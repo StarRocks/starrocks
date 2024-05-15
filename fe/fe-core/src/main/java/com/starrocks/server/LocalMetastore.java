@@ -49,7 +49,9 @@ import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -203,7 +205,6 @@ import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -212,7 +213,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -2997,17 +2997,17 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,
                 shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
 
-        // validate optHints
-        Map<String, String> optHints = null;
-        QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
-        if (queryRelation instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) queryRelation;
-            optHints = selectRelation.getSelectList().getOptHints();
-            if (optHints != null && !optHints.isEmpty()) {
-                SessionVariable sessionVariable = VariableMgr.newSessionVariable();
-                for (String key : optHints.keySet()) {
-                    VariableMgr.setSystemVariable(sessionVariable,
-                            new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+        // validate hint
+        Map<String, String> optHints = Maps.newHashMap();
+        if (stmt.isExistQueryScopeHint()) {
+            SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+            for (HintNode hintNode : stmt.getAllQueryScopeHints()) {
+                if (hintNode instanceof SetVarHint) {
+                    for (Map.Entry<String, String> entry : hintNode.getValue().entrySet()) {
+                        VariableMgr.setSystemVariable(sessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                        optHints.put(entry.getKey(), entry.getValue());
+                    }
                 }
             }
         }

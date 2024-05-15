@@ -19,6 +19,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -572,16 +574,24 @@ public class AnalyzeSingleTest {
     public void testSetVar() {
         StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ " +
                 "current_timestamp() AS time");
-        SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("Asia/Shanghai", selectRelation.getSelectList().getOptHints().get("time_zone"));
+        Assert.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
 
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
-        selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
+        Assert.assertEquals("1", statementBase.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
         SubmitTaskStmt stmt = (SubmitTaskStmt) analyzeSuccess("submit /*+ SET_VAR(broadcast_row_limit=1) */ task as " +
                 "create table temp as select count(*) as cnt from t0");
         Assert.assertEquals("1", stmt.getProperties().get("broadcast_row_limit"));
+
+        LoadStmt loadStmt = (LoadStmt) analyzeSuccess("LOAD /*+ SET_VAR(broadcast_row_limit=1) */  LABEL test.testLabel " +
+                "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") " +
+                "INTO TABLE `t0`) WITH BROKER hdfs_broker PROPERTIES (\"strict_mode\"=\"true\")");
+        Assert.assertEquals("1", loadStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
+
+        InsertStmt insertStmt = (InsertStmt) analyzeSuccess("insert /*+ SET_VAR(broadcast_row_limit=1) */ " +
+                "into t1 values (1, 2, 3)");
+        Assert.assertEquals("1", insertStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
+
     }
 
     @Test

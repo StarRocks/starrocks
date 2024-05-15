@@ -41,7 +41,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -124,7 +126,6 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -434,19 +435,8 @@ public class StmtExecutor {
                 // set isQuery before `forwardToLeader` to make it right for audit log.
                 context.getState().setIsQuery(isQuery);
 
-                if (isQuery &&
-                        ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
-                    SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
-                    optHints = selectRelation.getSelectList().getOptHints();
-                }
-
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    context.setSessionVariable(sessionVariable);
+                if (parsedStmt.isExistQueryScopeHint()) {
+                    processQueryScopeHint();
                 }
 
                 if (parsedStmt.isExplain()) {
@@ -697,7 +687,33 @@ public class StmtExecutor {
                 }
             }
 
-            context.setSessionVariable(sessionVariableBackup);
+            if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
+                clearQueryScopeHintContext(sessionVariableBackup);
+            }
+        }
+    }
+
+    private void clearQueryScopeHintContext(SessionVariable sessionVariableBackup) {
+        context.setSessionVariable(sessionVariableBackup);
+    }
+
+    // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
+    private void processQueryScopeHint() throws DdlException {
+        SessionVariable clonedSessionVariable = null;
+        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+            if (hint instanceof SetVarHint) {
+                if (clonedSessionVariable == null) {
+                    clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+                }
+                for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                    VariableMgr.setSystemVariable(clonedSessionVariable,
+                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                }
+            }
+        }
+
+        if (clonedSessionVariable != null) {
+            context.setSessionVariable(clonedSessionVariable);
         }
     }
 
