@@ -38,18 +38,42 @@ public class Constants {
     public enum TaskSource {
         CTAS,
         MV,
+<<<<<<< HEAD
         INSERT
+=======
+        INSERT,
+        PIPE,
+        DATACACHE_SELECT;
+
+        // Whether the task source is mergeable, only MV is mergeable by default.
+        public boolean isMergeable() {
+            return this == MV;
+        }
+>>>>>>> 34de8827d9 ([BugFix] Support MERGED state for task run (#45598))
     }
 
-    // PENDING -> RUNNING -> FAILED
-    //                    -> SUCCESS
+    //                   ------> FAILED
+    //                  |
+    //                  |
+    //     PENDING -> RUNNING -> SUCCESS
+    //        |
+    //        |
+    //         ----------------> MERGED
     public enum TaskRunState {
-        PENDING,
-        RUNNING,
-        FAILED,
-        SUCCESS,
+        PENDING,    // The task run is created and in the pending queue waiting to be scheduled
+        RUNNING,    // The task run is scheduled into running queue and is running
+        FAILED,     // The task run is failed
+        MERGED,     // The task run is merged into another task run
+        SUCCESS,    // The task run is finished successfully
     }
 
+<<<<<<< HEAD
+=======
+    public static boolean isFinishState(TaskRunState state) {
+        return state.equals(TaskRunState.SUCCESS) || state.equals(TaskRunState.FAILED) || state.equals(TaskRunState.MERGED);
+    }
+
+>>>>>>> 34de8827d9 ([BugFix] Support MERGED state for task run (#45598))
     // Used to determine the scheduling order of Pending TaskRun to Running TaskRun
     // The bigger the priority, the higher the priority, the default value is LOWEST
     public enum TaskRunPriority {

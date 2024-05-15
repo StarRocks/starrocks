@@ -178,6 +178,33 @@ public class TaskBuilder {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void rebuildMVTask(String dbName,
+                                     MaterializedView materializedView) throws DdlException {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        Task task;
+        if (currentTask == null) {
+            task = TaskBuilder.buildMvTask(materializedView, dbName);
+            TaskBuilder.updateTaskInfo(task, materializedView);
+            taskManager.createTask(task, false);
+        } else {
+            Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
+                     Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties);
+            TaskBuilder.updateTaskInfo(changedTask, materializedView);
+            taskManager.alterTask(currentTask, changedTask, false);
+            task = currentTask;
+        }
+
+        // for event triggered type, run task
+        if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+            taskManager.executeTask(task.getName(), ExecuteOption.makeMergeRedundantOption());
+        }
+    }
+
+>>>>>>> 34de8827d9 ([BugFix] Support MERGED state for task run (#45598))
     public static String getMvTaskName(long mvId) {
         return "mv-" + mvId;
     }
