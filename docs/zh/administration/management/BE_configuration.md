@@ -1010,11 +1010,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### update_compaction_size_threshold
 
-- 默认值：268435456
+- 默认值：268435456 (256 MB)
 - 类型：Int
-- 单位：-
+- 单位：字节
 - 是否动态：是
-- 描述：主键表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使主键表的 Compaction Score 与其他类型表的相近，便于用户理解。
+- 描述：主键表触发 Compaction 的文件大小阈值。超过该阈值后进行 Compaction。2.5.21 版本中，该参数默认值从 `268435456`（256 MB）调小为 `67108864` （64 MB），以提高主键表的 Compaction 的触发频率。
 - 引入版本：-
 
 ##### update_compaction_result_bytes
