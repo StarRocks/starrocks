@@ -1169,6 +1169,9 @@ CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");
 
+// Skip get from pk index when light pk compaction publish is enabled
+CONF_mBool(enable_light_pk_compaction_publish, "false");
+
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
