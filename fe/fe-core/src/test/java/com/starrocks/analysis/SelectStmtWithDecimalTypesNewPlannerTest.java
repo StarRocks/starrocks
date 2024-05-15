@@ -182,9 +182,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalBinaryPredicate() throws Exception {
         String sql = "select col_decimal64p13s0 > -9.223372E+18 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
-                "> -9223372000000000000";
-        Assert.assertTrue(plan.contains(snippet));
+        String snippet = "[3: col_decimal64p13s0, DECIMAL64(13,0), false] > -9223372000000000000";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
@@ -201,7 +200,16 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 between -9.223372E+18 and 9.223372E+18";
         String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
         String snippet =
-                "PREDICATES: CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) >= -9223372000000000000, CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) <= 9223372000000000000";
+                "3: col_decimal64p13s0 >= -9223372000000000000, 3: col_decimal64p13s0 <= 9223372000000000000";
+        Assert.assertTrue(plan, plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal2() throws Exception {
+        String sql = "select cast(9.223372E+18 as decimal(13,1))";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "constant exprs: \n" +
+                "         NULL";
         Assert.assertTrue(plan, plan.contains(snippet));
     }
 

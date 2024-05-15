@@ -93,7 +93,6 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -661,7 +660,8 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
+            Type compatibleType =
+                    TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!Type.canCastTo(type1, compatibleType)) {
