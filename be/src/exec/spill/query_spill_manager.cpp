@@ -28,7 +28,13 @@ namespace starrocks::spill {
 Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options) {
     bool enable_spill_to_remote_storage =
             query_options.__isset.enable_spill_to_remote_storage && query_options.enable_spill_to_remote_storage;
+    bool has_local_dir = !ExecEnv::GetInstance()->spill_dir_mgr()->is_empty();
     if (!enable_spill_to_remote_storage) {
+        if (!has_local_dir) {
+            return Status::InternalError(
+                    "there is no local spill directory on backends, if you want to use query spilling feature, please "
+                    "set enable_spill_to_remote_storage=true and configure a storage volume for spill.");
+        }
         _block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
         return Status::OK();
     }
@@ -38,6 +44,11 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
     if (!options.__isset.remote_storage_paths || !options.__isset.remote_storage_conf) {
         DCHECK(false) << "enable spill_to_remote_storage but remote_storage_paths or remote_storage_conf "
                          "is not set";
+        if (!has_local_dir) {
+            return Status::InternalError(
+                    "there is no local spill directory on backends, if you want to use query spilling feature, please "
+                    "set enable_spill_to_remote_storage=true and configure a storage volume for spill.");
+        }
         _block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
         return Status::OK();
     }
@@ -54,7 +65,7 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
     _remote_dir_manager = std::make_unique<DirManager>(remote_dirs);
 
     bool disable_spill_to_local_disk =
-            options.__isset.disable_spill_to_local_disk && options.disable_spill_to_local_disk;
+            options.__isset.disable_spill_to_local_disk && options.disable_spill_to_local_disk && has_local_dir;
     if (disable_spill_to_local_disk) {
         _block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get());
         return Status::OK();

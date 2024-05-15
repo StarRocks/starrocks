@@ -96,6 +96,8 @@ public:
 
     StatusOr<DirPtr> acquire_writable_dir(const AcquireDirOptions& opts);
 
+    bool is_empty() const { return _dirs.empty(); }
+
 private:
     bool is_same_disk(const std::string& path1, const std::string& path2) {
         struct statfs stat1, stat2;
