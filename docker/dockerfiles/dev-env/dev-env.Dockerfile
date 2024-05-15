@@ -19,10 +19,10 @@ ARG prebuild_maven=false
 # value: true | false
 # default: false
 ARG predownload_thirdparty=false
-ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230720.tar
+ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20240411.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v3.2.0
+ARG starlet_tag=v3.2.1
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 # Token to access artifacts in private github repositories.
