@@ -251,7 +251,7 @@ public class PaimonMetadataTest {
                 result = mockRecordReader;
             }
         };
-        List<String> result = metadata.listPartitionNames("db1", "tbl1");
+        List<String> result = metadata.listPartitionNames("db1", "tbl1", -1);
         Assert.assertEquals(2, result.size());
         List<String> expections = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
         Assertions.assertThat(result).hasSameElementsAs(expections);

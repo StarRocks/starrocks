@@ -203,6 +203,8 @@ public class ConnectContext {
     protected boolean isStatisticsConnection = false;
     protected boolean isStatisticsJob = false;
     protected boolean isStatisticsContext = false;
+
+    protected boolean isMetadataContext = false;
     protected boolean needQueued = true;
 
     protected DumpInfo dumpInfo;
@@ -727,6 +729,14 @@ public class ConnectContext {
 
     public void setStatisticsContext(boolean isStatisticsContext) {
         this.isStatisticsContext = isStatisticsContext;
+    }
+
+    public boolean isMetadataContext() {
+        return isMetadataContext;
+    }
+
+    public void setMetadataContext(boolean metadataContext) {
+        isMetadataContext = metadataContext;
     }
 
     public boolean isNeedQueued() {

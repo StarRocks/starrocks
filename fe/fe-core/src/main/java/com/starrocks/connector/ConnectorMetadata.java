@@ -91,9 +91,10 @@ public interface ConnectorMetadata {
      *
      * @param databaseName the name of the database
      * @param tableName the name of the table
+     * @param snapshotId table snapshot id, default value is -1
      * @return a list of partition names
      */
-    default List<String> listPartitionNames(String databaseName, String tableName) {
+    default List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
         return Lists.newArrayList();
     }
 
@@ -157,6 +158,20 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
+    /**
+     * Get table meta serialized specification
+     * @param dbName
+     * @param tableName
+     * @param snapshotId
+     * @param serializedPredicate serialized predicate string of lake format expression
+     * @return table meta serialized specification
+     */
+    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                     long snapshotId, String serializedPredicate) {
+        return null;
+    }
+
+
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }
@@ -182,7 +197,7 @@ public interface ConnectorMetadata {
         return Statistics.builder().build();
     }
 
-    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         return true;
     }
 
