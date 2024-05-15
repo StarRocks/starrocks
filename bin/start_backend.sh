@@ -31,6 +31,7 @@ OPTS=$(getopt \
     -l 'cn' \
     -l 'be' \
     -l 'logconsole' \
+    -l 'meta_tool' \
     -l numa: \
 -- "$@")
 
@@ -41,6 +42,7 @@ RUN_CN=0
 RUN_BE=0
 RUN_NUMA="-1"
 RUN_LOG_CONSOLE=0
+RUN_META_TOOL=0
 
 while true; do
     case "$1" in
@@ -49,6 +51,7 @@ while true; do
         --be) RUN_BE=1; RUN_CN=0; shift ;;
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --numa) RUN_NUMA=$2; shift 2 ;;
+        --meta_tool) RUN_META_TOOL=1 ; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -150,6 +153,12 @@ export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$ST
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 export_cachelib_lib_path
 
+
+# ====== handle meta_tool sub command before any modification change
+if [ ${RUN_META_TOOL} -eq 1 ] ; then
+    ${STARROCKS_HOME}/lib/starrocks_be meta_tool "$@"
+    exit $?
+fi
 
 # ================== kill/start =======================
 if [ ! -d $LOG_DIR ]; then
