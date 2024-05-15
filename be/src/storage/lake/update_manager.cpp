@@ -189,9 +189,11 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
     for (const auto& one_delete : state.deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
     }
     for (const auto& one_delete : state.auto_increment_deletes()) {
         RETURN_IF_ERROR(index.erase(*one_delete, &new_deletes));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
     }
     _block_cache->update_memory_usage();
     // 4. generate delvec
@@ -628,6 +630,7 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
             &metadata, &output_rowset, this, builder, &index, txn_id, base_version, &segment_id_to_add_dels, &delvecs);
     RETURN_IF_ERROR(resolver->execute());
+    _index_cache.update_object_size(index_entry, index.memory_usage());
     // 3. update TabletMeta and write to meta file
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
@@ -689,6 +692,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         {
             TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
             RETURN_IF_ERROR(index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes));
+            _index_cache.update_object_size(index_entry, index.memory_usage());
         }
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
