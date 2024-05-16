@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/stl_util.h"
@@ -1948,7 +1949,7 @@ Status TabletUpdates::_light_apply_compaction_commit(const EditVersion& version,
             // use new version's major version as base version,
             // that's because local table's compaction won't increase major version,
             // so base version's major version is same as new version's major version.
-            version.major_number(), version.major_number(), total_deletes, delvecs);
+            version.major(), version.major(), total_deletes, delvecs);
     return resolver->execute();
 }
 
@@ -2095,9 +2096,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
             DelVectorPtr dv = std::make_shared<DelVector>();
             if (tmp_deletes.empty()) {
-                dv->init(version.major_number(), nullptr, 0);
+                dv->init(version.major(), nullptr, 0);
             } else {
-                dv->init(version.major_number(), tmp_deletes.data(), tmp_deletes.size());
+                dv->init(version.major(), tmp_deletes.data(), tmp_deletes.size());
                 total_deletes += tmp_deletes.size();
             }
             delvecs.emplace_back(rssid, dv);
