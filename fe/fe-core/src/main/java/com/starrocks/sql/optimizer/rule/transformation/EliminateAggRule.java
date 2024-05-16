@@ -111,7 +111,6 @@ public class EliminateAggRule extends TransformationRule {
         if (uniqueKeys.size() == 0) {
             return false;
         }
-
         if (uniqueKeys.size() != groupKeys.size()) {
             return false;
         }
@@ -132,21 +131,35 @@ public class EliminateAggRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
+        LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
 
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
-            String fnName = entry.getValue().getFnName();
-            ScalarOperator newOperator = handleAggregationFunction(fnName, entry.getValue());
-            newProjectMap.put(entry.getKey(), newOperator);
-        }
-        if (!aggOp.getPartitionByColumns().isEmpty()) {
-            for (ColumnRefOperator columnRefOperator : aggOp.getPartitionByColumns()) {
-                newProjectMap.put(columnRefOperator, columnRefOperator);
+        Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
+        aggOp.getAggregations().forEach((aggColumnRef, callOperator) -> {
+            ColumnRefOperator childColumnRefOperator = (ColumnRefOperator) callOperator.getArguments().get(0);
+            ScalarOperator newOperator;
+
+            if (isProjectColumnRef(childColumnRefOperator, projectOp)) {
+                ScalarOperator projectColumnRef = projectOp.getColumnRefMap().get(childColumnRefOperator);
+                newOperator = (projectColumnRef instanceof ColumnRefOperator) ?
+                        projectColumnRef :
+                        handleAggregationFunction(callOperator.getFnName(), (CallOperator) projectColumnRef);
+            } else {
+                newOperator = handleAggregationFunction(callOperator.getFnName(), callOperator);
             }
-        }
+
+            newProjectMap.put(aggColumnRef, newOperator);
+        });
+
+        aggOp.getPartitionByColumns()
+                .forEach(columnRefOperator -> newProjectMap.put(columnRefOperator, columnRefOperator));
 
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
         return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
+    }
+
+    private boolean isProjectColumnRef(ColumnRefOperator columnRefOperator, LogicalProjectOperator projectOp) {
+        return OperatorType.VARIABLE.equals(columnRefOperator.getOpType()) &&
+                projectOp.getColumnRefMap().containsKey(columnRefOperator);
     }
 
     private ScalarOperator handleAggregationFunction(String fnName, CallOperator callOperator) {
