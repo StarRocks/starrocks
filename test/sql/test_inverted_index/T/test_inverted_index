@@ -731,3 +731,72 @@ function: wait_alter_table_finish()
 SHOW CREATE TABLE t_alter_gin_col_into_other_type;
 SELECT * FROM t_alter_gin_col_into_other_type;
 DROP TABLE t_alter_gin_col_into_other_type;
+
+-- name: test_gin_var
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_gin_var VALUES (1, "abc bcd");
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+SET enable_gin_filter = false;
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+SET enable_gin_filter = true;
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+DROP TABLE t_gin_var;
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "false");
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'english');
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+DROP TABLE t_gin_var;
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+DROP TABLE t_gin_var;
