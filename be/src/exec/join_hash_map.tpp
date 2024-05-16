@@ -1401,7 +1401,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
     size_t i = _probe_state->cur_probe_index;
 
     if constexpr (!first_probe) {
-        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        _probe_state->build_index[0] = _probe_state->cur_build_index;
         match_count = 1;
     }
 
