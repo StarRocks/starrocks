@@ -285,7 +285,7 @@ public class Locker {
     public void lockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
@@ -312,7 +312,7 @@ public class Locker {
                                                     long timeout, TimeUnit unit) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
@@ -358,7 +358,7 @@ public class Locker {
     public void unLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             if (lockType == LockType.WRITE) {
                 this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
             } else {
