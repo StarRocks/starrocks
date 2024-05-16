@@ -268,8 +268,9 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
                 // so here we swap the whole min_chunk out.
                 if (rows == 0) {
                     chunk->swap_chunk(*min_chunk._chunk);
-                    if (rssid_rowids != nullptr) {
-                        DCHECK(need_rssid_rowids);
+                    if (rssid_rowids != nullptr && need_rssid_rowids) {
+                        // insert into `rssid_rowids` only when need_rssid_rowids is true.
+                        DCHECK(min_chunk._rssid_rowids != nullptr);
                         rssid_rowids->insert(rssid_rowids->end(), min_chunk._rssid_rowids->begin(),
                                              min_chunk._rssid_rowids->end());
                     }
@@ -302,8 +303,9 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         DCHECK_GT(append_row_num, 0);
 
         chunk->append(*min_chunk._chunk, offset, append_row_num);
-        if (rssid_rowids != nullptr) {
-            DCHECK(need_rssid_rowids);
+        if (rssid_rowids != nullptr && need_rssid_rowids) {
+            // insert into `rssid_rowids` only when need_rssid_rowids is true.
+            DCHECK(min_chunk._rssid_rowids != nullptr);
             rssid_rowids->insert(rssid_rowids->end(), min_chunk._rssid_rowids->begin() + offset,
                                  min_chunk._rssid_rowids->begin() + offset + append_row_num);
         }
