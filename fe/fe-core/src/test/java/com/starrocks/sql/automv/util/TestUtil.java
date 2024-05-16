@@ -121,7 +121,7 @@ public class TestUtil {
     }
 
     public static List<String> getTPCHCreateTableSqlList() {
-        return getSqlList("sql/tpch_automv/", "lineitem", "orders", "part", "partsupp", "supplier", "customer",
+        return getSqlList("sql/tpch_tables/", "lineitem", "orders", "part", "partsupp", "supplier", "customer",
                 "region",
                 "nation");
     }
