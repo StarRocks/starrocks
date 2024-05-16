@@ -270,7 +270,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges = params.short_key_ranges;
-    if (keys_type == AGG_KEYS || keys_type == UNIQUE_KEYS) {
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
         rs_opts.asc_hint = _is_asc_hint;
     }
 
