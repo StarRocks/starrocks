@@ -66,6 +66,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
+#include "util/stack_util.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
@@ -1049,6 +1050,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         state->set_load_label(table_sink.label);
     }
 
+<<<<<<< HEAD
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
 
@@ -1071,6 +1073,8 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
 
+=======
+>>>>>>> 4c4619ac37 ([Enhancement] UniqueMetrics of OlapTableSink's profile support runtime profile report (#45675))
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema, state));
     _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
@@ -1093,14 +1097,57 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapTableSink::prepare(RuntimeState* state) {
-    _span->AddEvent("prepare");
-
+void OlapTableSink::_prepare_profile(RuntimeState* state) {
+    // For pipeline, the profile will be set in OlapTableSinkOperator::prepare
+    // For non-pipeline, the profile should be created and added to state's object pool
+    if (_profile == nullptr) {
+        _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
+    }
     _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
+<<<<<<< HEAD
+=======
+    _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
+
+    _ts_profile = state->obj_pool()->add(new TabletSinkProfile());
+    _ts_profile->runtime_profile = _profile;
+    _ts_profile->input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
+    _ts_profile->output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
+    _ts_profile->filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
+    _ts_profile->open_timer = ADD_TIMER(_profile, "OpenTime");
+    _ts_profile->close_timer = ADD_TIMER(_profile, "CloseWaitTime");
+    _ts_profile->prepare_data_timer = ADD_TIMER(_profile, "PrepareDataTime");
+    _ts_profile->convert_chunk_timer = ADD_CHILD_TIMER(_profile, "ConvertChunkTime", "PrepareDataTime");
+    _ts_profile->validate_data_timer = ADD_CHILD_TIMER(_profile, "ValidateDataTime", "PrepareDataTime");
+    _ts_profile->send_data_timer = ADD_TIMER(_profile, "SendDataTime");
+    _ts_profile->pack_chunk_timer = ADD_CHILD_TIMER(_profile, "PackChunkTime", "SendDataTime");
+    _ts_profile->send_rpc_timer = ADD_CHILD_TIMER(_profile, "SendRpcTime", "SendDataTime");
+    _ts_profile->wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
+    _ts_profile->serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
+    _ts_profile->compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
+    _ts_profile->client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
+    _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
+    _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
+    _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+}
+
+void OlapTableSink::set_profile(RuntimeProfile* profile) {
+    if (_profile != nullptr) {
+        LOG(WARNING) << "OlapTableSink profile is set duplicated, load_id: " << print_id(_load_id)
+                     << ", txn_id: " << _txn_id << ", stack\n"
+                     << get_stack_trace();
+        return;
+    }
+    _profile = profile;
+}
+
+Status OlapTableSink::prepare(RuntimeState* state) {
+    _span->AddEvent("prepare");
+    _prepare_profile(state);
+>>>>>>> 4c4619ac37 ([Enhancement] UniqueMetrics of OlapTableSink's profile support runtime profile report (#45675))
 
     SCOPED_TIMER(_profile->total_time_counter());
 
