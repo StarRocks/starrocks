@@ -312,6 +312,9 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
         if (fkConstraint == null || ukConstraint == null) {
             return false;
         }
+        if (ukConstraint.constraint.getUniqueColumns().size() != 1) {
+            return false;
+        } 
         BaseTableInfo parentTableInfo = fkConstraint.constraint.getParentTableInfo();
         if (parentTableInfo == null) {
             return false;
