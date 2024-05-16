@@ -70,7 +70,7 @@ public:
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
 
-    // replace old values, and make sure key exist
+    // replace old values and insert when key not exist.
     // Used in compaction apply & publish.
     // [not thread-safe]
     //
@@ -84,7 +84,6 @@ public:
     // replace_indexes : {2, 3}
     // So we only need to replace {c : rssid + rowid_start + 2, d : rssid + rowid_start + 3}
     //
-    // Return NotFound error when key not exist.
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
                    const Column& pks);
 

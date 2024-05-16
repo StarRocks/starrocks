@@ -210,4 +210,5 @@ add_library(Storage STATIC
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
+    local_primary_key_compaction_conflict_resolver.cpp
     primary_key_dump.cpp)

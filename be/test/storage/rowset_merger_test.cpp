@@ -42,6 +42,11 @@ public:
     Status init() override { return Status::OK(); }
 
     Status add_chunk(const Chunk& chunk) override {
+        std::vector<uint64_t> rssid_rowids;
+        return add_chunk(chunk, rssid_rowids);
+    }
+
+    Status add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) override {
         all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         return Status::OK();
     }
@@ -73,6 +78,12 @@ public:
     Status final_flush() override { return Status::OK(); }
 
     Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) override {
+        std::vector<uint64_t> rssid_rowids;
+        return add_columns(chunk, column_indexes, is_key, rssid_rowids);
+    }
+
+    Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key,
+                       const std::vector<uint64_t>& rssid_rowids) override {
         if (is_key) {
             all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         } else {
