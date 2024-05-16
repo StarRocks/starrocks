@@ -10,6 +10,8 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_call_expr.h"
+#include "exprs/literal.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -32,6 +34,10 @@ StatusOr<ColumnExprPredicate*> ColumnExprPredicate::make_column_expr_predicate(T
     // note: conjuncts would be shared by multiple scanners
     // so here we have to clone one to keep thread safe.
     expr_predicate->_add_expr_ctx(expr_ctx);
+    // passed by FE
+    if (expr_ctx != nullptr) {
+        expr_predicate->set_index_filter_only(expr_ctx->is_index_only_filter());
+    }
     return expr_predicate;
 }
 
@@ -178,6 +184,11 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     return false;
 }
 
+bool ColumnExprPredicate::ngram_bloom_filter(const BloomFilter* bf,
+                                             const NgramBloomFilterReaderOptions& reader_options) const {
+    return _expr_ctxs[0]->ngram_bloom_filter(bf, reader_options);
+}
+
 Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                                        ObjectPool* obj_pool) const {
     TypeDescriptor input_type = TypeDescriptor::from_storage_type_info(target_type_info.get());
@@ -270,6 +281,68 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         output->emplace_back(new_pred);
     }
 
+    return Status::OK();
+}
+Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                                roaring::Roaring* row_bitmap) const {
+    // Only support simple (NOT) LIKE/MATCH predicate for now
+    // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
+    // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
+    // For the untokenized mode, LIKE and MATCH are both available.
+    // Otherwise, only MATCH is available.
+    bool vaild_pred = false;
+    bool vaild_like = false;
+    bool vaild_match = false;
+    bool with_not = false;
+
+    with_not = _expr_ctxs[0]->root()->node_type() == TExprNodeType::COMPOUND_PRED &&
+               _expr_ctxs[0]->root()->op() == TExprOpcode::COMPOUND_NOT;
+    DCHECK((with_not && _expr_ctxs[0]->root()->get_num_children() == 1) || !with_not);
+
+    Expr* expr = with_not ? _expr_ctxs[0]->root()->get_child(0) : _expr_ctxs[0]->root();
+
+    auto* vectorized_function_call =
+            expr->node_type() == TExprNodeType::FUNCTION_CALL ? down_cast<VectorizedFunctionCallExpr*>(expr) : nullptr;
+
+    // check if satisfy vaild LIKE format
+    vaild_like = vectorized_function_call != nullptr &&
+                 LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
+                 expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
+                 expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
+
+    // check if satisfy vaild MATCH format
+    vaild_match = vectorized_function_call == nullptr && expr->node_type() == TExprNodeType::MATCH_EXPR &&
+                  expr->get_num_children() == 2 && expr->get_child(0)->node_type() == TExprNodeType::SLOT_REF &&
+                  expr->get_child(1)->node_type() == TExprNodeType::STRING_LITERAL;
+
+    vaild_pred = iterator->is_untokenized() ? (vaild_like || vaild_match) : vaild_match;
+
+    if (!vaild_pred) {
+        std::stringstream ss;
+        ss << "Not supported function call in inverted index, expr predicate: "
+           << (_expr_ctxs[0]->root() != nullptr ? _expr_ctxs[0]->root()->debug_string() : "");
+        LOG(WARNING) << ss.str();
+        return Status::NotSupported(ss.str());
+    }
+
+    auto* like_target = dynamic_cast<VectorizedLiteral*>(expr->get_child(1));
+    DCHECK(like_target != nullptr);
+    ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
+    Slice padded_value(literal_col->get(0).get_slice());
+    std::string str_v = padded_value.to_string();
+    InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
+    if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {
+        query_type = InvertedIndexQueryType::EQUAL_QUERY;
+    } else {
+        query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
+    }
+    roaring::Roaring roaring;
+    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+    if (with_not) {
+        *row_bitmap -= roaring;
+    } else {
+        *row_bitmap &= roaring;
+    }
     return Status::OK();
 }
 

@@ -31,11 +31,11 @@ import java.util.List;
  */
 public class Generator<T> {
     private List<T> data;
-    private int multiplier;
-    private int totalCount;
-    private int iTotal;
+    private long multiplier;
+    private long totalCount;
+    private long iTotal;
 
-    public Generator(List<T> data, int totalCount, int multiplier) {
+    public Generator(List<T> data, long totalCount, long multiplier) {
         this.data = data;
         assert (data.size() > 0);
         assert (totalCount % multiplier == 0);
@@ -51,7 +51,7 @@ public class Generator<T> {
 
     public T next() {
         assert (iTotal < totalCount);
-        T ans = data.get((iTotal / multiplier) % data.size());
+        T ans = data.get((int) (iTotal / multiplier) % data.size());
         iTotal++;
         return ans;
     }

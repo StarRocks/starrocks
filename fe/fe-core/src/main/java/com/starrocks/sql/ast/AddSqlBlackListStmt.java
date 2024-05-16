@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
@@ -46,7 +45,10 @@ public class AddSqlBlackListStmt extends StatementBase {
     }
 
     public void analyze() throws SemanticException {
-        sql = sql.trim().toLowerCase().replaceAll(" +", " ");
+        sql = sql.trim().toLowerCase().replaceAll(" +", " ")
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .replaceAll("\\s+", " ");
         if (sql.length() > 0) {
             try {
                 sqlPattern = Pattern.compile(sql);

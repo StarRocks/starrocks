@@ -70,7 +70,7 @@ public class ClusterStatePublisher {
     // Fuck singleton.
     public static ClusterStatePublisher getInstance() {
         if (INSTANCE == null) {
-            INSTANCE = new ClusterStatePublisher(GlobalStateMgr.getCurrentSystemInfo());
+            INSTANCE = new ClusterStatePublisher(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         }
         return INSTANCE;
     }

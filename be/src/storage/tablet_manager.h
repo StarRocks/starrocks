@@ -192,9 +192,11 @@ public:
     void get_tablets_by_partition(int64_t partition_id, std::vector<TabletInfo>& tablet_infos);
 
     void get_tablets_basic_infos(int64_t table_id, int64_t partition_id, int64_t tablet_id,
-                                 std::vector<TabletBasicInfo>& tablet_infos);
+                                 std::vector<TabletBasicInfo>& tablet_infos, std::set<int64_t>* authorized_table_ids);
 
     std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
+
+    Status generate_pk_dump();
 
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
@@ -264,6 +266,10 @@ private:
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
 
     int64_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
+
+    // make sure use this function to add shutdown tablets
+    // caller should acquire _shutdown_tablets_lock
+    void _add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabletInfo&& drop_info);
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);

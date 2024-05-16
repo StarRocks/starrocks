@@ -194,15 +194,15 @@ public class MaterializedViewRule extends Rule {
         Map<String, Integer> queryScanNodeColumnNameToIds = queryRelIdToColumnNameIds.get(relationId);
 
         Iterator<MaterializedIndexMeta> iterator = candidateIndexIdToMeta.iterator();
+        // Consider all IndexMetas of the base table so can be decided by cost strategy for better performance.
+        // eg:
+        // tbl1     : <a int, b  string, c string> and column `a` is short key
+        // tbl1_mv  : select b, a, c from tbl1 and column `b` is short key
+        // Q1: select * from tbl1 where a = 1, should choose tbl1
+        // Q2: select * from tbl1 where b = 'a', should choose tbl1_mv
         while (iterator.hasNext()) {
             MaterializedIndexMeta mvMeta = iterator.next();
             long mvIdx = mvMeta.getIndexId();
-
-            // Ignore original query index.
-            if (mvIdx == scanOperator.getSelectedIndexId()) {
-                iterator.remove();
-                continue;
-            }
 
             // Ignore indexes which cannot be remapping with query by column names.
             List<Column> mvNonAggregatedColumns = mvMeta.getNonAggregatedColumns();

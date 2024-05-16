@@ -107,7 +107,7 @@ If the data file you want to load involves only UPSERT operations, you do not ne
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert a record into `table1`.
 
@@ -157,7 +157,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
         columns terminated by ","
         format as "csv"
     )
-    with broker "broker1";
+    WITH BROKER;
     ```
 
   - If you want to include the `__op` field, run the following command:
@@ -171,7 +171,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
         format as "csv"
         set (__op = 'upsert')
     )
-    with broker "broker1";
+    WITH BROKER;
     ```
 
 - Run a Routine Load job.
@@ -269,7 +269,7 @@ If the data file you want to load involves only DELETE operations, you must add 
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert two records into `table2`.
 
@@ -306,7 +306,7 @@ Run a load job to delete the record whose `id` is `101` in `example2.csv` from `
       format as "csv"
       set (__op = 'delete')
   )
-  with broker "broker1";  
+  WITH BROKER;  
   ```
 
 - Run a Routine Load job.
@@ -381,7 +381,7 @@ If the data file you want to load involves both UPSERT and DELETE operations, yo
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert two records into `table3`.
 
@@ -423,7 +423,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
       (id, name, score, temp)
       set (__op=temp)
   )
-  with broker "broker1";
+  WITH BROKER;
   ```
 
 - Run a Routine Load job:
@@ -503,7 +503,7 @@ Since v2.2, StarRocks supports updating only the specified columns of a Primary 
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert a record into `table4`.
 
@@ -542,7 +542,7 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
       format as "csv"
       (id, name)
   )
-  WITH BROKER "broker1"
+  WITH BROKER
   PROPERTIES
   (
       "partial_update" = "true"
@@ -635,7 +635,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
       > **NOTE**
       >
-      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
 
    b. Insert a record into `table5`.
 
@@ -647,7 +647,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
 ### Load data
 
-Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `verion` value in each of the two records is greater or equal to their current `version` values.
+Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `version` value in each of the two records is greater or equal to their current `version` values.
 
 - Run a Stream Load job:
 

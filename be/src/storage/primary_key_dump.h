@@ -87,6 +87,10 @@ public:
             const std::function<void(const Chunk&)>& column_key_func,
             const std::function<void(const std::string&, const PartialKVsPB&)>& index_kvs_func);
 
+    std::string dump_filepath() const { return _dump_filepath; }
+
+    Status dump_file_exist();
+
 private:
     Status _dump_tablet_meta();
     Status _dump_rowset_meta();

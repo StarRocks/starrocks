@@ -13,7 +13,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```haskell
-VARCAHR url_decode(VARCHAR str)
+VARCHAR url_decode(VARCHAR str)
 ```
 
 ## 参数说明

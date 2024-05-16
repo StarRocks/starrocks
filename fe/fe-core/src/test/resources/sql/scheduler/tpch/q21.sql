@@ -3,20 +3,20 @@ PLAN FRAGMENT 0(F10)
   DOP: 16
   INSTANCES
     INSTANCE(0-F10#0)
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 1(F09)
   DOP: 16
   INSTANCES
     INSTANCE(1-F09#0)
       DESTINATIONS: 0-F10#0
-      BE: 10003
+      BE: 10001
     INSTANCE(2-F09#1)
       DESTINATIONS: 0-F10#0
-      BE: 10002
+      BE: 10003
     INSTANCE(3-F09#2)
       DESTINATIONS: 0-F10#0
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -382,4 +382,3 @@ PLAN FRAGMENT 5
      cardinality=1
      avgRowSize=9.0
 [end]
-

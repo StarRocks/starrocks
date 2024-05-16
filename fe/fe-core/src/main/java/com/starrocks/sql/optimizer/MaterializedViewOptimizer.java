@@ -30,15 +30,24 @@ public class MaterializedViewOptimizer {
                                   ConnectContext connectContext) {
         return optimize(mv, connectContext, true);
     }
+
     public MvPlanContext optimize(MaterializedView mv,
                                   ConnectContext connectContext,
                                   boolean inlineView) {
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        // Disable partition prune for mv's plan so no needs  to compensate pruned predicates anymore.
+        // Only needs to compensate mv's ref-base-table's partition predicates when mv's freshness cannot be satisfied.
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        optimizerConfig.disableRuleSet(RuleSetType.ALL_MV_REWRITE);
+        // INTERSECT_REWRITE is used for INTERSECT related plan optimize, which can not be SPJG;
+        // And INTERSECT_REWRITE should be based on PARTITION_PRUNE rule set.
+        // So exclude it
+        optimizerConfig.disableRuleSet(RuleSetType.INTERSECT_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
         optimizerConfig.disableRule(RuleType.TF_PRUNE_EMPTY_SCAN);
+        optimizerConfig.disableRule(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE);
+        optimizerConfig.disableRule(RuleType.TF_MV_TRANSPARENT_REWRITE_RULE);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
@@ -52,9 +61,12 @@ public class MaterializedViewOptimizer {
             return new MvPlanContext(false, "No query plan for it");
         }
         OptExpression mvPlan = plans.first;
-        if (!MvUtils.isValidMVPlan(mvPlan)) {
-            return new MvPlanContext(false, MvUtils.getInvalidReason(mvPlan));
+        boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
+        // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
+        String invalidPlanReason = "";
+        if (!isValidPlan) {
+            invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
         }
-        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
     }
 }

@@ -37,6 +37,14 @@
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/stringbuffer.h>
 
+#include <vector>
+
+#include "column/column_helper.h"
+#include "column/json_column.h"
+#include "column/nullable_column.h"
+#include "gutil/casts.h"
+#include "util/json.h"
+
 namespace starrocks {
 
 std::string to_json(const Status& status) {

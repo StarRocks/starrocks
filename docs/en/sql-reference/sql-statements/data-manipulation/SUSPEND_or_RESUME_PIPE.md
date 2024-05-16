@@ -11,6 +11,8 @@ Suspends or resumes a pipe:
 - When a load job is in progress (namely, in the `RUNNING` state), suspending (`SUSPEND`) the pipe for the job interrupts the job.
 - When a load job encounters errors, resuming (`RESUME`) the pipe for the job will continue to run the erroneous job.
 
+This command is supported from v3.2 onwards.
+
 ## Syntax
 
 ```SQL
@@ -46,3 +48,11 @@ ALTER PIPE user_behavior_replica RESUME;
 ```
 
 If you use [SHOW PIPES](../../../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) to query the pipe, you can see that its state has changed to `RUNNING`.
+
+## References
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)

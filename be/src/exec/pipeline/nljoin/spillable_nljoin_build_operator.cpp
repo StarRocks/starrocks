@@ -52,7 +52,6 @@ bool SpillableNLJoinBuildOperator::is_finished() const {
 }
 
 Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
-    auto& executor = *_spill_channel->io_executor();
     auto spiller = _spill_channel->spiller();
 
     if (!spiller->spilled()) {
@@ -61,7 +60,7 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(spiller->flush(state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+    RETURN_IF_ERROR(spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
     RETURN_IF_ERROR(spiller->set_flush_all_call_back(
             [&, state]() {
                 RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
@@ -69,7 +68,7 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
                 _spill_channel->set_finishing();
                 return Status::OK();
             },
-            state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+            state, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
 
     return Status::OK();
 }
@@ -79,8 +78,7 @@ Status SpillableNLJoinBuildOperator::push_chunk(RuntimeState* state, const Chunk
         RETURN_IF_ERROR(NLJoinBuildOperator::push_chunk(state, chunk));
     } else {
         // TODO: process auto spill mode
-        RETURN_IF_ERROR(_cross_join_context->input_channel(_driver_sequence)
-                                .add_chunk_to_spill_buffer(state, chunk, *_spill_channel->io_executor()));
+        RETURN_IF_ERROR(_cross_join_context->input_channel(_driver_sequence).add_chunk_to_spill_buffer(state, chunk));
     }
     return Status::OK();
 }
@@ -98,6 +96,7 @@ Status SpillableNLJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->read_shared = true;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
 
     return Status::OK();
 }

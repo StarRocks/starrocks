@@ -105,21 +105,30 @@ static std::map<int, pipeline::MorselQueuePtr> uniform_distribute_morsels(pipeli
         driver_seq = (driver_seq + 1) % dop;
     }
     std::map<int, pipeline::MorselQueuePtr> queue_per_driver;
-    for (auto& [operator_seq, morsels] : morsels_per_driver) {
-        queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels)));
+
+    auto morsel_queue_type = morsel_queue->type();
+    DCHECK(morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
+           morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
+
+    if (morsel_queue_type == pipeline::MorselQueue::Type::FIXED) {
+        for (auto& [operator_seq, morsels] : morsels_per_driver) {
+            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels)));
+        }
+    } else {
+        for (auto& [operator_seq, morsels] : morsels_per_driver) {
+            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels)));
+        }
     }
+
     return queue_per_driver;
 }
 
 StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel_queue_factory(
         const std::vector<TScanRangeParams>& global_scan_ranges,
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
-        int pipeline_dop, bool enable_tablet_internal_parallel,
+        int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode) {
-    // if scan range is empty, we don't have to check for per-bucket-optimize
-    // if we enable per-bucket-optimize, each scan_operator should be assign scan range by FE planner
-    DCHECK(global_scan_ranges.empty() || !output_chunk_by_bucket() || !scan_ranges_per_driver_seq.empty());
-    if (scan_ranges_per_driver_seq.empty()) {
+    if (scan_ranges_per_driver_seq.empty() && !in_colocate_exec_group) {
         ASSIGN_OR_RETURN(auto morsel_queue,
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,
                                                             enable_tablet_internal_parallel,
@@ -127,8 +136,12 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->max_degree_of_parallelism()), pipeline_dop);
         int io_parallelism = scan_dop * io_tasks_per_scan_operator();
 
+        auto morsel_queue_type = morsel_queue->type();
+        bool is_fixed_or_dynamic_morsel_queue = (morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
+                                                 morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
+
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
-        if (!always_shared_scan() && scan_dop > 1 && dynamic_cast<pipeline::FixedMorselQueue*>(morsel_queue.get()) &&
+        if (!always_shared_scan() && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
             morsel_queue->num_original_morsels() <= io_parallelism) {
             auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
@@ -148,6 +161,11 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                  scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
                                                  tablet_internal_parallel_mode, num_total_scan_ranges));
             queue_per_driver_seq.emplace(dop, std::move(queue));
+        }
+
+        // both of global_scan_ranges and scan_ranges_per_driver_seq are empty, create an empty morsel queue
+        if (queue_per_driver_seq.empty()) {
+            queue_per_driver_seq.emplace(pipeline_dop - 1, pipeline::create_empty_morsel_queue());
         }
 
         if (output_chunk_by_bucket()) {

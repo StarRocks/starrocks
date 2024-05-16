@@ -1,6 +1,5 @@
 ---
 displayed_sidebar: "English"
-unlisted: true
 ---
 
 # url_extract_host
@@ -9,10 +8,12 @@ unlisted: true
 
 Extracts the host section from a URL.
 
+This function is supported from v3.3 onwards.
+
 ## Syntax
 
 ```haskell
-VARCHAR url_extract_host(VARACHR str)
+VARCHAR url_extract_host(VARCHAR str)
 ```
 
 ## Parameters

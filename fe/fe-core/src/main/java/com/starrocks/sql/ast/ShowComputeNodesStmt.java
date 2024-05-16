@@ -33,7 +33,7 @@ public class ShowComputeNodesStmt extends ShowStmt {
 
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : ComputeNodeProcDir.TITLE_NAMES) {
+        for (String title : ComputeNodeProcDir.getMetadata()) {
             builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();

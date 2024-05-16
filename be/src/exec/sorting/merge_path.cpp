@@ -1128,7 +1128,7 @@ void MergePathCascadeMerger::_finishing() {
 void MergePathCascadeMerger::_init_late_materialization() {
     DeferOp defer([this]() {
         std::for_each(_metrics.begin(), _metrics.end(), [this](auto& metrics) {
-            metrics.profile->add_info_string("LateMaterialization", _late_materialization ? "true" : "false");
+            metrics.profile->add_info_string("LateMaterialization", _late_materialization ? "True" : "False");
         });
     });
 

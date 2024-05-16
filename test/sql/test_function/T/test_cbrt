@@ -1,0 +1,12 @@
+-- name: test_math_cbrt
+select cbrt(27);
+
+select cbrt(0.0);
+
+select cbrt(-27);
+
+select cbrt(3.1415);
+
+select cbrt(-3.1415);
+
+select cbrt(null);

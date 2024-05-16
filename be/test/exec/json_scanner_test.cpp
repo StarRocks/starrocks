@@ -195,6 +195,9 @@ TEST_F(JsonScannerTest, test_array_json) {
     ChunkPtr chunk = st2.value();
     ASSERT_EQ(chunk->columns()[0]->debug_string(), "[1]");
     ASSERT_EQ(chunk->columns()[1]->debug_string(), "[[{\"k2\": \"v2\"}]]");
+
+    ASSERT_GT(scanner->TEST_scanner_counter()->file_read_count, 0);
+    ASSERT_GT(scanner->TEST_scanner_counter()->file_read_ns, 0);
 }
 
 TEST_F(JsonScannerTest, test_json_without_path) {

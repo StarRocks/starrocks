@@ -29,16 +29,17 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -46,6 +47,7 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,10 +55,12 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -79,9 +83,11 @@ public class CompactionScheduler extends Daemon {
     private boolean finishedWaiting = false;
     private long waitTxnId = -1;
     private long lastPartitionCleanTime;
+    private Set<Long> disabledTables; // copy-on-write
 
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
-                        @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr) {
+                        @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
+                        @NotNull String disableTablesStr) {
         super("COMPACTION_DISPATCH", LOOP_INTERVAL_MS);
         this.compactionManager = compactionManager;
         this.systemInfoService = systemInfoService;
@@ -91,6 +97,9 @@ public class CompactionScheduler extends Daemon {
         this.lastPartitionCleanTime = System.currentTimeMillis();
         this.history = new SynchronizedCircularQueue<>(Config.lake_compaction_history_size);
         this.failHistory = new SynchronizedCircularQueue<>(Config.lake_compaction_fail_history_size);
+        this.disabledTables = Collections.unmodifiableSet(new HashSet<>());
+
+        disableTables(disableTablesStr);
     }
 
     @Override
@@ -130,8 +139,14 @@ public class CompactionScheduler extends Daemon {
                 iterator.hasNext(); ) {
             Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
             PartitionIdentifier partition = entry.getKey();
-            CompactionJob job = entry.getValue();
 
+            // Make sure all running compactions' priority is reset
+            PartitionStatistics statistics = compactionManager.getStatistics(partition);
+            if (statistics != null && statistics.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT) {
+                statistics.resetPriority();
+            }
+
+            CompactionJob job = entry.getValue();
             if (!job.transactionHasCommitted()) {
                 String errorMsg = null;
 
@@ -156,11 +171,10 @@ public class CompactionScheduler extends Daemon {
                     job.finish();
                     failHistory.offer(CompactionRecord.build(job, errorMsg));
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-                    abortTransactionIgnoreException(partition.getDbId(), job.getTxnId(), errorMsg);
+                    abortTransactionIgnoreException(job, errorMsg);
                     continue;
                 }
             }
-
             if (job.transactionHasCommitted() && job.waitTransactionVisible(50, TimeUnit.MILLISECONDS)) {
                 iterator.remove();
                 job.finish();
@@ -185,7 +199,8 @@ public class CompactionScheduler extends Daemon {
             return;
         }
 
-        List<PartitionIdentifier> partitions = compactionManager.choosePartitionsToCompact(runningCompactions.keySet());
+        List<PartitionIdentifier> partitions = compactionManager.choosePartitionsToCompact(runningCompactions.keySet(),
+                disabledTables);
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
             PartitionIdentifier partition = partitions.get(index++);
             CompactionJob job = startCompaction(partition);
@@ -200,11 +215,13 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-    private void abortTransactionIgnoreException(long dbId, long txnId, String reason) {
+    private void abortTransactionIgnoreException(CompactionJob job, String reason) {
         try {
-            transactionMgr.abortTransaction(dbId, txnId, reason);
+            List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
+            transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
+                    Collections.emptyList(), null);
         } catch (UserException ex) {
-            LOG.error("Fail to abort txn " + txnId, ex);
+            LOG.error("Fail to abort txn " + job.getTxnId(), ex);
         }
     }
 
@@ -221,26 +238,10 @@ public class CompactionScheduler extends Daemon {
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
             compactionManager.getAllPartitions()
                     .stream()
-                    .filter(p -> !isPartitionExist(p))
+                    .filter(p -> !MetaUtils.isPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
                     .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
                     .forEach(compactionManager::removePartition);
             lastPartitionCleanTime = now;
-        }
-    }
-
-    private boolean isPartitionExist(PartitionIdentifier partition) {
-        Database db = stateMgr.getDb(partition.getDbId());
-        if (db == null) {
-            return false;
-        }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            // lake table or lake materialized view
-            OlapTable table = (OlapTable) db.getTable(partition.getTableId());
-            return table != null && table.getPhysicalPartition(partition.getPartitionId()) != null;
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -312,7 +313,7 @@ public class CompactionScheduler extends Daemon {
             LOG.error(e);
             partition.setMinRetainVersion(0);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
-            abortTransactionIgnoreError(db.getId(), txnId, e.getMessage());
+            abortTransactionIgnoreError(job, e.getMessage());
             job.finish();
             failHistory.offer(CompactionRecord.build(job, e.getMessage()));
             return null;
@@ -351,12 +352,15 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utils.chooseBackend((LakeTablet) tablet);
-                if (beId == null) {
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getCompactionWarehouse();
+                ComputeNode computeNode = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
+                if (computeNode == null) {
                     beToTablets.clear();
                     return beToTablets;
                 }
-                beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+
+                beToTablets.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
             }
         }
         return beToTablets;
@@ -373,8 +377,11 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnSourceType txnSourceType = TransactionState.TxnSourceType.FE;
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
+
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getCompactionWarehouse();
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, Config.lake_compaction_default_timeout_second);
+                loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)
@@ -392,21 +399,27 @@ public class CompactionScheduler extends Daemon {
         }
 
         VisibleStateWaiter waiter;
+
+        TransactionState transactionState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), job.getTxnId());
+        List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         try {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), null);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());
     }
 
-    private void abortTransactionIgnoreError(long dbId, long txnId, String reason) {
+    private void abortTransactionIgnoreError(CompactionJob job, String reason) {
         try {
-            transactionMgr.abortTransaction(dbId, txnId, reason);
+            List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
+            transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
+                    Collections.emptyList(), null);
         } catch (UserException ex) {
             LOG.error(ex);
         }
@@ -438,6 +451,22 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    protected ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+        return runningCompactions;
+    }
+
+    public boolean existCompaction(long txnId) {
+        for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = getRunningCompactions().entrySet().iterator();
+                iterator.hasNext(); ) {
+            Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
+            CompactionJob job = entry.getValue();
+            if (job.getTxnId() == txnId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static class SynchronizedCircularQueue<E> {
         private CircularFifoQueue<E> q;
 
@@ -463,5 +492,27 @@ public class CompactionScheduler extends Daemon {
         synchronized void forEach(Consumer<? super E> consumer) {
             q.forEach(consumer);
         }
+    }
+
+    public boolean isTableDisabled(Long tableId) {
+        return disabledTables.contains(tableId);
+    }
+
+    public void disableTables(String disableTablesStr) {
+        Set<Long> newDisabledTables = new HashSet<>();
+        if (!disableTablesStr.isEmpty()) {
+            String[] arr = disableTablesStr.split(";");
+            for (String a : arr) {
+                try {
+                    long l = Long.parseLong(a);
+                    newDisabledTables.add(l);
+                } catch (NumberFormatException e) {
+                    LOG.warn("Bad format of disable tables string: {}, now is {}, should be like \"tableId1;tableId2\"",
+                              e, disableTablesStr);
+                    return;
+                }
+            }
+        }
+        disabledTables = Collections.unmodifiableSet(newDisabledTables);
     }
 }

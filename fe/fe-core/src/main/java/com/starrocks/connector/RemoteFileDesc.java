@@ -18,13 +18,18 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.iceberg.FileScanTask;
+import org.apache.kudu.client.KuduScanToken;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class RemoteFileDesc {
     private String fileName;
+    // Optional.
+    // The full path of the remote file.
+    private String fullPath;
     private String compression;
     private long length;
     private long modificationTime;
@@ -38,11 +43,14 @@ public class RemoteFileDesc {
     private List<FileScanTask> icebergScanTasks = new ArrayList<>();
     private PaimonSplitsInfo paimonSplitsInfo;
     private OdpsSplitsInfo odpsSplitsInfo;
+    private List<KuduScanToken> kuduScanTokens;
+
+    private HoodieInstant hudiInstant;
 
     private RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                            ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
                            List<FileScanTask> icebergScanTasks, PaimonSplitsInfo paimonSplitsInfo,
-                           OdpsSplitsInfo odpsSplitsInfo) {
+                           OdpsSplitsInfo odpsSplitsInfo, List<KuduScanToken> kuduScanTokens) {
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
@@ -52,6 +60,7 @@ public class RemoteFileDesc {
         this.icebergScanTasks = icebergScanTasks;
         this.paimonSplitsInfo = paimonSplitsInfo;
         this.odpsSplitsInfo = odpsSplitsInfo;
+        this.kuduScanTokens = kuduScanTokens;
     }
 
     public RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
@@ -65,15 +74,19 @@ public class RemoteFileDesc {
     }
 
     public static RemoteFileDesc createIcebergRemoteFileDesc(List<FileScanTask> tasks) {
-        return new RemoteFileDesc(null, null, 0, 0, null, null, tasks, null, null);
+        return new RemoteFileDesc(null, null, 0, 0, null, null, tasks, null, null, null);
     }
 
     public static RemoteFileDesc createPamonRemoteFileDesc(PaimonSplitsInfo paimonSplitsInfo) {
-        return new RemoteFileDesc(null, null, 0, 0, null, null, null, paimonSplitsInfo, null);
+        return new RemoteFileDesc(null, null, 0, 0, null, null, null, paimonSplitsInfo, null, null);
     }
 
     public static RemoteFileDesc createOdpsRemoteFileDesc(OdpsSplitsInfo odpsSplitsInfo) {
-        return new RemoteFileDesc(null, null, 0, 0, null, null, null, null, odpsSplitsInfo);
+        return new RemoteFileDesc(null, null, 0, 0, null, null, null, null, odpsSplitsInfo, null);
+    }
+
+    public static RemoteFileDesc createKuduRemoteFileDesc(List<KuduScanToken> kuduScanTokens) {
+        return new RemoteFileDesc(null, null, 0, 0, null, null, null, null, null, kuduScanTokens);
     }
 
     public String getFileName() {
@@ -100,17 +113,26 @@ public class RemoteFileDesc {
         return splittable;
     }
 
-    public TextFileFormatDesc getTextFileFormatDesc() {
-        return textFileFormatDesc;
-    }
-
     public RemoteFileDesc setSplittable(boolean splittable) {
         this.splittable = splittable;
         return this;
     }
 
+    public TextFileFormatDesc getTextFileFormatDesc() {
+        return textFileFormatDesc;
+    }
+
     public RemoteFileDesc setTextFileFormatDesc(TextFileFormatDesc textFileFormatDesc) {
         this.textFileFormatDesc = textFileFormatDesc;
+        return this;
+    }
+
+    public String getFullPath() {
+        return this.fullPath;
+    }
+
+    public RemoteFileDesc setFullPath(String fullPath) {
+        this.fullPath = fullPath;
         return this;
     }
 
@@ -125,14 +147,27 @@ public class RemoteFileDesc {
     public PaimonSplitsInfo getPaimonSplitsInfo() {
         return paimonSplitsInfo;
     }
+
     public OdpsSplitsInfo getOdpsSplitsInfo() {
         return odpsSplitsInfo;
+    }
+    public List<KuduScanToken> getKuduScanTokens() {
+        return kuduScanTokens;
+    }
+
+    public HoodieInstant getHudiInstant() {
+        return hudiInstant;
+    }
+
+    public void setHudiInstant(HoodieInstant instant) {
+        hudiInstant = instant;
     }
 
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("RemoteFileDesc{");
         sb.append("fileName='").append(fileName).append('\'');
+        sb.append("fullPath='").append(fullPath).append('\'');
         sb.append(", compression='").append(compression).append('\'');
         sb.append(", length=").append(length);
         sb.append(", modificationTime=").append(modificationTime);
@@ -142,6 +177,7 @@ public class RemoteFileDesc {
         sb.append(", hudiDeltaLogs=").append(hudiDeltaLogs);
         sb.append(", icebergScanTasks=").append(icebergScanTasks);
         sb.append(", paimonSplitsInfo=").append(paimonSplitsInfo);
+        sb.append(", kuduScanTokens=").append(kuduScanTokens);
         sb.append('}');
         return sb.toString();
     }

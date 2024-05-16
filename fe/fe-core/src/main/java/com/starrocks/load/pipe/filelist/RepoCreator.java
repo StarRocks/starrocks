@@ -69,7 +69,7 @@ public class RepoCreator {
     }
 
     public static boolean correctTable() {
-        int numBackends = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
+        int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         int replica = GlobalStateMgr.getCurrentState()
                 .mayGetDb(FileListTableRepo.FILE_LIST_DB_NAME)
                 .flatMap(db -> db.mayGetTable(FileListTableRepo.FILE_LIST_TABLE_NAME))

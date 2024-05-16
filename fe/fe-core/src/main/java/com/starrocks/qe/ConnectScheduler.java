@@ -37,6 +37,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.HttpConnectContext;
@@ -49,9 +50,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimerTask;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -125,24 +129,32 @@ public class ConnectScheduler {
         return true;
     }
 
-    // Register one connection with its connection id.
-    public boolean registerConnection(ConnectContext ctx) {
+    /**
+     * Register one connection with its connection id.
+     * @param ctx connection context
+     * @return a pair, first is success or not, second is error message(if any)
+     */
+    public Pair<Boolean, String> registerConnection(ConnectContext ctx) {
         if (numberConnection.get() >= maxConnections.get()) {
-            return false;
+            return new Pair<>(false, "Reach cluster-wide connection limit, qe_max_connection=" + maxConnections +
+                    ", connectionMap.size=" + connectionMap.size() +
+                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         // Check user
-        if (connCountByUser.get(ctx.getQualifiedUser()) == null) {
-            connCountByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
-        }
-        int currentConns = connCountByUser.get(ctx.getQualifiedUser()).get();
-        long currentMaxConns = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
-        if (currentConns >= currentMaxConns) {
-            return false;
+        connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
+        int currentConn = connCountByUser.get(ctx.getQualifiedUser()).get();
+        long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
+        if (currentConn >= currentUserMaxConn) {
+            return new Pair<>(false, "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
+                    ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
+                    "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
+                    ", connByUser.totConn=" + connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
+                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         numberConnection.incrementAndGet();
         connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
         connectionMap.put((long) ctx.getConnectionId(), ctx);
-        return true;
+        return new Pair<>(true, null);
     }
 
     public void unregisterConnection(ConnectContext ctx) {
@@ -152,6 +164,7 @@ public class ConnectScheduler {
             if (conns != null) {
                 conns.decrementAndGet();
             }
+            ctx.cleanTemporaryTable();
             LOG.info("Connection closed. remote={}, connectionId={}",
                     ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId());
         }
@@ -165,12 +178,15 @@ public class ConnectScheduler {
         return numberConnection.get();
     }
 
-    private List<ConnectContext.ThreadInfo> getAllConnThreadInfoByUser(ConnectContext connectContext, String user) {
+    private List<ConnectContext.ThreadInfo> getAllConnThreadInfoByUser(ConnectContext connectContext,
+                                                                       String currUser,
+                                                                       String forUser) {
         List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
         ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
 
         for (ConnectContext ctx : connectionMap.values()) {
-            if (!ctx.getQualifiedUser().equals(user)) {
+            // Check authorization first.
+            if (!ctx.getQualifiedUser().equals(currUser)) {
                 try {
                     Authorizer.checkSystemAction(currContext.getCurrentUserIdentity(),
                             currContext.getCurrentRoleIds(), PrivilegeType.OPERATE);
@@ -179,17 +195,28 @@ public class ConnectScheduler {
                 }
             }
 
+            // Check whether it's the connection for the specified user.
+            if (forUser != null && !ctx.getQualifiedUser().equals(forUser)) {
+                continue;
+            }
+
             infos.add(ctx.toThreadInfo());
         }
         return infos;
     }
 
-    public List<ConnectContext.ThreadInfo> listConnection(String user) {
-        return getAllConnThreadInfoByUser(null, user);
+    public List<ConnectContext.ThreadInfo> listConnection(String currUser, String forUser) {
+        return getAllConnThreadInfoByUser(null, currUser, forUser);
     }
 
-    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String user) {
-        return getAllConnThreadInfoByUser(context, user);
+    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String currUser) {
+        return getAllConnThreadInfoByUser(context, currUser, null);
+    }
+
+    public Set<UUID> listAllSessionsId() {
+        Set<UUID> sessionIds = new HashSet<>();
+        connectionMap.values().forEach(ctx -> sessionIds.add(ctx.getSessionId()));
+        return sessionIds;
     }
 
     private class LoopHandler implements Runnable {
@@ -213,10 +240,11 @@ public class ConnectScheduler {
                         return;
                     }
 
-                    if (registerConnection(context)) {
+                    Pair<Boolean, String> registerResult = registerConnection(context);
+                    if (registerResult.first) {
                         MysqlProto.sendResponsePacket(context);
                     } else {
-                        context.getState().setError("Reach limit of connections");
+                        context.getState().setError(registerResult.second);
                         MysqlProto.sendResponsePacket(context);
                         return;
                     }

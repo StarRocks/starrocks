@@ -51,11 +51,14 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -105,8 +108,10 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testAfterAborted(@Injectable TransactionState transactionState,
+    public void testAfterAborted(@Mocked RoutineLoadMgr routineLoadMgr,
+                                 @Injectable TransactionState transactionState,
                                  @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+        Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
         long txnId = 1L;
@@ -118,6 +123,8 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(attachment, "progress", kafkaProgress);
 
         KafkaProgress currentProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
 
         new Expectations() {
             {
@@ -136,6 +143,9 @@ public class RoutineLoadJobTest {
                 routineLoadTaskInfo.getId();
                 minTimes = 0;
                 result = UUID.randomUUID();
+                routineLoadMgr.getJob(anyLong);
+                minTimes = 0;
+                result = routineLoadJob;
             }
         };
 
@@ -146,7 +156,6 @@ public class RoutineLoadJobTest {
         };
 
         String txnStatusChangeReasonString = "no data";
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
         Deencapsulation.setField(routineLoadJob, "progress", currentProgress);
@@ -232,6 +241,38 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+    public void testGetShowInfoSharedData(@Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked WarehouseManager warehouseManager) throws UserException {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+                warehouseManager.getWarehouse(0L);
+                result = new DefaultWarehouse(0, "default_warehouse");
+                warehouseManager.getWarehouse(1L);
+                result = new Exception("Warehouse id: 1 not exist");
+            }
+        };
+
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        routineLoadJob.setWarehouseId(0L);
+        List<String> showInfo = routineLoadJob.getShowInfo();
+        Assert.assertEquals(22, showInfo.size());
+        Assert.assertEquals("default_warehouse", showInfo.get(20));
+
+        routineLoadJob.setWarehouseId(1L);
+        showInfo = routineLoadJob.getShowInfo();
+        Assert.assertEquals("Warehouse id: 1 not exist", showInfo.get(20));
+    }
+
+    @Test
     public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
         new Expectations() {
             {
@@ -286,7 +327,8 @@ public class RoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) throws UserException {
+                                                       ImmutableMap<String, String> properties,
+                                                       long warehouseId) throws UserException {
                 return Lists.newArrayList(1, 2, 3);
             }
         };

@@ -50,6 +50,10 @@ public class CreateTableLikeStmt extends DdlStmt {
         return ifNotExists;
     }
 
+    public String getCatalogName() {
+        return tableName.getCatalog();
+    }
+
     public String getDbName() {
         return tableName.getDb();
     }

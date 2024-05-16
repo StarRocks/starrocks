@@ -1,4 +1,5 @@
 ---
+keywords: ['xiugai'] 
 displayed_sidebar: "Chinese"
 ---
 
@@ -19,9 +20,9 @@ displayed_sidebar: "Chinese"
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
 
-> **注意**
->
-> 该操作需要有对应表的 ALTER 权限。
+:::tip
+该操作需要有对应表的 ALTER 权限。
+:::
 
 ## 语法
 
@@ -34,21 +35,25 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
-- rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
-- comment: 修改已有表的注释。**从 3.1 版本开始支持。**
+- rename: 修改表名，rollup index 名称，修改 partition 名称。
+- comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
-- column: 增加列，删除列，调整列顺序，修改列类型。
+- column: 增加列，删除列，调整列顺序，修改列类型。*
 - rollup index: 创建或删除 rollup index。
 - bitmap index: 修改 bitmap index。
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
 
-:::note
+## 使用限制和注意事项
 
 - partition、column 和 rollup index <!--是否包含compaction，bucket和column/rollupindex可以在一起吗-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
+- 当前还不支持修改列名。
+- 当前还不支持修改列注释。
+- 每张表仅支持一个进行中的 Schema Change 操作。不能对同一张表同时执行两条 Schema Change 命令。
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](../data-manipulation/SHOW_ALTER.md)。
 - rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
+
 :::
 
 ### Rename 对名称进行修改
@@ -86,6 +91,10 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
+
+:::tip
+当前还不支持修改列注释。
+:::
 
 ### 操作 partition 相关语法
 
@@ -128,7 +137,7 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE];
 注意：
 
 1. 使用分区方式的表至少要保留一个分区。
-2. 执行 DROP PARTITION 一段时间内，可以通过 RECOVER 语句恢复被删除的分区。详见 [RECOVER](../data-definition/RECOVER.md) 语句。
+2. 执行 DROP PARTITION 一段时间内（默认 1 天），可以通过 RECOVER 语句恢复被删除的分区。详见 [RECOVER](../data-definition/backup_restore/RECOVER.md) 语句。
 3. 如果执行 DROP PARTITION FORCE，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
@@ -314,8 +323,8 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 使用说明：
 
-- 聚合模型如果增加 value 列，需要指定 agg_type。
-- 非聚合模型（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
+- 聚合表如果增加 value 列，需要指定 agg_type。
+- 非聚合表（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
 - 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
 #### 向指定 index 添加多列
@@ -344,8 +353,8 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 注意：
 
-1. 聚合模型如果增加 value 列，需要指定 agg_type。
-2. 非聚合模型如果增加 key 列，需要指定 KEY 关键字。
+1. 聚合表如果增加 value 列，需要指定 agg_type。
+2. 非聚合表如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
 #### 增加生成列
@@ -388,42 +397,27 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 
 注意：
 
-1. 聚合模型如果修改 value 列，需要指定 agg_type。
+1. 聚合表如果修改 value 列，需要指定 agg_type。
 2. 非聚合类型如果修改 key 列，需要指定 KEY 关键字。
 3. 只能修改列的类型，列的其他属性维持原样（即其他属性需在语句中按照原属性显式的写出，参见示例中 [column](#column) 部分第 8 个例子）。
 4. 分区列不能做任何修改。
 5. 目前支持以下类型的转换（精度损失由用户保证）：
 
     - TINYINT/SMALLINT/INT/BIGINT 转换成 TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
-    - TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL 转换成 VARCHAR。
+    - TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL 转换成 VARCHAR。
     - VARCHAR 支持修改最大长度。
-    - VARCHAR 转换成 TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
+    - VARCHAR 转换成 TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
     - VARCHAR 转换成 DATE (目前支持 "%Y-%m-%d"，"%y-%m-%d"， "%Y%m%d"，"%y%m%d"，"%Y/%m/%d，"%y/%m/%d " 六种格式化格式)
     DATETIME 转换成 DATE(仅保留年-月-日信息，例如: `2019-12-09 21:47:05` &lt;--&gt; `2019-12-09`)
     DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` &lt;--&gt; `2019-12-09 00:00:00`)
     - FLOAT 转换成 DOUBLE。
     - INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
 
-6. 不支持从 NULL 转为 NOT NULL。
+#### 修改排序键
 
-#### 对指定 index 的列进行重新排序
+自 3.0 版本起，支持修改主键表的排序键。自 3.3 版本起，支持修改明细表、聚合表和更新表的排序键。
 
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-ORDER BY (column_name1, column_name2, ...)
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
-```
-
-注意：
-
-- index 中的所有列都要写出来。
-- value 列在 key 列之后。
-
-#### 修改主键表中组成排序键的列
-<!--支持版本-->
+明细表和主键表中排序键可以为任意列的排序组合，聚合表和更新表中排序键必须包含所有 key 列，但是列的顺序无需与 key 列保持一致。
 
 语法：
 
@@ -435,9 +429,9 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
-示例：
+示例：修改主键表中的排序键
 
-假设原表为主键表，排序键与主键耦合  `dt,order_id`。
+假设原表为主键表，排序键与主键耦合 `dt,order_id`。
 
 ```SQL
 create table orders (
@@ -615,6 +609,8 @@ StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，�
 
 3.1 版本之后，增加了一个 SQL 接口，用户可以通过执行 SQL 命令来手动进行 Compaction，可以指定表、单个或多个分区进行 Compaction。
 
+存算分离集群自 v3.3.0 起支持该功能。
+
 语法：
 
 ```sql
@@ -758,7 +754,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 ### Column
 
-1. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（非聚合模型）。
+1. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（非聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -766,7 +762,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-2. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（非聚合模型）。
+2. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（非聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -774,7 +770,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-3. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（聚合模型）。
+3. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -782,7 +778,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-4. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（SUM 聚合类型）（聚合模型）。
+4. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（SUM 聚合类型）（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -790,7 +786,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-5. 向 `example_rollup_index` 添加多列（聚合模型）。
+5. 向 `example_rollup_index` 添加多列（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table

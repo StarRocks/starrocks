@@ -397,12 +397,11 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     }
 
     int64_t xor_checksum = 0;
-    size_t num = _null_column->size();
     uint8_t* src = _null_column->get_data().data();
 
     // The XOR of NullableColumn
     // XOR all the 8-bit integers one by one
-    for (size_t i = 0; i < num; ++i) {
+    for (size_t i = from; i < to; ++i) {
         xor_checksum ^= src[i];
         if (!src[i]) {
             xor_checksum ^= _data_column->xor_checksum(static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1));
@@ -411,11 +410,12 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return xor_checksum;
 }
 
-void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     if (_has_null && _null_column->get_data()[idx]) {
-        buf->push_null();
+        buf->push_null(is_binary_protocol);
     } else {
-        _data_column->put_mysql_row_buffer(buf, idx);
+        buf->update_field_pos();
+        _data_column->put_mysql_row_buffer(buf, idx, is_binary_protocol);
     }
 }
 

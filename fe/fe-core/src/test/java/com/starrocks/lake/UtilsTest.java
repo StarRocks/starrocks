@@ -15,8 +15,13 @@
 
 package com.starrocks.lake;
 
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
@@ -24,21 +29,34 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Optional;
+
 public class UtilsTest {
 
     @Mocked
     GlobalStateMgr globalStateMgr;
 
     @Mocked
-    SystemInfoService systemInfoService;
+    NodeMgr nodeMgr;
+
+    @Mocked
+    NodeSelector nodeSelector;
 
     @Test
     public void testChooseBackend() {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+        };
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
+                SystemInfoService systemInfo = new SystemInfoService();
+                return systemInfo;
             }
         };
 
@@ -49,13 +67,57 @@ public class UtilsTest {
             }
         };
 
-        new MockUp<SystemInfoService>() {
+        new MockUp<NodeSelector>() {
             @Mock
             public Long seqChooseBackendOrComputeId() throws UserException {
                 throw new UserException("No backend or compute node alive.");
             }
         };
+    }
 
-        Assert.assertNull(Utils.chooseBackend(new LakeTablet(1000L)));
+    @Test
+    public void testGetWarehouse() {
+        WarehouseManager manager = new WarehouseManager();
+        manager.initDefaultWarehouse();
+
+        Optional<Long> workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertFalse(workerGroupId.isEmpty());
+        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
+
+        try {
+            workerGroupId = Optional.ofNullable(null);
+            workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, 1111L);
+            Assert.assertEquals(1, 2);   // can not be here
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(workerGroupId.isEmpty());
+            Assert.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
+        }
+    }
+
+    @Test
+    public void testGetWarehouseIdByNodeId() {
+        SystemInfoService systemInfo = new SystemInfoService();
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        b1.setBePort(9060);
+        b1.setWarehouseId(10001L);
+        Backend b2 = new Backend(10002L, "192.168.0.2", 9050);
+        b2.setBePort(9060);
+        b2.setWarehouseId(10002L);
+
+        // add two backends to different warehouses
+        systemInfo.addBackend(b1);
+        systemInfo.addBackend(b2);
+
+        // If the version of be is old, it may pass null.
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                Utils.getWarehouseIdByNodeId(systemInfo, 0).orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID).longValue());
+
+        // pass a wrong tBackend
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                Utils.getWarehouseIdByNodeId(systemInfo, 10003).orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID).longValue());
+
+        // pass a right tBackend
+        Assert.assertEquals(10001L, Utils.getWarehouseIdByNodeId(systemInfo, 10001).get().longValue());
+        Assert.assertEquals(10002L, Utils.getWarehouseIdByNodeId(systemInfo, 10002).get().longValue());
     }
 }

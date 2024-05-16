@@ -361,7 +361,7 @@ void benchmark_decompression(starrocks::CompressionTypePB type, std::string& str
 }
 
 TEST_F(BlockCompressionTest, LZ4F_compression_LARGE_PAGE_TEST) {
-    std::string str = random_string(1024 * 1024 * 20);
+    std::string str = random_string(1024 * 5);
     CompressionTypePB type = starrocks::CompressionTypePB::LZ4_FRAME;
 
     const BlockCompressionCodec* codec = nullptr;

@@ -254,7 +254,7 @@ struct TypeDescriptor {
         if (children != o.children) {
             return false;
         }
-        if (type == TYPE_CHAR) {
+        if (is_string_type()) {
             return len == o.len;
         }
         if (is_decimal_type()) {
@@ -304,6 +304,13 @@ struct TypeDescriptor {
 
     inline bool is_collection_type() const { return type == TYPE_ARRAY || type == TYPE_MAP; }
 
+    inline bool is_integer_type() const {
+        return type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT || type == TYPE_BIGINT ||
+               type == TYPE_LARGEINT;
+    }
+
+    inline bool is_float_type() const { return type == TYPE_FLOAT || type == TYPE_DOUBLE; }
+
     // Could this type be used at join on conjuncts
     bool support_join() const;
     // Could this type be used at order by clause
@@ -338,6 +345,8 @@ struct TypeDescriptor {
     void to_thrift(TTypeDesc* thrift_type) const;
 
     size_t get_array_depth_limit() const;
+
+    static TypeDescriptor promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2);
 
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.

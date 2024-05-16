@@ -23,8 +23,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
@@ -68,7 +68,7 @@ import org.apache.logging.log4j.Logger;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
+public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     protected static final Logger LOG = LogManager.getLogger(AlterJobExecutor.class);
     protected Database db;
     protected Table table;
@@ -118,7 +118,7 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
     public Void visitSwapTableClause(SwapTableClause clause, ConnectContext context) {
         // must hold db write lock
         Locker locker = new Locker();
-        Preconditions.checkState(locker.isWriteLockHeldByCurrentThread(db));
+        Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
 
         OlapTable origTable = (OlapTable) table;
 
@@ -324,7 +324,7 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
         Database db = MetaUtils.getDatabase(context, mvName);
 
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
         }
 

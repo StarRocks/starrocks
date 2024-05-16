@@ -15,8 +15,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
@@ -106,7 +104,7 @@ public class ShowTaskTest {
         Assert.assertEquals(2, tasks.size());
         for (TTaskInfo task : tasks) {
             if(task.getTask_name().equals("test_periodical")) {
-                Assert.assertEquals(task.getSchedule(),"PERIODICAL (START 2020-04-21T00:00 EVERY(5 SECONDS))");
+                Assert.assertEquals("PERIODICAL START(2020-04-21T00:00) EVERY(5 SECONDS)", task.getSchedule());
             } else {
                 Assert.assertEquals(task.getSchedule(),"MANUAL");
             }

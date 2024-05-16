@@ -27,8 +27,9 @@ ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_
     }
 }
 
-ScanExecutor::~ScanExecutor() {
+void ScanExecutor::close() {
     _task_queue->close();
+    _thread_pool->shutdown();
 }
 
 void ScanExecutor::initialize(int num_threads) {
@@ -86,6 +87,10 @@ void ScanExecutor::worker_thread() {
 
 bool ScanExecutor::submit(ScanTask task) {
     return _task_queue->try_offer(std::move(task));
+}
+
+void ScanExecutor::force_submit(ScanTask task) {
+    _task_queue->force_put(std::move(task));
 }
 
 } // namespace starrocks::workgroup

@@ -108,7 +108,7 @@ public:
     void set_cumulative_layer_point(int64_t new_point);
 
     size_t tablet_footprint(); // disk space occupied by tablet
-    size_t num_rows();
+    size_t num_rows() const override;
     size_t version_count() const;
     Version max_version() const;
 
@@ -157,8 +157,11 @@ public:
     [[nodiscard]] Status capture_consistent_rowsets(const Version& spec_version,
                                                     vector<RowsetSharedPtr>* rowsets) const;
 
+    [[nodiscard]] Status capture_consistent_rowsets(const int64_t gtid, vector<RowsetSharedPtr>* rowsets) const;
+
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
+    [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
     [[nodiscard]] bool has_delete_predicates(const Version& version);
 
     // meta lock
@@ -323,6 +326,9 @@ public:
 
     void set_will_be_force_replaced() { _will_be_force_replaced = true; }
 
+    void remove_all_delta_column_group_cache() const;
+    void remove_all_delta_column_group_cache_unlocked() const;
+
 protected:
     void on_shutdown() override;
 
@@ -402,6 +408,9 @@ private:
     // These _stale rowsets are been removed when rowsets' pathVersion is expired,
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
+
+    // gtid -> version
+    std::map<int64_t, int64_t> _gtid_to_version_map;
 
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;

@@ -17,10 +17,10 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exprs/array_expr.h"
-#include "exprs/jit/jit_expr.h"
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -170,31 +170,7 @@ public:
         }
         return expr;
     }
-
-    static void verify_with_jit(ColumnPtr ptr, Expr* expr, RuntimeState* runtime_state,
-                                const std::function<void(ColumnPtr const&)>& test_func) {
-        // Verify the original result.
-        test_func(ptr);
-
-        auto jit_engine = JITEngine::get_instance();
-        if (!jit_engine->support_jit()) {
-            return;
-        }
-
-        ObjectPool pool;
-        auto* jit_expr = JITExpr::create(&pool, expr);
-        ExprContext exprContext(jit_expr);
-        std::vector<ExprContext*> expr_ctxs = {&exprContext};
-
-        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
-
-        ptr = expr->evaluate(&exprContext, nullptr);
-        // Verify the result after JIT.
-        test_func(ptr);
-    }
 };
-
 class TExprBuilder {
 public:
     TExprBuilder& operator<<(const LogicalType& slot_type) {

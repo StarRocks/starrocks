@@ -67,12 +67,13 @@ Status SchemaFeTabletSchedulesScanner::start(RuntimeState* state) {
     if (_param->limit > 0) {
         request.__set_limit(_param->limit);
     }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tablet_schedules(*(_param->ip), _param->port, request, &response));
-        _infos.swap(response.tablet_schedules);
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
+    if (nullptr != _param->current_user_ident) {
+        request.__set_current_user_ident(*(_param->current_user_ident));
     }
+
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tablet_schedules(_ss_state, request, &response));
+    _infos.swap(response.tablet_schedules);
     return Status::OK();
 }
 

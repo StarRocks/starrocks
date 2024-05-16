@@ -53,8 +53,7 @@ DUPLICATE KEY(id)
 PARTITION BY (dt,province)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 alter table t_recharge_detail rename column dt to datekey;
 insert into t_recharge_detail values(1,1,1,'bj','2020-01-01');
@@ -105,7 +104,6 @@ PARTITION p4 VALUES [('15000000'), ('20000000'))
 DISTRIBUTED BY HASH(`bill_code`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT"
 );
 alter table bill_detail rename column bill_code to bill;

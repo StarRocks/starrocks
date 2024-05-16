@@ -69,7 +69,7 @@ public class IcebergScanNodeTest extends TableTestBase {
     public void testGetScanRangeLocations() throws Exception {
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableC, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableC, Maps.newHashMap());
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
@@ -97,7 +97,7 @@ public class IcebergScanNodeTest extends TableTestBase {
     public void testEqualityDelete() throws UserException {
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", columns, mockedNativeTableA, Maps.newHashMap());
+                "iceberg_table", "", columns, mockedNativeTableA, Maps.newHashMap());
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
@@ -120,7 +120,7 @@ public class IcebergScanNodeTest extends TableTestBase {
         Assert.assertEquals("/path/to/data-a.parquet", hdfsScanRange.full_path);
         Assert.assertEquals(2, hdfsScanRange.delete_files.size());
         TIcebergDeleteFile tDeleteFile = hdfsScanRange.delete_files.get(0);
-        Assert.assertEquals("/path/to/data-a2-deletes.parquet", tDeleteFile.full_path);
+        Assert.assertEquals("/path/to/data-a2-deletes.orc", tDeleteFile.full_path);
         Assert.assertEquals(TIcebergFileContent.EQUALITY_DELETES, tDeleteFile.file_content);
         Assert.assertEquals(2147473647, hdfsScanRange.delete_column_slot_ids.get(0).intValue());
         Assert.assertEquals(1, hdfsScanRange.delete_column_slot_ids.size());

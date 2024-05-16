@@ -25,6 +25,7 @@ SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
@@ -42,25 +43,29 @@ Status SchemaTasksScanner::start(RuntimeState* state) {
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tasks(*(_param->ip), _param->port, task_params, &_task_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tasks(_ss_state, task_params, &_task_result));
     _task_index = 0;
     return Status::OK();
 }
 
 DatumArray SchemaTasksScanner::_build_row() {
     auto& task = _task_result.tasks.at(_task_index++);
+    if (!task.__isset.catalog) {
+        // Compatible for upgrades
+        task.catalog = "default_catalog";
+    }
+    Datum expire_time = task.__isset.expire_time && task.expire_time > 0
+                                ? TimestampValue::create_from_unixtime(task.expire_time, _runtime_state->timezone_obj())
+                                : kNullDatum;
+    Datum create_time = task.__isset.create_time && task.create_time > 0
+                                ? TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj())
+                                : kNullDatum;
+
     return {
-            Slice(task.task_name),
-            TimestampValue::create_from_unixtime(task.create_time, _runtime_state->timezone_obj()),
-            Slice(task.schedule),
-            Slice(task.database),
-            Slice(task.definition),
-            TimestampValue::create_from_unixtime(task.expire_time, _runtime_state->timezone_obj()),
-            Slice(task.properties),
+            Slice(task.task_name),  create_time, Slice(task.schedule),   Slice(task.catalog), Slice(task.database),
+            Slice(task.definition), expire_time, Slice(task.properties),
     };
 }
 

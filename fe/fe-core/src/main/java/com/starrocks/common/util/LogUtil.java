@@ -14,6 +14,9 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Preconditions;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlAuthPacket;
 import com.starrocks.plugin.AuditEvent;
@@ -21,13 +24,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 
+import java.lang.management.ThreadInfo;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class LogUtil {
-
     public static void logConnectionInfoToAuditLogAndQueryQueue(ConnectContext ctx, MysqlAuthPacket authPacket) {
         boolean enableConnectionLog = false;
         if (Config.audit_log_modules != null) {
@@ -47,10 +52,11 @@ public class LogUtil {
                 .setAuthorizedUser(ctx.getCurrentUserIdentity() == null
                         ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
+                .setFeIp(FrontendOptions.getLocalHostAddress())
                 .setDb(authPacket == null ? "null" : authPacket.getDb())
                 .setState(ctx.getState().toString())
                 .setErrorCode(ctx.getState().getErrorMessage());
-        GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(builder.build());
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(builder.build());
 
         QueryDetail queryDetail = new QueryDetail();
         queryDetail.setQueryId(DebugUtil.printId(UUIDUtil.genUUID()));
@@ -60,19 +66,77 @@ public class LogUtil {
         queryDetail.setRemoteIP(ctx.getRemoteIP());
         queryDetail.setDatabase(authPacket == null ? "null" : authPacket.getDb());
         queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
+        queryDetail.setCatalog(ctx.getCurrentCatalog());
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
+    public static List<String> getCurrentStackTraceToList(int trimHeadLevels, int reserveLevels) {
+        return getStackTraceToList(Thread.currentThread(), trimHeadLevels, reserveLevels);
+    }
+
+    public static JsonArray getCurrentStackTraceToJsonArray(int trimHeadLevels, int reserveLevels) {
+        return strListToJsonArray(getCurrentStackTraceToList(trimHeadLevels, reserveLevels));
+    }
+
     public static List<String> getCurrentStackTraceToList() {
-        return Arrays.stream(Thread.currentThread().getStackTrace())
-                .map(StackTraceElement::toString)
-                .collect(Collectors.toList());
+        // no trim, reserve all levels
+        return getStackTraceToList(Thread.currentThread(), 0, 100);
+    }
+
+    public static JsonArray getCurrentStackTraceToJsonArray() {
+        return strListToJsonArray(getCurrentStackTraceToList());
+    }
+
+    // Trim `trimHeadLevels` stack frames from head,
+    // then reserve `reserveLevels` of the remained stack frames.
+    public static List<String> getStackTraceToList(Thread thread, int trimHeadLevels, int reserveLevels) {
+        return getStackTraceToList(thread.getStackTrace(), trimHeadLevels, reserveLevels);
+    }
+
+    public static JsonArray getStackTraceToJsonArray(Thread thread, int trimHeadLevels, int reserveLevels) {
+        return strListToJsonArray(getStackTraceToList(thread, trimHeadLevels, reserveLevels));
+    }
+
+    public static JsonArray getStackTraceToJsonArray(ThreadInfo threadInfo, int trimHeadLevels, int reserveLevels) {
+        return strListToJsonArray(getStackTraceToList(threadInfo.getStackTrace(), trimHeadLevels, reserveLevels));
     }
 
     public static String getCurrentStackTrace() {
         return Arrays.stream(Thread.currentThread().getStackTrace())
                 .map(stack -> "        " + stack.toString())
                 .collect(Collectors.joining(System.lineSeparator(), System.lineSeparator(), ""));
+    }
+
+    private static List<String> getStackTraceToList(StackTraceElement[] stackTraceElements,
+                                                    int trimHeadLevels,
+                                                    int reserveLevels) {
+        Preconditions.checkState(trimHeadLevels >= 0);
+        Preconditions.checkState(reserveLevels > 0);
+        List<String> stackTrace = Arrays.stream(stackTraceElements)
+                .map(StackTraceElement::toString)
+                .collect(Collectors.toList());
+        if (stackTrace.size() <= trimHeadLevels) {
+            return Collections.singletonList("all stack frames trimmed, trimHeadLevels: " + trimHeadLevels);
+        } else {
+            int toIndex = Math.min(trimHeadLevels + reserveLevels, stackTrace.size());
+            // slice list
+            return stackTrace.subList(trimHeadLevels, toIndex);
+        }
+    }
+
+    private static JsonArray strListToJsonArray(List<String> stackTrace) {
+        JsonArray jsonArray = new JsonArray();
+        stackTrace.forEach(jsonArray::add);
+        return jsonArray;
+    }
+
+    public static String dumpThread(Thread t, int reserveLevels) {
+        JsonObject info = new JsonObject();
+        info.addProperty("id", t.getId());
+        info.addProperty("name", t.getName());
+        info.add("stack", getStackTraceToJsonArray(t, 0, reserveLevels));
+
+        return info.toString();
     }
 
     // just remove redundant spaces, tabs and line separators

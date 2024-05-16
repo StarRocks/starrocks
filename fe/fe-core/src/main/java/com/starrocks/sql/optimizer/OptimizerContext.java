@@ -27,13 +27,15 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
-import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,6 +51,7 @@ public class OptimizerContext {
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
     private DumpInfo dumpInfo;
+    private Set<Long> currentSqlDbIds;
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private final OptimizerConfig optimizerConfig;
@@ -62,18 +65,22 @@ public class OptimizerContext {
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
-    // used by view based mv rewrite
-    // query's logical plan with view
-    private OptExpression logicalTreeWithView;
-    // collect LogicalViewScanOperators
-    private List<LogicalViewScanOperator> viewScans;
-
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
-    // TODO: refactor materialized view's variables/contexts into this.
     private QueryMaterializationContext queryMaterializationContext;
 
     private boolean isShortCircuit = false;
+    private boolean inMemoPhase = false;
+
+    // Is not null predicate can be derived from inner join or semi join,
+    // which should be kept to be used to convert outer join into inner join.
+    private List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
+
+    // uniquePartitionIdGenerator for external catalog
+    private long uniquePartitionIdGenerator = 0L;
+
+    // collect all LogicalOlapScanOperators in the query before any optimization
+    private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -86,6 +93,7 @@ public class OptimizerContext {
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
         this.queryId = UUID.randomUUID();
+        this.allLogicalOlapScanOperators = Collections.emptyList();
     }
 
     @VisibleForTesting
@@ -103,6 +111,7 @@ public class OptimizerContext {
         this.queryId = connectContext.getQueryId();
         this.sessionVariable = connectContext.getSessionVariable();
         this.dumpInfo = connectContext.getDumpInfo();
+        this.currentSqlDbIds = connectContext.getCurrentSqlDbIds();
         this.cteContext = new CTEContext();
         cteContext.reset();
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
@@ -142,6 +151,10 @@ public class OptimizerContext {
 
     public DumpInfo getDumpInfo() {
         return dumpInfo;
+    }
+
+    public Set<Long> getCurrentSqlDbIds() {
+        return currentSqlDbIds;
     }
 
     public CTEContext getCteContext() {
@@ -245,22 +258,6 @@ public class OptimizerContext {
                 ErrorType.INTERNAL_ERROR);
     }
 
-    public OptExpression getLogicalTreeWithView() {
-        return logicalTreeWithView;
-    }
-
-    public void setLogicalTreeWithView(OptExpression logicalTreeWithView) {
-        this.logicalTreeWithView = logicalTreeWithView;
-    }
-
-    public void setViewScans(List<LogicalViewScanOperator> viewScans) {
-        this.viewScans = viewScans;
-    }
-
-    public List<LogicalViewScanOperator> getViewScans() {
-        return viewScans;
-    }
-
     public void setQueryMaterializationContext(QueryMaterializationContext queryMaterializationContext) {
         this.queryMaterializationContext = queryMaterializationContext;
     }
@@ -281,5 +278,38 @@ public class OptimizerContext {
         if (this.queryMaterializationContext != null) {
             this.queryMaterializationContext.clear();
         }
+    }
+
+    public void setInMemoPhase(boolean inMemoPhase) {
+        this.inMemoPhase = inMemoPhase;
+    }
+
+    public boolean isInMemoPhase() {
+        return this.inMemoPhase;
+    }
+
+    public List<IsNullPredicateOperator> getPushdownNotNullPredicates() {
+        return pushdownNotNullPredicates;
+    }
+
+    public void addPushdownNotNullPredicates(IsNullPredicateOperator notNullPredicate) {
+        pushdownNotNullPredicates.add(notNullPredicate);
+    }
+
+    // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
+    public void clearNotNullPredicates() {
+        pushdownNotNullPredicates.clear();
+    }
+
+    public long getNextUniquePartitionId() {
+        return uniquePartitionIdGenerator++;
+    }
+
+    public void setAllLogicalOlapScanOperators(List<LogicalOlapScanOperator> allScanOperators) {
+        this.allLogicalOlapScanOperators = allScanOperators;
+    }
+
+    public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
+        return allLogicalOlapScanOperators;
     }
 }

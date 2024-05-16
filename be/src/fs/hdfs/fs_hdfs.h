@@ -18,6 +18,21 @@
 
 namespace starrocks {
 
+struct HdfsReadMetricsKey {
+    static constexpr const char* kTotalOpenFSTimeNs = "TotalOpenFSTimeNs";
+    static constexpr const char* kTotalOpenFileTimeNs = "TotalOpenFileTimeNs";
+
+    static constexpr const char* kTotalBytesRead = "TotalBytesRead";
+    static constexpr const char* kTotalLocalBytesRead = "TotalLocalBytesRead";
+    static constexpr const char* kTotalShortCircuitBytesRead = "TotalShortCircuitBytesRead";
+    static constexpr const char* kTotalZeroCopyBytesRead = "TotalZeroCopyBytesRead";
+
+    // metrics for hedged read
+    static constexpr const char* kTotalHedgedReadOps = "TotalHedgedReadOps";
+    static constexpr const char* kTotalHedgedReadOpsInCurThread = "TotalHedgedReadOpsInCurThread";
+    static constexpr const char* kTotalHedgedReadOpsWin = "TotalHedgedReadOpsWin";
+};
+
 std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options);
 
 } // namespace starrocks

@@ -17,7 +17,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "llvm/IR/Constants.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -64,11 +63,9 @@ StatusOr<llvm::Type*> IRHelper::logical_to_ir_type(llvm::IRBuilder<>& b, const L
     }
 }
 
-template <typename Type>
-StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, Type value) {
+StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, int64_t value) {
     switch (type) {
     case TYPE_BOOLEAN:
-        return b.getInt8(value);
     case TYPE_TINYINT:
         return b.getInt8(value);
     case TYPE_SMALLINT:
@@ -102,7 +99,7 @@ StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const Lo
     }
 }
 
-StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, const uint8_t* value) {
+StatusOr<llvm::Value*> IRHelper::load_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, const uint8_t* value) {
     switch (type) {
     case TYPE_BOOLEAN:
         return b.getInt8(reinterpret_cast<const uint8_t*>(value)[0]);
@@ -140,7 +137,6 @@ StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const Lo
 
 StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value* value, const LogicalType& from_type,
                                               const LogicalType& to_type) {
-    ASSIGN_OR_RETURN(auto logical_from_type, IRHelper::logical_to_ir_type(b, from_type));
     ASSIGN_OR_RETURN(auto logical_to_type, IRHelper::logical_to_ir_type(b, to_type));
 
     if (from_type == to_type) {
@@ -149,13 +145,14 @@ StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value*
         // TODO(Yueyang): check this.
         return b.CreateIntCast(value, logical_to_type, false);
     } else if (from_type == TYPE_BOOLEAN && is_float_type(to_type)) {
-        llvm::Value* integer = b.CreateIntCast(value, b.getInt32Ty(), false);
+        auto* integer = b.CreateIntCast(value, b.getInt32Ty(), false);
         return b.CreateCast(llvm::Instruction::SIToFP, integer, logical_to_type);
     } else if (is_integer_type(from_type) && to_type == TYPE_BOOLEAN) {
-        // TODO(Yueyang): check this type.
-        return b.CreateICmpNE(value, llvm::ConstantInt::get(logical_from_type, 0));
+        auto result = b.CreateICmpNE(value, llvm::ConstantInt::get(value->getType(), 0, true));
+        return b.CreateCast(llvm::Instruction::ZExt, result, logical_to_type);
     } else if (is_float_type(from_type) && to_type == TYPE_BOOLEAN) {
-        return b.CreateFCmpUNE(value, llvm::ConstantInt::get(logical_from_type, 0));
+        auto result = b.CreateFCmpUNE(value, llvm::ConstantFP::get(value->getType(), 0));
+        return b.CreateCast(llvm::Instruction::ZExt, result, logical_to_type);
     } else if (is_integer_type(from_type) && is_integer_type(to_type)) {
         return b.CreateIntCast(value, logical_to_type, true);
     } else if (is_integer_type(from_type) && is_float_type(to_type)) {
@@ -168,6 +165,43 @@ StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value*
 
     // Not supported.
     return Status::NotSupported("JIT cast type not supported.");
+}
+
+llvm::Value* IRHelper::build_if_else(llvm::Value* condition, llvm::Type* return_type,
+                                     const std::function<llvm::Value*()>& then_func,
+                                     const std::function<llvm::Value*()>& else_func, llvm::IRBuilder<>* builder) {
+    auto* head = builder->GetInsertBlock();
+    DCHECK_NE(head, nullptr);
+
+    // Create blocks for the then, else and merge cases.
+    llvm::BasicBlock* then_bb = llvm::BasicBlock::Create(head->getContext(), "then", head->getParent());
+    llvm::BasicBlock* else_bb = llvm::BasicBlock::Create(head->getContext(), "else", head->getParent());
+    llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(head->getContext(), "merge", head->getParent());
+
+    builder->CreateCondBr(condition, then_bb, else_bb);
+
+    // Emit the then block.
+    builder->SetInsertPoint(then_bb);
+    auto then_value = then_func();
+    builder->CreateBr(merge_bb);
+
+    // refresh then_bb for phi (could have changed due to code generation of then_value).
+    then_bb = builder->GetInsertBlock();
+
+    // Emit the else block.
+    builder->SetInsertPoint(else_bb);
+    auto else_value = else_func();
+    builder->CreateBr(merge_bb);
+
+    // refresh else_bb for phi (could have changed due to code generation of else_value).
+    else_bb = builder->GetInsertBlock();
+
+    // Emit the merge block.
+    builder->SetInsertPoint(merge_bb);
+    llvm::PHINode* result_value = builder->CreatePHI(return_type, 2, "res_value");
+    result_value->addIncoming(then_value, then_bb);
+    result_value->addIncoming(else_value, else_bb);
+    return result_value;
 }
 
 } // namespace starrocks

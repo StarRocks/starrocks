@@ -20,6 +20,8 @@ displayed_sidebar: "Chinese"
 CREATE DATABASE [IF NOT EXISTS] db_name
 ```
 
+`db_name`：数据库名称。有关数据库的命名要求，参见[系统限制](../../../reference/System_limit.md)。
+
 ## 示例
 
 1. 新建数据库 db_test。

@@ -39,7 +39,7 @@ def print_help():
     """help"""
     print(
         """
-python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a ${attr}] [--file_filter=${regex}] [--case_filter=${regex}]
+python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a ${attr}] [-C ${cluster_type}] [--file_filter=${regex}] [--case_filter=${regex}]
               -d|--dir             Case dirname|filename, default "./sql"
               -r|--record          SQL record mode, run cases in T and generate R
               -v|--validate        [DEFAULT] SQL validate mode, run cases in R, and check the results
@@ -48,10 +48,13 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
               -t|--timeout         Timeout(s) of each case, >0, default 600
               -l|--list            Only list cases name and don't run
               -a|--attr            Case attrs for filter, default all cases, e.x: system,admit
+              -C|--cluster         Cluster Type, cloud|native, default is native"
               --skip_reruns        skip 3 time reruns, all case will be run exactly once, default False
               --file_filter        Case file regex for filter, default .*
               --case_filter        Case name regex for filter, default .*
               --config             Config path, default conf/sr.conf
+              --keep_alive         Check cluster status before each case, only works with sequential mode(-c=1)
+              --run_info           Extra info
         """
     )
 
@@ -69,8 +72,10 @@ if __name__ == "__main__":
     part = False
     skip_reruns = False
     config = "conf/sr.conf"
+    keep_alive = False
+    run_info = ""
 
-    args = "hld:rvc:t:x:y:pa:"
+    args = "hld:rvc:t:x:y:pa:C:"
     detail_args = [
         "help",
         "list",
@@ -83,8 +88,11 @@ if __name__ == "__main__":
         "case_filter=",
         "part",
         "attr=",
+        "cluster=",
         "skip_reruns",
         "config=",
+        "keep_alive",
+        "run_info="
     ]
 
     case_dir = None
@@ -94,6 +102,8 @@ if __name__ == "__main__":
     case_name_regex = ".*"
 
     attr = ""
+
+    cluster = "native"
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], args, detail_args)
@@ -137,11 +147,32 @@ if __name__ == "__main__":
         if opt in ("-a", "--attr"):
             attr = arg
 
+        if opt in ("-C", "--cluster"):
+            cluster = arg
+
         if opt == "--skip_reruns":
             skip_reruns = True
 
         if opt == "--config":
             config = arg
+
+        if opt == "--keep_alive":
+            keep_alive = True
+
+        if opt == "--run_info":
+            run_info = arg
+
+    # merge cluster info to attr
+    cluster_attr = "!cloud" if cluster == "native" else "!native"
+    attr = f"{attr},{cluster_attr}".strip(",")
+    # check sequential mode with concurrency=1
+    if 'sequential' in attr and concurrency != 1:
+        print("In sequential mode, set concurrency=1 in default!")
+        concurrency = 1
+    # check alive mode with concurrency=1
+    if keep_alive and concurrency != 1:
+        print("In alive mode, set concurrency=1 in default!")
+        concurrency = 1
 
     # set environment
     os.environ["record_mode"] = "true" if record else "false"
@@ -150,6 +181,8 @@ if __name__ == "__main__":
     os.environ["case_filter"] = case_filter
     os.environ["attr"] = attr
     os.environ["config_path"] = config
+    os.environ["keep_alive"] = str(keep_alive)
+    os.environ['run_info'] = run_info
 
     argv = [
         "nosetests",

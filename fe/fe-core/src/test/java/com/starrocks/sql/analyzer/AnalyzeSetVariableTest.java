@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -80,9 +81,14 @@ public class AnalyzeSetVariableTest {
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
         UserVariable userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         Assert.assertNotNull(userVariable.getEvaluatedExpression());
-        Assert.assertEquals("3", userVariable.getEvaluatedExpression().getStringValue());
+        Assert.assertEquals("3", ((LiteralExpr) userVariable.getEvaluatedExpression()).getStringValue());
 
         sql = "set @var = abs(1.2)";
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        userVariable = (UserVariable) setStmt.getSetListItems().get(0);
+        Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
+
+        sql = "set @var =JSON_ARRAY(1, 2, 3)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         Assert.assertTrue(userVariable.getUnevaluatedExpression() instanceof Subquery);
@@ -105,7 +111,14 @@ public class AnalyzeSetVariableTest {
         Assert.assertEquals(2, setStmt.getSetListItems().size());
 
         sql = "set @var = [1,2,3]";
-        analyzeFail(sql, "Can't set variable with type ARRAY");
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        Assert.assertEquals(1, setStmt.getSetListItems().size());
+
+        sql = "set @var = to_binary('abab', 'hex')";
+        analyzeFail(sql, "Can't set variable with type VARBINARY");
+
+        sql = "set @var = [bitmap_empty(), bitmap_empty(), bitmap_empty()]";
+        analyzeFail(sql, "Can't set variable with type ARRAY<BITMAP>");
 
         sql = "set @var = bitmap_empty()";
         analyzeFail(sql, "Can't set variable with type BITMAP");
@@ -257,5 +270,31 @@ public class AnalyzeSetVariableTest {
 
         sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 1";
         analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testComputationFragmentSchedulingPolicy() {
+        String sql;
+
+        sql = "SET computation_fragment_scheduling_policy = compute_nodes_only";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = all_nodes";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = ALL_NODES";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = All_nodes";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = 'all_nodes'";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = \"all_nodes\"";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = compute_nodes";
+        analyzeFail(sql);
     }
 }

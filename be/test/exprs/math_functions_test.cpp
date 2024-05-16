@@ -998,6 +998,27 @@ TEST_F(VecMathFunctionsTest, ExpOverflowTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, CbrtTest) {
+    Columns columns;
+
+    auto tc1 = DoubleColumn::create();
+    tc1->append(0);
+    tc1->append(-8);
+    tc1->append(8);
+    tc1->append(3.1415);
+    tc1->append(-3.1415);
+    columns.emplace_back(tc1);
+
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    ColumnPtr results = MathFunctions::cbrt(ctx.get(), columns).value();
+    std::vector<double> expects = {0, -8, 8, 3.1415, -3.1415};
+
+    ASSERT_EQ(results->size(), expects.size());
+    for (int i = 0; i < results->size(); ++i) {
+        ASSERT_EQ(results->get(i).get_double(), std::cbrt(expects[i]));
+    }
+}
+
 TEST_F(VecMathFunctionsTest, squareTest) {
     {
         Columns columns;
@@ -1404,6 +1425,17 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         std::vector<bool> null_expect = {true, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::log2(ctx.get(), columns).value();
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        std::vector<bool> null_expect = {false, false, true};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::cbrt(ctx.get(), columns).value();
         auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
         ASSERT_EQ(nullable->size(), null_expect.size());
         for (size_t i = 0; i < nullable->size(); i++) {

@@ -32,17 +32,17 @@ PLAN FRAGMENT 0(F04)
   DOP: 16
   INSTANCES
     INSTANCE(0-F04#0)
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 1(F03)
   DOP: 16
   INSTANCES
     INSTANCE(1-F03#0)
       DESTINATIONS: 0-F04#0
-      BE: 10003
+      BE: 10002
     INSTANCE(2-F03#1)
       DESTINATIONS: 0-F04#0
-      BE: 10002
+      BE: 10003
     INSTANCE(3-F03#2)
       DESTINATIONS: 0-F04#0
       BE: 10001
@@ -146,11 +146,11 @@ PLAN FRAGMENT 1
   9:SORT
   |  order by: <slot 24> 24: L_SHIPMODE ASC
   |  offset: 0
-  |  
+  |
   8:AGGREGATE (merge finalize)
   |  output: sum(29: sum), sum(30: sum)
   |  group by: 24: L_SHIPMODE
-  |  
+  |
   7:EXCHANGE
 
 PLAN FRAGMENT 2
@@ -165,19 +165,19 @@ PLAN FRAGMENT 2
   |  STREAMING
   |  output: sum(27: case), sum(28: case)
   |  group by: 24: L_SHIPMODE
-  |  
+  |
   5:Project
   |  <slot 24> : 24: L_SHIPMODE
   |  <slot 27> : if((6: o_orderpriority = '1-URGENT') OR (6: o_orderpriority = '2-HIGH'), 1, 0)
   |  <slot 28> : if((6: o_orderpriority != '1-URGENT') AND (6: o_orderpriority != '2-HIGH'), 1, 0)
-  |  
+  |
   4:HASH JOIN
   |  join op: INNER JOIN (BUCKET_SHUFFLE)
-  |  colocate: false, reason: 
+  |  colocate: false, reason:
   |  equal join conjunct: 1: o_orderkey = 10: L_ORDERKEY
-  |  
+  |
   |----3:EXCHANGE
-  |    
+  |
   0:OlapScanNode
      TABLE: orders
      PREAGGREGATION: ON
@@ -199,7 +199,7 @@ PLAN FRAGMENT 3
   2:Project
   |  <slot 10> : 10: L_ORDERKEY
   |  <slot 24> : 24: L_SHIPMODE
-  |  
+  |
   1:OlapScanNode
      TABLE: lineitem
      PREAGGREGATION: ON
@@ -211,4 +211,3 @@ PLAN FRAGMENT 3
      cardinality=1
      avgRowSize=30.0
 [end]
-

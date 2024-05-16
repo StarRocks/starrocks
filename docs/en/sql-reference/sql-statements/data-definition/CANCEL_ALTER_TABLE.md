@@ -26,7 +26,7 @@ Cancels the execution of the ongoing ALTER TABLE operation, including:
 
 ## Parameters
 
-- `{COLUMN ｜ OPTIMIZE | ROLLUP}`：
+- `{COLUMN ｜ OPTIMIZE | ROLLUP}`
 
   - If `COLUMN` is specified, this statement cancels operations of modifying columns.
   - If `OPTIMIZE` is specified, this statement cancels operations of optimizing table schema.

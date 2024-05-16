@@ -16,6 +16,12 @@ shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/page_index_big_
 
 Succeed: Total num: 1, size: 1,261,651. OK num: 1(upload 1 files).
 -- !result
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/repeated_value.parquet oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/repeated_value.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,292,867. OK num: 1(upload 1 files).
+-- !result
 CREATE EXTERNAL TABLE read_range_test (
     c0 int,
     c1 int,
@@ -38,6 +44,18 @@ CREATE EXTERNAL TABLE read_range_big_page_test (
 ENGINE=file
 PROPERTIES (
     "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/page_index_big_page.parquet",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+CREATE EXTERNAL TABLE repeated_value (
+    c0 int,
+    c1 int,
+    c2 array<int>
+)
+ENGINE=file
+PROPERTIES (
+    "path" = "oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/repeated_value.parquet",
     "format" = "parquet"
 );
 -- result:
@@ -117,6 +135,11 @@ select * from read_range_big_page_test where c0 in (8193, 12289);
 -- result:
 8193	91808	93	[193,null,808]
 12289	87712	89	[289,null,712]
+-- !result
+select * from repeated_value where c0 = 1;
+-- result:
+1	50000	[1,50000]
+1	50000	[1,50000]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:

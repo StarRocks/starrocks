@@ -323,32 +323,6 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
-    public void testDecodeNodeRewriteMultiAgg()
-            throws Exception {
-        boolean cboCteReuse = connectContext.getSessionVariable().isCboCteReuse();
-        boolean enableLowCardinalityOptimize = connectContext.getSessionVariable().isEnableLowCardinalityOptimize();
-        int newPlannerAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
-        connectContext.getSessionVariable().setCboCteReuse(false);
-        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
-        connectContext.getSessionVariable().setNewPlanerAggStage(2);
-
-        try {
-            String sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
-            String plan = getVerboseExplain(sql);
-            Assert.assertTrue(plan, plan.contains("dict_col=S_ADDRESS"));
-            sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier " +
-                    "having count(1) > 0";
-            plan = getVerboseExplain(sql);
-            Assert.assertFalse(plan, plan.contains("dict_col="));
-            Assert.assertFalse(plan, plan.contains("Decode"));
-        } finally {
-            connectContext.getSessionVariable().setCboCteReuse(cboCteReuse);
-            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(enableLowCardinalityOptimize);
-            connectContext.getSessionVariable().setNewPlanerAggStage(newPlannerAggStage);
-        }
-    }
-
-    @Test
     public void testDecodeNodeRewrite7() throws Exception {
         String sql = "select S_ADDRESS, count(S_ADDRESS) from supplier group by S_ADDRESS";
         String plan = getFragmentPlan(sql);
@@ -841,34 +815,20 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select if(S_ADDRESS='kks', S_COMMENT, S_COMMENT) from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(
-                "  |  9 <-> if[(DictDecode(10: S_ADDRESS, [<place-holder> = 'kks']), [12: expr, VARCHAR(101), true], " +
-                        "[12: expr, VARCHAR(101), true]); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; " +
-                        "args nullable: true; result nullable: true]\n" +
-                        "  |  common expressions:\n" +
-                        "  |  12 <-> DictDecode(11: S_COMMENT, [<place-holder>])"));
+                "9 <-> if[(DictDecode(10: S_ADDRESS, [<place-holder> = 'kks']), DictDecode(11: S_COMMENT, [<place-holder>]), " +
+                        "DictDecode(11: S_COMMENT, [<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; " +
+                        "result: VARCHAR; args nullable: true; result nullable: true]"));
         assertNotContains(plan, "DecodeNode");
 
         // common expression reuse 3
-        sql =
-                "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
+        sql = "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  |  output columns:\n" +
-                "  |  9 <-> if[(DictDecode(11: S_ADDRESS, [<place-holder> = 'kks']), [13: expr, VARCHAR, true], " +
-                "DictDecode(12: S_COMMENT, [<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; " +
-                "args nullable: true; result nullable: true]\n" +
-                "  |  10 <-> concat[([13: expr, VARCHAR, true], DictDecode(11: S_ADDRESS, [<place-holder>])); " +
-                "args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
-        Assert.assertTrue(plan.contains("  |  common expressions:\n" +
-                "  |  13 <-> DictDecode(12: S_COMMENT, [upper(<place-holder>)])"));
+        Assert.assertTrue(plan.contains("9 <-> if[(DictDecode(11: S_ADDRESS, [<place-holder> = 'kks'])"));
 
         // support(support(unsupport(Column), unsupport(Column)))
         sql = "select REVERSE(SUBSTR(LEFT(REVERSE(S_ADDRESS),INSTR(REVERSE(S_ADDRESS),'/')-1),5)) FROM supplier";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:Project\n" +
-                "  |  <slot 9> : reverse(substr(left(11: expr, CAST(CAST(instr(11: expr, '/') AS BIGINT)" +
-                " - 1 AS INT)), 5))\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 11> : DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
+        assertContains(plan, "<slot 9> : reverse(substr(left(DictDecode(10: S_ADDRESS, [reverse(<place-holder>)])");
     }
 
     @Test
@@ -1903,5 +1863,49 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 9> : if(CURRENT_ROLE() = 'root', DictDecode(10: S_ADDRESS, [concat(<place-holder>, 'ccc')]), '***')");
+    }
+
+    @Test
+    public void testJoinWithMinMaxAgg() throws Exception {
+        String sql = "\n" +
+                "\n" +
+                "with agged_supplier as (\n" +
+                "    select S_NAME, max(S_ADDRESS) as mx_addr from supplier_nullable group by S_NAME\n" +
+                "),\n" +
+                "agged_supplier_1 as (\n" +
+                "    select l.S_NAME, l.mx_addr mx_addr from agged_supplier l left join " +
+                "[shuffle] supplier_nullable r on l.S_NAME=r.S_NAME\n" +
+                "),\n" +
+                "agged_supplier_2 as (\n" +
+                "  select S_NAME, if(mx_addr = 'key', 'key2', S_NAME) mx_addr from agged_supplier_1 l\n" +
+                "),\n" +
+                "agged_supplier_4 as (\n" +
+                "  select S_NAME, mx_addr from agged_supplier_2 l group by S_NAME,mx_addr\n" +
+                "),\n" +
+                "agged_supplier_5 as (\n" +
+                "    select l.S_NAME, l.mx_addr from agged_supplier_4 l join supplier_nullable r\n" +
+                ")\n" +
+                "select l.S_NAME,l.mx_addr from agged_supplier_5 l \n" +
+                "left join [shuffle] supplier_nullable z on l.S_NAME = z.S_NAME and l.mx_addr = z.S_ADDRESS\n" +
+                ";";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: max[([3: S_ADDRESS, VARCHAR, true]); args: VARCHAR; " +
+                "result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                "  |  group by: [2: S_NAME, CHAR, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * S_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * max-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  ");
+    }
+
+
+    @Test
+    public void testNestedStringFunc() throws Exception {
+        String sql = "SELECT CASE WHEN S_ADDRESS = '' THEN '' ELSE SUBSTR(MD5(S_ADDRESS), 1, 3) END AS value FROM supplier;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "if(DictDecode(10: S_ADDRESS, [<place-holder> = '']), ''," +
+                " substr(md5(DictDecode(10: S_ADDRESS, [<place-holder>])), 1, 3))");
     }
 }

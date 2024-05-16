@@ -54,8 +54,6 @@ public:
         return _state->wait_until(abs);
     }
 
-    SharedFuture<R> share() { return SharedFuture<R>(std::move(_state)); }
-
 protected:
     constexpr FutureBase() noexcept : _state() {}
 
@@ -76,6 +74,8 @@ protected:
         ~Reset() { _future._state.reset(); }
         FutureBase& _future;
     };
+
+    SharedFuture<R> share() { return SharedFuture<R>(std::move(_state)); }
 
     std::shared_ptr<SharedState<R>> _state;
 };
@@ -111,8 +111,11 @@ public:
         return std::move(this->_state->value());
     }
 
+    using BaseType::share;
+
 private:
     friend class Promise<R>;
+    friend class SharedFuture<R>;
 
     explicit Future(std::shared_ptr<SharedState<R>> state) : BaseType(std::move(state)) {}
 };
@@ -144,8 +147,11 @@ public:
         return this->_state->value();
     }
 
+    using BaseType::share;
+
 private:
     friend class Promise<R&>;
+    friend class SharedFuture<R&>;
 
     explicit Future(std::shared_ptr<SharedState<R&>> state) : BaseType(std::move(state)) {}
 };
@@ -175,8 +181,11 @@ public:
         this->wait_and_check_exception();
     }
 
+    using BaseType::share;
+
 private:
     friend class Promise<void>;
+    friend class SharedFuture<void>;
 
     explicit Future(std::shared_ptr<SharedState<void>> state) : BaseType(std::move(state)) {}
 };
@@ -224,9 +233,14 @@ public:
         return this->_state->value();
     }
 
+    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+
+    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+
 private:
     friend class Promise<R>;
     friend class Future<R>;
+    friend class FutureBase<R>;
 
     using BaseType = FutureBase<R>;
 
@@ -269,6 +283,10 @@ public:
         return this->_state->value();
     }
 
+    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+
+    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+
 private:
     friend class Promise<R&>;
 
@@ -310,6 +328,10 @@ public:
         SharedStateBase::check_state(this->_state);
         this->wait_and_check_exception();
     }
+
+    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+
+    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
 
 private:
     friend class Promise<void>;

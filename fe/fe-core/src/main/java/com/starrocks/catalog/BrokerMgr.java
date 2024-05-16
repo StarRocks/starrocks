@@ -47,7 +47,9 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ModifyBrokerClause;
@@ -77,7 +79,7 @@ public class BrokerMgr implements GsonPostProcessable {
     // we need IP to find the co-location broker.
     // { BrokerName -> { IP -> [FsBroker] } }
     private final Map<String, ArrayListMultimap<String, FsBroker>> brokersMap = Maps.newHashMap();
-    private final ReentrantLock lock = new ReentrantLock();
+    private final ReentrantLock lock = new FairReentrantLock();
     private BrokerProcNode procNode = null;
 
     public BrokerMgr() {
@@ -213,7 +215,7 @@ public class BrokerMgr implements GsonPostProcessable {
                 List<FsBroker> addressList = brokerAddrsMap.get(pair.first);
                 for (FsBroker addr : addressList) {
                     if (addr.port == pair.second) {
-                        throw new DdlException("Broker(" + pair.first + ":" + pair.second
+                        throw new DdlException("Broker(" + NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second)
                                 + ") has already in brokers.");
                     }
                 }
@@ -268,7 +270,8 @@ public class BrokerMgr implements GsonPostProcessable {
                     }
                 }
                 if (!found) {
-                    throw new DdlException("Broker(" + pair.first + ":" + pair.second + ") has not in brokers.");
+                    throw new DdlException("Broker(" + NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) +
+                            ") has not in brokers.");
                 }
             }
             GlobalStateMgr.getCurrentState().getEditLog().logDropBroker(new ModifyBrokerInfo(name, dropedAddressList));

@@ -90,7 +90,7 @@ public class AggregationNode extends PlanNode {
 
     private boolean useSortAgg = false;
     private boolean usePerBucketOptimize = false;
-    
+
     private boolean withLocalShuffle = false;
 
     // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
@@ -270,6 +270,7 @@ public class AggregationNode extends PlanNode {
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         msg.agg_node.setInterpolate_passthrough(
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
+        msg.agg_node.setEnable_pipeline_share_limit(ConnectContext.get().getSessionVariable().getEnableAggregationPipelineShareLimit());
     }
 
     protected String getDisplayLabelDetail() {
@@ -346,8 +347,10 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -357,7 +360,7 @@ public class AggregationNode extends PlanNode {
         }
 
         Function<Expr, Boolean> couldBoundChecker = couldBound(description, descTbl);
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                 candidatesOfSlotExpr(probeExpr, couldBoundChecker),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }

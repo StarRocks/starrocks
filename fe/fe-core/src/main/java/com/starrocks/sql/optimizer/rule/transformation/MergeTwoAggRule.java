@@ -146,7 +146,6 @@ public class MergeTwoAggRule extends TransformationRule {
                 aggregateAbove.getPartitionByColumns(),
                 newAggregations,
                 false,
-                -1,
                 aggregateAbove.getLimit(),
                 aggregateAbove.getPredicate());
 

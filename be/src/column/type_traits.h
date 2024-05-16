@@ -352,6 +352,11 @@ struct ColumnTraits<int16_t> {
 };
 
 template <>
+struct ColumnTraits<uint16_t> {
+    using ColumnType = UInt16Column;
+};
+
+template <>
 struct ColumnTraits<int32_t> {
     using ColumnType = Int32Column;
 };

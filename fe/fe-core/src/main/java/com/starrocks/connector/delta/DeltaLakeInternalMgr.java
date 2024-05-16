@@ -26,6 +26,7 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
@@ -37,14 +38,14 @@ import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class DeltaLakeInternalMgr {
-    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue");
-    private final String catalogName;
-    private final Map<String, String> properties;
-    private final HdfsEnvironment hdfsEnvironment;
+    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue", "dlf");
+    protected final String catalogName;
+    protected final Map<String, String> properties;
+    protected final HdfsEnvironment hdfsEnvironment;
     private final boolean enableMetastoreCache;
     private final CachingHiveMetastoreConf hmsConf;
     private ExecutorService refreshHiveMetastoreExecutor;
-    private final MetastoreType metastoreType;
+    protected final MetastoreType metastoreType;
 
     public DeltaLakeInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
@@ -54,7 +55,7 @@ public class DeltaLakeInternalMgr {
         this.hdfsEnvironment = hdfsEnvironment;
 
         String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
-        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+        if (!isSupportedMetastoreType(hiveMetastoreType)) {
             throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
         }
 
@@ -64,6 +65,14 @@ public class DeltaLakeInternalMgr {
             Util.validateMetastoreUris(hiveMetastoreUris);
         }
         this.metastoreType = MetastoreType.get(hiveMetastoreType);
+    }
+
+    protected boolean isSupportedMetastoreType(String metastoreType) {
+        return SUPPORTED_METASTORE_TYPE.contains(metastoreType);
+    }
+
+    public IMetastore createMetastore() {
+        return createHiveMetastore();
     }
 
     public IHiveMetastore createHiveMetastore() {

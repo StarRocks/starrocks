@@ -24,7 +24,7 @@ public class TaskRunBuilder {
     private final Task task;
     private Map<String, String> properties;
     private ConnectContext connectContext;
-    private ExecuteOption executeOption = new ExecuteOption();
+    private ExecuteOption executeOption = new ExecuteOption(false);
 
     public static TaskRunBuilder newBuilder(Task task) {
         return new TaskRunBuilder(task);
@@ -50,6 +50,8 @@ public class TaskRunBuilder {
         taskRun.setType(getTaskType());
         if (task.getSource().equals(Constants.TaskSource.MV)) {
             taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
+        } else if (task.getSource().equals(Constants.TaskSource.DATACACHE_SELECT)) {
+            taskRun.setProcessor(new DataCacheSelectProcessor());
         } else {
             taskRun.setProcessor(new SqlTaskRunProcessor());
         }

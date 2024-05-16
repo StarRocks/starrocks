@@ -20,6 +20,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -40,12 +41,13 @@ public class AstToSqlTest extends PlanTestBase {
 
     @ParameterizedTest
     @MethodSource("testSqls")
-    void testAstToSQl(String sql) {
+    void testAstToSQl(String sql, String expected) {
         StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
         Analyzer.analyze(stmt, connectContext);
         String afterSql = AstToSQLBuilder.toSQL(stmt);
         try {
             SqlParser.parse(afterSql, connectContext.getSessionVariable());
+            Assert.assertTrue(afterSql, afterSql.contains(expected));
         } catch (Exception e) {
             fail("failed to parse the sql: " + afterSql + ". errMsg: " + e.getMessage());
         }
@@ -53,12 +55,27 @@ public class AstToSqlTest extends PlanTestBase {
 
 
     private static Stream<Arguments> testSqls() {
-        List<String> sqls = Lists.newArrayList();
-        sqls.add("with with_t_0 as (select t0.days_add(t0.v1, -1692245077) from t0) select * from t1, with_t_0;");
-        sqls.add("with with_t_0 as (select t0.days_add(v1, -1692245077) as c from t0) select * from t1, with_t_0;");
-        sqls.add("with with_t_0 (abc) as (select t0.days_add(v1, -1692245077) as c from t0) select * from t1, with_t_0;");
-        sqls.add("with with_t_0 as (select t0.days_add(v1, -1692245077) as c from t0) " +
-                "select * from t1, with_t_0 where t1.abs(v4) = 1 order by t1.abs(v6) = 2;");
-        return sqls.stream().map(e -> Arguments.of(e));
+        List<Arguments> arguments = Lists.newArrayList();
+        arguments.add(Arguments.of("with with_t_0 as (select t0.days_add(t0.v1, -1692245077) from t0) " +
+                "select * from t1, with_t_0;", ""));
+        arguments.add(Arguments.of("with with_t_0 as (select /*+ set_var(query_timeout = 1) */" +
+                " t0.days_add(t0.v1, -1692245077) from t0) " +
+                "select * from t1, with_t_0;", ""));
+        arguments.add(Arguments.of("with with_t_0 as (select t0.days_add(v1, -1692245077) as c from t0) " +
+                "select * from t1, with_t_0;", ""));
+        arguments.add(Arguments.of("with with_t_0 (abc) as (select t0.days_add(v1, -1692245077) as c from t0) " +
+                "select * from t1, with_t_0;", ""));
+        arguments.add(Arguments.of("with with_t_0 as (select t0.days_add(v1, -1692245077) as c from t0) " +
+                "select * from t1, with_t_0 where t1.abs(v4) = 1 order by t1.abs(v6) = 2;", ""));
+        arguments.add(Arguments.of("with with_t_0 as (select t0.days_add(t0.v1, -1692245077) from t0) " +
+                        "select /*+ set_var(query_timeout = 1) */ * from t1, with_t_0",
+                "/*+ set_var(query_timeout = 1) */"));
+        arguments.add(Arguments.of("with with_t_0 as (select t0.days_add(t0.v1, -1692245077) from t0) " +
+                        "select /*+ set_var(query_timeout = 1) */ " +
+                        "/*+ SET_USER_VARIABLE(@b= (select max(k) from decimal_t), @ a = 1 + 1) */ * from t1, with_t_0",
+                "/*+ set_var(query_timeout = 1) */" +
+                        " /*+ SET_USER_VARIABLE(@b= (select max(k) from decimal_t), @ a = 1 + 1) */"));
+
+        return arguments.stream();
     }
 }

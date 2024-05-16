@@ -39,6 +39,7 @@ import com.google.gson.reflect.TypeToken;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
@@ -167,9 +168,9 @@ public class ExecuteSqlAction extends RestBaseAction {
     private void changeCatalogAndDB(String catalogName, String databaseName, HttpConnectContext context)
             throws StarRocksHttpException {
         try {
-            context.getGlobalStateMgr().changeCatalog(context, catalogName);
+            context.changeCatalog(catalogName);
             if (databaseName != null) {
-                context.getGlobalStateMgr().changeCatalogDb(context, databaseName);
+                context.changeCatalogDb(databaseName);
             }
         } catch (Exception e) {
             // 403 Forbidden DdlException
@@ -237,9 +238,9 @@ public class ExecuteSqlAction extends RestBaseAction {
 
         context.setConnectScheduler(connectScheduler);
         // mark as registered
-        boolean registered = connectScheduler.registerConnection(context);
-        if (!registered) {
-            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, "Reach limit of connections");
+        Pair<Boolean, String> result = connectScheduler.registerConnection(context);
+        if (!result.first) {
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, result.second);
         }
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);

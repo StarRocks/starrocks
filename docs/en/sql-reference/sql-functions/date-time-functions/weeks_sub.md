@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Returns the value with the number of weeks minused to date.
+Subtracts a specified number of weeks from a datetime or date value.
 
 ## Syntax
 
@@ -22,7 +22,7 @@ DATETIME weeks_sub(DATETIME expr1, INT expr2);
 
 ## Return value
 
-returns `DATETIME`. 
+Returns a `DATETIME` value.
 
 `NULL` is returned if the date does not exist.
 

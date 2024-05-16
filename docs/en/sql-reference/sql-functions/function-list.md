@@ -4,9 +4,9 @@ displayed_sidebar: "English"
 
 # Function list
 
-StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions.
+StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions. StarRocks also provides [Hive Bitmap UDFs](../../integrations/hive_bitmap_udf.md). You can generate Bitmap data in Hive and then load Bitmap into StarRocks. You can also export the Bitmap data generated in StarRocks to Hive for other systems to use.
 
-You can find a function based on the following categories:
+You can find a built-in function based on the following categories:
 
 - [Function list](#function-list)
   - [Aggregate functions](#aggregate-functions)
@@ -16,7 +16,7 @@ You can find a function based on the following categories:
   - [Bitmap functions](#bitmap-functions)
   - [Conditional functions](#conditional-functions)
   - [Cryptographic functions](#cryptographic-functions)
-  - [Date functions](#date-functions)
+  - [Date and time functions](#date-and-time-functions)
   - [Geographic functions](#geographic-functions)
   - [Hash functions](#hash-functions)
   - [JSON functions](#json-functions)
@@ -29,11 +29,13 @@ You can find a function based on the following categories:
   - [Struct functions](#struct-functions)
   - [Table functions](#table-functions)
   - [Utility functions](#utility-functions)
+  - [Dictionary functions](#dictionary-functions)
 
 ## Aggregate functions
 
 - [any_value](./aggregate-functions/any_value.md)
 - [approx_count_distinct](./aggregate-functions/approx_count_distinct.md)
+- [approx_top_k](./aggregate-functions/approx_top_k.md)
 - [array_agg](./array-functions/array_agg.md)
 - [avg](./aggregate-functions/avg.md)
 - [bitmap](./aggregate-functions/bitmap.md)
@@ -42,11 +44,10 @@ You can find a function based on the following categories:
 - [covar_pop](./aggregate-functions/covar_pop.md)
 - [covar_samp](./aggregate-functions/covar_samp.md)
 - [count](./aggregate-functions/count.md)
-- [group_concat](./aggregate-functions/group_concat.md)
+- [count_if](./aggregate-functions/count_if.md)
+- [group_concat](./string-functions/group_concat.md)
 - [grouping](./aggregate-functions/grouping.md)
 - [grouping_id](./aggregate-functions/grouping_id.md)
-- [hll_empty](./aggregate-functions/hll_empty.md)
-- [hll_hash](./aggregate-functions/hll_hash.md)
 - [hll_raw_agg](./aggregate-functions/hll_raw_agg.md)
 - [hll_union](./aggregate-functions/hll_union.md)
 - [hll_union_agg](./aggregate-functions/hll_union_agg.md)
@@ -60,7 +61,7 @@ You can find a function based on the following categories:
 - [percentile_cont](./aggregate-functions/percentile_cont.md)
 - [percentile_disc](./aggregate-functions/percentile_disc.md)
 - [retention](./aggregate-functions/retention.md)
-- [stddev，stddev_pop](./aggregate-functions/stddev.md)
+- [stddev, stddev_pop](./aggregate-functions/stddev.md)
 - [stddev_samp](./aggregate-functions/stddev_samp.md)
 - [sum](./aggregate-functions/sum.md)
 - [variance, variance_pop, var_pop](./aggregate-functions/variance.md)
@@ -77,6 +78,7 @@ You can find a function based on the following categories:
 - [array_concat](./array-functions/array_concat.md)
 - [array_contains](./array-functions/array_contains.md)
 - [array_contains_all](./array-functions/array_contains_all.md)
+- [array_contains_seq](./array-functions/array_contains_seq.md)
 - [array_cum_sum](./array-functions/array_cum_sum.md)
 - [array_difference](./array-functions/array_difference.md)
 - [array_distinct](./array-functions/array_distinct.md)
@@ -99,7 +101,7 @@ You can find a function based on the following categories:
 - [array_unique_agg](./array-functions/array_unique_agg.md)
 - [cardinality](./array-functions/cardinality.md)
 - [element_at](./array-functions/element_at.md)
-- [reverse](./array-functions/reverse.md)
+- [reverse](./string-functions/reverse.md)
 - [unnest](./array-functions/unnest.md)
 
 ## Binary functions
@@ -171,16 +173,16 @@ You can find a function based on the following categories:
 - [sm3](./crytographic-functions/sm3.md)
 - [to_base64](./crytographic-functions/from_base64.md)
 
-## Date functions
+## Date and time functions
 
 - [add_months](./date-time-functions/add_months.md)
-- [adddate, days_ad](./date-time-functions/adddate.md)
+- [adddate](./date-time-functions/adddate.md)
 - [convert_tz](./date-time-functions/convert_tz.md)
-- [current_date，curdate](./date-time-functions/curdate.md)
-- [current_time，curtime](./date-time-functions/curtime.md)
+- [current_date, curdate](./date-time-functions/curdate.md)
+- [current_time, curtime](./date-time-functions/curtime.md)
 - [current_timestamp](./date-time-functions/current_timestamp.md)
 - [date](./date-time-functions/date.md)
-- [date_add](./date-time-functions/date_add.md)
+- [date_add, adddate](./date-time-functions/date_add.md)
 - [date_diff](./date-time-functions/date_diff.md)
 - [date_format](./date-time-functions/date_format.md)
 - [date_slice](./date-time-functions/date_slice.md)
@@ -188,12 +190,12 @@ You can find a function based on the following categories:
 - [date_trunc](./date-time-functions/date_trunc.md)
 - [datediff](./date-time-functions/datediff.md)
 - [day](./date-time-functions/day.md)
-- [day_of_week_iso](./date-time-functions/day_of_week_iso.md)
+- [dayofweek_iso](./date-time-functions/day_of_week_iso.md)
 - [dayname](./date-time-functions/dayname.md)
 - [dayofmonth](./date-time-functions/dayofmonth.md)
 - [dayofweek](./date-time-functions/dayofweek.md)
 - [dayofyear](./date-time-functions/dayofyear.md)
-- [days_add](./date-time-functions/adddate.md)
+- [days_add](./date-time-functions/days_add.md)
 - [days_diff](./date-time-functions/days_diff.md)
 - [days_sub](./date-time-functions/days_sub.md)
 - [from_days](./date-time-functions/from_days.md)
@@ -207,6 +209,7 @@ You can find a function based on the following categories:
 - [makedate](./date-time-functions/makedate.md)
 - [microseconds_add](./date-time-functions/microseconds_add.md)
 - [microseconds_sub](./date-time-functions/microseconds_sub.md)
+- [milliseconds_diff](./date-time-functions/milliseconds_diff.md)
 - [minute](./date-time-functions/minute.md)
 - [minutes_add](./date-time-functions/minutes_add.md)
 - [minutes_diff](./date-time-functions/minutes_diff.md)
@@ -247,6 +250,7 @@ You can find a function based on the following categories:
 - [weeks_diff](./date-time-functions/weeks_diff.md)
 - [weeks_sub](./date-time-functions/weeks_sub.md)
 - [year](./date-time-functions/year.md)
+- [yearweek](./date-time-functions/yearweek.md)
 - [years_add](./date-time-functions/years_add.md)
 - [years_diff](./date-time-functions/years_diff.md)
 - [years_sub](./date-time-functions/years_sub.md)
@@ -276,6 +280,7 @@ You can find a function based on the following categories:
 - [parse_json](./json-functions/json-constructor-functions/parse_json.md)
 - [Arrow function](./json-functions/json-query-and-processing-functions/arrow-function.md)
 - [cast](./json-functions/json-query-and-processing-functions/cast.md)
+- [get_json_bool](./json-functions/json-query-and-processing-functions/get_json_bool.md)
 - [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)
 - [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)
 - [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)
@@ -312,6 +317,7 @@ You can find a function based on the following categories:
 - [lpad](./string-functions/lpad.md)
 - [ltrim](./string-functions/ltrim.md)
 - [money_format](./string-functions/money_format.md)
+- [ngram_search](./string-functions/ngram_search.md)
 - [null_or_empty](./string-functions/null_or_empty.md)
 - [parse_url](./string-functions/parse_url.md)
 - [repeat](./string-functions/repeat.md)
@@ -336,6 +342,7 @@ You can find a function based on the following categories:
 - [upper](./string-functions/upper.md)
 - [url_decode](./string-functions/url_decode.md)
 - [url_encode](./string-functions/url_encode.md)
+- [url_extract_host](./string-functions/url_extract_host.md)
 - [url_extract_parameter](./string-functions/url_extract_parameter.md)
 
 ## Map functions
@@ -361,6 +368,7 @@ You can find a function based on the following categories:
 - [atan](./math-functions/atan.md)
 - [atan2](./math-functions/atan2.md)
 - [bin](./math-functions/bin.md)
+- [cbrt](./math-functions/cbrt.md)
 - [ceil, dceil](./math-functions/ceil.md)
 - [ceiling](./math-functions/ceiling.md)
 - [conv](./math-functions/conv.md)
@@ -418,6 +426,8 @@ You can find a function based on the following categories:
 ## Scalar functions
 
 - [hll_cardinality](./scalar-functions/hll_cardinality.md)
+- [hll_empty](./scalar-functions/hll_empty.md)
+- [hll_hash](./scalar-functions/hll_hash.md)
 
 ## Struct functions
 
@@ -449,3 +459,7 @@ You can find a function based on the following categories:
 - [uuid](./utility-functions/uuid.md)
 - [uuid_numeric](./utility-functions/uuid_numeric.md)
 - [version](./utility-functions/version.md)
+
+## Dictionary functions
+
+[dict_mapping](./dict-functions/dict_mapping.md)

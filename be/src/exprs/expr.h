@@ -43,15 +43,13 @@
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
-#include "exprs/jit/ir_helper.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
 namespace starrocks {
 
+class BloomFilter;
 class Expr;
 class ObjectPool;
 class RuntimeState;
@@ -64,7 +62,10 @@ struct UserFunctionCacheEntry;
 class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
+class JITContext;
 class JITExpr;
+struct JitScore;
+struct LLVMDatum;
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {
@@ -102,15 +103,6 @@ public:
     void clear_children() { _children.clear(); }
     Expr* get_child(int i) const { return _children[i]; }
     int get_num_children() const { return _children.size(); }
-    int get_num_jit_children() const {
-        int num = 0;
-        if (is_compilable()) {
-            for (auto& child : _children) {
-                num += child->get_num_jit_children();
-            }
-        }
-        return num + 1;
-    };
 
     const TypeDescriptor& type() const { return _type; }
     const std::vector<Expr*>& children() const { return _children; }
@@ -157,14 +149,14 @@ public:
     /// Create expression tree from the list of nodes contained in texpr within 'pool'.
     /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
     /// 'ctx'.
-    [[nodiscard]] static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx,
-                                                 RuntimeState* state);
+    static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
+                                   bool can_jit = false);
 
     /// Creates vector of ExprContexts containing exprs from the given vector of
     /// TExprs within 'pool'.  Returns an error if any of the individual conversions caused
     /// an error, otherwise OK.
-    [[nodiscard]] static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs,
-                                                  std::vector<ExprContext*>* ctxs, RuntimeState* state);
+    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
+                                    RuntimeState* state, bool can_jit = false);
 
     /// Creates an expr tree for the node rooted at 'node_idx' via depth-first traversal.
     /// parameters
@@ -178,9 +170,8 @@ public:
     /// return
     ///   [[nodiscard]] Status.ok() if successful
     ///   ![[nodiscard]] Status.ok() if tree is inconsistent or corrupt
-    [[nodiscard]] static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes,
-                                                        Expr* parent, int* node_idx, Expr** root_expr,
-                                                        ExprContext** ctx, RuntimeState* state);
+    static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
+                                          int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state);
 
     static Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
                                                    int* node_idx, Expr** root_expr, ExprContext** ctx,
@@ -225,44 +216,47 @@ public:
     // Get the first column ref in expr.
     ColumnRef* get_column_ref();
 
-    /**
-     * @brief For JIT compile, generate IR code for this expr.
-     * This function primarily generates generic union null code and calls the 'generate_ir_impl' method.
-     */
-    [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module,
-                                                          llvm::IRBuilder<>& b,
-                                                          const std::vector<LLVMDatum>& datums) const final;
+    StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
 
-    /**
-     * @brief For JIT compile, generate specific evaluation IR code for this expr.
-     * Its internal logic is similar to the 'evaluate_checked' function.
-     */
-    [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module,
-                                                               llvm::IRBuilder<>& b,
-                                                               const std::vector<LLVMDatum>& datums) const {
-        return Status::NotSupported("JIT expr not supported");
-    }
+    virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
 
     // Return true if this expression supports JIT compilation.
-    virtual bool is_compilable() const { return false; }
+    virtual bool is_compilable(RuntimeState* state) const { return false; }
+
+    std::string jit_func_name(RuntimeState* state) const;
+
+    virtual std::string jit_func_name_impl(RuntimeState* state) const;
+
+    std::string jit_func_name() const;
 
     // This function will collect all uncompiled expressions in this expression tree.
     // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
-    void get_uncompilable_exprs(std::vector<Expr*>& exprs);
-
-    // This function collects all JIT-related expressions in this expression tree in post-order.
-    // JIT-related expressions include all compilable expressions and the non-compilable expressions that serve as inputs.
-    void get_jit_exprs(std::vector<Expr*>& exprs);
+    void get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state);
 
     // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
     // This method searches from top to bottom for compilable expressions.
     // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
     // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
-    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool);
+    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced);
 
     // Establishes whether the current expression should undergo compilation.
-    bool should_compile() const;
+    // if adaptive, the valuable expressions should take the majority, i.e., `jit_score_ratio` of all expressions,
+    // but case_when expr is especial, refer to its `compute_jit_score()`.
+    bool should_compile(RuntimeState* state) const;
 
+    // The valuable expressions get 1 score per expression, others get 0 score per expression, including
+    // comparison expr, logical expr, branch expr, div and mod.
+    virtual JitScore compute_jit_score(RuntimeState* state) const;
+
+    // Return true if this expr or any of its children support ngram bloom filter, otherwise return flase
+    virtual bool support_ngram_bloom_filter(ExprContext* context) const;
+
+    // Return false to filter out a data page.
+    virtual bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
+                                    const NgramBloomFilterReaderOptions& reader_options) const;
+
+    // Return true if this expr or any of its children is index only filter, otherwise return false
+    bool is_index_only_filter() const;
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }
 #endif
@@ -315,6 +309,11 @@ protected:
     /// Releases cache entries to LibCache in all nodes of the Expr tree.
     virtual void close();
 
+    // ------------------------------------------------------------------------------------
+    // Data Members:
+    // **NOTE** that when adding a new data member, please check whether it need to be added into `Expr::Expr(const Expr&)`.
+    // ------------------------------------------------------------------------------------
+
     /// Cache entry for the library implementing this function.
     std::shared_ptr<UserFunctionCacheEntry> _cache_entry = nullptr;
 
@@ -334,6 +333,9 @@ protected:
     // Is this expr monotnoic or not. This info is passed from FE
     bool _is_monotonic = false;
 
+    // In storage engine, Is this expr only used for index filter(so expr filter phase will skip this expr). This info is passed from FE
+    bool _is_index_only_filter = false;
+
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;
     std::vector<Expr*> _children = std::vector<Expr*>();
@@ -348,6 +350,7 @@ protected:
     int _fn_context_index;
 
     std::once_flag _constant_column_evaluate_once{};
+    // set if this expr is constant, used to avoid redundant computation
     StatusOr<ColumnPtr> _constant_column = Status::OK();
 
     /// Simple debug string that provides no expr subclass-specific information
@@ -356,6 +359,8 @@ protected:
         out << expr_name << "(" << Expr::debug_string() << ")";
         return out.str();
     }
+
+    Status prepare_jit_expr(RuntimeState* state, ExprContext* context);
 
 private:
     // Create a new vectorized expr

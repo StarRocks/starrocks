@@ -28,7 +28,7 @@ public class PluginAnalyzer {
         new PluginAnalyzerVisitor().visit(statement, context);
     }
 
-    static class PluginAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class PluginAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {

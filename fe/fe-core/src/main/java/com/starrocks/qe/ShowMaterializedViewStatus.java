@@ -55,6 +55,7 @@ public class ShowMaterializedViewStatus {
     private String partitionType;
     private long lastCheckTime;
     private String inactiveReason;
+    private String queryRewriteStatus;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -215,6 +216,8 @@ public class ShowMaterializedViewStatus {
         private boolean isReplay = false;
         @SerializedName("priority")
         private int priority = Constants.TaskRunPriority.LOWEST.value();
+        @SerializedName("lastTaskRunState")
+        private Constants.TaskRunState lastTaskRunState = Constants.TaskRunState.PENDING;
 
         public boolean isManual() {
             return isManual;
@@ -254,6 +257,14 @@ public class ShowMaterializedViewStatus {
 
         public void setQueryIds(List<String> queryIds) {
             this.queryIds = queryIds;
+        }
+
+        public Constants.TaskRunState getLastTaskRunState() {
+            return lastTaskRunState;
+        }
+
+        public void setLastTaskRunState(Constants.TaskRunState lastTaskRunState) {
+            this.lastTaskRunState = lastTaskRunState;
         }
     }
 
@@ -375,6 +386,7 @@ public class ShowMaterializedViewStatus {
         List<String> queryIds = applyTaskRunStatusWith(x -> x.getQueryId());
         // queryIds
         extraMessage.setQueryIds(queryIds);
+        extraMessage.setLastTaskRunState(lastTaskRunStatus.getState());
         MVTaskRunExtraMessage firstTaskRunExtraMessage = firstTaskRunStatus.getMvTaskRunExtraMessage();
         if (firstTaskRunExtraMessage != null && firstTaskRunExtraMessage.getExecuteOption() != null) {
             ExecuteOption executeOption = firstTaskRunExtraMessage.getExecuteOption();
@@ -437,6 +449,13 @@ public class ShowMaterializedViewStatus {
         return status;
     }
 
+    public String getQueryRewriteStatus() {
+        return queryRewriteStatus;
+    }
+
+    public void setQueryRewriteStatus(String queryRewriteStatus) {
+        this.queryRewriteStatus = queryRewriteStatus;
+    }
 
     /**
      * Return the thrift of show materialized views command from be's request.
@@ -487,6 +506,9 @@ public class ShowMaterializedViewStatus {
         // extra message
         status.setExtra_message(refreshJobStatus.getExtraMessage() == null ? "" :
                 GsonUtils.GSON.toJson(refreshJobStatus.getExtraMessage()));
+
+        // query_rewrite_status
+        status.setQuery_rewrite_status(queryRewriteStatus);
 
         return status;
     }
@@ -552,6 +574,8 @@ public class ShowMaterializedViewStatus {
         // extra message
         addField(resultRow, refreshJobStatus.getExtraMessage() == null ? "" :
                 GsonUtils.GSON.toJson(refreshJobStatus.getExtraMessage()));
+        // query_rewrite_status
+        addField(resultRow, queryRewriteStatus);
 
         return resultRow;
     }

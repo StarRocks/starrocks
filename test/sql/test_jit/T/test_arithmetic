@@ -42,7 +42,7 @@ INSERT INTO jit_basic (k1, k2, v1, v2, v3, v4, v5, v6, v7, v8, v9) VALUES
 (1234, -645, 9223372036854775807, -9223372036854775808, 1, 2, 3, 0, -1, -2, -3),
 (754, -14, 9223372036854775807, -9223372036854775808, 0, 0, 0, 0, 0, 0, 0);
 
-set enable_jit = true;
+set jit_level = -1;
 
 -- +
 SELECT k1 + k2 + v1 as result FROM jit_basic ORDER BY result;
@@ -85,6 +85,7 @@ SELECT (k1 * k2 + v1) * (k1 - v2) as result FROM jit_basic ORDER BY result;
 SELECT k1 + k2 - v1 * v2 + v3 as result FROM jit_basic ORDER BY result;
 SELECT (v1 - v2) * (k1 + k2 - v3) as result FROM jit_basic ORDER BY result;
 SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 as result FROM jit_basic ORDER BY result;
+SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 + null, K1 +v1+null, K1/null as result FROM jit_basic ORDER BY result;
 -- hard
 select bitnot(cast(power(-2,127) as largeint)+1);
 
@@ -100,4 +101,10 @@ select a.c_dis,b.c_largeint + a.c_bigint + b.c_int + a.c_smallint + b.c_tinyint 
                 on b.c_largeint + b.c_bigint + b.c_int + b.c_smallint + b.c_tinyint = a.c_largeint + a.c_bigint + a.c_int + a.c_smallint + a.c_tinyint
                 order by 1;
 
+SELECT (((1 / 1) % 1) * 1);
+select 1+2 * null;
+select 2/null;
+
+SELECT min(((1 / 1) % 1) * 1) from jit_basic;
+SELECT min(((1 / 1) % 1) * null) from jit_basic;
 DROP TABLE IF EXISTS `jit_basic`;

@@ -149,6 +149,8 @@ public:
 
     static Status JitCompileError(std::string_view msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
 
+    static Status CapacityLimitExceed(std::string_view msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
@@ -410,6 +412,17 @@ struct StatusInstance {
             exit(1);                          \
         }                                     \
     } while (false)
+
+#define VA_ARGS_HELPER(fmt, ...) fmt " " #__VA_ARGS__
+
+#define RETURN_ERROR_IF_FALSE(condition, ...)                                       \
+    if (GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition))) {                            \
+        std::ostringstream oss;                                                     \
+        oss << "Check failed: " #condition ". " << VA_ARGS_HELPER("", __VA_ARGS__); \
+        std::string error_msg = oss.str();                                          \
+        LOG(ERROR) << error_msg;                                                    \
+        return Status::InternalError(error_msg);                                    \
+    }
 
 /// @brief Emit a warning if @c to_call returns a bad status.
 #define WARN_IF_ERROR(to_call, warning_prefix)                \

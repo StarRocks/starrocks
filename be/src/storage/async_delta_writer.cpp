@@ -19,6 +19,7 @@
 #include "runtime/current_thread.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -33,7 +34,13 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
     }
     auto writer = static_cast<DeltaWriter*>(meta);
     bool flush_after_write = false;
+    int num_tasks = 0;
+    int64_t pending_time_ns = 0;
+    MonotonicStopWatch watch;
+    watch.start();
     for (; iter; ++iter) {
+        num_tasks += 1;
+        pending_time_ns += MonotonicNanos() - iter->create_time_ns;
         Status st;
         if (iter->abort) {
             writer->abort(iter->abort_with_log);
@@ -81,6 +88,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         LOG_IF(WARNING, !st.ok()) << "Fail to flush. txn_id: " << writer->txn_id()
                                   << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }
+    StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
+    StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
+    StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() / 1000);
+    StarRocksMetrics::instance()->async_delta_writer_task_pending_duration_us.increment(pending_time_ns / 1000);
     return 0;
 }
 

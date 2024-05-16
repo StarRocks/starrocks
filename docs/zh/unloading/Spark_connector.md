@@ -22,6 +22,7 @@ Spark Connector 支持三种数据读取方式：Spark SQL、Spark DataFrame 和
 
 | Spark Connector | Spark         | StarRocks   | Java | Scala |
 |---------------- | ------------- | ----------- | ---- | ----- |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上   | 8    | 2.12  |
 | 1.1.1           | 3.2, 3.3, 3.4 | 2.5 及以上   | 8    | 2.12  |
 | 1.1.0           | 3.2, 3.3, 3.4 | 2.5 及以上   | 8    | 2.12  |
 | 1.0.0           | 3.x           | 1.18 及以上  | 8    | 2.12  |
@@ -215,6 +216,7 @@ Spark Connector Jar 包的命名格式如下：
 | STRING           | DataTypes.StringType    |
 | DATE             | DataTypes.DateType      |
 | DATETIME         | DataTypes.TimestampType |
+| JSON             | DataTypes.StringType <br /> **NOTE:** <br /> **自 1.1.2 版本起支持该类型映射**，并且 StarRocks 版本需要为 2.5.13、3.0.3、3.1.0 或更高版本。 |
 | ARRAY            | Unsupported datatype    |
 | HLL              | Unsupported datatype    |
 | BITMAP           | Unsupported datatype    |
@@ -262,6 +264,10 @@ Spark Connector 中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 ## 使用示例
 
 假设您的 StarRocks 集群中已创建数据库 `test`，并且您拥有 `root` 账号权限。示例的参数配置基于 Spark Connector 1.1.0 版本。
+
+### 网络设置
+
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
 
 ### 数据样例
 

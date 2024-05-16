@@ -11,7 +11,6 @@ DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1832,4 +1831,18 @@ E: (1064, "Getting syntax error at line 1, column 16. Detail message: Unexpected
 select array_agg(separator NULL);
 -- result:
 E: (1064, "Getting syntax error at line 1, column 27. Detail message: No viable statement for input 'array_agg(separator NULL'.")
+-- !result
+select array_agg_distinct(name order by 1 asc), array_agg(distinct name order by 1 desc), array_agg(name order by 1 desc) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Ti","May",null]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
+-- !result
+select array_agg_distinct(name order by 1), cardinality(array_agg_distinct(arr order by score)) from ss group by id order by 1;
+-- result:
+[null]	1
+[null,"Ti"]	2
+["May","Ti","欧阳诸葛方程"]	3
+["Tom"]	1
+["Tom","王武程咬金"]	3
+["张三掩耳盗铃","张三此地无银三百两"]	2
+["李四大闹天空"]	1
 -- !result

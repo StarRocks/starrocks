@@ -22,6 +22,7 @@
 #include "gutil/macros.h"
 #include "io/io_error.h"
 #include "io_profiler.h"
+#include "util/stopwatch.hpp"
 
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"
@@ -69,6 +70,8 @@ Status FdInputStream::close() {
 
 StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
+    MonotonicStopWatch watch;
+    watch.start();
     ssize_t res;
 #ifdef USE_STAROS
     staros::starlet::metrics::TimeObserver<prometheus::Histogram> observer(s_posixread_iolatency);
@@ -82,7 +85,7 @@ StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     s_posixread_iosize.Observe(res);
 #endif
     _offset += res;
-    IOProfiler::add_read(res);
+    IOProfiler::add_read(res, watch.elapsed_time());
     return res;
 }
 

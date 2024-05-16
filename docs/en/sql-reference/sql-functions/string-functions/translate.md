@@ -18,11 +18,11 @@ TRANSLATE(source, from_string, to_string)
 
 ## Parameters
 
-- `source`: supports the `VARCAHR` type. The source string to be translated. If a character in the `source` is not found in `from_string`, it is simply included in the result string.
+- `source`: supports the `VARCHAR` type. The source string to be translated. If a character in the `source` is not found in `from_string`, it is simply included in the result string.
 
-- `from_string`: supports the `VARCAHR` type. Each character in `from_string` is either replaced by its corresponding character in the `to_string`, or if there is no corresponding character (i.e. if `to_string` has fewer characters than the `from_string`, the character is excluded from the result string). See Examples 2 and 3. If a character appears multiple times in `from_string`, only its first occurrence is effective. See Example 5.
+- `from_string`: supports the `VARCHAR` type. Each character in `from_string` is either replaced by its corresponding character in the `to_string`, or if there is no corresponding character (i.e. if `to_string` has fewer characters than the `from_string`, the character is excluded from the result string). See Examples 2 and 3. If a character appears multiple times in `from_string`, only its first occurrence is effective. See Example 5.
 
-- `to_string`: supports the `VARCAHR` type. The string used to replace characters. If more characters are specified in `to_string` than in the `from_string` argument, extra characters from `to_string` are ignored. See Example 4.
+- `to_string`: supports the `VARCHAR` type. The string used to replace characters. If more characters are specified in `to_string` than in the `from_string` argument, extra characters from `to_string` are ignored. See Example 4.
 
 ## Return value
 

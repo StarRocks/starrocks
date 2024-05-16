@@ -1,4 +1,4 @@
--- name: testCreateStorageVolume
+-- name: testCreateStorageVolume @cloud
 CREATE STORAGE VOLUME storage_volume_create type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "false", "enabled"="false", "aws.s3.secret_key"="secret_key", "aws.s3.access_key"="access_key");
 SHOW STORAGE VOLUMES like 'storage_volume_create';
 CREATE STORAGE VOLUME storage_volume_create type = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("aws.s3.endpoint"="endpoint", "aws.s3.region"="us-west-2", "aws.s3.use_aws_sdk_default_behavior" = "true", "enabled"="false");
@@ -7,3 +7,9 @@ SHOW STORAGE VOLUMES like 'storage_volume_create';
 DESC STORAGE VOLUME 'storage_volume_create';
 DROP STORAGE VOLUME IF EXISTS storage_volume_create;
 SHOW STORAGE VOLUMES like 'storage_volume_create';
+-- name: test_create_s3_storage_volume_with_partitioned_prefix @cloud
+CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_partioned_prefix_success TYPE = S3 LOCATIONS = ('s3://bucketname') PROPERTIES ("aws.s3.use_aws_sdk_default_behavior" = "true", "aws.s3.enable_partitioned_prefix" = "true", "aws.s3.num_partitioned_prefix" = "1024");
+CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_partioned_prefix_fail1 TYPE = S3 LOCATIONS = ('s3://bucketname/subpath') PROPERTIES ("aws.s3.use_aws_sdk_default_behavior" = "true", "aws.s3.enable_partitioned_prefix" = "true", "aws.s3.num_partitioned_prefix" = "1024");
+CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_partioned_prefix_fail2 TYPE = S3 LOCATIONS = ('s3://bucketname') PROPERTIES ("aws.s3.use_aws_sdk_default_behavior" = "true", "aws.s3.enable_partitioned_prefix" = "true", "aws.s3.num_partitioned_prefix" = "-1");
+CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_partioned_prefix_fail3 TYPE = S3 LOCATIONS = ('s3://bucketname') PROPERTIES ("aws.s3.use_aws_sdk_default_behavior" = "true", "aws.s3.enable_partitioned_prefix" = "true", "aws.s3.num_partitioned_prefix" = "aa");
+DROP STORAGE VOLUME IF EXISTS storage_volume_partioned_prefix_success;

@@ -20,8 +20,8 @@
 #include <memory>
 
 #include "common/status.h"
+#include "compaction_task_context.h"
 #include "gutil/macros.h"
-#include "storage/lake/compaction_task.h"
 #include "util/blocking_queue.hpp"
 #include "util/stack_trace_mutex.h"
 
@@ -31,15 +31,15 @@ class Closure;
 } // namespace google::protobuf
 
 namespace starrocks {
+class CompactRequest;
+class CompactResponse;
 class ThreadPool;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
-class CompactRequest;
-class CompactResponse;
 class CompactionScheduler;
-struct CompactionTaskContext;
+class CompactionTask;
 class TabletManager;
 
 // For every `CompactRequest` a new `CompactionTaskCallback` instance will be created.
@@ -49,8 +49,8 @@ class TabletManager;
 // `CompactResponse` will be sent to the FE.
 class CompactionTaskCallback {
 public:
-    explicit CompactionTaskCallback(CompactionScheduler* scheduler, const lake::CompactRequest* request,
-                                    lake::CompactResponse* response, ::google::protobuf::Closure* done);
+    explicit CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
+                                    CompactResponse* response, ::google::protobuf::Closure* done);
 
     ~CompactionTaskCallback();
 
@@ -82,36 +82,12 @@ private:
 
     CompactionScheduler* _scheduler;
     mutable StackTraceMutex<bthread::Mutex> _mtx;
-    const lake::CompactRequest* _request;
-    lake::CompactResponse* _response;
+    const CompactRequest* _request;
+    CompactResponse* _response;
     ::google::protobuf::Closure* _done;
     Status _status;
     int64_t _timeout_deadline_ms;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
-};
-
-// Context of a single tablet compaction task.
-struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
-    explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_,
-                                   std::shared_ptr<CompactionTaskCallback> cb_)
-            : txn_id(txn_id_), tablet_id(tablet_id_), version(version_), callback(std::move(cb_)) {}
-
-#ifndef NDEBUG
-    ~CompactionTaskContext() {
-        CHECK(next() == this && previous() == this) << "Must remove CompactionTaskContext from list before destructor";
-    }
-#endif
-
-    const int64_t txn_id;
-    const int64_t tablet_id;
-    const int64_t version;
-    std::atomic<int64_t> start_time{0};
-    std::atomic<int64_t> finish_time{0};
-    std::atomic<bool> skipped{false};
-    std::atomic<int> runs{0};
-    Status status;
-    lake::CompactionTask::Progress progress;
-    std::shared_ptr<CompactionTaskCallback> callback;
 };
 
 struct CompactionTaskInfo {
@@ -189,13 +165,12 @@ class CompactionScheduler {
 
         int task_queue_size();
 
-        int task_queue_safe_size();
-
         void set_target_size(int32_t target_size);
 
         int32_t target_size();
 
-        void put(int idx, std::unique_ptr<CompactionTaskContext>& context);
+        void put_by_txn_id(int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts);
+        void put_by_txn_id(int64_t txn_id, std::unique_ptr<CompactionTaskContext>& context);
 
         bool try_get(int idx, std::unique_ptr<CompactionTaskContext>* context);
 
@@ -208,6 +183,9 @@ class CompactionScheduler {
         void resize_if_needed(Limiter& limiter);
 
     private:
+        // mutex must be held
+        int _task_queue_safe_index(int64_t txn_id);
+
         std::mutex _task_queues_mutex;
         std::vector<std::shared_ptr<TaskQueue>> _internal_task_queues;
         int16_t _target_size;
@@ -245,10 +223,6 @@ private:
     void thread_task(int id);
 
     Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
-
-    int choose_task_queue_by_txn_id(int64_t txn_id) { return txn_id % _task_queues.task_queue_safe_size(); }
-
-    bool txn_log_exists(int64_t tablet_id, int64_t txn_id) const;
 
     bool reschedule_task_if_needed(int id);
 
@@ -304,7 +278,7 @@ inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_v
         auto diff = new_val - _total;
         _free += diff;
         _total += diff;
-    } else {
+    } else if (new_val < _total) {
         if (_reserved != 0) {
             double percentage = static_cast<double>(_total) / new_val;
             _reserved = static_cast<int16_t>(static_cast<double>(_reserved) * percentage);
@@ -314,6 +288,9 @@ inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_v
             _total = new_val;
             _free = _total;
         }
+    } else {
+        // nothing change
+        return;
     }
     LOG(INFO) << "Update Limiter's _total value to " << _total << ", _free value to " << _free
               << ", and _reserved value to " << _reserved;
@@ -324,15 +301,15 @@ inline int CompactionScheduler::WrapTaskQueues::task_queue_size() {
     return _internal_task_queues.size();
 }
 
-inline int CompactionScheduler::WrapTaskQueues::task_queue_safe_size() {
-    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+// mutex must be held
+inline int CompactionScheduler::WrapTaskQueues::_task_queue_safe_index(int64_t txn_id) {
     if (_target_size < _internal_task_queues.size()) {
         // Shrinking, It can prevent tasks from being placed on queues with IDs greater than it.
-        return _target_size;
+        return txn_id % _target_size;
     } else {
         // Expanding or normal state, if _internal_task_queues is expanding, it can prevent tasks
         // from being placed to the areas that have not expanded yet.
-        return _internal_task_queues.size();
+        return txn_id % _internal_task_queues.size();
     }
 }
 
@@ -346,13 +323,27 @@ inline int32_t CompactionScheduler::WrapTaskQueues::target_size() {
     return _target_size;
 }
 
-inline void CompactionScheduler::WrapTaskQueues::put(int idx, std::unique_ptr<CompactionTaskContext>& context) {
+inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
+                                                               std::unique_ptr<CompactionTaskContext>& context) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    int idx = _task_queue_safe_index(txn_id);
     _internal_task_queues[idx]->put(std::move(context));
+}
+
+inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
+        int64_t txn_id, std::vector<std::unique_ptr<CompactionTaskContext>>& contexts) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    int idx = _task_queue_safe_index(txn_id);
+    for (auto& context : contexts) {
+        _internal_task_queues[idx]->put(std::move(context));
+    }
 }
 
 inline bool CompactionScheduler::WrapTaskQueues::try_get(int idx, std::unique_ptr<CompactionTaskContext>* context) {
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    if (idx >= _internal_task_queues.size()) { // idx might be invalid
+        return false;
+    }
     return _internal_task_queues[idx]->try_get(context);
 }
 
@@ -386,5 +377,7 @@ inline void CompactionScheduler::WrapTaskQueues::steal_task(int start_index,
     }
     DCHECK(*context == nullptr);
 }
+
+bool compaction_should_cancel(CompactionTaskContext* context);
 
 } // namespace starrocks::lake

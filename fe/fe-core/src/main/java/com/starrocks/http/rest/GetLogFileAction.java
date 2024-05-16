@@ -43,11 +43,17 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 import java.io.File;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /*
@@ -78,7 +84,10 @@ public class GetLogFileAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+        Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+
         String logType = request.getSingleParameter("type");
         String logFile = request.getSingleParameter("file");
 
@@ -101,7 +110,6 @@ public class GetLogFileAction extends RestBaseAction {
             String fileInfos = getFileInfos(logType);
             response.updateHeader("file_infos", fileInfos);
             writeResponse(request, response, HttpResponseStatus.OK);
-            return;
         } else if (method.equals(HttpMethod.GET)) {
             File log = getLogFile(logType, logFile);
             if (log == null || !log.exists() || !log.isFile()) {
@@ -119,7 +127,7 @@ public class GetLogFileAction extends RestBaseAction {
     private String getFileInfos(String logType) {
         Map<String, Long> fileInfos = Maps.newTreeMap();
         File logDir = new File(Config.audit_log_dir);
-        for (File file : logDir.listFiles()) {
+        for (File file : Objects.requireNonNull(logDir.listFiles())) {
             if (file.isFile() && file.getName().startsWith(logType)) {
                 fileInfos.put(file.getName(), file.length());
             }
@@ -138,7 +146,7 @@ public class GetLogFileAction extends RestBaseAction {
     private File getLogFile(String logType, String logFile) {
         String basePath = logType.equals(TYPE_AUDIT) ? Config.audit_log_dir : Config.sys_log_dir;
         File logDir = new File(basePath);
-        for (File file : logDir.listFiles()) {
+        for (File file : Objects.requireNonNull(logDir.listFiles())) {
             if (file.isFile() && file.getName().endsWith(logFile)) {
                 return file;
             }

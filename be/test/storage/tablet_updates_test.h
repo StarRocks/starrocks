@@ -673,7 +673,10 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    void SetUp() override { _compaction_mem_tracker = std::make_unique<MemTracker>(-1); }
+    void SetUp() override {
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
+        config::enable_pk_size_tiered_compaction_strategy = false;
+    }
 
     void TearDown() override {
         if (_tablet2) {
@@ -684,6 +687,7 @@ public:
             (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
         }
+        config::enable_pk_size_tiered_compaction_strategy = true;
     }
 
     static Status full_clone(const TabletSharedPtr& source_tablet, int clone_version,
@@ -791,6 +795,8 @@ public:
     void test_compaction_score_enough_normal(bool enable_persistent_index);
     void test_horizontal_compaction(bool enable_persistent_index);
     void test_vertical_compaction(bool enable_persistent_index);
+    void test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index);
+    void test_vertical_compaction_with_rows_mapper(bool enable_persistent_index);
     void test_compaction_with_empty_rowset(bool enable_persistent_index, bool vertical, bool multi_column_pk);
     void test_link_from(bool enable_persistent_index);
     void test_convert_from(bool enable_persistent_index);
@@ -832,6 +838,8 @@ public:
     void load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet, SegmentFooterPB* footer);
     void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
     void test_pk_dump(size_t rowset_cnt);
+    void update_and_recover(bool enable_persistent_index);
+    void test_recover_rowset_sorter();
 
 protected:
     TabletSharedPtr _tablet;

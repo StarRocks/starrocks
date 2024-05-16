@@ -34,6 +34,8 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DynamicPartitionUtil.StartOfDate;
@@ -61,9 +63,9 @@ public class DynamicPartitionProperty {
     public static final int NOT_SET_HISTORY_PARTITION_NUM = 0;
     public static final String NOT_SET_PREFIX = "p";
 
-    private boolean exist;
+    private final boolean exists;
 
-    private boolean enable;
+    private boolean enabled;
     private String timeUnit;
     private int start;
     private int end;
@@ -76,8 +78,8 @@ public class DynamicPartitionProperty {
     private int historyPartitionNum;
     public DynamicPartitionProperty(Map<String, String> properties) {
         if (properties != null && !properties.isEmpty()) {
-            this.exist = true;
-            this.enable = Boolean.parseBoolean(properties.get(ENABLE));
+            this.exists = true;
+            this.enabled = Boolean.parseBoolean(properties.get(ENABLE));
             this.timeUnit = properties.get(TIME_UNIT);
             this.tz = TimeUtils.getOrSystemTimeZone(properties.get(TIME_ZONE));
             // In order to compatible dynamic add partition version
@@ -91,7 +93,7 @@ public class DynamicPartitionProperty {
                     HISTORY_PARTITION_NUM, String.valueOf(NOT_SET_HISTORY_PARTITION_NUM)));
             createStartOfs(properties);
         } else {
-            this.exist = false;
+            this.exists = false;
         }
     }
 
@@ -111,8 +113,8 @@ public class DynamicPartitionProperty {
         }
     }
 
-    public boolean isExist() {
-        return exist;
+    public boolean isExists() {
+        return exists;
     }
 
     public String getTimeUnit() {
@@ -135,8 +137,8 @@ public class DynamicPartitionProperty {
         return buckets;
     }
 
-    public boolean getEnable() {
-        return enable;
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public StartOfDate getStartOfWeek() {
@@ -170,34 +172,37 @@ public class DynamicPartitionProperty {
         return historyPartitionNum;
     }
 
-    public String getPropString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        sb.append(ENABLE + ":" + enable + ",");
-        sb.append(TIME_UNIT + ":" + timeUnit + ",");
-        sb.append(TIME_ZONE + ":" + tz.getID() + ",");
-        sb.append(START + ":" + start + ",");
-        sb.append(END + ":" + end + ",");
-        sb.append(PREFIX + ":" + prefix + ",");
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(ENABLE, String.valueOf(enabled));
+        properties.put(TIME_UNIT, timeUnit);
+        properties.put(TIME_ZONE, tz.getID());
+        properties.put(START, String.valueOf(start));
+        properties.put(END, String.valueOf(end));
+        properties.put(PREFIX, prefix);
         if (buckets > 0) {
-            sb.append(BUCKETS + ":" + buckets + ",");
+            properties.put(BUCKETS, String.valueOf(buckets));
         }
+        properties.put(HISTORY_PARTITION_NUM, String.valueOf(historyPartitionNum));
         if (replicationNum != NOT_SET_REPLICATION_NUM) {
-            sb.append(REPLICATION_NUM + ":" + replicationNum + ",");
+            properties.put(REPLICATION_NUM, String.valueOf(replicationNum));
         }
         if (getTimeUnit().equalsIgnoreCase(TimeUnit.WEEK.toString())) {
-            sb.append(START_DAY_OF_WEEK + ":" + startOfWeek.dayOfWeek + ",");
+            properties.put(START_DAY_OF_WEEK, String.valueOf(startOfWeek.dayOfWeek));
         } else if (getTimeUnit().equalsIgnoreCase(TimeUnit.MONTH.toString())) {
-            sb.append(START_DAY_OF_MONTH + ":" + startOfMonth.day + ",");
+            properties.put(START_DAY_OF_MONTH, String.valueOf(startOfMonth.day));
         }
-        sb.deleteCharAt(sb.length() - 1);
-        sb.append("}");
-        return sb.toString();
+        return properties;
+    }
+
+    @VisibleForTesting
+    public void setTimeUnit(String timeUnit) {
+        this.timeUnit = timeUnit;
     }
 
     @Override
     public String toString() {
-        String res = ",\n\"" + ENABLE + "\" = \"" + enable + "\""
+        String res = ",\n\"" + ENABLE + "\" = \"" + enabled + "\""
                 + ",\n\"" + TIME_UNIT + "\" = \"" + timeUnit + "\""
                 + ",\n\"" + TIME_ZONE + "\" = \"" + tz.getID() + "\""
                 + ",\n\"" + START + "\" = \"" + start + "\""

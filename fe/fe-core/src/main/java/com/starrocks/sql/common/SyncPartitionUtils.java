@@ -404,12 +404,20 @@ public class SyncPartitionUtils {
         basePartitions.add(partitionValue);
     }
 
+    /**
+     * Update the base table partition name to its intersected materialized view names into result.
+     * @param result : the final result: BaseTable -> <BaseTablePartitionName -> Set<MVPartitionName>>
+     * @param baseTable:: to update the base table
+     * @param baseTablePartitionName: base table partition name
+     * @param mvPartitionName: materialized view partition name
+     */
     public static void updateTableRefMap(Map<Table, Map<String, Set<String>>> result,
-                                         Table table,
-                                         String partitionKey, String partitionValue) {
-        Map<String, Set<String>> partitionMap = result.computeIfAbsent(table, k -> new HashMap<>());
-        Set<String> basePartitions = partitionMap.computeIfAbsent(partitionKey, k -> new HashSet<>());
-        basePartitions.add(partitionValue);
+                                         Table baseTable,
+                                         String baseTablePartitionName,
+                                         String mvPartitionName) {
+        Map<String, Set<String>> partitionMap = result.computeIfAbsent(baseTable, k -> new HashMap<>());
+        Set<String> basePartitions = partitionMap.computeIfAbsent(baseTablePartitionName, k -> new HashSet<>());
+        basePartitions.add(mvPartitionName);
     }
 
     public static void initialMvRefMap(Map<String, Map<Table, Set<String>>> result,
@@ -434,12 +442,10 @@ public class SyncPartitionUtils {
             Map<String, Range<PartitionKey>> mvRangeMap) {
         Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
         // for each partition of base, find the corresponding partition of mv
-        List<PartitionRange> mvRanges = mvRangeMap.keySet()
-                .stream()
+        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream()
                 .map(name -> new PartitionRange(name, mvRangeMap.get(name)))
                 .sorted(PartitionRange::compareTo)
                 .collect(Collectors.toList());
-
         for (Map.Entry<Table, Map<String, Range<PartitionKey>>> entry : baseRangeMap.entrySet()) {
             Table baseTable = entry.getKey();
             Map<String, Range<PartitionKey>> refreshedPartitionsMap = entry.getValue();
@@ -462,15 +468,13 @@ public class SyncPartitionUtils {
 
                 int lower = mid - 1;
                 while (lower >= 0 && mvRanges.get(lower).isIntersected(baseRange)) {
-                    updateTableRefMap(
-                            result, baseTable, baseRange.getPartitionName(), mvRanges.get(lower).getPartitionName());
+                    updateTableRefMap(result, baseTable, baseRange.getPartitionName(), mvRanges.get(lower).getPartitionName());
                     lower--;
                 }
 
                 int higher = mid + 1;
                 while (higher < mvRanges.size() && mvRanges.get(higher).isIntersected(baseRange)) {
-                    updateTableRefMap(
-                            result, baseTable, baseRange.getPartitionName(), mvRanges.get(higher).getPartitionName());
+                    updateTableRefMap(result, baseTable, baseRange.getPartitionName(), mvRanges.get(higher).getPartitionName());
                     higher++;
                 }
             }
@@ -478,6 +482,12 @@ public class SyncPartitionUtils {
         return result;
     }
 
+    /**
+     * Generate the mapping from materialized view partition to base table partition.
+     * @param mvRangeMap : materialized view partition range map: <partitionName, partitionRange>
+     * @param basePartitionExprMap: base table partition expression map, <baseTable, partitionExpr>
+     * @param baseRangeMap: base table partition range map, <baseTable, <partitionName, partitionRange>>
+     */
     public static Map<String, Map<Table, Set<String>>> generateMvRefMap(
             Map<String, Range<PartitionKey>> mvRangeMap,
             Map<Table, Expr> basePartitionExprMap,
@@ -566,7 +576,6 @@ public class SyncPartitionUtils {
                     mvNeedRefreshPartitions.addAll(mvAssociatedPartitions);
                 }
 
-                Preconditions.checkState(mvNeedRefreshPartitions.contains(needRefreshMvPartitionName));
                 if (mvNeedRefreshPartitions.size() > 1) {
                     needRefreshMvPartitionNames.addAll(mvNeedRefreshPartitions);
                     mvPotentialRefreshPartitionNames.add(needRefreshMvPartitionName);
@@ -665,6 +674,10 @@ public class SyncPartitionUtils {
                 break;
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);
+        }
+        final DateLiteral maxDateTime = DateLiteral.createMaxValue(Type.DATETIME);
+        if (truncUpperDateTime.isAfter(maxDateTime.toLocalDateTime())) {
+            return upperDateTime;
         }
         return truncUpperDateTime;
     }

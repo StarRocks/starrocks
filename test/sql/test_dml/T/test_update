@@ -1,0 +1,57 @@
+-- name: test_update
+drop table if exists primary_key_with_null;
+CREATE TABLE `primary_key_with_null` ( 
+    `k1`  date, 
+    `k2`  datetime, 
+    `k3`  varchar(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `K9`  bigint, 
+    `K10` largeint, 
+    `K11` float, 
+    `K12` double, 
+    `K13` decimal(27,9) 
+) PRIMARY KEY(`k1`, `k2`, `k3`) 
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
+PROPERTIES ( "replication_num" = "1");
+
+INSERT INTO primary_key_with_null VALUES
+ ('2020-10-22','2020-10-23 12:12:12','k1','k4',0,1,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-23','2020-10-23 12:12:12','k2','k4',0,0,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-24','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889)
+,('2020-10-25','2020-10-23 12:12:12','k4','k4',0,1,2,3,4,NULL,NULL,NULL,2.889);
+
+UPDATE primary_key_with_null SET `k4`  = 'update_k4', `k5`  = 1, `k6`  = 1, `k7`  = 7, `k8`  = 0, `k9`  = 9, `k10` = 10, `k11` = 1.0, `k12` = 2.0,`k13` = 3.0  WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-23 12:12:12';
+select * from primary_key_with_null order by k1, k2, k3;
+
+UPDATE primary_key_with_null SET `k4`  = 'update_k4', `k5`  = 1, `k6`  = 1, `k7`  = 7, `k8`  = 0 WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-22 00:00:00';
+select * from primary_key_with_null order by k1, k2, k3;
+
+-- test column case-insensitive
+UPDATE primary_key_with_null SET `K4`  = 'update_k4', `K5`  = 2, `K6`  = 1, `k7`  = 7, `k8`  = 0 WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-22 00:00:00';
+select * from primary_key_with_null order by k1, k2, k3;
+
+-- invalid column type
+UPDATE primary_key_with_null SET `K4`  = 'update_k4', `K5`  = 'INVALID', `K6`  = 'xxx', `k7`  = 7, `k8`  = 0 WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-22 00:00:00';
+select * from primary_key_with_null order by k1, k2, k3;
+
+UPDATE primary_key_with_null SET `k5`  = 5;
+select * from primary_key_with_null order by k1, k2, k3;
+drop table if exists primary_key_with_null;
+
+CREATE TABLE `pk_tbl1` (
+ `k1` bigint(20) NOT NULL AUTO_INCREMENT,
+ `k2` datetime NULL,
+ `k3` bigint(20) NULL,
+ `k4` bigint(20) NULL,
+ `k5` int(11) NULL
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`);
+insert into pk_tbl1(k2, k3, k4, k5) values('2024-01-01', 1, 2, 3), ('2024-01-01', 1, 2, 3);
+update pk_tbl1 set K4 = 1, K3 = 1, K5 = 1 where K1 = 1;
+select * from pk_tbl1 order by k1;
+drop table if exists pk_tbl1;

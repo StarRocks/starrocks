@@ -14,16 +14,16 @@
 
 package com.starrocks.privilege;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,88 +33,88 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_ID = 1;
     private static final short PLUGIN_VERSION = 1;
 
-    private static final Map<ObjectType, List<PrivilegeType>> TYPE_TO_ACTION_LIST =
-            ImmutableMap.<ObjectType, List<PrivilegeType>>builder()
-                    .put(ObjectType.TABLE, ImmutableList.of(
-                            PrivilegeType.DELETE,
-                            PrivilegeType.DROP,
-                            PrivilegeType.INSERT,
-                            PrivilegeType.SELECT,
-                            PrivilegeType.ALTER,
-                            PrivilegeType.EXPORT,
-                            PrivilegeType.UPDATE))
+    protected final Map<ObjectType, List<PrivilegeType>> typeToActionList = new HashMap<>();
 
-                    .put(ObjectType.DATABASE, ImmutableList.of(
-                            PrivilegeType.CREATE_TABLE,
-                            PrivilegeType.DROP,
-                            PrivilegeType.ALTER,
-                            PrivilegeType.CREATE_VIEW,
-                            PrivilegeType.CREATE_FUNCTION,
-                            PrivilegeType.CREATE_MATERIALIZED_VIEW,
-                            PrivilegeType.CREATE_PIPE))
+    public DefaultAuthorizationProvider() {
+        typeToActionList.put(ObjectType.TABLE, Lists.newArrayList(
+                PrivilegeType.DELETE,
+                PrivilegeType.DROP,
+                PrivilegeType.INSERT,
+                PrivilegeType.SELECT,
+                PrivilegeType.ALTER,
+                PrivilegeType.EXPORT,
+                PrivilegeType.UPDATE));
 
-                    .put(ObjectType.SYSTEM, ImmutableList.of(
-                            PrivilegeType.GRANT,
-                            PrivilegeType.NODE,
-                            PrivilegeType.CREATE_RESOURCE,
-                            PrivilegeType.PLUGIN,
-                            PrivilegeType.FILE,
-                            PrivilegeType.BLACKLIST,
-                            PrivilegeType.OPERATE,
-                            PrivilegeType.CREATE_EXTERNAL_CATALOG,
-                            PrivilegeType.REPOSITORY,
-                            PrivilegeType.CREATE_RESOURCE_GROUP,
-                            PrivilegeType.CREATE_GLOBAL_FUNCTION,
-                            PrivilegeType.CREATE_STORAGE_VOLUME))
+        typeToActionList.put(ObjectType.DATABASE, Lists.newArrayList(
+                PrivilegeType.CREATE_TABLE,
+                PrivilegeType.DROP,
+                PrivilegeType.ALTER,
+                PrivilegeType.CREATE_VIEW,
+                PrivilegeType.CREATE_FUNCTION,
+                PrivilegeType.CREATE_MATERIALIZED_VIEW,
+                PrivilegeType.CREATE_PIPE));
 
-                    .put(ObjectType.USER, ImmutableList.of(
-                            PrivilegeType.IMPERSONATE))
+        typeToActionList.put(ObjectType.SYSTEM, Lists.newArrayList(
+                PrivilegeType.GRANT,
+                PrivilegeType.NODE,
+                PrivilegeType.CREATE_RESOURCE,
+                PrivilegeType.PLUGIN,
+                PrivilegeType.FILE,
+                PrivilegeType.BLACKLIST,
+                PrivilegeType.OPERATE,
+                PrivilegeType.CREATE_EXTERNAL_CATALOG,
+                PrivilegeType.REPOSITORY,
+                PrivilegeType.CREATE_RESOURCE_GROUP,
+                PrivilegeType.CREATE_GLOBAL_FUNCTION,
+                PrivilegeType.CREATE_STORAGE_VOLUME));
 
-                    .put(ObjectType.RESOURCE, ImmutableList.of(
-                            PrivilegeType.USAGE,
-                            PrivilegeType.ALTER,
-                            PrivilegeType.DROP))
+        typeToActionList.put(ObjectType.USER, Lists.newArrayList(
+                PrivilegeType.IMPERSONATE));
 
-                    .put(ObjectType.VIEW, ImmutableList.of(
-                            PrivilegeType.SELECT,
-                            PrivilegeType.ALTER,
-                            PrivilegeType.DROP))
+        typeToActionList.put(ObjectType.RESOURCE, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
 
-                    .put(ObjectType.CATALOG, ImmutableList.of(
-                            PrivilegeType.USAGE,
-                            PrivilegeType.CREATE_DATABASE,
-                            PrivilegeType.DROP,
-                            PrivilegeType.ALTER))
+        typeToActionList.put(ObjectType.VIEW, Lists.newArrayList(
+                PrivilegeType.SELECT,
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
 
-                    .put(ObjectType.MATERIALIZED_VIEW, ImmutableList.of(
-                            PrivilegeType.ALTER,
-                            PrivilegeType.REFRESH,
-                            PrivilegeType.DROP,
-                            PrivilegeType.SELECT))
+        typeToActionList.put(ObjectType.CATALOG, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.CREATE_DATABASE,
+                PrivilegeType.DROP,
+                PrivilegeType.ALTER));
 
-                    .put(ObjectType.FUNCTION, ImmutableList.of(
-                            PrivilegeType.USAGE,
-                            PrivilegeType.DROP))
+        typeToActionList.put(ObjectType.MATERIALIZED_VIEW, Lists.newArrayList(
+                PrivilegeType.ALTER,
+                PrivilegeType.REFRESH,
+                PrivilegeType.DROP,
+                PrivilegeType.SELECT));
 
-                    .put(ObjectType.RESOURCE_GROUP, ImmutableList.of(
-                            PrivilegeType.ALTER,
-                            PrivilegeType.DROP))
+        typeToActionList.put(ObjectType.FUNCTION, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.DROP));
 
-                    .put(ObjectType.PIPE, ImmutableList.of(
-                            PrivilegeType.ALTER,
-                            PrivilegeType.DROP,
-                            PrivilegeType.USAGE
-                    ))
+        typeToActionList.put(ObjectType.RESOURCE_GROUP, Lists.newArrayList(
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
 
-                    .put(ObjectType.GLOBAL_FUNCTION, ImmutableList.of(
-                            PrivilegeType.USAGE,
-                            PrivilegeType.DROP))
+        typeToActionList.put(ObjectType.PIPE, Lists.newArrayList(
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP,
+                PrivilegeType.USAGE));
 
-                    .put(ObjectType.STORAGE_VOLUME, ImmutableList.of(
-                            PrivilegeType.DROP,
-                            PrivilegeType.ALTER,
-                            PrivilegeType.USAGE))
-                    .build();
+        typeToActionList.put(ObjectType.GLOBAL_FUNCTION, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.STORAGE_VOLUME, Lists.newArrayList(
+                PrivilegeType.DROP,
+                PrivilegeType.ALTER,
+                PrivilegeType.USAGE));
+    }
 
     public static final String UNEXPECTED_TYPE = "unexpected type ";
 
@@ -130,22 +130,39 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
     @Override
     public Set<ObjectType> getAllPrivObjectTypes() {
-        return TYPE_TO_ACTION_LIST.keySet();
+        return typeToActionList.keySet();
     }
 
     @Override
     public List<PrivilegeType> getAvailablePrivType(ObjectType objectType) {
-        return new ArrayList<>(TYPE_TO_ACTION_LIST.get(objectType));
+        return new ArrayList<>(typeToActionList.get(objectType));
     }
 
     @Override
     public boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType) {
-        if (!TYPE_TO_ACTION_LIST.containsKey(objectType)) {
+        if (!typeToActionList.containsKey(objectType)) {
             return false;
         }
-        return TYPE_TO_ACTION_LIST.get(objectType).contains(privilegeType);
+        return typeToActionList.get(objectType).contains(privilegeType);
     }
 
+    @Override
+    public PrivilegeType getPrivilegeType(String privTypeString) {
+        return PrivilegeType.NAME_TO_PRIVILEGE.get(privTypeString);
+    }
+
+    @Override
+    public ObjectType getObjectType(String objectTypeUnResolved) {
+        if (ObjectType.NAME_TO_OBJECT.containsKey(objectTypeUnResolved)) {
+            return ObjectType.NAME_TO_OBJECT.get(objectTypeUnResolved);
+        }
+
+        if (ObjectType.PLURAL_TO_OBJECT.containsKey(objectTypeUnResolved)) {
+            return ObjectType.PLURAL_TO_OBJECT.get(objectTypeUnResolved);
+        }
+
+        throw new SemanticException("cannot find privilege object type " + objectTypeUnResolved);
+    }
 
     @Override
     public PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr)

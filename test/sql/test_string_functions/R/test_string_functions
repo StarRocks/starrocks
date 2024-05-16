@@ -420,35 +420,36 @@ select crc32(c2) from crc01;
 -- result:
 2291122336
 -- !result
-select ngram_search("chinese","china");
+-- name: test_ngram_search
+select ngram_search("chinese","china",4);
 -- result:
 0.5
 -- !result
-select ngram_search("chinese","CHINESE");
+select ngram_search("chinese","CHINESE",4);
 -- result:
 0.0
 -- !result
-select ngram_search_case_insensitive("chinese","CHINESE");
+select ngram_search_case_insensitive("chinese","CHINESE",4);
 -- result:
 1.0
 -- !result
-select ngram_search_case_insensitive("CHINESE","chinese");
+select ngram_search_case_insensitive("CHINESE","chinese",4);
 -- result:
 1.0
 -- !result
-select ngram_search("chinese","");
+select ngram_search("chinese","",4);
 -- result:
 0.0
 -- !result
-select ngram_search("","chinese");
+select ngram_search("","chinese",4);
 -- result:
 0.0
 -- !result
-select ngram_search("","");
+select ngram_search("","",4);
 -- result:
 0.0
 -- !result
-select ngram_search("chi","chi");
+select ngram_search("chi","chi",4);
 -- result:
 0.0
 -- !result
@@ -475,23 +476,23 @@ insert into string_table values
 ("1bd32347-274f-4a30-93f3-9087594de9cd");
 -- result:
 -- !result
-select ngram_search(rowkey,"000073a7-274f-46bf-bfaf-678868cc26cd") as a from string_table order by a;
+select ngram_search(rowkey,"000073a7-274f-46bf-bfaf-678868cc26cd",4) as a from string_table order by a;
 -- result:
-0.15151513
-0.18181819
-0.21212119
-0.24242425
+0.15151512622833252
+0.1818181872367859
+0.21212118864059448
+0.24242424964904785
 1.0
 -- !result
-select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757") as a from string_table order by a;
+select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757",4) as a from string_table order by a;
 -- result:
 0.0
-0.121212125
-0.18181819
-0.24242425
+0.12121212482452393
+0.1818181872367859
+0.24242424964904785
 1.0
 -- !result
-select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey) from string_table;
+select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string_table;
 -- result:
 E: (1064, "ngram function's second parameter must be const")
 -- !result

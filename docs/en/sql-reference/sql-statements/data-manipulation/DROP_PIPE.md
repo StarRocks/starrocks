@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Drops a pipe and the related jobs and metadata. Executing this statement on a pipe does not revoke the data that has been loaded via this pipe.
+Drops a pipe and the related jobs and metadata. Executing this statement on a pipe does not revoke the data that has been loaded via this pipe. This command is supported from v3.2 onwards.
 
 ## Syntax
 
@@ -32,3 +32,11 @@ Drop the pipe named `user_behavior_replica` in the database named `mydatabase`:
 USE mydatabase;
 DROP PIPE user_behavior_replica;
 ```
+
+## References
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)

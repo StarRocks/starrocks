@@ -89,7 +89,7 @@ SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0}
 insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} VALUES (3,"2020-06-25");
 -- result:
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+function: check_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1", "UNION")
 -- result:
 None
 -- !result

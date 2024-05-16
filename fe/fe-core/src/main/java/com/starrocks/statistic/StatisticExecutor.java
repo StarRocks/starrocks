@@ -14,14 +14,15 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -56,30 +57,28 @@ public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
     public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
-                                                    List<String> columnNames) {
+                                                   List<String> columnNames) throws AnalysisException {
         if (table == null) {
             // Statistical information query is an unlocked operation,
             // so it is possible for the table to be deleted while the code is running
             return Collections.emptyList();
         }
-        List<Column> columns = Lists.newArrayList();
+        List<Type> columnTypes = Lists.newArrayList();
         for (String colName : columnNames) {
-            Column column = table.getColumn(colName);
-            Preconditions.checkState(column != null);
-            columns.add(column);
+            columnTypes.add(StatisticUtils.getQueryStatisticsColumnType(table, colName));
         }
-        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(tableUUID, columns);
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(tableUUID, columnNames, columnTypes);
         return executeStatisticDQL(context, sql);
     }
 
-    public List<TStatisticData> queryStatisticSync(ConnectContext context,
-                                                   Long dbId, Long tableId, List<String> columnNames) {
+    public List<TStatisticData> queryStatisticSync(ConnectContext context, Long dbId, Long tableId,
+                                                   List<String> columnNames) {
         String sql;
-        BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
             Table table = null;
             if (dbId == null) {
-                List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+                List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
                 for (Long id : dbIds) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(id);
                     if (db == null) {
@@ -102,14 +101,12 @@ public class StatisticExecutor {
                 return Collections.emptyList();
             }
 
-            List<Column> columns = Lists.newArrayList();
+            List<Type> columnTypes = Lists.newArrayList();
             for (String colName : columnNames) {
-                Column column = table.getColumn(colName);
-                Preconditions.checkState(column != null);
-                columns.add(column);
+                columnTypes.add(StatisticUtils.getQueryStatisticsColumnType(table, colName));
             }
 
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columns);
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames, columnTypes);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
@@ -128,9 +125,9 @@ public class StatisticExecutor {
         }
     }
 
-    public void dropTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
+    public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
         String sql = StatisticSQLBuilder.buildDropExternalStatSQL(tableUUID);
-        LOG.debug("Expire statistic SQL: {}", sql);
+        LOG.debug("Expire external statistic SQL: {}", sql);
 
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
@@ -156,6 +153,11 @@ public class StatisticExecutor {
         return executeStatisticDQL(statsConnectCtx, sql);
     }
 
+    public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildQueryConnectorHistogramStatisticsSQL(tableUUID, columnNames);
+        return executeStatisticDQL(statsConnectCtx, sql);
+    }
+
     public List<TStatisticData> queryMCV(ConnectContext statsConnectCtx, String sql) {
         return executeStatisticDQL(statsConnectCtx, sql);
     }
@@ -165,6 +167,14 @@ public class StatisticExecutor {
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
             LOG.warn("Execute statistic table expire fail.");
+        }
+    }
+
+    public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(tableUUID, columnNames);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute external histogram statistic table expire fail.");
         }
     }
 
@@ -236,7 +246,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_TABLE_VERSION
                 || version == StatsConstants.STATISTIC_BATCH_VERSION
                 || version == StatsConstants.STATISTIC_EXTERNAL_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION) {
+                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -263,10 +274,10 @@ public class StatisticExecutor {
 
         try {
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
-            GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
-            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
             statsConnectCtx.setStatisticsConnection(true);
             statsJob.collect(statsConnectCtx, analyzeStatus);
@@ -275,46 +286,60 @@ public class StatisticExecutor {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             return analyzeStatus;
         } finally {
-            GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(analyzeStatus.getId(), false);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().unregisterConnection(analyzeStatus.getId(), false);
         }
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         analyzeStatus.setEndTime(LocalDateTime.now());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         // update StatisticsCache
         statsConnectCtx.setStatisticsConnection(false);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
-            for (String columnName : statsJob.getColumns()) {
-                HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
-                        table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
-                        statsJob.getProperties());
-                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
-                GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(
-                        histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
-                        Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
+            if (table.isNativeTableOrMaterializedView()) {
+                for (String columnName : statsJob.getColumnNames()) {
+                    HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
+                            table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
+                            statsJob.getProperties());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshHistogramStatisticsCache(
+                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
+                }
+            } else {
+                for (String columnName : statsJob.getColumnNames()) {
+                    ExternalHistogramStatsMeta histogramStatsMeta = new ExternalHistogramStatsMeta(
+                            statsJob.getCatalogName(), db.getFullName(), table.getName(), columnName,
+                            statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
+
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(histogramStatsMeta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
+                            statsJob.getCatalogName(), db.getFullName(), table.getName(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
+                }
             }
         } else {
             if (table.isNativeTableOrMaterializedView()) {
-                long existUpdateRows = GlobalStateMgr.getCurrentAnalyzeMgr().getExistUpdateRows(table.getId());
+                long existUpdateRows = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExistUpdateRows(table.getId());
                 BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
-                        statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(),
+                        statsJob.getColumnNames(), statsJob.getType(), analyzeStatus.getEndTime(),
                         statsJob.getProperties(), existUpdateRows);
-                GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
-                GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshBasicStatisticsCache(
                         basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
                         refreshAsync);
             } else {
                 // for external table
                 ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(),
-                        db.getFullName(), table.getName(), statsJob.getColumns(), statsJob.getType(),
+                        db.getFullName(), table.getName(), statsJob.getColumnNames(), statsJob.getType(),
                         analyzeStatus.getStartTime(), statsJob.getProperties());
-                GlobalStateMgr.getCurrentAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
-                GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
-                        db.getFullName(), table.getName(), statsJob.getColumns(), refreshAsync);
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                        .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
+                                db.getFullName(), table.getName(), statsJob.getColumnNames(), refreshAsync);
             }
         }
         return analyzeStatus;
@@ -336,6 +361,8 @@ public class StatisticExecutor {
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
+                DebugUtil.printId(context.getQueryId()), sql);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
@@ -352,10 +379,12 @@ public class StatisticExecutor {
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            AuditLog.getStatisticAudit().info("statistic execute DML | QueryId [{}] | SQL: {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             executor.execute();
             return true;
         } catch (Exception e) {
-            LOG.warn("Execute statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
+            LOG.warn("statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
             return false;
         }
     }

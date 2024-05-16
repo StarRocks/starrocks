@@ -45,6 +45,10 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3 struct<c3_sub1 array<struct<c3_sub1_sub1 int, c3_sub1_sub2 int>>, c3_sub2 int>) " +
                 "duplicate key(c1) distributed by hash(c1) buckets 1 " +
                 "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table index_struct_nest(c1 int,\n" +
+                "index_struct array<struct<`index` bigint(20), char_col varchar(1048576)>>)\n" +
+                "duplicate key(c1) distributed by hash(c1) buckets 1\n" +
+                "properties('replication_num'='1')");
         FeConstants.runningUnitTest = false;
     }
 
@@ -67,6 +71,11 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select c2 from test1 union all select c2_0 from test1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(3: c2 AS struct<a int(11), b varchar(10)>)");
+
+        sql = "select index_struct[1].`index` from index_struct_nest";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 3> : 2: index_struct[1].index[true]");
     }
 
     @Test
@@ -193,7 +202,7 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[/c3/d]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
-        assertPlanContains(sql, "map_from_arrays(5: cast, 5: cast)");
+        assertPlanContains(sql, "<slot 4> : map_keys(map_from_arrays(CAST([] AS ARRAY<BOOLEAN>), CAST([] AS ARRAY<BOOLEAN>)))");
     }
 
     @Test

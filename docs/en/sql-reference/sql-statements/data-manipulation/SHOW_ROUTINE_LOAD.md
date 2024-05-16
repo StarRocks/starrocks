@@ -15,7 +15,7 @@ Shows the execution information of Routine Load jobs.
 ## Syntax
 
 ```SQL
-SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
+SHOW [ALL] ROUTINE LOAD [ FOR [<db_name>.]<job_name> | FROM <db_name> ]
 [ WHERE [ STATE = { "NEED_SCHEDULE" | "RUNNING" | "PAUSED" | "UNSTABLE" | "STOPPED" | "CANCELLED"  } ] ]
 [ ORDER BY field_name [ ASC | DESC ] ]
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
@@ -31,8 +31,8 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 
 | **Parameter**                     | **Required** | **Description**                                              |
 | --------------------------------- | ------------ | ------------------------------------------------------------ |
-| db_name                           | No           | The name of the database to which the load job belongs.      |
-| job_name                          | Yes          | The name of the load job.                                    |
+| db_name                           | No           | The name of the database to which the load job belongs. Note that this parameter is required if the `FROM` clause is used. |
+| job_name                          | No           | The name of the load job. Note that this parameter is required if the `FOR` clause is used.         |
 | ALL                               | No           | Displays all load jobs, including those in the `STOPPED` or  `CANCELLED` states. |
 | STATE                             | No           |  The status of the load job.                                       |
 | ORDER BY field_name [ASC \| DESC] | No           | Sorts the return result in ascending or descending order based on the specified field. The following fields are supported: `Id`, `Name`, `CreateTime`, `PauseTime`, `EndTime`, `TableName`, `State`, and `CurrentTaskNum`.<ul><li>To sort the return result in ascending order, specify `ORDER BY field_name ASC`.</li><li>To sort the return result in descending order, specify `ORDER BY field_name DESC`.</li></ul>If you do not specify the field or the sort order, the return result is sorted in ascending order of `Id` by default. |
@@ -50,7 +50,7 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 | EndTime              | The date and time when the load job entered `STOPPED` state. |
 | DbName               | The database to which the target table of the load job belongs.  |
 | TableName            | The target table of the load job.                                |
-| State                | The status of the load job, including:<ul><li>`NEED_SCHEDULE`: The load job is waiting to be scheduled. After you use CREATE ROUTINE LOAD or RESUME ROUTINE LOAD to create or resume a Routine Load job, the load job first enters the `NEED_SCHEDULE` state.</li><li>`RUNNING`: The load job is running. You can view the consumption progress of the Routine Load job through `Statistic` and `Progress`.</li><li>`PAUSED`: The load job is paused. You can refer to `ReasonOfStateChanged` and `ErrorLogUrls` for troubleshooting. After fixing the error, you can use RESUME ROUTINE LOAD to resume the Routine Load job.</li><li>`CANCELLED`: The load job is cancelled. You can refer to `ReasonOfStateChanged` and `ErrorLogUrls` for troubleshooting. However, after fixing the error, you cannot recover the load job in this state.</li><li>`STOPPED`: The load job is stopped. You cannot recover the load job in this state.</li><li>`UNSTABLE`: The load job is unstable. A Routine Load job is set in the `UNSTABLE` state if any task within the Routine Load job lags (namely, the difference between the timestamp of the message being consumed and the current time exceeds this FE parameter [`routine_load_unstable_threshold_second`](../../../administration/FE_configuration.md#routine_load_unstable_threshold_second), and unconsumed messages exist in the data source.)</li></ul> |
+| State                | The status of the load job, including:<ul><li>`NEED_SCHEDULE`: The load job is waiting to be scheduled. After you use CREATE ROUTINE LOAD or RESUME ROUTINE LOAD to create or resume a Routine Load job, the load job first enters the `NEED_SCHEDULE` state.</li><li>`RUNNING`: The load job is running. You can view the consumption progress of the Routine Load job through `Statistic` and `Progress`.</li><li>`PAUSED`: The load job is paused. You can refer to `ReasonOfStateChanged` and `ErrorLogUrls` for troubleshooting. After fixing the error, you can use RESUME ROUTINE LOAD to resume the Routine Load job.</li><li>`CANCELLED`: The load job is cancelled. You can refer to `ReasonOfStateChanged` and `ErrorLogUrls` for troubleshooting. However, after fixing the error, you cannot recover the load job in this state.</li><li>`STOPPED`: The load job is stopped. You cannot recover the load job in this state.</li><li>`UNSTABLE`: The load job is unstable. A Routine Load job is set in the `UNSTABLE` state if any task within the Routine Load job lags (namely, the difference between the timestamp of the message being consumed and the current time exceeds this FE parameter [`routine_load_unstable_threshold_second`](../../../administration/management/FE_configuration.md#routine_load_unstable_threshold_second), and unconsumed messages exist in the data source.)</li></ul> |
 | DataSourceType       | The type of the data source. Fixed value: `KAFKA`.           |
 | CurrentTaskNum       | The current number of tasks in the load job.                     |
 | JobProperties        | The properties of the load job, such as partitions to be consumed and column mapping. |
@@ -63,7 +63,7 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 | ErrorLogUrls         | The URL of error logs. You can use the `curl` or `wget` command to  access the URL. |
 | TrackingSQL          | The SQL command that you can directly run to query the error log information recorded in the `information_schema` database. |
 | OtherMsg             | The information about all failed load tasks of the Routine Load job. |
-| LatestSourcePosition | The latest consumer position of messages in partitions of the topic. |
+| LatestSourcePosition | The position of latest message in each partition of the topic, which helps check the latencies of data loading. |
 
 ## Examples
 

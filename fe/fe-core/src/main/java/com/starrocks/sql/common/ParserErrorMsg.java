@@ -211,4 +211,15 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Not support ''{0}'' {1}")
     String unsupportedSubquery(String a0, String a1);
+
+    @BaseMessage("Invalid hint value ''{0}''")
+    String invalidHintValue(String a0);
+
+    @BaseMessage("Failed to evaluate user variable hint ''{0}'', because {1}")
+    String invalidUserVariableHint(String a0, String a1);
+
+    @BaseMessage("No selected database for cancel BACKUP/RESTORE")
+    String nullIdentifierCancelBackupRestore();
+    @BaseMessage("Value count in PIVOT {0} must match number of FOR columns {1}")
+    String pivotValueArityMismatch(int a0, int a1);
 }

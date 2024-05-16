@@ -17,7 +17,7 @@ array_cum_sum(array(double))
 
 ## 参数说明
 
-`array`：需要处理的数组。支持的数据类型为 BIGINT (8 字节有符号整型）和 DOUBLE (8 字节浮点数)。
+`array`：需要处理的数组。支持的数据类型为 BIGINT（8 字节有符号整型）和 DOUBLE (8 字节浮点数)。
 
 ## 返回值说明
 

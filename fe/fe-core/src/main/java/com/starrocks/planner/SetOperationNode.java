@@ -40,7 +40,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
@@ -308,12 +307,14 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr, List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
-
-        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds()) &&
+                partitionByExprs.stream().allMatch(expr -> expr.isBoundByTupleIds(getTupleIds()));
+        if (!isBound) {
             return false;
         }
 
@@ -321,7 +322,7 @@ public abstract class SetOperationNode extends PlanNode {
             boolean pushDown = false;
             // try to push all children if any expr of a child can match `probeExpr`
             for (int i = 0; i < materializedResultExprLists_.size(); i++) {
-                pushDown |= pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+                pushDown |= pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                         candidatesOfSlotExprForChild(probeExpr, i), partitionByExprs,
                         candidatesOfSlotExprsForChild(partitionByExprs, i), i, false);
             }
@@ -330,7 +331,7 @@ public abstract class SetOperationNode extends PlanNode {
             }
         }
 
-        if (description.canProbeUse(this)) {
+        if (description.canProbeUse(this, context)) {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);

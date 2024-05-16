@@ -1,0 +1,10 @@
+-- name: test_error
+
+select * from files("path" = "xxx", "format" = "parquet");
+-- result:
+E: (1064, 'Access storage error. Error message: invalid path. scheme is null')
+-- !result
+select * from files("path" = "hdfs://hdfs://test/x", "format" = "parquet");
+-- result:
+E: (1064, 'Access storage error. Error message: java.net.UnknownHostException: hdfs')
+-- !result

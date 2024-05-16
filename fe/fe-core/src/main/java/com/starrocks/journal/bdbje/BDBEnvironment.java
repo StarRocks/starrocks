@@ -117,7 +117,7 @@ public class BDBEnvironment {
      */
     public static BDBEnvironment initBDBEnvironment(String nodeName) throws JournalException, InterruptedException {
         // check for port use
-        Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getSelfNode();
+        Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
         try {
             if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
                 String errMsg = String.format("edit_log_port %d is already in use. will exit.", selfNode.second);
@@ -125,7 +125,7 @@ public class BDBEnvironment {
                 throw new JournalException(errMsg);
             }
         } catch (IOException e) {
-            String errMsg = String.format("failed to check if %s:%s is used!", selfNode.first, selfNode.second);
+            String errMsg = String.format("failed to check if [%s]:%s is used!", selfNode.first, selfNode.second);
             LOG.error(errMsg, e);
             JournalException journalException = new JournalException(errMsg);
             journalException.initCause(e);
@@ -133,15 +133,15 @@ public class BDBEnvironment {
         }
 
         // constructor
-        String selfNodeHostPort = selfNode.first + ":" + selfNode.second;
+        String selfNodeHostPort = NetUtils.getHostPortInAccessibleFormat(selfNode.first, selfNode.second);
 
         File dbEnv = new File(getBdbDir());
         if (!dbEnv.exists()) {
             dbEnv.mkdirs();
         }
 
-        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getHelperNode();
-        String helperHostPort = helperNode.first + ":" + helperNode.second;
+        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNode();
+        String helperHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, helperNode.second);
 
         BDBEnvironment bdbEnvironment = new BDBEnvironment(dbEnv, nodeName, selfNodeHostPort,
                 helperHostPort, GlobalStateMgr.getCurrentState().isElectable());
@@ -174,7 +174,7 @@ public class BDBEnvironment {
 
     protected void initConfigs(boolean isElectable) throws JournalException {
         // Almost never used, just in case the master can not restart
-        if (Config.metadata_failure_recovery.equals("true")) {
+        if (Config.bdbje_reset_election_group.equals("true")) {
             if (!isElectable) {
                 String errMsg = "Current node is not in the electable_nodes list. will exit";
                 LOG.error(errMsg);
@@ -203,6 +203,7 @@ public class BDBEnvironment {
         replicationConfig
                 .setConfigParam(ReplicationConfig.REPLAY_COST_PERCENT,
                         String.valueOf(Config.bdbje_replay_cost_percent));
+        replicationConfig.setConfigParam(ReplicationConfig.BIND_INADDR_ANY, "true");
 
         if (isElectable) {
             replicationConfig.setReplicaAckTimeout(Config.bdbje_replica_ack_timeout_second, TimeUnit.SECONDS);
@@ -338,7 +339,7 @@ public class BDBEnvironment {
         }
 
         // Almost never used, just in case the master can not restart
-        if (Config.metadata_failure_recovery.equals("true")) {
+        if (Config.bdbje_reset_election_group.equals("true")) {
             LOG.info("skip check local environment because metadata_failure_recovery = true");
             return;
         }
@@ -348,6 +349,7 @@ public class BDBEnvironment {
         // 1. init environment as an observer
         initConfigs(false);
 
+        // this HostAndPort.fromString method support get ipv6 host and port, but remember to use [host]:port
         HostAndPort hostAndPort = HostAndPort.fromString(helperHostPort);
 
         JournalException exception = null;
@@ -367,7 +369,7 @@ public class BDBEnvironment {
 
                 // 3. found if match
                 for (ReplicationNode node : localNodes) {
-                    if (node.getHostName().equals(hostAndPort.getHost()) && node.getPort() == hostAndPort.getPort()) {
+                    if (NetUtils.isSameIP(hostAndPort.getHost(), node.getHostName()) && node.getPort() == hostAndPort.getPort()) {
                         LOG.info("found {} in local environment!", helperHostPort);
                         return;
                     }
@@ -413,8 +415,8 @@ public class BDBEnvironment {
     }
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
-        Set<InetSocketAddress> addrs = GlobalStateMgr.getCurrentState()
-                .getFrontends(FrontendNodeType.FOLLOWER)
+        Set<InetSocketAddress> addrs = GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getFrontends(null)
                 .stream()
                 .filter(Frontend::isAlive)
                 .map(fe -> new InetSocketAddress(fe.getHost(), fe.getEditLogPort()))

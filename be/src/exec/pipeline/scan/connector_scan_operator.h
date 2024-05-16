@@ -39,7 +39,7 @@ struct ConnectorScanOperatorMemShareArbitrator {
             : query_mem_limit(query_mem_limit), scan_mem_limit(query_mem_limit) {}
 
     int64_t set_scan_mem_ratio(double mem_ratio) {
-        scan_mem_limit = query_mem_limit * mem_ratio;
+        scan_mem_limit = std::max<int64_t>(1, query_mem_limit * mem_ratio);
         return scan_mem_limit;
     }
 
@@ -113,7 +113,11 @@ public:
     void end_driver_process(PipelineDriver* driver) override;
     bool is_running_all_io_tasks() const override;
 
-public:
+    void append_morsels(std::vector<MorselPtr>&& morsels);
+    ConnectorScanOperatorAdaptiveProcessor* adaptive_processor() const { return _adaptive_processor; }
+    bool enable_adaptive_io_tasks() const { return _enable_adaptive_io_tasks; }
+
+private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;

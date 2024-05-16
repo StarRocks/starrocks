@@ -32,6 +32,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <aws/core/Aws.h>
+#include <fmt/format.h>
 #include <gflags/gflags.h>
 
 #include <iostream>
@@ -42,6 +44,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
+#include "fs/fs_s3.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -54,6 +57,7 @@
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
+#include "storage/lake/vacuum.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
@@ -91,7 +95,7 @@ using starrocks::DeltaColumnGroupList;
 using starrocks::PrimaryKeyDump;
 
 DEFINE_string(root_path, "", "storage root path");
-DEFINE_string(operation, "get_meta",
+DEFINE_string(operation, "",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, show_meta, "
               "check_table_meta_consistency, print_lake_metadata, print_lake_txn_log, print_lake_schema");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
@@ -105,46 +109,72 @@ DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
 DEFINE_int32(column_index, -1, "column index");
 DEFINE_int32(key_column_count, 0, "key column count");
+DEFINE_int64(expired_sec, 86400, "expired seconds");
+DEFINE_string(conf_file, "", "conf file path");
+DEFINE_string(audit_file, "", "audit file path");
+DEFINE_bool(do_delete, false, "do delete files");
+
+// flag defined in gflags library
+DECLARE_bool(helpshort);
 
 std::string get_usage(const std::string& progname) {
-    std::stringstream ss;
-    ss << progname << " is the StarRocks BE Meta tool.\n";
-    ss << "Stop BE first before use this tool.\n";
-    ss << "Usage:\n";
-    ss << "./meta_tool.sh --operation=get_meta --root_path=/path/to/storage/path "
-          "--tablet_id=tabletid [--schema_hash=schemahash]\n";
-    ss << "./meta_tool.sh --operation=load_meta --root_path=/path/to/storage/path "
-          "--json_meta_path=path\n";
-    ss << "./meta_tool.sh --operation=delete_meta "
-          "--root_path=/path/to/storage/path --tablet_id=tabletid "
-          "[--schema_hash=schemahash] | ./meta_tool --operation=delete_meta "
-          "--root_path=/path/to/storage/path --table_id=tableid\n";
-    ss << "./meta_tool.sh --operation=delete_meta --tablet_file=file_path\n";
-    ss << "./meta_tool.sh --operation=delete_rowset_meta "
-          "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
-          "--rowset_id=rowset_id\n";
-    ss << "./meta_tool.sh --operation=delete_persistent_index_meta "
-          "--root_path=/path/to/storage/path --tablet_id=tabletid | "
-          "./meta_tool.sh --operation=delete_persistent_index_meta "
-          "--root_path=/path/to/storage/path --table_id=tableid\n";
-    ss << "./meta_tool.sh --operation=compact_meta --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=get_meta_stats --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=ls --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=show_meta --pb_meta_path=path\n";
-    ss << "./meta_tool.sh --operation=show_segment_footer --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=dump_segment_data --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=dump_column_size --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=print_pk_dump --file=/path/to/pk/dump/file\n";
-    ss << "./meta_tool.sh --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
-    ss << "./meta_tool.sh --operation=calc_checksum [--column_index=xx] --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
-          "--table_id=tableid\n";
-    ss << "./meta_tool --operation=scan_dcgs --root_path=/path/to/storage/path "
-          "--tablet_id=tabletid\n";
-    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
-    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
-    ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
-    return ss.str();
+    constexpr const char* const usage_msg = R"(
+  {progname} is the StarRocks BE Meta tool.
+    [CAUTION] Stop BE first before using this tool if modification will be made.
+
+  Usage:
+    get_meta:
+      {progname} --operation=get_meta --root_path=</path/to/storage/path> --tablet_id=<tabletid> [--schema_hash=<schemahash>]
+    load_meta:
+      {progname} --operation=load_meta --root_path=</path/to/storage/path> --json_meta_path=<path>
+    delete_meta:
+      {progname} --operation=delete_meta --root_path=</path/to/storage/path> --tablet_id=<tabletid> [--schema_hash=<schemahash>]
+      {progname} --operation=delete_meta --root_path=</path/to/storage/path> --table_id=<tableid>
+      {progname} --operation=delete_meta --tablet_file=<file_path>
+    delete_rowset_meta:
+      {progname} --operation=delete_rowset_meta --root_path=</path/to/storage/path> --tablet_uid=<tablet_uid> --rowset_id=<rowset_id>
+    delete_persistent_index_meta:
+      {progname} --operation=delete_persistent_index_meta --root_path=</path/to/storage/path> --tablet_id=<tabletid>
+      {progname} --operation=delete_persistent_index_meta --root_path=</path/to/storage/path> --table_id=<tableid>
+    compact_meta:
+      {progname} --operation=compact_meta --root_path=</path/to/storage/path>
+    get_meta_stats:
+      {progname} --operation=get_meta_stats --root_path=</path/to/storage/path>
+    ls:
+      {progname} --operation=ls --root_path=</path/to/storage/path>
+    show_meta:
+      {progname} --operation=show_meta --pb_meta_path=<path>
+    show_segment_footer:
+      {progname} --operation=show_segment_footer --file=</path/to/segment/file>
+    dump_segment_data:
+      {progname} --operation=dump_segment_data --file=</path/to/segment/file>
+    dump_column_size:
+      {progname} --operation=dump_column_size --file=</path/to/segment/file>
+    print_pk_dump:
+      {progname} --operation=print_pk_dump --file=</path/to/pk/dump/file>
+    dump_short_key_index:
+      {progname} --operation=dump_short_key_index --file=</path/to/segment/file> --key_column_count=<2>
+    calc_checksum:
+      {progname} --operation=calc_checksum [--column_index=<index>] --file=</path/to/segment/file>
+    check_table_meta_consistency:
+      {progname} --operation=check_table_meta_consistency --root_path=</path/to/storage/path> --table_id=<tableid>
+    scan_dcgs:
+      {progname} --operation=scan_dcgs --root_path=</path/to/storage/path> --tablet_id=<tabletid>
+    print_lake_metadata:
+      cat <tablet_meta_file.meta> | {progname} --operation=print_lake_metadata
+    print_lake_txn_log:
+      cat <tablet_transaction_log_file.log> | {progname} --operation=print_lake_txn_log
+    print_lake_schema:
+      cat <tablet_schema_file> | {progname} --operation=print_lake_schema
+    lake_datafile_gc:
+      {progname} --operation=lake_datafile_gc --root_path=<path> --expired_sec=<86400> --conf_file=<path> --audit_file=<path> --do_delete=<true|false>
+    )";
+    return fmt::format(usage_msg, fmt::arg("progname", progname));
+}
+
+static void show_usage() {
+    FLAGS_helpshort = true;
+    google::HandleCommandLineHelpFlags();
 }
 
 void show_meta() {
@@ -994,11 +1024,17 @@ Status SegmentDump::dump_column_size() {
 } // namespace starrocks
 
 int meta_tool_main(int argc, char** argv) {
+    bool empty_args = (argc <= 1);
     std::string usage = get_usage(argv[0]);
     gflags::SetUsageMessage(usage);
     google::ParseCommandLineFlags(&argc, &argv, true);
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
+
+    if (empty_args || FLAGS_operation.empty()) {
+        show_usage();
+        return -1;
+    }
 
     if (FLAGS_operation == "show_meta") {
         show_meta();
@@ -1098,7 +1134,7 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
     } else if (FLAGS_operation == "print_lake_metadata") {
-        starrocks::lake::TabletMetadataPB metadata;
+        starrocks::TabletMetadataPB metadata;
         if (!metadata.ParseFromIstream(&std::cin)) {
             std::cerr << "Fail to parse tablet metadata\n";
             return -1;
@@ -1113,7 +1149,7 @@ int meta_tool_main(int argc, char** argv) {
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "print_lake_txn_log") {
-        starrocks::lake::TxnLogPB txn_log;
+        starrocks::TxnLogPB txn_log;
         if (!txn_log.ParseFromIstream(&std::cin)) {
             std::cerr << "Fail to parse txn log\n";
             return -1;
@@ -1142,6 +1178,28 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         std::cout << json << '\n';
+    } else if (FLAGS_operation == "lake_datafile_gc") {
+        if (!starrocks::config::init(FLAGS_conf_file.c_str())) {
+            std::cerr << "Init config failed, conf file: " << FLAGS_conf_file << std::endl;
+            return -1;
+        }
+        if (!starrocks::init_glog("lake_datafile_gc", true)) {
+            std::cerr << "Init glog failed" << std::endl;
+            return -1;
+        }
+        if (FLAGS_expired_sec < 600) {
+            std::cerr << "expired_sec is less than 10min" << std::endl;
+            return -1;
+        }
+        Aws::SDKOptions options;
+        Aws::InitAPI(options);
+        auto status =
+                starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);
+        if (!status.ok()) {
+            std::cout << status << std::endl;
+        }
+        starrocks::close_s3_clients();
+        Aws::ShutdownAPI(options);
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",
@@ -1155,7 +1213,8 @@ int meta_tool_main(int argc, char** argv) {
                                                   "check_table_meta_consistency",
                                                   "scan_dcgs"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
-            std::cout << "invalid operation:" << FLAGS_operation << std::endl;
+            std::cout << "invalid operation: " << FLAGS_operation << std::endl << std::endl;
+            show_usage();
             return -1;
         }
 
@@ -1165,6 +1224,10 @@ int meta_tool_main(int argc, char** argv) {
             read_only = true;
         }
 
+        if (FLAGS_root_path.empty()) {
+            std::cout << "--root_path option is required for operation: " << FLAGS_operation << "!" << std::endl;
+            return -1;
+        }
         std::unique_ptr<DataDir> data_dir;
         Status st = init_data_dir(FLAGS_root_path, &data_dir, read_only);
         if (!st.ok()) {
@@ -1193,7 +1256,8 @@ int meta_tool_main(int argc, char** argv) {
         } else if (FLAGS_operation == "scan_dcgs") {
             scan_dcgs(data_dir.get());
         } else {
-            std::cout << "invalid operation: " << FLAGS_operation << "\n" << usage << std::endl;
+            std::cout << "invalid operation: " << FLAGS_operation << std::endl << std::endl;
+            show_usage();
             return -1;
         }
     }

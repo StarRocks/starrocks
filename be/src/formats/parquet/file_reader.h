@@ -14,23 +14,47 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <cstdint>
 #include <memory>
+#include <set>
+#include <string>
+#include <vector>
 
 #include "block_cache/block_cache.h"
 #include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
+#include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
+namespace tparquet {
+class ColumnMetaData;
+class ColumnOrder;
+class RowGroup;
+} // namespace tparquet
+
 namespace starrocks {
 class RandomAccessFile;
-
 struct HdfsScannerContext;
+class BlockCache;
+class SlotDescriptor;
+
+namespace io {
+class SharedBufferedInputStream;
+} // namespace io
+namespace parquet {
+struct ParquetField;
+} // namespace parquet
+struct TypeDescriptor;
 
 } // namespace starrocks
 
@@ -42,7 +66,7 @@ constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 48 * 1024;
 constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
 constexpr static const char* PARQUET_EMAIC_NUMBER = "PARE";
 
-class FileMetaData;
+using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 
 class FileReader {
 public:
@@ -63,14 +87,14 @@ private:
     // get footer of parquet file from cache or parquet file
     Status _get_footer();
 
-    void _build_metacache_key();
+    std::string _build_metacache_key();
 
-    // parse footer of parquet file
-    Status _parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size);
+    std::shared_ptr<MetaHelper> _build_meta_helper();
+
+    Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
 
     void _prepare_read_columns();
 
-    // init row group readers.
     Status _init_group_readers();
 
     // filter row group by min/max conjuncts
@@ -108,8 +132,7 @@ private:
 
     bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 
-    // get the data page start offset in parquet file
-    static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
+    Status _build_split_tasks();
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
@@ -124,10 +147,7 @@ private:
     bool _no_materialized_column_scan = false;
 
     BlockCache* _cache = nullptr;
-    FileMetaData* _file_metadata = nullptr;
-    bool _is_metadata_cached = false;
-    std::string _metacache_key;
-    CacheHandle _cache_handle;
+    FileMetaDataPtr _file_metadata = nullptr;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;

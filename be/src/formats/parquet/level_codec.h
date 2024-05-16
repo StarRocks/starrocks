@@ -14,13 +14,20 @@
 
 #pragma once
 
+#include <glog/logging.h>
+#include <string.h>
+
+#include <algorithm>
 #include <cstdint>
+#include <vector>
 
 #include "common/status.h"
 #include "formats/parquet/types.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/bit_stream_utils.h"
 #include "util/rle_encoding.h"
+#include "util/runtime_profile.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 class Slice;
@@ -30,7 +37,7 @@ namespace starrocks::parquet {
 
 class LevelDecoder {
 public:
-    LevelDecoder() = default;
+    LevelDecoder(int64_t* const timer) : _timer(timer) {}
     ~LevelDecoder() = default;
 
     // Decode will try to decode data in slice, only some of the input slice will used.
@@ -40,8 +47,69 @@ public:
     //     the last 900.
     Status parse(tparquet::Encoding::type encoding, level_t max_level, uint32_t num_levels, Slice* slice);
 
+    size_t next_repeated_count() {
+        DCHECK_EQ(_encoding, tparquet::Encoding::RLE);
+        return _rle_decoder.repeated_count();
+    }
+
+    level_t get_repeated_value(size_t count) { return _rle_decoder.get_repeated_value(count); }
+
+    void get_levels(level_t** levels, size_t* num_levels) {
+        *levels = &_levels[0];
+        *num_levels = _levels_parsed;
+    }
+
+    level_t* get_forward_levels(size_t num_levels) { return &_levels[_levels_parsed - num_levels]; }
+
+    void reset() {
+        size_t num_levels = _levels_decoded - _levels_parsed;
+        if (num_levels == 0) {
+            _levels_parsed = _levels_decoded = 0;
+            return;
+        }
+        if (_levels_parsed == 0) {
+            return;
+        }
+
+        memmove(&_levels[0], &_levels[_levels_parsed], num_levels * sizeof(level_t));
+        _levels_decoded -= _levels_parsed;
+        _levels_parsed = 0;
+    }
+
+    void consume_levels(size_t num_levels) { _levels_parsed += num_levels; }
+
+    size_t get_avail_levels(size_t row, level_t** levels) {
+        size_t batch_size = _get_level_to_decode_batch_size(row);
+        if (batch_size > 0) {
+            size_t new_capacity = batch_size + _levels_decoded;
+            if (new_capacity > _levels_capacity) {
+                _levels.resize(new_capacity);
+                _levels_capacity = new_capacity;
+            }
+            size_t res_def = _decode_batch(batch_size, &_levels[_levels_decoded]);
+            _levels_decoded += res_def;
+        }
+        *levels = &_levels[_levels_parsed];
+        return _levels_decoded - _levels_parsed;
+    }
+
+    void append_default_levels(size_t level_nums) {
+        size_t new_capacity = _levels_parsed + level_nums;
+        if (new_capacity > _levels_capacity) {
+            _levels.resize(new_capacity);
+            _levels_capacity = new_capacity;
+        }
+        memset(&_levels[_levels_parsed], 0x0, level_nums * sizeof(level_t));
+        _levels_parsed += level_nums;
+        _levels_decoded = _levels_parsed;
+    }
+
+private:
+    size_t _get_level_to_decode_batch_size(size_t row);
+
     // Try to decode n levels into levels;
-    size_t decode_batch(size_t n, level_t* levels) {
+    size_t _decode_batch(size_t n, level_t* levels) {
+        SCOPED_RAW_TIMER(_timer);
         if (_encoding == tparquet::Encoding::RLE) {
             // NOTE(zc): Because RLE can only record elements that are multiples of 8,
             // it must be ensured that the incoming parameters cannot exceed the boundary.
@@ -55,20 +123,20 @@ public:
         return 0;
     }
 
-    size_t next_repeated_count() {
-        DCHECK_EQ(_encoding, tparquet::Encoding::RLE);
-        return _rle_decoder.repeated_count();
-    }
-
-    level_t get_repeated_value(size_t count) { return _rle_decoder.get_repeated_value(count); }
-
-private:
     tparquet::Encoding::type _encoding;
     level_t _bit_width = 0;
     [[maybe_unused]] level_t _max_level = 0;
     uint32_t _num_levels = 0;
     RleDecoder<level_t> _rle_decoder;
     BitReader _bit_packed_decoder;
+
+    int64_t* const _timer;
+
+    // used for level decoding batch then batch
+    size_t _levels_parsed = 0;
+    size_t _levels_decoded = 0;
+    size_t _levels_capacity = 0;
+    std::vector<level_t> _levels;
 };
 
 } // namespace starrocks::parquet

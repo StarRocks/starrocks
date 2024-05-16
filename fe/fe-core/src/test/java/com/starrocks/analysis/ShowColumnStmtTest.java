@@ -50,7 +50,7 @@ public class ShowColumnStmtTest {
         String dropSQL = "drop table test_default";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
         }
@@ -61,8 +61,7 @@ public class ShowColumnStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "show full columns from test_default;";
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowResultSet resultSet = ShowExecutor.execute(showColumnStmt, ctx);
         Assert.assertEquals("uuid()", resultSet.getResultRows().get(0).get(5));
     }
 
@@ -71,8 +70,7 @@ public class ShowColumnStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "show full columns from test_only_metric_default;";
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowResultSet resultSet = ShowExecutor.execute(showColumnStmt, ctx);
         // here must set null not \N
         Assert.assertNull(resultSet.getResultRows().get(0).get(5));
         Assert.assertNull(resultSet.getResultRows().get(1).get(5));

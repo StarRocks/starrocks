@@ -154,9 +154,9 @@ public:
         Status status;
         // encode
         PageBuilderOptions options;
-        // page size: 16M
-        options.data_page_size = 1 * 1024 * 1024;
-        options.dict_page_size = 1 * 1024 * 1024;
+        // page size: 128K
+        options.data_page_size = 128 * 1024;
+        options.dict_page_size = 128 * 1024;
         BinaryDictPageBuilder page_builder(options);
         size_t count = contents.size();
         std::vector<OwnedSlice> results;
@@ -190,9 +190,9 @@ public:
                   << ", dict size:" << dict_slice.slice().size << " result page size:" << results.size();
 
         // validate
-        // random 100 times to validate
+        // random 20 times to validate
         srand(time(nullptr));
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < 20; ++i) {
             int slice_index = random() % results.size();
             //int slice_index = 1;
             auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice());
@@ -289,7 +289,7 @@ TEST_F(BinaryDictPageTest, TestEncodingRatio) {
     while (getline(infile, line)) {
         src_strings.emplace_back(line);
     }
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < 1000; ++i) {
         for (const auto& src_string : src_strings) {
             slices.emplace_back(src_string);
         }

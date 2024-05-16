@@ -50,7 +50,7 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
         ScalarOperator on = join.getOnPredicate();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
                 input, true, false, context.getColumnRefFactory(),
-                context.isEnableLeftRightJoinEquivalenceDerive());
+                context.isEnableLeftRightJoinEquivalenceDerive(), context);
         OptExpression root = joinPredicatePushdown.pushdown(join.getOnPredicate());
         ((LogicalJoinOperator) root.getOp()).setHasPushDownJoinOnClause(true);
         if (root.getOp().equals(input.getOp()) && on.equals(join.getOnPredicate()) &&

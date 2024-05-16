@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.optimizer.transformer;
 
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.Operator;
+
+import java.util.Map;
 
 public class TransformerContext {
     private final ColumnRefFactory columnRefFactory;
@@ -31,29 +35,25 @@ public class TransformerContext {
     private final boolean inlineView;
     private final boolean enableViewBasedMvRewrite;
 
+    private final Map<Operator, ParseNode> optToAstMap;
+
     public TransformerContext(
             ColumnRefFactory columnRefFactory,
-            ConnectContext session) {
+            ConnectContext session,
+            Map<Operator, ParseNode> optToAstMap) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), true);
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), true, optToAstMap);
     }
 
     public TransformerContext(
             ColumnRefFactory columnRefFactory,
             ConnectContext session,
-            boolean inlineView) {
+            boolean inlineView,
+            Map<Operator, ParseNode> optToAstMap) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), inlineView);
-    }
-
-    public TransformerContext(
-            ColumnRefFactory columnRefFactory,
-            ConnectContext session,
-            ExpressionMapping outer,
-            CTETransformerContext cteContext) {
-        this(columnRefFactory, session, outer, cteContext, true);
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), inlineView, optToAstMap);
     }
 
     public TransformerContext(
@@ -61,13 +61,24 @@ public class TransformerContext {
             ConnectContext session,
             ExpressionMapping outer,
             CTETransformerContext cteContext,
-            boolean inlineView) {
+            Map<Operator, ParseNode> optToAstMap) {
+        this(columnRefFactory, session, outer, cteContext, true, optToAstMap);
+    }
+
+    public TransformerContext(
+            ColumnRefFactory columnRefFactory,
+            ConnectContext session,
+            ExpressionMapping outer,
+            CTETransformerContext cteContext,
+            boolean inlineView,
+            Map<Operator, ParseNode> optToAstMap) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = outer;
         this.cteContext = cteContext;
         this.inlineView = inlineView;
         this.enableViewBasedMvRewrite = session.getSessionVariable().isEnableViewBasedMvRewrite();
+        this.optToAstMap = optToAstMap;
     }
 
     public ColumnRefFactory getColumnRefFactory() {
@@ -92,5 +103,9 @@ public class TransformerContext {
 
     public boolean isEnableViewBasedMvRewrite() {
         return enableViewBasedMvRewrite;
+    }
+
+    public Map<Operator, ParseNode> getOptToAstMap() {
+        return optToAstMap;
     }
 }

@@ -31,6 +31,7 @@ OPTS=$(getopt \
     -l 'cn' \
     -l 'be' \
     -l 'logconsole' \
+    -l 'meta_tool' \
     -l numa: \
 -- "$@")
 
@@ -41,6 +42,7 @@ RUN_CN=0
 RUN_BE=0
 RUN_NUMA="-1"
 RUN_LOG_CONSOLE=0
+RUN_META_TOOL=0
 
 while true; do
     case "$1" in
@@ -49,6 +51,7 @@ while true; do
         --be) RUN_BE=1; RUN_CN=0; shift ;;
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --numa) RUN_NUMA=$2; shift 2 ;;
+        --meta_tool) RUN_META_TOOL=1 ; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -85,8 +88,6 @@ fi
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
 
-# Dependent dynamic libraries
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 
 # ================== jvm section =======================
 if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
@@ -101,6 +102,7 @@ fi
 
 if [ "$JAVA_HOME" = "" ]; then
     echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
@@ -152,6 +154,12 @@ export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 export_cachelib_lib_path
 
 
+# ====== handle meta_tool sub command before any modification change
+if [ ${RUN_META_TOOL} -eq 1 ] ; then
+    ${STARROCKS_HOME}/lib/starrocks_be meta_tool "$@"
+    exit $?
+fi
+
 # ================== kill/start =======================
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
@@ -183,12 +191,20 @@ fi
 
 chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
 
+if [ $(ulimit -n) != "unlimited" ] && [ $(ulimit -n) -lt 60000 ]; then
+    ulimit -n 65535
+fi
 
 START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/starrocks_be"
 LOG_FILE=$LOG_DIR/be.out
 if [ ${RUN_CN} -eq 1 ]; then
     START_BE_CMD="${START_BE_CMD} --cn"
     LOG_FILE=${LOG_DIR}/cn.out
+fi
+
+# enable DD profile
+if [ "${ENABLE_DATADOG_PROFILE}" == "true" ] && [ -f "${STARROCKS_HOME}/datadog/ddprof" ]; then
+    START_BE_CMD="${STARROCKS_HOME}/datadog/ddprof -l debug ${START_BE_CMD}"
 fi
 
 if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
@@ -199,7 +215,7 @@ else
     exec &>> ${LOG_FILE}
 fi
 
-echo "start time: "$(date)
+echo "start time: $(date), server uptime: $(uptime)"
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${START_BE_CMD} "$@" </dev/null &
 else

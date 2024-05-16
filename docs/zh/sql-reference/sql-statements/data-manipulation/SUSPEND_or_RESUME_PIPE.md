@@ -11,6 +11,8 @@ displayed_sidebar: "Chinese"
 - 当导入作业正在进行时（即，处于 `RUNNING` 状态），暂停 (`SUSPEND`) Pipe 会中断正在执行的作业。
 - 当出现导入错误时，重新启动 (`RESUME`) Pipe 会继续执行出错的作业。
 
+该命令自 3.2 版本起支持。
+
 ## 语法
 
 ```SQL
@@ -46,3 +48,11 @@ ALTER PIPE user_behavior_replica RESUME;
 ```
 
 通过 [SHOW PIPES](../../../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) 查看该 Pipe，可以看到 Pipe 的状态变为 `RUNNING`。
+
+## 相关文档
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)

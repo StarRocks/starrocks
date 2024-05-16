@@ -120,7 +120,7 @@ DROP PREPARE select_by_id_stmt;
 
 The following example demonstrates how to use prepared statements to insert, delete, update, and query data from a StarRocks table:
 
-Assuming the following database named `demo` and table named `users` are alrealy created:
+Assuming the following database named `demo` and table named `users` are already created:
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS demo;

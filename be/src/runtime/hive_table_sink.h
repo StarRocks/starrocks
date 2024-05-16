@@ -15,7 +15,12 @@
 #pragma once
 
 #include "common/logging.h"
+#include "connector/hive_chunk_sink.h"
 #include "exec/data_sink.h"
+#include "exec/hdfs_scanner_text.h"
+#include "exec/pipeline/sink/connector_sink_operator.h"
+#include "formats/column_evaluator.h"
+#include "formats/csv/csv_file_writer.h"
 
 namespace starrocks {
 
@@ -40,6 +45,9 @@ public:
     RuntimeProfile* profile() override { return _profile; }
 
     std::vector<TExpr> get_output_expr() const { return _t_output_expr; }
+
+    Status decompose_to_pipeline(pipeline::OpFactories prev_operators, const TDataSink& thrift_sink,
+                                 pipeline::PipelineBuilderContext* context) const;
 
 private:
     ObjectPool* _pool;

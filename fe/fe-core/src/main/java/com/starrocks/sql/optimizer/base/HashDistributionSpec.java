@@ -129,7 +129,7 @@ public class HashDistributionSpec extends DistributionSpec {
 
         // check shuffle_local equivalentDescriptor
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
-            ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+            ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
             long tableId = equivDesc.getTableId();
             // Disable use colocate/bucket join when table with empty partition
             boolean satisfyColocate = equivDesc.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&

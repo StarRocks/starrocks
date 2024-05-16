@@ -47,10 +47,13 @@
    GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
    -- 切换到对应数据目录。
    SET CATALOG hive_catalog;
-   -- 赋予角色所有表的查询权限。注意当前仅支持查询 Hive 表的视图 (自 3.1 版本起)。
+   -- 赋予角色该 Catalog 下所有表和视图的查询权限。
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
-   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
    ```
+
+   :::tip
+   对于外部数据目录下的视图，当前仅支持查询 Hive 表的视图 (自 3.1 版本起)。
+   :::
 
 4. 指定外部数据目录（External Catalog）下的写权限
 
@@ -81,7 +84,7 @@
      -- 赋予角色创建数据库的权限。
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover;
      -- 赋予角色创建任意表的权限。
-     GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover;
+     GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover;
      -- 赋予角色向任意表导入、导出数据的权限。
      GRANT INSERT, EXPORT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
      ```
@@ -98,7 +101,7 @@
      -- 赋予角色创建数据库的权限。
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover_db;
      -- 赋予角色创建任意表的权限。
-     GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover_db;
+     GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover_db;
      -- 赋予角色向任意表导入数据的权限。
      GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
      -- 赋予角色向待备份数据库下所有表的导出权限。

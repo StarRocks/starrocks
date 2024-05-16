@@ -82,7 +82,7 @@ public class AnalyzerUtilsTest {
     public void testConvertCatalogMaxStringToOlapMaxString() {
         ScalarType catalogString = ScalarType.createDefaultCatalogString();
         ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
-        Assert.assertEquals(ScalarType.OLAP_MAX_VARCHAR_LENGTH, convertedString.getLength());
+        Assert.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
     }
 
 }

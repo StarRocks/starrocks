@@ -64,7 +64,8 @@ public class SystemTable extends Table {
     }
 
     public boolean requireOperatePrivilege() {
-        return SystemTable.isBeSchemaTable(getName()) || SystemTable.isFeSchemaTable(getName());
+        return (SystemTable.isBeSchemaTable(getName()) || SystemTable.isFeSchemaTable(getName())) &&
+                !getName().equals("be_tablets") && !getName().equals("fe_tablet_schedules");
     }
 
     @Override

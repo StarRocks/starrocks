@@ -50,7 +50,7 @@ group by store_id;
 
 Example 2: Load PERCENTILE data.
 
-Create an aggregate table that contains a PERCENTILE column `sale_amt_per`.
+Create an Aggregate table that contains a PERCENTILE column `sale_amt_per`.
 
 ```sql
 CREATE TABLE sales_records(

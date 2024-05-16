@@ -15,11 +15,14 @@
 
 package com.starrocks.load;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -47,7 +50,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
+public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobMgr.class);
 
     @SerializedName(value = "overwriteJobMap")
@@ -71,7 +74,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
         ThreadFactory threadFactory = new DefaultThreadFactory("cancel-thread");
         this.cancelJobExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.runningJobs = Lists.newArrayList();
-        this.lock = new ReentrantReadWriteLock();
+        this.lock = new FairReentrantReadWriteLock();
     }
 
     public void executeJob(ConnectContext context, StmtExecutor stmtExecutor, InsertOverwriteJob job) throws Exception {
@@ -264,5 +267,10 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
         overwriteJobMap = catalog.overwriteJobMap;
         tableToOverwriteJobs = catalog.tableToOverwriteJobs;
         runningJobs = catalog.runningJobs;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("insertOverwriteJobs", (long) overwriteJobMap.size());
     }
 }

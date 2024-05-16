@@ -62,16 +62,6 @@ public class SRMetaBlockReader {
         header = GsonUtils.GSON.fromJson(s, SRMetaBlockHeader.class);
     }
 
-    @Deprecated
-    public SRMetaBlockReader(DataInputStream dis, String name) throws IOException {
-        this.checkedInputStream = new CheckedInputStream(dis, new CRC32());
-        this.header = null;
-        this.numJsonRead = 0;
-
-        String s = Text.readStringWithChecksum(checkedInputStream);
-        header = GsonUtils.GSON.fromJson(s, SRMetaBlockHeader.class);
-    }
-
     public SRMetaBlockHeader getHeader() {
         return header;
     }

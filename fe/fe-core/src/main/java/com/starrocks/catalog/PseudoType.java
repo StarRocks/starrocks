@@ -50,4 +50,9 @@ public class PseudoType extends Type {
     protected String toSql(int depth) {
         return toString();
     }
+
+    @Override
+    protected String toTypeString(int depth) {
+        return toString();
+    }
 }

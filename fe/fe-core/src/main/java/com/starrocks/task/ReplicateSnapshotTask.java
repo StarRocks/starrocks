@@ -15,8 +15,8 @@
 package com.starrocks.task;
 
 import com.starrocks.task.AgentTask;
-import com.starrocks.thrift.TRemoteSnapshotInfo;
 import com.starrocks.thrift.TReplicateSnapshotRequest;
+import com.starrocks.thrift.TSnapshotInfo;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 
@@ -34,12 +34,12 @@ public class ReplicateSnapshotTask extends AgentTask {
     private final TTabletType srcTabletType;
     private final int srcSchemaHash;
     private final long srcVisibleVersion;
-    private final List<TRemoteSnapshotInfo> srcSnapshotInfos;
+    private final List<TSnapshotInfo> srcSnapshotInfos;
 
     public ReplicateSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
             TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion,
             String srcToken, long srcTabletId, TTabletType srcTabletType, int srcSchemaHash,
-            long srcVisibleVersion, List<TRemoteSnapshotInfo> srcSnapshotInfos) {
+            long srcVisibleVersion, List<TSnapshotInfo> srcSnapshotInfos) {
         super(null, backendId, TTaskType.REPLICATE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
                 System.currentTimeMillis());
         this.transactionId = transactionId;

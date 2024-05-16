@@ -12,8 +12,7 @@ displayed_sidebar: "Chinese"
 
 > **说明**
 >
-> - 使用 INSERT INTO FILES 导出数据不支持将数据导出至本地文件系统。
-> - 当前，INSERT INTO FILES 仅支持以 Parquet 文件格式导出数据。
+> 使用 INSERT INTO FILES 导出数据不支持将数据导出至本地文件系统。
 
 ## 准备工作
 
@@ -109,6 +108,28 @@ FILES(
     "password" = "xxxxx",
     "compression" = "lz4",
     "single" = "true"
+)
+SELECT * FROM sales_records;
+```
+
+### 导出数据到 S3 (MinIO)
+
+以下示例将 `sales_records` 中的所有数据行导出至 MinIO。
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "s3://huditest/unload/data3",
+    "format" = "parquet",
+    "aws.s3.access_key" = "admin",
+    "aws.s3.secret_key" = "password",
+    "aws.s3.region" = "us-west-2",
+    "aws.s3.use_instance_profile" = "false",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
+    "compression" = "zstd",
+    "single" = "true",
+    "aws.s3.endpoint" = "http://minio:9000"
 )
 SELECT * FROM sales_records;
 ```

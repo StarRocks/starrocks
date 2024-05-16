@@ -167,6 +167,11 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.label = ctx->label;
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
+
     // set timestamp
     request.__set_timestamp(GetCurrentTimeMicros());
     if (ctx->timeout_second != -1) {
@@ -208,8 +213,9 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
-    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
+    request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
@@ -320,8 +326,9 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
-    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
+    request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
@@ -367,7 +374,10 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
+    request.commitInfos = std::move(ctx->commit_infos);
+    request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     request.__set_reason(std::string(ctx->status.message()));
 
     // set attachment if has

@@ -85,10 +85,16 @@ public class FileTableScanNode extends ScanNode {
 
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
             hdfsScanRange.setRelative_path(file.getFileName());
-            if (fileTable.getTableLocation().endsWith("/")) {
-                hdfsScanRange.setFull_path(fileTable.getTableLocation() + file.getFileName());
+	    // If `fullPath` is set, we just pass it down directly. Otherwise we try to concatenate the `fileName`
+            // and `tableLocation` to get the full path.
+            if (file.getFullPath() != null) {
+                hdfsScanRange.setFull_path(file.getFullPath());
             } else {
-                hdfsScanRange.setFull_path(fileTable.getTableLocation());
+                if (fileTable.getTableLocation().endsWith("/")) {
+                    hdfsScanRange.setFull_path(fileTable.getTableLocation() + file.getFileName());
+                } else {
+                    hdfsScanRange.setFull_path(fileTable.getTableLocation());
+                }
             }
             hdfsScanRange.setOffset(blockDesc.getOffset());
             hdfsScanRange.setLength(blockDesc.getLength());

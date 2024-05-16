@@ -16,6 +16,7 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.ConnectProcessor;
 import org.apache.logging.log4j.LogManager;
@@ -39,7 +40,7 @@ public class NMysqlChannel extends MysqlChannel {
         this.conn = connection;
         if (connection.getPeerAddress() instanceof InetSocketAddress) {
             InetSocketAddress address = (InetSocketAddress) connection.getPeerAddress();
-            remoteHostPortString = address.getHostString() + ":" + address.getPort();
+            remoteHostPortString = NetUtils.getHostPortInAccessibleFormat(address.getHostString(), address.getPort());
             remoteIp = address.getAddress().getHostAddress();
         } else {
             // Reach here, what's it?

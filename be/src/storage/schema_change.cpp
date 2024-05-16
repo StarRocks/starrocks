@@ -259,13 +259,8 @@ void HeapChunkMerger::_pop_heap() {
 Status LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
                                    TabletSchemaCSPtr base_tablet_schema) {
-#ifndef BE_TEST
-    Status st = CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange");
-    if (!st.ok()) {
-        LOG(WARNING) << alter_msg_header() << "fail to execute schema change: " << st.message() << std::endl;
-        return st;
-    }
-#endif
+    RETURN_IF_ERROR_WITH_WARN(CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange"),
+                              fmt::format("{}fail to execute schema change", alter_msg_header()));
 
     Status status =
             new_rowset_writer->add_rowset_for_linked_schema_change(rowset, _chunk_changer->get_schema_mapping());
@@ -370,7 +365,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group
-        std::vector<uint32_t> unique_column_ids;
+        std::vector<ColumnUID> unique_column_ids;
         for (const auto& iter : *chunk_changer->get_gc_exprs()) {
             ColumnUID unique_id = new_tablet_schema->column(iter.first).unique_id();
             unique_column_ids.emplace_back(unique_id);
@@ -404,7 +399,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
 
         // Get DeltaColumnGroup for current cols file
         auto dcg = std::make_shared<DeltaColumnGroup>();
-        std::vector<std::vector<uint32_t>> dcg_column_ids{unique_column_ids};
+        std::vector<std::vector<ColumnUID>> dcg_column_ids{unique_column_ids};
         std::vector<std::string> dcg_column_files{file_name(segment_writer->segment_path())};
         dcg->init(version, dcg_column_ids, dcg_column_files);
         dcgs.emplace_back(dcg);
@@ -420,7 +415,15 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
     Schema base_schema =
             ChunkHelper::convert_schema(cur_base_tablet_schema, _chunk_changer->get_selected_column_indexes());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    auto new_tschema = new_tablet->tablet_schema();
+    std::vector<ColumnId> cids;
+    for (size_t i = 0; i < new_tschema->num_columns(); i++) {
+        if (new_tschema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+        cids.push_back(i);
+    }
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
@@ -436,13 +439,9 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             return Status::InternalError(alter_msg_header() + "bg_worker_stopped");
         }
 
-#ifndef BE_TEST
-        st = CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange");
-        if (!st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "fail to execute schema change: " << st.message() << std::endl;
-            return st;
-        }
-#endif
+        RETURN_IF_ERROR_WITH_WARN(CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange"),
+                                  fmt::format("{}fail to execute schema change", alter_msg_header()));
+
         if (st = reader->do_get_next(base_chunk.get()); !st.ok()) {
             if (is_eos = st.is_end_of_file(); !is_eos) {
                 LOG(WARNING) << alter_msg_header()
@@ -504,7 +503,15 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
     Schema base_schema =
             ChunkHelper::convert_schema(cur_base_tablet_schema, _chunk_changer->get_selected_column_indexes());
-    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    auto new_tschema = new_tablet->tablet_schema();
+    std::vector<ColumnId> cids;
+    for (size_t i = 0; i < new_tschema->num_columns(); i++) {
+        if (new_tschema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+        cids.push_back(i);
+    }
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
@@ -628,7 +635,7 @@ Status SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_a
     return Status::OK();
 }
 
-Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& request) {
     LOG(INFO) << _alter_msg_header << "begin to do request alter tablet: base_tablet_id=" << request.base_tablet_id
               << ", base_schema_hash=" << request.base_schema_hash << ", new_tablet_id=" << request.new_tablet_id
               << ", new_schema_hash=" << request.new_schema_hash << ", alter_version=" << request.alter_version;
@@ -646,14 +653,14 @@ Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& req
     DeferOp release_lock(
             [&] { StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id); });
 
-    Status status = _do_process_alter_tablet_v2(request);
+    Status status = _do_process_alter_tablet(request);
     LOG(INFO) << _alter_msg_header << "finished alter tablet process, status=" << status.to_string()
               << " duration: " << timer.elapsed_time() / 1000000
               << "ms, peak_mem_usage: " << CurrentThread::mem_tracker()->peak_consumption() << " bytes";
     return status;
 }
 
-Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& request) {
     TabletSharedPtr base_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.base_tablet_id);
     if (base_tablet == nullptr) {
         LOG(WARNING) << _alter_msg_header << "fail to find base tablet. base_tablet=" << request.base_tablet_id
@@ -701,18 +708,13 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     // Create a new tablet schema, should merge with dropped columns in light schema change
-    TabletSchemaSPtr base_tablet_schema = std::make_shared<TabletSchema>();
-    base_tablet_schema->copy_from(base_tablet->tablet_schema());
+    TabletSchemaCSPtr base_tablet_schema;
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        base_tablet_schema->clear_columns();
-        for (const auto& column : request.columns) {
-            base_tablet_schema->append_column(TabletColumn(column));
-        }
-        base_tablet_schema->generate_sort_key_idxes();
+        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), request.columns);
+    } else {
+        base_tablet_schema = base_tablet->tablet_schema();
     }
     auto new_tablet_schema = new_tablet->tablet_schema();
-
-    auto tablet_schema_ptr = new_tablet->tablet_schema();
 
     SchemaChangeParams sc_params;
     sc_params.base_tablet = base_tablet;
@@ -721,7 +723,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     sc_params.base_table_column_names = request.base_table_column_names;
     sc_params.alter_job_type = request.alter_job_type;
     sc_params.chunk_changer =
-            std::make_unique<ChunkChanger>(sc_params.base_tablet_schema, tablet_schema_ptr,
+            std::make_unique<ChunkChanger>(sc_params.base_tablet_schema, new_tablet_schema,
                                            sc_params.base_table_column_names, sc_params.alter_job_type);
 
     auto* chunk_changer = sc_params.chunk_changer.get();
@@ -806,14 +808,14 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         }
         return Status::OK();
     } else {
-        return _do_process_alter_tablet_v2_normal(request, sc_params, base_tablet, new_tablet);
+        return _do_process_alter_tablet_normal(request, sc_params, base_tablet, new_tablet);
     }
 }
 
-Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTabletReqV2& request,
-                                                               SchemaChangeParams& sc_params,
-                                                               const TabletSharedPtr& base_tablet,
-                                                               const TabletSharedPtr& new_tablet) {
+Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletReqV2& request,
+                                                            SchemaChangeParams& sc_params,
+                                                            const TabletSharedPtr& base_tablet,
+                                                            const TabletSharedPtr& new_tablet) {
     // begin to find deltas to convert from base tablet to new tablet so that
     // obtain base tablet and new tablet's push lock and header write lock to prevent loading data
     RowsetSharedPtr max_rowset;
@@ -842,6 +844,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
+                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
+            }
             if (rowsets_to_change.back() == nullptr) {
                 std::vector<Version> base_tablet_versions;
                 base_tablet->list_versions(&base_tablet_versions);
@@ -907,6 +912,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
+    if (sc_params.sc_directly) {
+        // If the segments of rowset is overlapping, will should use heap merge,
+        // otherwise the rows is not ordered by short key.
+        read_params.sorted_by_keys_per_tablet = true;
+    }
 
     // open tablet readers out of lock for open is heavy because of io
     for (auto& tablet_reader : readers) {

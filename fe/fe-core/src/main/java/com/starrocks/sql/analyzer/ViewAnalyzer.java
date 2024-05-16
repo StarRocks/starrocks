@@ -40,7 +40,7 @@ public class ViewAnalyzer {
         new ViewAnalyzer.ViewAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             // normalize & validate view name
@@ -49,7 +49,10 @@ public class ViewAnalyzer {
             FeNameFormat.checkTableName(tableName);
 
             Analyzer.analyze(stmt.getQueryStatement(), context);
-
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
             String viewSql = AstToSQLBuilder.toSQL(stmt.getQueryStatement());
@@ -73,6 +76,10 @@ public class ViewAnalyzer {
             AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
             Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
+            if (hasTemporaryTable) {
+                throw new SemanticException("View can't base on temporary table");
+            }
 
             List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
                     alterViewClause.getColWithComments());

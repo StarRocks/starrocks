@@ -169,7 +169,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
     public Map<String, Long> getDataSize() {
         Map<String, Long> result = new HashMap<String, Long>();
-        List<String> dbNames = GlobalStateMgr.getCurrentState().getDbNames();
+        List<String> dbNames = GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames();
 
         for (int i = 0; i < dbNames.size(); i++) {
             String dbName = dbNames.get(i);

@@ -51,17 +51,21 @@ public class ColumnAccessPath {
     // The top one must be ROOT
     private TAccessPathType type;
 
-    private String path;
+    private final String path;
 
     private final List<ColumnAccessPath> children;
 
     private boolean fromPredicate;
 
-    public ColumnAccessPath(TAccessPathType type, String path) {
+    // flat json used, to mark the type of the leaf
+    private Type valueType;
+
+    public ColumnAccessPath(TAccessPathType type, String path, Type valueType) {
         this.type = type;
         this.path = path;
         this.children = Lists.newArrayList();
         this.fromPredicate = false;
+        this.valueType = valueType;
     }
 
     public void setType(TAccessPathType type) {
@@ -72,8 +76,20 @@ public class ColumnAccessPath {
         return type;
     }
 
+    public String getPath() {
+        return path;
+    }
+
     public boolean onlyRoot() {
         return type == TAccessPathType.ROOT && children.isEmpty();
+    }
+
+    public void setValueType(Type valueType) {
+        this.valueType = valueType;
+    }
+
+    public Type getValueType() {
+        return valueType;
     }
 
     public void setFromPredicate(boolean fromPredicate) {
@@ -111,13 +127,27 @@ public class ColumnAccessPath {
         return children.stream().filter(p -> p.path.equals(path)).findFirst().orElse(null);
     }
 
+    public List<ColumnAccessPath> getChildren() {
+        return children;
+    }
+
     public void clearChildPath() {
         children.clear();
     }
 
+    public void clearUnusedValueType() {
+        // only save leaf's value type
+        if (!children.isEmpty()) {
+            this.valueType = Type.INVALID;
+            children.forEach(ColumnAccessPath::clearUnusedValueType);
+        }
+    }
+
     private void explainImpl(String parent, List<String> allPaths) {
         boolean hasName = type == TAccessPathType.FIELD || type == TAccessPathType.ROOT;
-        String cur = parent + "/" + (hasName ? path : type.name());
+        boolean hasType = valueType != Type.INVALID;
+        String cur = parent + "/" + (hasName ? path : type.name())
+                + (hasType ? "(" + valueType.toSql() + ")" : "");
         if (children.isEmpty()) {
             allPaths.add(cur);
         }
@@ -144,6 +174,9 @@ public class ColumnAccessPath {
         tColumnAccessPath.setPath(new StringLiteral(path).treeToThrift());
         tColumnAccessPath.setChildren(children.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList()));
         tColumnAccessPath.setFrom_predicate(fromPredicate);
+        if (valueType != null) {
+            tColumnAccessPath.setType_desc(valueType.toThrift());
+        }
         return tColumnAccessPath;
     }
 }

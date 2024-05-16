@@ -13,7 +13,7 @@ This functions is supported from v3.2.
 ## Syntax
 
 ```haskell
-VARCAHR url_decode(VARCHAR str)
+VARCHAR url_decode(VARCHAR str)
 ```
 
 ## Parameters

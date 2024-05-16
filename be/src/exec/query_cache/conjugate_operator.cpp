@@ -88,6 +88,18 @@ Status ConjugateOperator::set_cancelled(RuntimeState* state) {
     }
 }
 
+const pipeline::LocalRFWaitingSet& ConjugateOperator::rf_waiting_set() const {
+    return _source_op->rf_waiting_set();
+}
+
+RuntimeFilterProbeCollector* ConjugateOperator::runtime_bloom_filters() {
+    return _source_op->runtime_bloom_filters();
+}
+
+const RuntimeFilterProbeCollector* ConjugateOperator::runtime_bloom_filters() const {
+    return _source_op->runtime_bloom_filters();
+}
+
 void ConjugateOperator::set_precondition_ready(RuntimeState* state) {
     _sink_op->set_precondition_ready(state);
     _source_op->set_precondition_ready(state);

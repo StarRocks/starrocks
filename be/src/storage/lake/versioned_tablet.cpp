@@ -37,15 +37,16 @@ int64_t VersionedTablet::version() const {
 
 StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer(WriterType type, int64_t txn_id,
                                                                     uint32_t max_rows_per_segment,
-                                                                    ThreadPool* flush_pool) {
+                                                                    ThreadPool* flush_pool, bool is_compaction) {
     auto tablet_schema = get_schema();
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id, flush_pool);
+            return std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id, flush_pool,
+                                                              is_compaction);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalPkTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
-                                                            max_rows_per_segment, flush_pool);
+                                                            max_rows_per_segment, flush_pool, is_compaction);
         }
     } else {
         if (type == kHorizontal) {
@@ -61,6 +62,12 @@ StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer(WriterType t
 
 StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema) {
     return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema));
+}
+
+StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema, bool could_split,
+                                                                    bool could_split_physically) {
+    return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
+                                          could_split_physically);
 }
 
 bool VersionedTablet::has_delete_predicates() const {

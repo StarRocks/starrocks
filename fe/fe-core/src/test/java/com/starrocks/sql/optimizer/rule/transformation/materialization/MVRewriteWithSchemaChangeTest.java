@@ -62,7 +62,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 "                );");
         String sql = "CREATE MATERIALIZED VIEW sync_mv1 AS select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
         waitingRollupJobV2Finish();
         String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
         String plan = getFragmentPlan(query);
@@ -132,7 +132,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
                 Assert.fail("could not active the mv");
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("mv schema changed"));
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains("column schema not compatible"));
             }
 
             plan = getFragmentPlan(sql);

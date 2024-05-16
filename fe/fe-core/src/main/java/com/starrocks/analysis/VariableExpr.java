@@ -47,8 +47,6 @@ public class VariableExpr extends Expr {
     private final SetType setType;
     private final String name;
     private Object value;
-    private boolean isNull;
-
     @VisibleForTesting
     public VariableExpr(String name) {
         this(name, SetType.SESSION);
@@ -69,7 +67,6 @@ public class VariableExpr extends Expr {
         setType = other.setType;
         name = other.name;
         value = other.value;
-        isNull = other.isNull;
     }
 
     public SetType getSetType() {
@@ -86,14 +83,6 @@ public class VariableExpr extends Expr {
 
     public void setValue(Object value) {
         this.value = value;
-    }
-
-    public boolean isNull() {
-        return isNull;
-    }
-
-    public void setIsNull() {
-        isNull = true;
     }
 
     @Override
@@ -117,7 +106,7 @@ public class VariableExpr extends Expr {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), name, setType, value, isNull);
+        return Objects.hash(super.hashCode(), name, setType, value);
     }
 
     @Override
@@ -126,6 +115,6 @@ public class VariableExpr extends Expr {
         if (o == null || getClass() != o.getClass()) return false;
         if (!super.equals(o)) return false;
         VariableExpr that = (VariableExpr) o;
-        return isNull == that.isNull && setType == that.setType && Objects.equals(name, that.name) && Objects.equals(value, that.value);
+        return setType == that.setType && Objects.equals(name, that.name) && Objects.equals(value, that.value);
     }
 }

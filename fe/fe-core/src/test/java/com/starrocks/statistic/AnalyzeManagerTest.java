@@ -32,12 +32,12 @@ import java.time.LocalTime;
 public class AnalyzeManagerTest extends PlanTestBase {
     @Test
     public void testClearStatisticFromDroppedTable() {
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
                 1, 2, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.MIN, Maps.newHashMap()));
-        Assert.assertNotNull(GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(2L));
-        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
-        Assert.assertNull(GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(2L));
+        Assert.assertNotNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(2L));
     }
 
     @Test

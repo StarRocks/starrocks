@@ -93,6 +93,8 @@ public:
 
     virtual bool is_object() const { return false; }
 
+    virtual bool is_json() const { return false; }
+
     virtual bool is_array() const { return false; }
 
     virtual bool is_map() const { return false; }
@@ -353,7 +355,7 @@ public:
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
     // Push one row to MysqlRowBuffer
-    virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
+    virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const = 0;
 
     void set_delete_state(DelCondSatisfied delete_state) { _delete_state = delete_state; }
 

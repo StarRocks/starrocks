@@ -34,8 +34,6 @@
 
 #include "agent/task_worker_pool.h"
 
-#include <block_cache/block_cache.h>
-
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -50,6 +48,8 @@
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
+#include "block_cache/block_cache.h"
+#include "block_cache/datacache_utils.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
@@ -692,7 +692,8 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
         request.tablets.clear();
 
-        request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
+        int64_t report_version = g_report_version.load(std::memory_order_relaxed);
+        request.__set_report_version(report_version);
         Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&request.tablets);
         if (!st_report.ok()) {
             LOG(WARNING) << "Fail to report all tablets info, err=" << st_report.to_string();
@@ -714,6 +715,8 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report olap table state to " << master_address.hostname << ":"
                          << master_address.port << ", err=" << status;
+        } else {
+            LOG(INFO) << "Report tablets successfully, report version: " << report_version;
         }
 
         // wait for notifying until timeout
@@ -831,22 +834,7 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         if (config::datacache_enable) {
             const BlockCache* cache = BlockCache::instance();
             const DataCacheMetrics& metrics = cache->cache_metrics();
-
-            switch (metrics.status) {
-            case starcache::CacheStatus::NORMAL:
-                t_metrics.__set_status(TDataCacheStatus::NORMAL);
-                break;
-            case starcache::CacheStatus::UPDATING:
-                t_metrics.__set_status(TDataCacheStatus::UPDATING);
-                break;
-            default:
-                t_metrics.__set_status(TDataCacheStatus::ABNORMAL);
-            }
-
-            t_metrics.__set_disk_quota_bytes(metrics.disk_quota_bytes);
-            t_metrics.__set_disk_used_bytes(metrics.disk_used_bytes);
-            t_metrics.__set_mem_quota_bytes(metrics.mem_quota_bytes);
-            t_metrics.__set_mem_used_bytes(metrics.mem_used_bytes);
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
         } else {
             t_metrics.__set_status(TDataCacheStatus::DISABLED);
         }

@@ -12,9 +12,9 @@ storage_root_path = <storage_root_path>
 
 #### storage_root_path
 
-本地缓存数据依赖的存储目录以及该存储介质的类型，多块盘配置使用分号（;）隔开。如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。默认值：`${STARROCKS_HOME}/storage`。
+本地缓存数据依赖的存储目录，多块盘配置使用分号（;）隔开。例如：`/data1;/data2`。默认值：`${STARROCKS_HOME}/storage`。
 
-本地缓存在查询频繁且被查询的数据是最新的情况下非常有效，但有些情况下你可能希望完全关闭本地缓存。
+本地缓存在查询频率较高且被查询的数据为最新数据的情况下非常有效，但以下情况下您可以关闭本地缓存。
 
 - 在一个具有按需缩放的 CN pod 的 Kubernetes 环境中，pod 可能没有附加存储卷。
 - 当查询的数据大部分是位于远程存储中的旧数据时，如果查询不频繁，缓存数据的命中率可能很低，此时开启本地缓存并不能显著提升查询性能。

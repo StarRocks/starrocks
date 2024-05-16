@@ -40,6 +40,7 @@ add_library(Storage STATIC
     local_tablet_reader.cpp
     publish_version_manager.cpp
     olap_common.cpp
+    olap_define.cpp
     olap_server.cpp
     options.cpp
     page_cache.cpp
@@ -80,6 +81,9 @@ add_library(Storage STATIC
     rowset/bitshuffle_page.cpp
     rowset/bitshuffle_wrapper.cpp
     rowset/column_iterator.cpp
+    rowset/json_column_iterator.cpp
+    rowset/json_column_writer.cpp
+    rowset/cast_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
     rowset/column_decoder.cpp
@@ -98,6 +102,7 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
+    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
@@ -132,6 +137,7 @@ add_library(Storage STATIC
     column_or_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
+    predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
     disjunctive_predicates.cpp
@@ -175,15 +181,19 @@ add_library(Storage STATIC
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
     push_utils.cpp
+    primary_key_recover.cpp
+    local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/compaction_task_context.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/primary_key_compaction_policy.cpp
     lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
@@ -201,7 +211,20 @@ add_library(Storage STATIC
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
-    lake/primary_key_recover.cpp
+    lake/lake_primary_key_recover.cpp
+    sstable/block_builder.cpp
+    sstable/block.cpp
+    sstable/coding.cpp
+    sstable/comparator.cpp
+    sstable/filter_block.cpp
+    sstable/format.cpp
+    sstable/table_builder.cpp
+    sstable/table.cpp
+    sstable/two_level_iterator.cpp
+    sstable/filter_policy.cpp
+    sstable/iterator.cpp
+    sstable/options.cpp
+    sstable/merger.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -217,5 +240,22 @@ add_library(Storage STATIC
     lake/lake_persistent_index.cpp
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
+    lake/persistent_index_sstable.cpp
+    lake/lake_primary_key_compaction_conflict_resolver.cpp
     primary_key_dump.cpp
-    dictionary_cache_manager.cpp)
+    dictionary_cache_manager.cpp
+    rows_mapper.cpp
+    primary_key_compaction_conflict_resolver.cpp
+    local_primary_key_compaction_conflict_resolver.cpp
+    inverted/index_descriptor.hpp
+    inverted/inverted_index_iterator.cpp
+    inverted/inverted_index_iterator.cpp
+    inverted/inverted_index_option.cpp
+    inverted/inverted_index_common.hpp
+    inverted/inverted_plugin_factory.cpp
+    inverted/clucene/clucene_plugin.cpp
+    inverted/clucene/clucene_roaring_hit_collector.hpp
+    inverted/clucene/clucene_inverted_writer.cpp
+    inverted/clucene/clucene_inverted_reader.cpp
+    inverted/clucene/clucene_inverted_util.hpp
+    inverted/clucene/match_operator.cpp)

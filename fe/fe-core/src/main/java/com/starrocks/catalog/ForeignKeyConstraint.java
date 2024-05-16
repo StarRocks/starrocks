@@ -21,6 +21,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.lang.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -165,12 +167,29 @@ public class ForeignKeyConstraint {
         return foreignKeyConstraints;
     }
 
-    private static BaseTableInfo getTableBaseInfo(String catalog, String db, String table, String tableIdentifier) {
+    private static BaseTableInfo getTableBaseInfo(String catalogName, String db, String table, String tableIdentifier) {
         BaseTableInfo baseTableInfo;
-        if (catalog.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-            baseTableInfo = new BaseTableInfo(Long.parseLong(db), Long.parseLong(table));
+        if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+            Preconditions.checkArgument(NumberUtils.isNumber(db),
+                    "BaseTableInfo db %s should be dbId for internal catalog", db);
+            Preconditions.checkArgument(NumberUtils.isNumber(table),
+                    "BaseTableInfo table %s should be tableId for internal catalog", table);
+            long dbId = Long.parseLong(db);
+            long tableId = Long.parseLong(table);
+            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (database == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo's db %s should not be null in the foreign key " +
+                        "constraint, please drop foreign key constraints and retry", dbId));
+            }
+            Table baseTable = database.getTable(tableId);
+            if (baseTable == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo' base table %s should not be null in the foreign kee" +
+                                " constraint, please drop foreign key constraints and retry",
+                        tableId));
+            }
+            baseTableInfo = new BaseTableInfo(dbId, database.getFullName(), baseTable.getName(), tableId);
         } else {
-            baseTableInfo = new BaseTableInfo(catalog, db, table, tableIdentifier);
+            baseTableInfo = new BaseTableInfo(catalogName, db, table, tableIdentifier);
         }
         return baseTableInfo;
     }

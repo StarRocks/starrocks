@@ -10,7 +10,7 @@ You only need to specify a simple partition expression (either a time function e
 
 ## Partitioning based on a time function expression
 
-If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetimes based on the loaded data and partition expression.
+If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
 
 However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
 
@@ -218,7 +218,7 @@ PROPERTIES(
 
 ### Load data into partitions
 
-During data loading, StarRocks will automatically create partitions based on the loaded data and partition rule defined bythe partition expression.
+During data loading, StarRocks will automatically create partitions based on the loaded data and partition rule defined by the partition expression.
 
 Note that if you use expression partitioning at table creation and need to use [INSERT OVERWRITE](../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) to overwrite data in a specific partition, whether the partition has been created or not, you currently need to explicitly provide an partition range in `PARTITION()`. This is different from [Range Partitioning](./Data_distribution.md#range-partitioning) or [List Partitioning](./list_partitioning.md), which allow you only to provide the partition name in `PARTITION (<partition_name>)`.
 
@@ -253,8 +253,8 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## Limits
 
-- Since v3.1.0, StarRocks's [shared-data mode](../deployment/shared_data/s3.md) supports the [time function expression](#partitioning-based-on-a-time-function-expression). And since v3.1.1, StarRocks's [shared-data mode](../deployment/shared_data/s3.md) further supports the [column expression](#partitioning-based-on-the-column-expression-since-v31).
+- Since v3.1.0, StarRocks's [shared-data mode](../deployment/shared_data/shared_data.mdx) supports the [time function expression](#partitioning-based-on-a-time-function-expression). And since v3.1.1, StarRocks's [shared-data mode](../deployment/shared_data/shared_data.mdx) further supports the [column expression](#partitioning-based-on-the-column-expression-since-v31).
 - Currently, using CTAS to create tables configured expression partitioning is not supported.
 - Currently, using Spark Load to load data to tables that use expression partitioning is not supported.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and cannot be recovered.
-- Currently you cannot [backup and restore](../administration/Backup_and_restore.md) partitions created by the expression partitioning.
+- Currently you cannot [backup and restore](../administration/management/Backup_and_restore.md) partitions created by the expression partitioning.

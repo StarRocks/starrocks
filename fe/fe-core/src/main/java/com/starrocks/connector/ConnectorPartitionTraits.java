@@ -35,6 +35,8 @@ import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.KuduPartitionKey;
+import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OdpsPartitionKey;
@@ -83,6 +85,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
                     .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
                     .put(Table.TableType.ODPS, OdpsPartitionTraits::new)
+                    .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
                     .build();
@@ -145,7 +148,7 @@ public abstract class ConnectorPartitionTraits {
      */
     abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
 
-    abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
     /**
      * The max of refresh ts for all partitions
@@ -160,7 +163,7 @@ public abstract class ConnectorPartitionTraits {
 
     // ========================================= Implementations ==============================================
 
-    abstract static class DefaultTraits extends ConnectorPartitionTraits {
+    public abstract static class DefaultTraits extends ConnectorPartitionTraits {
 
         @Override
         public boolean supportPartitionRefresh() {
@@ -210,6 +213,7 @@ public abstract class ConnectorPartitionTraits {
             if (table.isUnPartitioned()) {
                 return Lists.newArrayList(table.getName());
             }
+
             return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     table.getCatalogName(), getDbName(), getTableName());
         }
@@ -244,7 +248,7 @@ public abstract class ConnectorPartitionTraits {
         }
 
         protected List<PartitionInfo> getPartitions(List<String> names) {
-            throw new NotImplementedException("Only support hive/jdbc");
+            throw new NotImplementedException("Only support hive/paimon/jdbc");
         }
 
         @Override
@@ -283,7 +287,9 @@ public abstract class ConnectorPartitionTraits {
                     long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
 
                     MaterializedView.BasePartitionInfo basePartitionInfo = versionEntry.getValue();
-                    if (basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion()) {
+                    // basePartitionVersion less than 0 is illegal
+                    if ((basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion())
+                            && basePartitionVersion >= 0) {
                         result.add(basePartitionName);
                     }
                 }
@@ -376,12 +382,7 @@ public abstract class ConnectorPartitionTraits {
         }
 
         public List<Column> getPartitionColumns() {
-            // TODO: check partition type
-            try {
-                return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
-            } catch (com.starrocks.common.NotImplementedException e) {
-                return null;
-            }
+            return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
         }
     }
 
@@ -477,6 +478,18 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
+        public List<String> getPartitionNames() {
+            if (table.isUnPartitioned()) {
+                return Lists.newArrayList(table.getName());
+            }
+
+            IcebergTable icebergTable = (IcebergTable) table;
+            long snapshotId = icebergTable.getSnapshot().isPresent() ? icebergTable.getSnapshot().get().snapshotId() : -1;
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    table.getCatalogName(), getDbName(), getTableName(), snapshotId);
+        }
+
+        @Override
         public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
                 throws AnalysisException {
             Preconditions.checkState(partitionValues.size() == partitionColumns.size(),
@@ -546,57 +559,21 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
-                                                    MaterializedView.AsyncRefreshContext context) {
-            PaimonTable baseTable = (PaimonTable) table;
-            Set<String> result = Sets.newHashSet();
-            for (BaseTableInfo baseTableInfo : baseTables) {
-                if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
-                    continue;
-                }
-                Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        getOptionalMetadata(baseTable.getCatalogName());
-                if (!connectorMetadata.isPresent()) {
-                    LOG.error("Get paimon connectorMetadata failed : {}", baseTable.getCatalogName());
-                    throw new RuntimeException("Get paimon connectorMetadata failed :" + baseTable.getCatalogName());
-                }
-                Map<String, MaterializedView.BasePartitionInfo> partitionVersionMap =
-                        context.getBaseTableRefreshInfo(baseTableInfo);
-                Set<String> partitions = Sets.newHashSet(getPartitionNames());
-                long mvLatestSnapShotID = Long.MIN_VALUE;
-                for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : partitionVersionMap.entrySet()) {
-                    if (entry.getValue() != null) {
-                        mvLatestSnapShotID = Math.max(mvLatestSnapShotID, entry.getValue().getVersion());
-                    }
-                    // If there are partitions deleted, return all latest partitions.
-                    if (!partitions.contains(entry.getKey())) {
-                        result.addAll(partitions);
-                        LOG.info("Get paimon updated partition names {}, partition {} has been deleted, return all.",
-                                baseTables, entry.getKey());
-                        return result;
-                    }
-                }
-                for (String part : partitions) {
-                    if (!partitionVersionMap.containsKey(part)) {
-                        result.add(part);
-                    }
-                }
-                ConnectorMetadata metadata = connectorMetadata.get();
-                List<PartitionInfo> changedPartitionInfo = metadata.getChangedPartitionInfo(baseTable,
-                        mvLatestSnapShotID);
-                for (PartitionInfo partitionInfo : changedPartitionInfo) {
-                    com.starrocks.connector.paimon.Partition info =
-                            (com.starrocks.connector.paimon.Partition) partitionInfo;
-                    // Change log record partition which has been deleted.
-                    if (!partitions.contains(info.getPartitionName())) {
-                        continue;
-                    }
-                    result.add(info.getPartitionName());
-                }
-            }
-            LOG.debug("Get updated partition name of paimon table result: {}", result);
-            return result;
+        public List<PartitionInfo> getPartitions(List<String> partitionNames) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(paimonTable.getCatalogName(), table, partitionNames);
         }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                    getPartitionNameWithPartitionInfo();
+            return partitionNameWithPartition.values().stream()
+                            .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
+                            .max(Long::compareTo);
+        }
+
     }
 
     static class OdpsPartitionTraits extends DefaultTraits {
@@ -609,6 +586,26 @@ public abstract class ConnectorPartitionTraits {
         @Override
         PartitionKey createEmptyKey() {
             return new OdpsPartitionKey();
+        }
+    }
+
+    static class KuduPartitionTraits extends DefaultTraits {
+
+        @Override
+        public String getDbName() {
+            return ((KuduTable) table).getDbName();
+        }
+
+        @Override
+        PartitionKey createEmptyKey() {
+            return new KuduPartitionKey();
+        }
+
+        @Override
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
+            // TODO: implement
+            return null;
         }
     }
 

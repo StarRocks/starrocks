@@ -14,12 +14,43 @@
 
 package com.starrocks.catalog;
 
+import com.google.api.client.util.Lists;
+import com.starrocks.server.GlobalStateMgr;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
 
 public class ForeignKeyConstraintTest {
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+    Database db = new Database(100, "testDb");
+
+    @Before
+    public void beforeAll() {
+        Table table1 = new Table(1000, "tbl1", Table.TableType.OLAP, Lists.newArrayList());
+        Table table2 = new Table(1001, "tbl2", Table.TableType.OLAP, Lists.newArrayList());
+        Table table3 = new Table(1002, "tbl3", Table.TableType.OLAP, Lists.newArrayList());
+        db.registerTableUnlocked(table1);
+        db.registerTableUnlocked(table2);
+        db.registerTableUnlocked(table3);
+
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getDb(anyLong);
+                minTimes = 0;
+                result = db;
+            }
+        };
+    }
+
     @Test
     public void testParseInternal() {
         // internal catalog

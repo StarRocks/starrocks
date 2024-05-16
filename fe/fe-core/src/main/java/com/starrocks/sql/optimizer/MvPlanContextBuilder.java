@@ -26,19 +26,21 @@ public class MvPlanContextBuilder {
     public static List<MvPlanContext> getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-        ConnectContext connectContext = ConnectContext.get();
+
         // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
         // NPE in the planning.
-        if (connectContext == null) {
-            connectContext = new ConnectContext();
-            connectContext.setThreadLocalInfo();
-        }
-        MvPlanContext contextWithoutView = mvOptimizer.optimize(mv, connectContext);
-        List<MvPlanContext> results = Lists.newArrayList(contextWithoutView);
-        List<TableType> baseTableTypes = mv.getBaseTableTypes();
-        if (baseTableTypes.stream().anyMatch(type -> type == TableType.VIEW)) {
-            MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false);
-            results.add(contextWithView);
+        ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+
+        List<MvPlanContext> results = Lists.newArrayList();
+        try (var guard = connectContext.bindScope()) {
+            MvPlanContext contextWithoutView = mvOptimizer.optimize(mv, connectContext);
+            results.add(contextWithoutView);
+
+            // TODO: Only add context with view when view rewrite is set on.
+            if (mv.getBaseTableTypes().stream().anyMatch(type -> type == TableType.VIEW)) {
+                MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false);
+                results.add(contextWithView);
+            }
         }
         return results;
     }

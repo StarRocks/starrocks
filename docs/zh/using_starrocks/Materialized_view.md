@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-keywords: ['wuhua']
+keywords: ['wuhua', 'Wuhuashitu']
 ---
 
 # 异步物化视图
@@ -239,7 +239,7 @@ MySQL > SELECT * FROM order_mv;
 
 ## 使用异步物化视图改写加速查询
 
-StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透明改写。其查询改写包括单表改写，Join 改写，聚合改写，Union 改写和嵌套物化视图的改写。详细内容，请参考[物化视图查询改写](./query_rewrite_with_materialized_views.md)。
+StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透明改写。其查询改写包括单表改写，Join 改写，聚合改写，Union 改写和嵌套物化视图的改写。自 v3.3.0 起，StarRocks 进一步支持基于文本的物化视图改写。详细内容，请参考[物化视图查询改写](./query_rewrite_with_materialized_views.md)。
 
 目前，StarRocks 支持基于 Default catalog、Hive catalog、Hudi catalog 和 Iceberg catalog 的异步物化视图的查询改写。当查询 Default catalog 数据时，StarRocks 通过排除数据与基表不一致的物化视图，来保证改写之后的查询与原始查询结果的强一致性。当物化视图数据过期时，不会作为候选物化视图。在查询外部目录数据时，由于 StarRocks 无法感知外部目录分区中的数据变化，因此不保证结果的强一致性。关于基于 External Catalog 的异步物化视图，请参考[使用物化视图加速数据湖查询](./data_lake_query_acceleration_with_materialized_views.md)。
 
@@ -332,7 +332,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 2. 基于查询到的 `TASK_NAME` 在表 `task_runs` 中查看执行状态。
 
    ```Plain
-   mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
+   mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME\G
    *************************** 1. row ***************************
         QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
        TASK_NAME: mv-59299

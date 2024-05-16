@@ -115,12 +115,15 @@ public class ApplyRuleTask extends OptimizerTask {
             }
 
             GroupExpression newGroupExpression = result.second;
-            if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+
+            // Add this rule into `appliedRules` to mark rules which have already been applied.
+            {
                 // new bitset should derive old bitset's info to track the lineage of applied rules.
                 newGroupExpression.mergeAppliedRules(groupExpression.getAppliedRuleMasks());
                 // new bitset add new rule which it's derived from.
                 newGroupExpression.addNewAppliedRule(rule);
             }
+
             if (newGroupExpression.getOp().isLogical()) {
                 // For logic newGroupExpression, optimize it
                 pushTask(new OptimizeExpressionTask(context, newGroupExpression, isExplore));

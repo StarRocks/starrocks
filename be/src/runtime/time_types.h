@@ -117,7 +117,7 @@ public:
 
     inline static void to_date_with_cache(JulianDate julian, int* year, int* month, int* day);
 
-    static bool check(int year, int month, int day);
+    inline static bool check(int year, int month, int day);
 
     static JulianDate from_date(int year, int month, int day);
 
@@ -144,7 +144,7 @@ public:
 
     // Get date base on format "%Y-%m-%d", '-' means any char.
     // compare every char.
-    static bool from_string_to_date_internal(const char* ptr, int* year, int* month, int* day);
+    static bool from_string_to_date_internal(const char* ptr, int* pyear, int* pmonth, int* pday);
 
     // process string based on format like "%Y-%m-%d %H:%i:%s",
     // if successful return true;
@@ -157,8 +157,17 @@ public:
                             int* second, int* microsecond);
     static bool from_string_to_date(const char* date_str, size_t len, int* year, int* month, int* day);
     static bool is_standard_datetime_format(const char* ptr, int length, const char** ptr_time);
-    static bool from_string_to_datetime(const char* date_str, size_t len, int* year, int* month, int* day, int* hour,
-                                        int* minute, int* second, int* microsecond);
+    struct ToDatetimeResult {
+        int year;
+        int month;
+        int day;
+        int hour;
+        int minute;
+        int second;
+        int microsecond;
+    };
+
+    static std::pair<bool, bool> from_string_to_datetime(const char* date_str, size_t len, ToDatetimeResult* res);
 
 public:
     // from_date(1970, 1, 1)
@@ -201,7 +210,7 @@ public:
 
     inline static Timestamp from_julian_and_time(JulianDate julian, Timestamp microsecond);
 
-    static bool check_time(int hour, int minute, int second, int microsecond);
+    inline static bool check_time(int hour, int minute, int second, int microsecond);
 
     inline static bool check(int year, int month, int day, int hour, int minute, int second, int microsecond);
 
@@ -307,6 +316,14 @@ bool date::char_to_digit(const char* value, int i, uint8_t* v) {
     }
 }
 
+bool date::check(int year, int month, int day) {
+    if (year > 9999 || month > 12 || month < 1 || day > 31 || day < 1) {
+        return false;
+    }
+
+    return day <= DAYS_IN_MONTH[is_leap(year)][month];
+}
+
 // ============================== Timestamp inline function ==================================
 
 Timestamp timestamp::to_time(Timestamp timestamp) {
@@ -393,6 +410,10 @@ Timestamp timestamp::of_epoch_second(int64_t seconds, int64_t nanoseconds) {
     int64_t second = seconds + timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;
     return timestamp::from_julian_and_time(day, second * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
+}
+
+bool timestamp::check_time(int hour, int minute, int second, int microsecond) {
+    return hour < HOURS_PER_DAY && minute < MINS_PER_HOUR && second < SECS_PER_MINUTE && microsecond < USECS_PER_SEC;
 }
 
 struct JulianToDateEntry {

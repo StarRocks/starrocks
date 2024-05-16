@@ -25,86 +25,79 @@ namespace lake {
 class TabletManager;
 }
 
-class LakeServiceImpl : public ::starrocks::lake::LakeService {
+class LakeServiceImpl : public ::starrocks::LakeService {
 public:
     explicit LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr);
 
     ~LakeServiceImpl() override;
 
     void publish_version(::google::protobuf::RpcController* controller,
-                         const ::starrocks::lake::PublishVersionRequest* request,
-                         ::starrocks::lake::PublishVersionResponse* response,
-                         ::google::protobuf::Closure* done) override;
+                         const ::starrocks::PublishVersionRequest* request,
+                         ::starrocks::PublishVersionResponse* response, ::google::protobuf::Closure* done) override;
 
-    void abort_txn(::google::protobuf::RpcController* controller, const ::starrocks::lake::AbortTxnRequest* request,
-                   ::starrocks::lake::AbortTxnResponse* response, ::google::protobuf::Closure* done) override;
+    void abort_txn(::google::protobuf::RpcController* controller, const ::starrocks::AbortTxnRequest* request,
+                   ::starrocks::AbortTxnResponse* response, ::google::protobuf::Closure* done) override;
 
-    void delete_tablet(::google::protobuf::RpcController* controller,
-                       const ::starrocks::lake::DeleteTabletRequest* request,
-                       ::starrocks::lake::DeleteTabletResponse* response, ::google::protobuf::Closure* done) override;
+    void delete_tablet(::google::protobuf::RpcController* controller, const ::starrocks::DeleteTabletRequest* request,
+                       ::starrocks::DeleteTabletResponse* response, ::google::protobuf::Closure* done) override;
 
-    void delete_txn_log(::google::protobuf::RpcController* controller,
-                        const ::starrocks::lake::DeleteTxnLogRequest* request,
-                        ::starrocks::lake::DeleteTxnLogResponse* response, ::google::protobuf::Closure* done) override;
+    void delete_txn_log(::google::protobuf::RpcController* controller, const ::starrocks::DeleteTxnLogRequest* request,
+                        ::starrocks::DeleteTxnLogResponse* response, ::google::protobuf::Closure* done) override;
 
-    void compact(::google::protobuf::RpcController* controller, const ::starrocks::lake::CompactRequest* request,
-                 ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) override;
+    void compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,
+                 ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) override;
 
-    void drop_table(::google::protobuf::RpcController* controller, const ::starrocks::lake::DropTableRequest* request,
-                    ::starrocks::lake::DropTableResponse* response, ::google::protobuf::Closure* done) override;
+    void drop_table(::google::protobuf::RpcController* controller, const ::starrocks::DropTableRequest* request,
+                    ::starrocks::DropTableResponse* response, ::google::protobuf::Closure* done) override;
 
-    void delete_data(::google::protobuf::RpcController* controller, const ::starrocks::lake::DeleteDataRequest* request,
-                     ::starrocks::lake::DeleteDataResponse* response, ::google::protobuf::Closure* done) override;
+    void delete_data(::google::protobuf::RpcController* controller, const ::starrocks::DeleteDataRequest* request,
+                     ::starrocks::DeleteDataResponse* response, ::google::protobuf::Closure* done) override;
 
-    void get_tablet_stats(::google::protobuf::RpcController* controller,
-                          const ::starrocks::lake::TabletStatRequest* request,
-                          ::starrocks::lake::TabletStatResponse* response, ::google::protobuf::Closure* done) override;
+    void get_tablet_stats(::google::protobuf::RpcController* controller, const ::starrocks::TabletStatRequest* request,
+                          ::starrocks::TabletStatResponse* response, ::google::protobuf::Closure* done) override;
 
     void publish_log_version(::google::protobuf::RpcController* controller,
-                             const ::starrocks::lake::PublishLogVersionRequest* request,
-                             ::starrocks::lake::PublishLogVersionResponse* response,
+                             const ::starrocks::PublishLogVersionRequest* request,
+                             ::starrocks::PublishLogVersionResponse* response,
                              ::google::protobuf::Closure* done) override;
 
     void publish_log_version_batch(::google::protobuf::RpcController* controller,
-                                   const ::starrocks::lake::PublishLogVersionBatchRequest* request,
-                                   ::starrocks::lake::PublishLogVersionResponse* response,
+                                   const ::starrocks::PublishLogVersionBatchRequest* request,
+                                   ::starrocks::PublishLogVersionResponse* response,
                                    ::google::protobuf::Closure* done) override;
 
     void lock_tablet_metadata(::google::protobuf::RpcController* controller,
-                              const ::starrocks::lake::LockTabletMetadataRequest* request,
-                              ::starrocks::lake::LockTabletMetadataResponse* response,
+                              const ::starrocks::LockTabletMetadataRequest* request,
+                              ::starrocks::LockTabletMetadataResponse* response,
                               ::google::protobuf::Closure* done) override;
 
     void unlock_tablet_metadata(::google::protobuf::RpcController* controller,
-                                const ::starrocks::lake::UnlockTabletMetadataRequest* request,
-                                ::starrocks::lake::UnlockTabletMetadataResponse* response,
+                                const ::starrocks::UnlockTabletMetadataRequest* request,
+                                ::starrocks::UnlockTabletMetadataResponse* response,
                                 ::google::protobuf::Closure* done) override;
 
     void upload_snapshots(::google::protobuf::RpcController* controller,
-                          const ::starrocks::lake::UploadSnapshotsRequest* request,
-                          ::starrocks::lake::UploadSnapshotsResponse* response,
-                          ::google::protobuf::Closure* done) override;
+                          const ::starrocks::UploadSnapshotsRequest* request,
+                          ::starrocks::UploadSnapshotsResponse* response, ::google::protobuf::Closure* done) override;
 
     void restore_snapshots(::google::protobuf::RpcController* controller,
-                           const ::starrocks::lake::RestoreSnapshotsRequest* request,
-                           ::starrocks::lake::RestoreSnapshotsResponse* response,
-                           ::google::protobuf::Closure* done) override;
+                           const ::starrocks::RestoreSnapshotsRequest* request,
+                           ::starrocks::RestoreSnapshotsResponse* response, ::google::protobuf::Closure* done) override;
 
     void abort_compaction(::google::protobuf::RpcController* controller,
-                          const ::starrocks::lake::AbortCompactionRequest* request,
-                          ::starrocks::lake::AbortCompactionResponse* response,
-                          ::google::protobuf::Closure* done) override;
+                          const ::starrocks::AbortCompactionRequest* request,
+                          ::starrocks::AbortCompactionResponse* response, ::google::protobuf::Closure* done) override;
 
-    void vacuum(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumRequest* request,
-                ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) override;
+    void vacuum(::google::protobuf::RpcController* controller, const ::starrocks::VacuumRequest* request,
+                ::starrocks::VacuumResponse* response, ::google::protobuf::Closure* done) override;
 
-    void vacuum_full(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumFullRequest* request,
-                     ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
+    void vacuum_full(::google::protobuf::RpcController* controller, const ::starrocks::VacuumFullRequest* request,
+                     ::starrocks::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
-    void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size, const int64_t* txn_ids,
-                                          const int64_t* log_versions, size_t txn_size,
-                                          ::starrocks::lake::PublishLogVersionResponse* response);
+    void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
+                                          std::span<const TxnInfoPB> txn_infos, const int64_t* log_versions,
+                                          ::starrocks::PublishLogVersionResponse* response);
 
 private:
     static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L;  // 5 minutes

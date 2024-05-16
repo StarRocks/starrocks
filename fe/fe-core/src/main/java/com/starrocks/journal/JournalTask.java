@@ -34,8 +34,10 @@ public class JournalTask implements Future<Boolean> {
     protected CountDownLatch latch;
     // JournalWrite will commit immediately if received a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTimeInNano;
+    private final long startTimeNano;
 
-    public JournalTask(DataOutputBuffer buffer, long maxWaitIntervalMs) {
+    public JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs) {
+        this.startTimeNano = startTimeNano;
         this.buffer = buffer;
         this.latch = new CountDownLatch(1);
         if (maxWaitIntervalMs > 0) {
@@ -43,6 +45,10 @@ public class JournalTask implements Future<Boolean> {
         } else {
             this.betterCommitBeforeTimeInNano = -1;
         }
+    }
+
+    public long getStartTimeNano() {
+        return startTimeNano;
     }
 
     public void markSucceed() {

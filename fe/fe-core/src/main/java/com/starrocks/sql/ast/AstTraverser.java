@@ -19,7 +19,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
-public class AstTraverser<R, C> extends AstVisitor<R, C> {
+public class AstTraverser<R, C> implements AstVisitor<R, C> {
 
     // ---------------------------------------- Query Statement --------------------------------------------------------------
 
@@ -142,6 +142,9 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
 
     @Override
     public R visitSetOp(SetOperationRelation node, C context) {
+        if (node.hasWithClause()) {
+            node.getCteRelations().forEach(this::visit);
+        }
         node.getRelations().forEach(this::visit);
         return null;
     }

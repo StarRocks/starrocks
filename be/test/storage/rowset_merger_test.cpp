@@ -42,6 +42,11 @@ public:
     Status init() override { return Status::OK(); }
 
     Status add_chunk(const Chunk& chunk) override {
+        std::vector<uint64_t> rssid_rowids;
+        return add_chunk(chunk, rssid_rowids);
+    }
+
+    Status add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) override {
         all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         return Status::OK();
     }
@@ -73,6 +78,12 @@ public:
     Status final_flush() override { return Status::OK(); }
 
     Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) override {
+        std::vector<uint64_t> rssid_rowids;
+        return add_columns(chunk, column_indexes, is_key, rssid_rowids);
+    }
+
+    Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key,
+                       const std::vector<uint64_t>& rssid_rowids) override {
         if (is_key) {
             all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         } else {
@@ -225,8 +236,7 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     const int num_segment = 1 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
-    cfg.chunk_size = 1000 + rand() % 2000;
-    LOG(INFO) << "merge test #rowset:" << num_segment << " #row:" << N << " chunk_size:" << cfg.chunk_size;
+    LOG(INFO) << "merge test #rowset:" << num_segment << " #row:" << N;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
@@ -274,7 +284,6 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     const int num_segment = 2 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
-    cfg.chunk_size = 1000 + rand() % 2000;
     cfg.algorithm = VERTICAL_COMPACTION;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
@@ -332,13 +341,11 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     const int num_segment = 1 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
-    cfg.chunk_size = 100 + rand() % 2000;
     // small size test
     //    const int num_segment = 3;
     //    const int N = 30;
     //    MergeConfig cfg;
-    //    cfg.chunk_size = 20;
-    LOG(INFO) << "seq merge test #rowset:" << num_segment << " #row:" << N << " chunk_size:" << cfg.chunk_size;
+    LOG(INFO) << "seq merge test #rowset:" << num_segment << " #row:" << N;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);
     for (int i = 0; i < N; i++) {
@@ -385,7 +392,6 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     const int num_segment = 2 + rand() % max_segments;
     const int N = 500000 + rand() % 1000000;
     MergeConfig cfg;
-    cfg.chunk_size = 100 + rand() % 2000;
     cfg.algorithm = VERTICAL_COMPACTION;
     vector<uint32_t> rssids(N);
     vector<vector<int64_t>> segments(num_segment);

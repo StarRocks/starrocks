@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -248,6 +249,7 @@ public:
     // NOTE: The dir must be empty.
     virtual Status delete_dir(const std::string& dirname) = 0;
 
+    // TODO: Rename this method, because this method can also delete a normal file.
     // Deletes the contents of 'dirname' (if it is a directory) and the contents of all its subdirectories,
     // recursively, then deletes 'dirname' itself. Symlinks are not followed (symlink is removed, not its target).
     virtual Status delete_dir_recursive(const std::string& dirname) = 0;
@@ -288,7 +290,7 @@ public:
     // Batch delete the given files.
     // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message
     // possibly stop at the first error if is simulating batch deletes.
-    virtual Status delete_files(const std::vector<std::string>& paths) {
+    virtual Status delete_files(std::span<const std::string> paths) {
         for (auto&& path : paths) {
             auto st = delete_file(path);
             if (!st.ok() && !st.is_not_found()) {
@@ -345,9 +347,9 @@ public:
 
     std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
-    const std::string& filename() const { return _name; }
+    const std::string& filename() const override { return _name; }
 
-    bool is_cache_hit() const { return _is_cache_hit; }
+    bool is_cache_hit() const override { return _is_cache_hit; }
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;

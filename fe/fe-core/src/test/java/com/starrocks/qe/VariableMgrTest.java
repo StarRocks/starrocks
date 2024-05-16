@@ -41,8 +41,6 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -66,8 +64,6 @@ public class VariableMgrTest {
     private GlobalStateMgr globalStateMgr;
     @Mocked
     private EditLog editLog;
-    @Mocked
-    private Auth auth;
 
     @Before
     public void setUp() {
@@ -79,14 +75,6 @@ public class VariableMgrTest {
 
                 editLog.logGlobalVariable((SessionVariable) any);
                 minTimes = 0;
-
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -101,7 +89,6 @@ public class VariableMgrTest {
 
     @Test
     public void testNormal() throws IllegalAccessException, NoSuchFieldException, UserException {
-        GlobalStateMgr.getCurrentState().initAuth(false);
         SessionVariable var = VariableMgr.newSessionVariable();
         Assert.assertEquals(2147483648L, var.getMaxExecMemByte());
         Assert.assertEquals(300, var.getQueryTimeoutS());

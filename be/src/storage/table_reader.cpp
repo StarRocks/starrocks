@@ -61,7 +61,7 @@ Status TableReader::init(const TableReaderParams& params) {
     RETURN_IF_ERROR(_partition_param->init(nullptr));
     _location_param = std::make_unique<OlapTableLocationParam>(params.location_param);
     _nodes_info = std::make_unique<StarRocksNodesInfo>(params.nodes_info);
-    _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc(), false);
+    _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc());
     return Status::OK();
 }
 
@@ -259,6 +259,8 @@ Status TableReader::_tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t t
             closure = nullptr;
         }
     });
+    // ref count for next rpc call
+    closure->ref();
     if (_params->timeout_ms > 0) {
         closure->cntl.set_timeout_ms(_params->timeout_ms);
     }

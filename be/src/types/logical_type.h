@@ -118,17 +118,11 @@ inline bool is_integer_type(LogicalType type) {
            type == TYPE_LARGEINT;
 }
 
-inline LogicalType promote_integer_types(LogicalType type1, LogicalType type2) {
-    DCHECK(is_integer_type(type1) && is_integer_type(type2));
-    if (type1 > type2) return type1;
-    return type2;
-}
-
 inline bool is_float_type(LogicalType type) {
     return type == TYPE_FLOAT || type == TYPE_DOUBLE;
 }
 
-inline bool is_string_type(LogicalType type) {
+constexpr bool is_string_type(LogicalType type) {
     return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR;
 }
 
@@ -179,7 +173,7 @@ inline bool is_complex_metric_type(LogicalType type) {
     }
 }
 
-inline bool is_enumeration_type(LogicalType type) {
+constexpr bool is_enumeration_type(LogicalType type) {
     switch (type) {
     case TYPE_TINYINT:
     case TYPE_SMALLINT:

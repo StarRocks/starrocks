@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.task;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -36,10 +35,10 @@ import java.util.List;
  *
  */
 public class RewriteTreeTask extends OptimizerTask {
-    private final OptExpression planTree;
-    private final boolean onlyOnce;
-    private final List<Rule> rules;
-    private long change = 0;
+    protected final OptExpression planTree;
+    protected final boolean onlyOnce;
+    protected final List<Rule> rules;
+    protected long change = 0;
 
     public RewriteTreeTask(TaskContext context, OptExpression root, List<Rule> rules, boolean onlyOnce) {
         super(context);
@@ -57,15 +56,24 @@ public class RewriteTreeTask extends OptimizerTask {
     public void execute() {
         // first node must be RewriteAnchorNode
         rewrite(planTree, 0, planTree.getInputs().get(0));
-
+        // pushdownNotNullPredicates should task-bind, reset it before another RewriteTreeTask
+        // TODO: refactor TaskContext to make it local to support this requirement better?
+        context.getOptimizerContext().clearNotNullPredicates();
         if (change > 0 && !onlyOnce) {
             pushTask(new RewriteTreeTask(context, planTree, rules, onlyOnce));
         }
     }
 
-    private void rewrite(OptExpression parent, int childIndex, OptExpression root) {
-        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
+    protected void rewrite(OptExpression parent, int childIndex, OptExpression root) {
 
+        root = applyRules(parent, childIndex, root);
+        // prune cte column depend on prune right child first
+        for (int i = root.getInputs().size() - 1; i >= 0; i--) {
+            rewrite(root, i, root.getInputs().get(i));
+        }
+    }
+
+    protected OptExpression applyRules(OptExpression parent, int childIndex, OptExpression root) {
         for (Rule rule : rules) {
             if (rule.exhausted(context.getOptimizerContext())) {
                 continue;
@@ -91,14 +99,10 @@ public class RewriteTreeTask extends OptimizerTask {
             change++;
             deriveLogicalProperty(root);
         }
-
-        // prune cte column depend on prune right child first
-        for (int i = root.getInputs().size() - 1; i >= 0; i--) {
-            rewrite(root, i, root.getInputs().get(i));
-        }
+        return root;
     }
 
-    private boolean match(Pattern pattern, OptExpression root) {
+    protected boolean match(Pattern pattern, OptExpression root) {
         if (!pattern.matchWithoutChild(root)) {
             return false;
         }
@@ -128,7 +132,7 @@ public class RewriteTreeTask extends OptimizerTask {
         return true;
     }
 
-    private void deriveLogicalProperty(OptExpression root) {
+    protected void deriveLogicalProperty(OptExpression root) {
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
         }
@@ -138,5 +142,9 @@ public class RewriteTreeTask extends OptimizerTask {
             context.deriveLogicalProperty();
             root.setLogicalProperty(context.getRootProperty());
         }
+    }
+
+    public boolean hasChange() {
+        return change > 0;
     }
 }

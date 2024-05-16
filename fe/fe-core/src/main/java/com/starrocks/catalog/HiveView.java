@@ -24,6 +24,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.List;
 
@@ -38,15 +39,18 @@ public class HiveView extends Table {
     }
 
     private final String catalogName;
+    private final String dbName;
     private final String inlineViewDef;
     private final Type viewType;
 
     public static final String PRESTO_VIEW_PREFIX = "/* Presto View: ";
     public static final String PRESTO_VIEW_SUFFIX = " */";
 
-    public HiveView(long id, String catalogName, String name, List<Column> schema, String definition, Type type) {
+    public HiveView(long id, String catalogName, String dbName, String name, List<Column> schema, String definition,
+                    Type type) {
         super(id, name, TableType.HIVE_VIEW, schema);
         this.catalogName = requireNonNull(catalogName, "Hive view catalog name is null");
+        this.dbName = requireNonNull(dbName, "Hive view db name is null");
         this.inlineViewDef = requireNonNull(definition, "Hive view text is null");
         this.viewType = requireNonNull(type, "Hive view type is null");
     }
@@ -102,6 +106,9 @@ public class HiveView extends Table {
         List<TableRelation> tableRelations = AnalyzerUtils.collectTableRelations(queryStatement);
         for (TableRelation tableRelation : tableRelations) {
             tableRelation.getName().setCatalog(catalogName);
+            if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
+                tableRelation.getName().setDb(dbName);
+            }
         }
         return queryStatement;
     }

@@ -16,16 +16,30 @@
 
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
 
-CompactionTask::CompactionTask(int64_t txn_id, VersionedTablet tablet,
-                               std::vector<std::shared_ptr<Rowset>> input_rowsets)
-        : _txn_id(txn_id),
+CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                               CompactionTaskContext* context)
+        : _txn_id(context->txn_id),
           _tablet(std::move(tablet)),
           _input_rowsets(std::move(input_rowsets)),
           _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
-                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())) {}
+                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())),
+          _context(context) {}
+
+Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
+    if (_tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS) {
+        auto metadata = _tablet.metadata();
+        if (metadata->enable_persistent_index() &&
+            metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
+            return _tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(_tablet.metadata()->id(),
+                                                                                          *metadata, txn_log);
+        }
+    }
+    return Status::OK();
+}
 
 } // namespace starrocks::lake

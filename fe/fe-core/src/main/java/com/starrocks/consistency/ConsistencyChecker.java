@@ -50,9 +50,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.CheckConsistencyTask;
@@ -98,7 +99,7 @@ public class ConsistencyChecker extends FrontendDaemon {
         super("consistency checker");
 
         jobs = Maps.newHashMap();
-        jobsLock = new ReentrantReadWriteLock();
+        jobsLock = new FairReentrantReadWriteLock();
 
         if (!initWorkTime()) {
             LOG.error("failed to init time in ConsistencyChecker. exit");
@@ -256,7 +257,7 @@ public class ConsistencyChecker extends FrontendDaemon {
         List<Long> chosenTablets = Lists.newArrayList();
 
         // sort dbs
-        List<Long> dbIds = globalStateMgr.getDbIds();
+        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
         if (dbIds.isEmpty()) {
             return chosenTablets;
         }
@@ -280,6 +281,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                 Database db = (Database) chosenOne;
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
+                long startTime = System.currentTimeMillis();
                 try {
                     // sort tables
                     List<Table> tables = db.getTables();
@@ -368,6 +370,10 @@ public class ConsistencyChecker extends FrontendDaemon {
                         } // end while partitionQueue
                     } // end while tableQueue
                 } finally {
+                    // Since only at most `MAX_JOB_NUM` tablet are chosen, we don't need to release the db read lock
+                    // from time to time, just log the time cost here.
+                    LOG.info("choose tablets from db[{}-{}](with read lock held) took {}ms",
+                            db.getFullName(), db.getId(), System.currentTimeMillis() - startTime);
                     locker.unLockDatabase(db, LockType.READ);
                 }
             } // end while dbQueue

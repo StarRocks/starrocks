@@ -45,6 +45,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -89,13 +90,18 @@ public class RestoreJobMaterializedViewTest {
 
     private Database db;
 
-    private String label = "test_mv_label";
+    private long dbId = 111;
+    private long tblId = 121;
+    private long partId = 131;
+    private long idxId = 141;
+    private long tabletId = 151;
+    private long backendId = 100001;
+    private long version = 161;
+    private long repoId = 30001;
+    private AtomicLong id = new AtomicLong(50001);
+    private String label = "test_mv_restore_label";
 
     private static final int ID_SIZE = 10000;
-
-    private AtomicLong id = new AtomicLong(50000);
-
-    private long repoId = 30000;
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -135,20 +141,14 @@ public class RestoreJobMaterializedViewTest {
     private EditLog editLog;
     @Mocked
     private SystemInfoService systemInfoService;
+    @Mocked
+    private NodeSelector nodeSelector;
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;
-
-    private long dbId = 11;
-    private long tblId = 12;
-    private long partId = 13;
-    private long idxId = 14;
-    private long tabletId = 15;
-    private long backendId = 10000;
-    private long version = 16;
 
     private Object[] arrayIds;
     private void setUpMocker() {
@@ -171,7 +171,7 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
 
@@ -185,7 +185,10 @@ public class RestoreJobMaterializedViewTest {
             }
 
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.getNodeSelector();
+                minTimes = 0;
+                result = nodeSelector;
+                nodeSelector.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
 
@@ -437,16 +440,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(1)
     public void testMVRestore_TestOneTable1() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.MATERIALIZED_VIEW_NAME));
         checkJobRun(job);
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
@@ -463,16 +456,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(3)
     public void testMVRestore_TestMVWithBaseTable1() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
         // backup & restore
@@ -483,16 +466,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(4)
     public void testMVRestore_TestMVWithBaseTable2() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME, TABLE_NAME));
         // backup & restore
@@ -503,16 +476,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(5)
     public void testMVRestore_TestMVWithBaseTable3() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         // gen BackupJobInfo
         RestoreJob job1 = createRestoreJob(ImmutableList.of(TABLE_NAME));
         // backup & restore
@@ -527,20 +490,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(6)
     public void testMVRestore_TestMVWithBaseTable4() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getCurrentState().getDb(DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {

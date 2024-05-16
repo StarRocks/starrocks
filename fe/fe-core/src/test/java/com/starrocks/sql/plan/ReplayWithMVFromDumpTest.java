@@ -15,6 +15,8 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -24,28 +26,35 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Set;
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
-        new MockUp<MaterializedView>() {
+        new MockUp<MvRefreshArbiter>() {
+            /**
+             * {@link MvRefreshArbiter#getPartitionNamesToRefreshForMv(MaterializedView, boolean)}
+             */
             @Mock
-            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
-                                                           boolean isQueryRewrite) {
-                return true;
+            public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
+                                                                boolean isQueryRewrite) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
             }
         };
 
         new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
             @Mock
             boolean isPrintPlanTableNames() {
                 return true;
@@ -68,7 +77,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("table: mv1, rollup: mv1"));
+        assertContains(replayPair.second, "table: mv1, rollup: mv1");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -78,7 +87,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/mock_join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("table: tbl_mock_001, rollup: tbl_mock_001"));
+        // Rewrite OK when enhance rule based mv rewrite.
+        assertContains(replayPair.second, "table: test_mv0, rollup: test_mv0");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -89,7 +99,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
+        assertContains(replayPair.second, "table: mv1, rollup: mv1");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -100,7 +110,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
+        assertContains(replayPair.second, "line_order_flat_mv");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -112,7 +122,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
+        assertContains(replayPair.second, "line_order_flat_mv");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -122,7 +132,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv1"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("mv2"));
+        assertContains(replayPair.second, "mv2");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -132,7 +142,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_mv_on_mv1"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("tbl_mock_017"));
+        assertContains(replayPair.second, "tbl_mock_017");
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -143,7 +153,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
-        Assert.assertTrue(replayPair.second.contains("test_mv2"));
+        assertContains(replayPair.second, "test_mv2");
     }
 
     @Test
@@ -151,7 +161,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
+        assertContains(replayPair.second, "TEST_MV_2");
     }
 
     @Test
@@ -159,7 +169,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
+        assertContains(replayPair.second, "TEST_MV_2");
     }
 
     @Test
@@ -167,7 +177,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("TEST_MV_2"));
+        assertContains(replayPair.second, "TEST_MV_2");
     }
 
     @Test
@@ -175,7 +185,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("tbl_mock_021"));
+        // Rewrite OK since rule based mv is enhanced
+        assertContains(replayPair.second, "test_mv2");
     }
 
     @Test
@@ -185,8 +196,41 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_with_cost_bug1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_35"));
+        assertContains(replayPair.second, "mv_35");
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    public void testMVWithDictRewrite() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            assertContains(replayPair.second,
+                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])");
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
+
+    /**
+     * Test synchronous materialized view rewrite with global dict optimization.
+     */
+    @Test
+    public void testSyncMVRewriteWithDict() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_rewrite_with_dict_opt1"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        // TODO: support synchronous materialized view in query dump
+        // String sql = "create materialized view mv_tbl_mock_001 " +
+        //        "as select nmock_002, nmock_003, nmock_004, " +
+        //        "nmock_005, nmock_006, nmock_007, nmock_008, nmock_009, nmock_010, " +
+        //        "nmock_011, nmock_012, nmock_013, nmock_014, nmock_015, nmock_016, " +
+        //        "nmock_017, nmock_018, nmock_019, nmock_020, nmock_021, nmock_022, nmock_023, " +
+        //        "nmock_024, nmock_025, nmock_026, nmock_027, nmock_028, nmock_029, nmock_030, nmock_031, " +
+        //        "nmock_032, nmock_033, nmock_034, nmock_035, nmock_036, nmock_037, nmock_038, nmock_039, " +
+        //        "nmock_040, nmock_041 from tbl_mock_001 order by nmock_002;";
+        assertNotContains(replayPair.second, "mv_tbl_mock_001");
     }
 }

@@ -32,7 +32,7 @@ public class CancelLoadStmtAnalyzer {
         new CancelLoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class CancelLoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class CancelLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private String label;
 

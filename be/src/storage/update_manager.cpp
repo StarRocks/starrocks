@@ -97,8 +97,7 @@ Status UpdateManager::init() {
         max_thread_cnt = config::transaction_apply_worker_count;
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
-    REGISTER_GAUGE_STARROCKS_METRIC(update_apply_queue_count,
-                                    [this]() { return _apply_thread_pool->num_queued_tasks(); });
+    REGISTER_THREAD_POOL_METRICS(update_apply, _apply_thread_pool);
 
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
@@ -587,13 +586,13 @@ bool UpdateManager::TEST_update_state_exist(Tablet* tablet, Rowset* rowset) {
         auto column_state_entry =
                 _update_column_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
         if (column_state_entry != nullptr) {
-            _update_column_state_cache.remove(column_state_entry);
+            _update_column_state_cache.release(column_state_entry);
             return true;
         }
     } else {
         auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
         if (state_entry != nullptr) {
-            _update_state_cache.remove(state_entry);
+            _update_state_cache.release(state_entry);
             return true;
         }
     }

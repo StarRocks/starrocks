@@ -19,7 +19,7 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.logging.log4j.LogManager;
@@ -44,7 +44,6 @@ public class DeltaLakeConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
-        // TODO extract to ConnectorConfigFactory
     }
 
     @Override
@@ -53,7 +52,7 @@ public class DeltaLakeConnector implements Connector {
     }
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
-        IHiveMetastore metastore = internalMgr.createHiveMetastore();
+        IMetastore metastore = internalMgr.createMetastore();
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,

@@ -1,0 +1,14 @@
+-- name: test_query_rewrite_status
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1(c1 int, c2 int, c3 int) ;
+
+create materialized view mv1 refresh manual as select * from t1;
+create materialized view mv2 refresh manual properties('enable_query_rewrite'='false') as select * from t1;
+create materialized view mv3 refresh manual as select c1, count(*) from t1 group by c1;
+alter materialized view mv3 inactive;
+create materialized view mv4 refresh manual as select c1, count(*) from t1 group by c1 limit 5;
+
+select table_name, query_rewrite_status from information_schema.materialized_views where TABLE_SCHEMA = 'db_${uuid0}' order by table_name;

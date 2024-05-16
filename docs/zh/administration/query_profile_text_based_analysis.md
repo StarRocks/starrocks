@@ -78,7 +78,7 @@ ANALYZE PROFILE FROM '<Query_ID>' [, <Node_ID> [, ...] ]
   - 🚀：运行中的算子。
   - ✅：已结束执行的算子。
 
-- 整体进度展示：根据 `运行中的算子数量/所有算子数量` 计算得到。由于没有考虑到行数信息，这个进度可能有点失真。
+- 整体进度展示：根据 `已结束执行的算子数量/所有算子数量` 计算得到。由于没有考虑到行数信息，这个进度可能有点失真。
 - 算子进度展示：根据 `已经处理的行数/总行数` 计算得到，若无法计算总行数，则该进度显示为 `?`。
 
 示例：
@@ -88,7 +88,7 @@ ANALYZE PROFILE FROM '<Query_ID>' [, <Node_ID> [, ...] ]
 
 ## 使用 EXPLAIN ANALYZE 语句模拟分析查询
 
-StarRocs 提供了 EXPLAIN ANALYZE 语句，方便您对查询直接进行模拟并分析其 Profile，语法如下：
+StarRocks 提供了 EXPLAIN ANALYZE 语句，方便您对查询直接进行模拟并分析其 Profile，语法如下：
 
 ```SQL
 EXPLAIN ANALYZE <sql_statement>

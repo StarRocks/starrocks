@@ -260,6 +260,11 @@ public:
     */
     DEFINE_VECTORIZED_FN(sqrt);
     /**
+    * @param: [DoubleColumn]
+    * @return: DoubleColumn
+    */
+    DEFINE_VECTORIZED_FN(cbrt);
+    /**
     * @param: [DoubleColumn base, DoubleColumn exp]
     * @return: DoubleColumn
     */

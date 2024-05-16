@@ -62,7 +62,7 @@ public class LocalTabletsProcDirTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = ImmutableMap.copyOf(idToBackend);
@@ -123,7 +123,7 @@ public class LocalTabletsProcDirTest {
 
         // Check
         LocalTabletsProcDir tabletsProcDir = new LocalTabletsProcDir(db, table, index);
-        List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null);
+        List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null, false);
         System.out.println(result);
         Assert.assertEquals(3, result.size());
         Assert.assertEquals((long) result.get(0).get(0), tablet1Id);

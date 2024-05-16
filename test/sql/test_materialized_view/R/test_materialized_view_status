@@ -108,3 +108,52 @@ refresh materialized view mv2  with sync mode;
 select * from mv2 order by k1;
 -- result:
 -- !result
+drop table t1;
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `k1` date NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(PARTITION pbefore VALUES [("0000-01-01"), ("2023-01-01")),
+PARTITION p20230101 VALUES [("2023-01-01"), ("2023-02-01")),
+PARTITION p20230201 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p20230301 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p20230401 VALUES [("2023-04-01"), ("2023-05-01")),
+PARTITION p20230501 VALUES [("2023-05-01"), ("2023-06-01")))
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),("2019-01-01",2,2),
+                                         ("2023-01-11",1,1),("2023-01-11",1,2),("2023-02-11",2,1),("2023-01-11",2,2),
+                                         ("2023-03-11",1,1),("2023-05-11",1,2),("2023-04-11",2,1),("2023-05-01",2,2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv3
+PARTITION BY (k1)
+REFRESH DEFERRED MANUAL
+AS SELECT k1,v1 FROM t1;
+-- result:
+-- !result
+refresh MATERIALIZED VIEW mv3 PARTITION start ('2023-02-01') end ('2023-05-01') with sync mode;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv3 INACTIVE;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv3 ACTIVE;
+-- result:
+-- !result
+show partitions from mv3;
+-- result:
+[REGEX].*p20230201.*
+.*p20230301.*
+.*p20230401.*
+-- !result

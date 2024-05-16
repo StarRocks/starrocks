@@ -16,18 +16,21 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -72,8 +75,6 @@ public class InfoSchemaDbTest {
         globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         globalStateMgr.getAuthorizationMgr().initBuiltinRolesAndUsers();
 
-        authorizationManager = globalStateMgr.getAuthorizationMgr();
-
         starRocksAssert.withDatabase("db");
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
@@ -82,6 +83,9 @@ public class InfoSchemaDbTest {
         starRocksAssert.withMaterializedView(
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(GlobalStateMgr.getCurrentState(),
+                new DefaultAuthorizationProvider()));
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
@@ -92,6 +96,8 @@ public class InfoSchemaDbTest {
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create role test_role", ctx);
         globalStateMgr.getAuthorizationMgr().createRole(createRoleStmt);
+
+        authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
     }
 
     @Test
@@ -100,7 +106,6 @@ public class InfoSchemaDbTest {
 
         Assert.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
-        db.dropTableWithLock("authors");
         db.write(null);
         Assert.assertNull(db.getTable("authors"));
     }
@@ -271,21 +276,19 @@ public class InfoSchemaDbTest {
         Assert.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
     }
 
-
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
-        new MockUp<CreateFunctionStmt>() {
-            @Mock
-            public void analyze(ConnectContext context) throws AnalysisException {
-            }
-        };
-
         new MockUp<PrivilegeStmtAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }
         };
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
 
+            }
+        };
         String createSql = "CREATE FUNCTION db.MY_UDF_JSON_GET(string, string) RETURNS string " +
                 "properties ( " +
                 "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
@@ -321,8 +324,9 @@ public class InfoSchemaDbTest {
     @Test
     public void testShowExternalCatalogPrivilege(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws Exception {
 
-        String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
-                "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
+        String createCatalog =
+                "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
+                        "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(createCatalog, ctx);
         Assert.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
@@ -356,7 +360,7 @@ public class InfoSchemaDbTest {
             }
         };
 
-        ctx.getGlobalStateMgr().changeCatalog(ctx, "hive_catalog_1");
+        ctx.changeCatalog("hive_catalog_1");
 
         String sql = "grant usage on catalog hive_catalog_1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -453,7 +457,6 @@ public class InfoSchemaDbTest {
         sql = "revoke select on all tables in database db from test_user";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.revoke(revokePrivilegeStmt);
-
 
         sql = "grant select on all views in database db to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

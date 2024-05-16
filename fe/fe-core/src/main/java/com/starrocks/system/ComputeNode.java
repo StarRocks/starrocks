@@ -29,6 +29,7 @@ import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import org.apache.logging.log4j.LogManager;
@@ -105,6 +106,11 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
 
+    @SerializedName("workerGroupId")
+    private long workerGroupId = 0;
+
+    @SerializedName("warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     // Indicate there is whether storage_path or not with CN node
     // It must be true for Backend
     @SerializedName("isSetStoragePath")
@@ -175,6 +181,11 @@ public class ComputeNode implements IComputable, Writable {
         return isSetStoragePath;
     }
 
+    // for test only
+    public void setIsStoragePath(boolean isSetStoragePath) {
+        this.isSetStoragePath = isSetStoragePath;
+    }
+
     public long getId() {
         return id;
     }
@@ -230,6 +241,22 @@ public class ComputeNode implements IComputable, Writable {
 
     public String getHeartbeatErrMsg() {
         return heartbeatErrMsg;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
+    }
+
+    public void setWorkerGroupId(long workerGroupId) {
+        this.workerGroupId = workerGroupId;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     // for test only
@@ -325,16 +352,8 @@ public class ComputeNode implements IComputable, Writable {
         return this.isAlive.get();
     }
 
-    public void setIsAlive(boolean isAlive) {
-        this.isAlive.set(isAlive);
-    }
-
     public boolean isDecommissioned() {
         return this.isDecommissioned.get();
-    }
-
-    public void setIsDecommissioned(boolean isDecommissioned) {
-        this.isDecommissioned.set(isDecommissioned);
     }
 
     public boolean isAvailable() {
@@ -444,10 +463,6 @@ public class ComputeNode implements IComputable, Writable {
 
     public AtomicBoolean getIsAlive() {
         return isAlive;
-    }
-
-    public void setIsAlive(AtomicBoolean isAlive) {
-        this.isAlive = isAlive;
     }
 
     public void setDecommissionType(int decommissionType) {

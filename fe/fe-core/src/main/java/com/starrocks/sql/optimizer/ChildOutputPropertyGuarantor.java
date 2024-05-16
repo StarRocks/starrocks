@@ -95,7 +95,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         EquivalentDescriptor leftDesc = leftLocalDistributionSpec.getEquivDesc();
         EquivalentDescriptor rightDesc = rightLocalDistributionSpec.getEquivDesc();
 
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         long leftTableId = leftDesc.getTableId();
         long rightTableId = rightDesc.getTableId();
 

@@ -8,9 +8,9 @@ displayed_sidebar: "English"
 
 StarRocks supports four table types: Duplicate Key table, Aggregate table, Unique Key table, and Primary Key table. All of them are sorted by KEY.
 
-- `AGGREGATE KEY`: When records with the same AGGREGATE KEY is loaded into StarRocks, the old and new records are aggregated. Currently, aggregate tables supports the following aggregate functions: SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating business statements and multi-dimensional analyses.
+- `AGGREGATE KEY`: When records with the same AGGREGATE KEY is loaded into StarRocks, the old and new records are aggregated. Currently, Aggregate tables supports the following aggregate functions: SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating business statements and multi-dimensional analyses.
 - `DUPLICATE KEY`: You only need to specify the sort key for a DUPLICATE KEY table. Records with the same DUPLICATE KEY exist at the same time. It is suitable for analyses that do not involve aggregating data in advance.
-- `UNIQUE KEY`: When records with the same UNIQUE KEY is loaded into StarRocks, the new record overwrites the old one. A UNIQUE KEY tables is similar to an aggregate table with REPLACE function. Both are suitable for analyses involving constant updates.
+- `UNIQUE KEY`: When records with the same UNIQUE KEY is loaded into StarRocks, the new record overwrites the old one. A UNIQUE KEY tables is similar to an Aggregate table with REPLACE function. Both are suitable for analyses involving constant updates.
 - `PRIMARY KEY`: Primary Key tables guarantee the uniqueness of records, and allow you to perform realtime updating.
 
 ~~~sql
@@ -33,7 +33,7 @@ CREATE TABLE session_data
     city        CHAR(20),
     province    CHAR(20),
     ip          varchar(32),
-    brower      CHAR(20),
+    browser      CHAR(20),
     url         VARCHAR(1024)
 )
 DUPLICATE KEY(visitorid, sessionid)
@@ -73,7 +73,7 @@ CREATE TABLE colocate_table
     city        CHAR(20),
     province    CHAR(20),
     ip          varchar(32),
-    brower      CHAR(20),
+    browser      CHAR(20),
     url         VARCHAR(1024)
 )
 DUPLICATE KEY(visitorid, sessionid)
@@ -93,7 +93,7 @@ Flat tables have the following drawbacks:
 
 - Costly dimension updates because a flat table usually contains a massive number of dimensions. Each time a dimension is updated, the entire table must be updated. The situation exacerbates as the update frequency increases.
 - High maintenance cost because flat tables require additional development workloads, storage space, and data backfilling operations.
-- High data ingestion cost because a flat table has many fields and an aggregate table may contain even more key fields. During data loading, more fields need to be sorted, which prolongs data loading.
+- High data ingestion cost because a flat table has many fields and an Aggregate table may contain even more key fields. During data loading, more fields need to be sorted, which prolongs data loading.
 
 If you have high requirements on query concurrency or low latency, you can still use flat tables.
 
@@ -123,7 +123,7 @@ When creating a table, it is recommended to place common filter fields at the be
 
 A VARCHAR field must placed at the end of a sparse index because the index gets truncated from the VARCHAR field. If the VARCHAR field appears first, the index may be less than 36 bytes.
 
-Use the above `site_visit` table as an example. The table has four columns: `siteid, city, username, pv`. The sort key contains three columns `siteid，city，username`, which occupy 4, 2, and 32 bytes respectively. So the prefix index (sparse index) can be the first 30 bytes of `siteid + city + username`.
+Use the above `site_visit` table as an example. The table has four columns: `siteid, city, username, pv`. The sort key contains three columns `siteid, city, username`, which occupy 4, 2, and 32 bytes respectively. So the prefix index (sparse index) can be the first 30 bytes of `siteid + city + username`.
 
 In addition to sparse indexes, StarRocks also provides bloomfilter indexes, which are effective for filtering columns with high discrimination. If you want to place VARCHAR fields before other fields, you can create bloomfilter indexes.
 
@@ -150,15 +150,15 @@ A rollup is essentially a materialized index of the original table (base table).
 - The prefix index in the base table cannot be hit, because the way the base table is built cannot cover all the query patterns. In this case, you may consider creating a rollup to adjust the column order. Use the above `session_data` table as an example:
 
   ~~~sql
-  session_data(visitorid, sessionid, visittime, city, province, ip, brower, url)
+  session_data(visitorid, sessionid, visittime, city, province, ip, browser, url)
   ~~~
 
   If there are cases where you need to analyze visits by `browser` and `province` in addition to `visitorid`, you can create a separate rollup:
 
   ~~~sql
   ALTER TABLE session_data
-  ADD ROLLUP rollup_brower(brower,province,ip,url)
-  DUPLICATE KEY(brower,province);
+  ADD ROLLUP rollup_browser(browser,province,ip,url)
+  DUPLICATE KEY(browser,province);
   ~~~
 
 ## Schema change

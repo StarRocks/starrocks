@@ -208,7 +208,7 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
                 ");");
 
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 100));
-        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
 
         FeConstants.runningUnitTest = true;
     }

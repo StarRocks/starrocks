@@ -31,6 +31,7 @@ import com.starrocks.statistic.StatsConstants;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -54,10 +55,10 @@ public class StatisticsCalcUtils {
         List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
                 .stream().map(Column::getName).collect(Collectors.toList());
         List<ColumnStatistic> columnStatisticList =
-                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, columns);
 
         Map<String, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
 
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
@@ -83,25 +84,33 @@ public class StatisticsCalcUtils {
     public static long getTableRowCount(Table table, Operator node, OptimizerContext optimizerContext) {
         if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
-            List<Partition> selectedPartitions;
+            Collection<Partition> selectedPartitions;
             if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
                     node.getOpType() == OperatorType.PHYSICAL_STREAM_SCAN) {
                 return 1;
             } else if (node.isLogical()) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
-                selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                if (olapScanOperator.getSelectedPartitionId() == null) {
+                    selectedPartitions = olapScanOperator.getTable().getPartitions();
+                } else {
+                    selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
+                            olapTable::getPartition).collect(Collectors.toList());
+                }
             } else {
                 PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
-                selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                if (olapScanOperator.getSelectedPartitionId() == null) {
+                    selectedPartitions = olapScanOperator.getTable().getPartitions();
+                } else {
+                    selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
+                            olapTable::getPartition).collect(Collectors.toList());
+                }
             }
             long rowCount = 0;
 
             BasicStatsMeta basicStatsMeta =
-                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
             StatsConstants.AnalyzeType analyzeType = basicStatsMeta == null ? null : basicStatsMeta.getType();
-            LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
+            LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
             if (StatsConstants.AnalyzeType.FULL == analyzeType) {
 
                 // The basicStatsMeta.getUpdateRows() interface can get the number of
@@ -112,10 +121,12 @@ public class StatisticsCalcUtils {
                 // For example, a large amount of data LOAD may cause the number of rows to change greatly.
                 // This leads to very inaccurate row counts.
                 long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
+                Map<Long, TableStatistic> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getTableStatistics(table.getId(), selectedPartitions);
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
-                    TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
-                            .getTableStatistic(table.getId(), partition.getId());
+                    TableStatistic tableStatistic =
+                            tableStatisticMap.getOrDefault(partition.getId(), TableStatistic.unknown());
                     LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
                     if (tableStatistic.equals(TableStatistic.unknown())) {
                         partitionRowCount = partition.getRowCount();
@@ -173,14 +184,16 @@ public class StatisticsCalcUtils {
 
     private static long deltaRows(Table table, long totalRowCount) {
         long tblRowCount = 0L;
+        Map<Long, TableStatistic> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getTableStatistics(table.getId(), table.getPartitions());
+
         for (Partition partition : table.getPartitions()) {
             long partitionRowCount;
-            TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
-                    .getTableStatistic(table.getId(), partition.getId());
-            if (tableStatistic.equals(TableStatistic.unknown())) {
+            TableStatistic statistic = tableStatisticMap.getOrDefault(partition.getId(), TableStatistic.unknown());
+            if (statistic.equals(TableStatistic.unknown())) {
                 partitionRowCount = partition.getRowCount();
             } else {
-                partitionRowCount = tableStatistic.getRowCount();
+                partitionRowCount = statistic.getRowCount();
             }
             tblRowCount += partitionRowCount;
         }

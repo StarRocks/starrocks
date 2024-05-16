@@ -26,11 +26,17 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 
 import java.util.List;
 import java.util.Map;
@@ -44,7 +50,7 @@ public class DataCacheStmtAnalyzer {
         new DataCacheStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class DataCacheStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class DataCacheStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -113,6 +119,28 @@ public class DataCacheStmtAnalyzer {
 
         @Override
         public Void visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
+            InsertStmt insertStmt = statement.getInsertStmt();
+            QueryStatement queryStatement = insertStmt.getQueryStatement();
+            // Analyze query sql is valid
+            Analyzer.analyze(queryStatement, context);
+
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
+            TableName tableName = tableRelation.getResolveTableName();
+            if (CatalogMgr.isInternalCatalog(tableName.getCatalog()) && RunMode.isSharedNothingMode()) {
+                throw new SemanticException("Currently cache select is not supported in local olap table");
+            }
+            statement.setCatalog(tableName.getCatalog());
+
+            Map<String, String> properties = statement.getProperties();
+            statement.setVerbose(Boolean.parseBoolean(properties.getOrDefault("verbose", "false")));
+            // todo analyze ttl, priority later
+
             return null;
         }
     }

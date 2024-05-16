@@ -141,7 +141,7 @@ public:
     static Status pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key);
 
-    using PendingRowsetIterateFunc = std::function<bool(int64_t version, std::string_view rowset_meta_data)>;
+    using PendingRowsetIterateFunc = std::function<StatusOr<bool>(int64_t version, std::string_view rowset_meta_data)>;
     static Status pending_rowset_iterate(DataDir* store, TTabletId tablet_id, const PendingRowsetIterateFunc& func);
 
     // On success, store a pointer to `RowsetMeta` in |*meta| and return OK status.
@@ -222,6 +222,9 @@ public:
 
     static Status put_del_vector(DataDir* store, WriteBatch* batch, TTabletId tablet_id, uint32_t segment_id,
                                  const DelVector& delvec);
+
+    static Status put_del_vectors(DataDir* store, WriteBatch* batch, TTabletId tablet_id, const EditVersion& version,
+                                  const vector<std::pair<uint32_t, DelVectorPtr>>& delvecs);
 
     static Status put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id, uint32_t segment_id,
                                          const DeltaColumnGroupList& dcgs);

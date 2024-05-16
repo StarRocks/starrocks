@@ -290,6 +290,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
         }
 
+        boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
+        if (hasTemporaryTable) {
+            throw new SemanticException(("Materialized view can't base on temporary table"));
+        }
+
         // forbid explain query
         if (queryStatement.isExplain()) {
             throw new IllegalArgumentException("Creating materialized view does not support explain query");
@@ -640,6 +645,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (mvColumnItem.getAggregationType() != null) {
                 break;
             }
+            // NOTE: Change aggregate type of the column to none rather than null
             mvColumnItem.setAggregationType(AggregateType.NONE, true);
         }
     }
@@ -709,6 +715,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             // supply value
             for (; theBeginIndexOfValue < mvColumnItemList.size(); theBeginIndexOfValue++) {
                 MVColumnItem mvColumnItem = mvColumnItemList.get(theBeginIndexOfValue);
+                // NOTE: Change aggregate type of the column to none rather than null
                 mvColumnItem.setAggregationType(AggregateType.NONE, true);
             }
         }

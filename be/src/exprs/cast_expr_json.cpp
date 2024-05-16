@@ -220,6 +220,10 @@ StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
     ColumnBuilder<TYPE_JSON> column_builder(column->size());
     vpack::Builder json_builder;
     for (int row = 0; row < column->size(); row++) {
+        if (column->is_null(row)) {
+            column_builder.append_null();
+            continue;
+        }
         json_builder.clear();
         RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, row, "", &json_builder));
 

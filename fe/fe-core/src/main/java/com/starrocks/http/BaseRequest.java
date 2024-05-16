@@ -46,7 +46,7 @@ import io.netty.handler.codec.http.cookie.ClientCookieDecoder;
 import io.netty.handler.codec.http.cookie.Cookie;
 
 import java.net.InetSocketAddress;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -125,7 +125,7 @@ public class BaseRequest {
         }
 
         List<String> values = decoder.parameters().get(key);
-        if (values != null && values.size() > 0) {
+        if (values != null && !values.isEmpty()) {
             return values.get(0);
         }
 
@@ -135,7 +135,7 @@ public class BaseRequest {
     public String getContent() throws DdlException {
         if (request instanceof FullHttpRequest) {
             FullHttpRequest fullHttpRequest = (FullHttpRequest) request;
-            return fullHttpRequest.content().toString(Charset.forName("UTF-8"));
+            return fullHttpRequest.content().toString(StandardCharsets.UTF_8);
         } else {
             throw new DdlException("Invalid request");
         }
@@ -162,15 +162,13 @@ public class BaseRequest {
     }
 
     public String getAuthorizationHeader() {
-        String authString = request.headers().get("Authorization");
-        return authString;
+        return request.headers().get("Authorization");
     }
 
     public String getHostString() {
         // get client host
         InetSocketAddress clientSocket = (InetSocketAddress) context.channel().remoteAddress();
-        String clientIp = clientSocket.getHostString();
-        return clientIp;
+        return clientSocket.getHostString();
     }
 
     public HttpConnectContext getConnectContext() {

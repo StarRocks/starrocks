@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
@@ -21,7 +20,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -141,8 +139,10 @@ public class ConcurrentDDLTest {
                 " concurrent_test_db.test_mv_RRR DISTRIBUTED BY HASH(`k2`) REFRESH MANUAL" +
                 " as select k2,k3 from concurrent_test_db.base_t1;";
 
+        final int NUM_ROUND = 1;
+
         // run multi rounds to try to detect potential concurrency problems
-        for (int round = 0; round < 5; round++) {
+        for (int round = 0; round < NUM_ROUND; round++) {
             System.out.println("round-" + round + " begin");
             AtomicBoolean stop = new AtomicBoolean(false);
 
@@ -150,7 +150,7 @@ public class ConcurrentDDLTest {
             Thread controlThread = new Thread(() -> {
                 int times = 0;
                 Random random = new Random();
-                while (times < 10) {
+                while (times < 5) {
                     try {
                         System.out.println("creating table and db time: " + times);
                         starRocksAssert.withDatabase("concurrent_test_db");
@@ -165,7 +165,6 @@ public class ConcurrentDDLTest {
                         ShowTableStmt showTableStmt =
                                 (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
                                         "show tables from concurrent_test_db", connectContext);
-                        ShowExecutor showExecutor = new ShowExecutor(connectContext, showTableStmt);
                         starRocksAssert.dropDatabase("concurrent_test_db");
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {

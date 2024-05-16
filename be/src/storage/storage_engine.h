@@ -232,6 +232,8 @@ public:
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
+    MemTableFlushExecutor* lake_memtable_flush_executor() { return _lake_memtable_flush_executor.get(); }
+
     SegmentReplicateExecutor* segment_replicate_executor() { return _segment_replicate_executor.get(); }
 
     SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
@@ -296,6 +298,8 @@ public:
 
     bool is_as_cn() { return !_options.need_write_cluster_id; }
 
+    bool enable_light_pk_compaction_publish();
+
 protected:
     static StorageEngine* _s_instance;
 
@@ -349,6 +353,8 @@ private:
     void* _manual_compaction_thread_callback(void* arg);
     // pk index major compaction function
     void* _pk_index_major_compaction_thread_callback(void* arg);
+
+    void* _pk_dump_thread_callback(void* arg);
 
 #ifdef USE_STAROS
     // local pk index of SHARED_DATA gc/evict function
@@ -425,6 +431,8 @@ private:
     std::vector<std::thread> _manual_compaction_threads;
     // thread to run pk index major compaction
     std::thread _pk_index_major_compaction_thread;
+    // thread to generate pk dump
+    std::thread _pk_dump_thread;
     // thread to gc/evict local pk index in sharded_data
     std::thread _local_pk_index_shared_data_gc_evict_thread;
 
@@ -465,6 +473,8 @@ private:
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
+
+    std::unique_ptr<MemTableFlushExecutor> _lake_memtable_flush_executor;
 
     std::unique_ptr<SegmentReplicateExecutor> _segment_replicate_executor;
 

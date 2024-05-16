@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # Table overview
 
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+
 Tables are units of data storage. Understanding the table structure in StarRocks and how to design an efficient table structure helps optimize data organization and enhance query efficiency. Also, compared to traditional databases, StarRocks can store complex semi-structured data such as JSON, ARRAY, in a columnar manner to improve query performance.
 
 This topic introduces the table structure in StarRocks from both basic and general perspectives.
@@ -28,16 +30,14 @@ CREATE TABLE user_access (
     last_access datetime,
     credits double
 )
-DUPLICATE KEY(uid, name);
+ORDER BY (uid, name);
 ```
 
 The above CREATE TABLE example creates a Duplicate Key table. No constraint is added to columns in this type of table, so duplicate data rows can exist in the table. The first two columns of the Duplicate Key table are specified as sort columns to form the sort key. Data is stored after being sorted based on the sort key, which can accelerate indexing during queries.
 
-:::note
+Since v3.3.0, the Duplicate Key table supports specifying the sort key using `ORDER BY`. If both `ORDER BY` and `DUPLICATE KEY` are used, `DUPLICATE KEY` does not take effect.
 
-If a StarRocks cluster in a staging environment contains only one BE, the number of replicas can be set to `1` in the `PROPERTIES` clause, such as `PROPERTIES( "replicaton_num" = "1" )`. The default number of replicas is 3, which is also the number recommended for production StarRocks clusters. If you want to use the default number, you do not need to configure the `PROPERTIES`.
-
-:::
+<Replicanum />
 
 Execute [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) to view the table schema.
 
@@ -72,14 +72,15 @@ Create Table: CREATE TABLE `user_access` (
 ) ENGINE=OLAP 
 DUPLICATE KEY(`uid`, `name`)
 DISTRIBUTED BY RANDOM
+ORDER BY(`uid`, `name`)
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
+"bucket_size" = "4294967296",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
 "replicated_storage" = "true",
-"compression" = "LZ4"
+"replication_num" = "3"
 );
-1 row in set (0.00 sec)
+1 row in set (0.01 sec)
 ```
 
 ## Understand comprehensive table structure
@@ -116,16 +117,15 @@ StarRocks provides two bucketing methods:
 - Hash bucketing: Data is distributed into buckets based on the hash values of the bucketing key. You can select columns frequently used as condition columns in queries as bucketing columns, which helps improve query efficiency.
 - Random bucketing: Data is randomly distributed to buckets. This bucketing method is more simple and ease to use.
 
-### [Data types](../sql-reference/sql-statements/data-types/data-type-list.md)
+### [Data types](../sql-reference/data-types/data-type-list.md)
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### Index
+### [Index](./indexes/indexes_overview.md)
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 
-StarRocks provides a built-in primary index, which is a prefix index composed of the prefixes of the table's sort key columns. StarRocks also allows you to create secondary indexes, including Bitmap and Bloom Filter indexes, to further enhance query efficiency.
-
+StarRocks provides built-in indexes: Prefix indexes, Ordinal indexes, and ZoneMap indexes. StarRocks also allows users to create indexes, that is, Bitmap indexes and Bloom Filter indexes, to further enhance query efficiency.
 
 ### Constraints
 
@@ -133,4 +133,4 @@ Constraints help ensure data integrity, consistency, and accuracy. The primary k
 
 ### More features
 
-Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using Bitmap and HLL columns to accelerate distinct counting, specifying generated columns or auto-increment columns to speed up some queries, configuring flexible and automatic storage cooldown methods to reduce maintainance costs, and configuring Colocate Join to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using Bitmap and HLL columns to accelerate distinct counting, specifying generated columns or auto-increment columns to speed up some queries, configuring flexible and automatic storage cooldown methods to reduce maintenance costs, and configuring Colocate Join to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).

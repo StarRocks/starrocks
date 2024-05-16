@@ -65,6 +65,9 @@ inline std::shared_ptr<FileSystem> get_tls_fs_starlet() {
 #endif
 
 StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri, FSOptions options) {
+    if (fs::is_fallback_to_hadoop_fs(uri)) {
+        return new_fs_hdfs(options);
+    }
     if (fs::is_posix_uri(uri)) {
         return new_fs_posix();
     }
@@ -87,6 +90,9 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
 }
 
 StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::string_view uri) {
+    if (fs::is_fallback_to_hadoop_fs(uri)) {
+        return get_tls_fs_hdfs();
+    }
     if (fs::is_posix_uri(uri)) {
         return get_tls_fs_posix();
     }

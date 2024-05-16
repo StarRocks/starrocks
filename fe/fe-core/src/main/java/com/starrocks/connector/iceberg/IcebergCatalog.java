@@ -15,25 +15,33 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.memory.MemoryTrackable;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static org.apache.iceberg.StarRocksIcebergTableScan.newTableScanContext;
 
-public interface IcebergCatalog {
+public interface IcebergCatalog extends MemoryTrackable {
 
     IcebergCatalogType getIcebergCatalogType();
 
@@ -75,23 +83,30 @@ public interface IcebergCatalog {
         }
     }
 
-    default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
+    default List<String> listPartitionNames(String dbName, String tableName,  long snapshotId, ExecutorService executorService) {
         org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
-        List<String> partitionNames = Lists.newArrayList();
+        Set<String> partitionNames = Sets.newHashSet();
 
-        // all partitions specs are unpartitioned
         if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
-            return partitionNames;
+            return new ArrayList<>();
         }
 
         TableScan tableScan = icebergTable.newScan().planWith(executorService);
-        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
+        try (CloseableIterable<FileScanTask> fileScanTaskIterable = tableScan.planFiles();
+                CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator()) {
 
-        for (FileScanTask fileScanTask : tasks) {
-            StructLike partition = fileScanTask.file().partition();
-            partitionNames.add(convertIcebergPartitionToPartitionName(fileScanTask.spec(), partition));
+            while (fileScanTaskIterator.hasNext()) {
+                FileScanTask scanTask = fileScanTaskIterator.next();
+                StructLike partition = scanTask.file().partition();
+                String partitionName = convertIcebergPartitionToPartitionName(scanTask.spec(), partition);
+                partitionNames.add(partitionName);
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException(String.format("Failed to list iceberg partition names %s.%s",
+                    dbName, tableName), e);
         }
-        return partitionNames;
+
+        return new ArrayList<>(partitionNames);
     }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
@@ -104,5 +119,13 @@ public interface IcebergCatalog {
     }
 
     default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
+
+    default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext srScanContext) {
+        return new StarRocksIcebergTableScan(
+                table,
+                table.schema(),
+                newTableScanContext(table),
+                srScanContext);
     }
 }

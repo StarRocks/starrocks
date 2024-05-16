@@ -21,7 +21,14 @@ STDDEV(expr)
 
 ## 返回值说明
 
-返回值为 DOUBLE 类型。
+返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
+
+![image](../../../assets/stddevpop_formula.png)
+
+<!--$$
+\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \bar{x})^2}
+$$ -->
+
 
 ## 示例
 
@@ -33,3 +40,7 @@ mysql> SELECT stddev(lo_quantity), stddev_pop(lo_quantity) from lineorder;
 |   14.43100708360797 |       14.43100708360797 |
 +---------------------+-------------------------+
 ```
+
+## 相关函数
+
+[stddev_samp](./stddev_samp.md)

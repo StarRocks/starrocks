@@ -128,7 +128,7 @@ ProfileReportWorker::ProfileReportWorker(ExecEnv* env) : _thread([this] { execut
     Thread::set_thread_name(_thread, "profile_report");
 }
 
-ProfileReportWorker::~ProfileReportWorker() {
+void ProfileReportWorker::close() {
     _stop.store(true, std::memory_order_release);
     _thread.join();
 }

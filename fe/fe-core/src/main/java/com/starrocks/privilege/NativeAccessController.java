@@ -107,6 +107,12 @@ public class NativeAccessController implements AccessController {
     }
 
     @Override
+    public void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                   Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException("Column-level access control not implemented");
+    }
+
+    @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.VIEW,
@@ -344,7 +350,7 @@ public class NativeAccessController implements AccessController {
                 throw new AccessDeniedException();
             }
         } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on {} {}, message: {}",
+            LOG.debug("Object not found when checking any action on {} {}, message: {}",
                     objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on {} {}",

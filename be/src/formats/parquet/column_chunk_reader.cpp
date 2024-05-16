@@ -14,14 +14,24 @@
 
 #include "formats/parquet/column_chunk_reader.h"
 
-#include <memory>
+#include <glog/logging.h>
 
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include "common/compiler_util.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+#include "util/compression/block_compression.h"
 
 namespace starrocks::parquet {
 
@@ -31,7 +41,9 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _max_rep_level(max_rep_level),
           _type_length(type_length),
           _chunk_metadata(column_chunk),
-          _opts(opts) {}
+          _opts(opts),
+          _def_level_decoder(&opts.stats->level_decode_ns),
+          _rep_level_decoder(&opts.stats->level_decode_ns) {}
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 

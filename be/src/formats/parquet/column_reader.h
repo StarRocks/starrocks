@@ -14,27 +14,50 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "formats/parquet/column_converter.h"
+#include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"
+#include "types/logical_type.h"
+
+namespace tparquet {
+class ColumnChunk;
+class OffsetIndex;
+class RowGroup;
+} // namespace tparquet
 
 namespace starrocks {
 class RandomAccessFile;
 struct HdfsScanStats;
+class ColumnPredicate;
+class ExprContext;
+class NullableColumn;
+class TIcebergSchemaField;
+
+namespace parquet {
+struct ParquetField;
+} // namespace parquet
+struct TypeDescriptor;
 } // namespace starrocks
 
 namespace starrocks::parquet {
-struct ColumnReaderContext {
-    Buffer<uint8_t>* filter = nullptr;
-    size_t next_row = 0;
-    size_t rows_to_skip = 0;
-
-    void advance(size_t num_rows) { next_row += num_rows; }
-};
 
 struct ColumnReaderOptions {
     std::string timezone;
@@ -44,7 +67,6 @@ struct ColumnReaderOptions {
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
-    ColumnReaderContext* context = nullptr;
 };
 
 class StoredColumnReader;
@@ -88,14 +110,6 @@ public:
                                                   std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
 
     virtual ~ColumnReader() = default;
-
-    virtual Status prepare_batch(size_t* num_records, Column* column) = 0;
-    virtual Status finish_batch() = 0;
-
-    Status next_batch(size_t* num_records, Column* column) {
-        RETURN_IF_ERROR(prepare_batch(num_records, column));
-        return finish_batch();
-    }
 
     virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) = 0;
 

@@ -55,7 +55,7 @@ text                                 | CREATE MATERIALIZED VIEW `mv_pred_2` (`lo
 DISTRIBUTED BY HASH(`lo_quantity`, `lo_revenue`) BUCKETS 2
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_medium" = "HDD"
 )
 AS SELECT `lineorder`.`lo_quantity`, `lineorder`.`lo_revenue`, sum(`lineorder`.`lo_tax`) AS `sum`
@@ -154,7 +154,7 @@ ExecTime      | 2.583 s
 - `QueryMemCost`：查询的总内存成本。
 - 其他针对各个运算符的特定指标，比如连接运算符和聚合运算符。
 
-有关如何分析 Query Profile 和理解其他指标的详细信息，请参阅 [查看分析 Query Profile](../administration/query_profile.md).
+有关如何分析 Query Profile 和理解其他指标的详细信息，请参阅 [查看分析 Query Profile](../administration/query_profile_overview.md).
 
 ### 验证查询是否被异步物化视图改写
 
@@ -172,7 +172,7 @@ Create Materialized View | CREATE MATERIALIZED VIEW `mv_agg` (`c_custkey`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "replicated_storage" = "true",
 "storage_medium" = "HDD"
 )

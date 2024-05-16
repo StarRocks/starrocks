@@ -27,6 +27,7 @@ import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
+import com.starrocks.thrift.TTabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -144,14 +145,17 @@ public class RemoteTransactionMgr {
     }
 
     // abort transaction in remote StarRocks cluster
-    public static void abortRemoteTransaction(long dbId, long transactionId,
-                                              String host, int port, String errorMsg)
+    public static void abortRemoteTransaction(long dbId, long transactionId, String host, int port, String errorMsg,
+                                              List<TTabletCommitInfo> tabletCommitInfos,
+                                              List<TTabletFailInfo> tabletFailInfos)
             throws AbortTransactionException {
         TNetworkAddress addr = new TNetworkAddress(host, port);
         TAbortRemoteTxnRequest request = new TAbortRemoteTxnRequest();
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setError_msg(errorMsg);
+        request.setCommit_infos(tabletCommitInfos);
+        request.setFail_infos(tabletFailInfos);
         TAbortRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,

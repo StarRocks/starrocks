@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -28,15 +29,18 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
@@ -54,7 +58,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class StreamLoadMgr {
+public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
 
     // label -> streamLoadTask
@@ -92,11 +96,17 @@ public class StreamLoadMgr {
         idToStreamLoadTask = Maps.newConcurrentMap();
         txnIdToSyncStreamLoadTasks = Maps.newConcurrentMap();
         dbToLabelToStreamLoadTask = Maps.newConcurrentMap();
-        lock = new ReentrantReadWriteLock(true);
+        lock = new FairReentrantReadWriteLock();
     }
 
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
                               int channelNum, int channelId, TransactionResult resp) throws UserException {
+        beginLoadTask(dbName, tableName, label, timeoutMillis, channelNum, channelId, resp,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
+    public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
+                              int channelNum, int channelId, TransactionResult resp, long warehouseId) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -122,7 +132,7 @@ public class StreamLoadMgr {
                 task.beginTxn(channelId, channelNum, resp);
                 return;
             }
-            task = createLoadTask(db, tableName, label, timeoutMillis, channelNum, channelId);
+            task = createLoadTask(db, tableName, label, timeoutMillis, channelNum, channelId, warehouseId);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
             addLoadTask(task);
@@ -138,14 +148,14 @@ public class StreamLoadMgr {
 
     // for sync stream load task
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
-                              TransactionResult resp, boolean isRoutineLoad) throws UserException {
+                              TransactionResult resp, boolean isRoutineLoad, long warehouseId) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
 
         writeLock();
         try {
-            task = createLoadTask(db, tableName, label, timeoutMillis, isRoutineLoad);
+            task = createLoadTask(db, tableName, label, timeoutMillis, isRoutineLoad, warehouseId);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
@@ -157,7 +167,8 @@ public class StreamLoadMgr {
     }
 
     // for sync stream load
-    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis, boolean isRoutineLoad)
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
+                                         boolean isRoutineLoad, long warehouseId)
             throws UserException {
         Table table;
         Locker locker = new Locker();
@@ -172,12 +183,12 @@ public class StreamLoadMgr {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, timeoutMillis, System.currentTimeMillis(), isRoutineLoad);
+                label, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouseId);
         return streamLoadTask;
     }
 
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
-                                         int channelNum, int channelId) throws UserException {
+                                         int channelNum, int channelId, long warehouseId) throws UserException {
         Table table;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
@@ -191,7 +202,7 @@ public class StreamLoadMgr {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, timeoutMillis, channelNum, channelId, System.currentTimeMillis());
+                label, timeoutMillis, channelNum, channelId, System.currentTimeMillis(), warehouseId);
         return streamLoadTask;
     }
 
@@ -269,7 +280,7 @@ public class StreamLoadMgr {
 
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
     }
 
     public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,
@@ -400,7 +411,6 @@ public class StreamLoadMgr {
                 if (streamLoadTask.checkNeedRemove(currentMs, isForce)) {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
-                    idToStreamLoadTask.remove(streamLoadTask.getId());
                     if (streamLoadTask.isSyncStreamLoad()) {
                         txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
                     }
@@ -642,5 +652,10 @@ public class StreamLoadMgr {
 
             addLoadTask(loadTask);
         }
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("StreamLoad", (long) idToStreamLoadTask.size());
     }
 }

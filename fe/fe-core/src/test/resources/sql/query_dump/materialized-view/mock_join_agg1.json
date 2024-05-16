@@ -4,13 +4,13 @@
     "db_mock_000.tbl_mock_001": "CREATE TABLE db_mock_000.tbl_mock_001 (\nmock_003 int(11) NOT NULL ,\nmock_005 int(11) NOT NULL ,\nmock_006 int(11) NOT NULL ,\nmock_004 varchar(20) NOT NULL ,\nmock_002 int(11) NOT NULL \n) ENGINE\u003d OLAP \nDUPLICATE KEY(mock_003)\nDISTRIBUTED BY HASH(mock_003)\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n);",
     "db_mock_000.tbl_mock_007": "CREATE TABLE db_mock_000.tbl_mock_007 (\nmock_008 int(11) ,\nmock_009 varchar(20) NOT NULL \n) ENGINE\u003d OLAP \nDUPLICATE KEY(mock_008)\nDISTRIBUTED BY HASH(mock_008)\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n);",
     "db_mock_000.tbl_mock_010": "CREATE TABLE db_mock_000.tbl_mock_010 (\nmock_011 int(11) NOT NULL ,\nmock_012 varchar(20) NOT NULL \n) ENGINE\u003d OLAP \nDUPLICATE KEY(mock_011)\nDISTRIBUTED BY HASH(mock_011)\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n);",
-    "db_mock_000.tbl_mock_013": "CREATE MATERIALIZED VIEW `tbl_mock_013` (`mock_003`, `mock_014`, `mock_015`, `mock_016`)\n\nDISTRIBUTED BY HASH(mock_003) BUCKETS 48 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n)\nAS SELECT mock_003, bitmap_union(to_bitmap(mock_002)) AS mock_014, hll_union(hll_hash(mock_002)) AS mock_015, percentile_union(percentile_hash(mock_002)) AS mock_016\nFROM db_mock_000.tbl_mock_001 INNER JOIN db_mock_000.tbl_mock_007 ON mock_005 \u003d mock_008 INNER JOIN db_mock_000.tbl_mock_010 ON mock_006 \u003d mock_011\nGROUP BY mock_003;"
+    "db_mock_000.test_mv0": "CREATE MATERIALIZED VIEW `test_mv0` (`mock_003`, `mock_014`, `mock_015`, `mock_016`)\n\nDISTRIBUTED BY HASH(mock_003) BUCKETS 48 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n)\nAS SELECT mock_003, bitmap_union(to_bitmap(mock_002)) AS mock_014, hll_union(hll_hash(mock_002)) AS mock_015, percentile_union(percentile_hash(mock_002)) AS mock_016\nFROM db_mock_000.tbl_mock_001 INNER JOIN db_mock_000.tbl_mock_007 ON mock_005 \u003d mock_008 INNER JOIN db_mock_000.tbl_mock_010 ON mock_006 \u003d mock_011\nGROUP BY mock_003;"
   },
   "table_row_count": {
     "db_mock_000.tbl_mock_007": {
       "t2": 200000
     },
-    "db_mock_000.tbl_mock_013": {
+    "db_mock_000.test_mv0": {
       "mv1": 20000
     },
     "db_mock_000.tbl_mock_010": {
@@ -24,7 +24,7 @@
     "db_mock_000.tbl_mock_007": {
       "mock_008": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
     },
-    "db_mock_000.tbl_mock_013": {
+    "db_mock_000.test_mv0": {
       "mock_003": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
       "mock_014": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
     },

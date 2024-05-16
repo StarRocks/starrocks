@@ -162,6 +162,10 @@ Description: Cumulative allocated memory for all FragmentInstances under this Fr
 
 Description: Cumulative deallocated memory for all FragmentInstances under this Fragment.
 
+##### InstancePeakMemoryUsage
+
+Description: The peak memory usage across all FragmentInstances under this Fragment.
+
 ### Pipeline Metrics
 
 The relationship between core metrics is illustrated in the following diagram:
@@ -249,7 +253,7 @@ Description: Cumulative memory deallocated by the Operator.
 
 ##### OperatorPeakMemoryUsage
 
-Description: Peak memory usage of the Operator. This metric is meaningful for certain materialization operators, such as aggregation, sorting, Join, etc. It is not relevant for operators like Project because memory is allocated by the current operator and released by subsequent operators, making peak memory equivalent to cumulative allocated memory for the current operator.
+Description: Peak memory usage by the Operator across all compute nodes. This metric is meaningful for certain materialization operators, such as aggregation, sorting, Join, etc. It is not relevant for operators like Project because memory is allocated by the current operator and released by subsequent operators, making peak memory equivalent to cumulative allocated memory for the current operator. In versions earlier than v3.1.8 and v3.2.3, this metric represents the peak memory usage by the Operator across all *PipelineDrivers*.
 
 ##### PrepareTime
 
@@ -423,11 +427,16 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 - Description: Execution time of IO tasks.
 - Level: Primary metric
-- Sub-metrics: CreateSegmentIter, GetDelVec, GetDeltaColumnGroup, GetRowsets, IOTime, LateMaterialize, ReadPKIndex, SegmentInit, SegmentRead
+- Sub-metrics: CreateSegmentIter, DictDecode, GetDelVec, GetDeltaColumnGroup, GetRowsets, IOTime, LateMaterialize, ReadPKIndex, SegmentInit, SegmentRead
 
 ##### CreateSegmentIter
 
 - Description: Time spent creating the Segment Iterator.
+- Level: Secondary metric
+
+##### DictDecode
+
+- Description: Time spent on decoding dictionary for low cardinality optimization.
 - Level: Secondary metric
 
 ##### GetDelVec
@@ -464,7 +473,7 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 - Description: Time spent initializing the Segment.
 - Level: Secondary metric
-- Sub-metrics: BitmapIndexFilter, BitmapIndexFilterRows, BloomFilterFilter, BloomFilterFilterRows, ColumnIteratorInit, ShortKeyFilter, ShortKeyFilterRows, ShortKeyRangeNumber, RemainingRowsAfterShortKeyFilter, ZoneMapIndexFiter, ZoneMapIndexFilterRows, SegmentZoneMapFilterRows, SegmentRuntimeZoneMapFilterRows
+- Sub-metrics: BitmapIndexFilter, BitmapIndexFilterRows, BloomFilterFilter, BloomFilterFilterRows, ColumnIteratorInit, ShortKeyFilter, ShortKeyFilterRows, ShortKeyRangeNumber, RemainingRowsAfterShortKeyFilter, ZoneMapIndexFilter, ZoneMapIndexFilterRows, SegmentZoneMapFilterRows, SegmentRuntimeZoneMapFilterRows
 
 ##### BitmapIndexFilter
 
@@ -1189,9 +1198,9 @@ Description: Time taken to build the output sorted sequence.
 
 ### Merge Operator
 
-For ease of understanding various metrics, Merge can be represented as the following state machinism:
+For ease of understanding various metrics, Merge can be represented as the following state mechanism:
 
-```
+```plaintext
                ┌────────── PENDING ◄──────────┐
                │                              │
                │                              │
@@ -1353,3 +1362,52 @@ Description: Number of shuffles. This metric is only valid when `Type` is `Parti
 ##### LocalExchangePeakMemoryUsage
 
 Description: Peak memory usage.
+
+#### OlapTableSink Operator
+
+OlapTableSink is the operator that profiles data loading with INSERT INTO FILES() and Broker Load. This feature is supported from v3.3.0 onwards.
+
+:::tip
+- An excessive difference between the Max and Min values of the PushChunkNum metric of OlapTableSink indicates data skew in the upstream operators, which may lead to a bottleneck in loading performance.
+- RpcClientSideTime equals RpcServerSideTime plus network transmission time plus RPC framework processing time. If there is a significant difference between RpcClientSideTime and RpcServerSideTime, consider enabling compression to reduce transmission time.
+:::
+
+##### IndexNum
+
+Description: Number of the synchronous materialized views created for the destination table.
+
+##### ReplicatedStorage
+
+Description: Whether Single Leader Replication is enabled.
+
+##### TxnID
+
+Description: ID of the loading transaction.
+
+##### RowsRead
+
+Description: Number of rows read from upstream operators.
+
+##### RowsFiltered
+
+Description: Number of rows filtered out due to inadequate data quality.
+
+##### RowsReturned
+
+Description: Number of rows written to the destination table.
+
+##### RpcClientSideTime
+
+Description: Total RPC time consumption for loading recorded by the client side.
+
+##### RpcServerSideTime
+
+Description: Total RPC time consumption for loading recorded by the server side.
+
+##### PrepareDataTime
+
+Description: Total time consumption for the data preparation phase, including data format conversion and data quality check.
+
+##### SendDataTime
+
+Description: Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue.

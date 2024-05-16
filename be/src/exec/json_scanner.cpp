@@ -306,7 +306,8 @@ Status JsonScanner::_open_next_reader() {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
         return st;
     }
-    _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors);
+    _cur_file_reader =
+            std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors, range_desc);
     RETURN_IF_ERROR(_cur_file_reader->open());
     _next_range++;
     return Status::OK();
@@ -332,14 +333,16 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
 }
 
 JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter* counter, JsonScanner* scanner,
-                       std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs)
+                       std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs,
+                       const TBrokerRangeDesc& range_desc)
         : _state(state),
           _counter(counter),
           _scanner(scanner),
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
-          _op_col_index(-1) {
+          _op_col_index(-1),
+          _range_desc(range_desc) {
     int index = 0;
     for (const auto& desc : _slot_descs) {
         if (desc == nullptr) {
@@ -680,9 +683,15 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
 
 Status JsonReader::_read_file_stream() {
     // TODO: Remove the down_cast, should not rely on the specific implementation.
-    auto* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    auto pipe = make_shared<StreamLoadPipeReader>(down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe());
+    if (_range_desc.compression_type != TCompressionType::NO_COMPRESSION &&
+        _range_desc.compression_type != TCompressionType::UNKNOWN_COMPRESSION) {
+        pipe = std::make_shared<CompressedStreamLoadPipeReader>(
+                down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe(), _range_desc.compression_type);
+    }
+    ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
-    ASSIGN_OR_RETURN(_file_stream_buffer, stream_file->pipe()->read());
+    ASSIGN_OR_RETURN(_file_stream_buffer, pipe->read());
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
@@ -703,6 +712,7 @@ Status JsonReader::_read_file_stream() {
 
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_file_broker() {
+    ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
     // TODO: Remove the down_cast, should not rely on the specific implementation.

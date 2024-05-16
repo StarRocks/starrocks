@@ -156,19 +156,20 @@ enable_load_volume_from_conf = false
 
 <SharedDataUseIntro />
 
-The following example creates a storage volume `def_volume` for a GCS bucket `defaultbucket` with an HMAC Access Key and Secret Key, enables the storage volume, and sets it as the default storage volume:
+The following example creates a storage volume `def_volume` for a GCS bucket `defaultbucket` with an HMAC Access Key and Secret Key, enables the [Partitioned Prefix](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md#partitioned-prefix) feature, and sets it as the default storage volume:
 
 ```SQL
 CREATE STORAGE VOLUME def_volume
 TYPE = S3
-LOCATIONS = ("s3://defaultbucket/test/")
+LOCATIONS = ("s3://defaultbucket")
 PROPERTIES
 (
     "enabled" = "true",
     "aws.s3.region" = "us-east1",
     "aws.s3.endpoint" = "https://storage.googleapis.com",
     "aws.s3.access_key" = "<HMAC access key>",
-    "aws.s3.secret_key" = "<HMAC secret key>"
+    "aws.s3.secret_key" = "<HMAC secret key>",
+    "aws.s3.enable_partitioned_prefix" = "true"
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;

@@ -74,7 +74,7 @@ If any of the above ports are occupied, you must find alternatives and specify t
 
 ## Hostnames
 
-If you want to [enable FQDN access](../administration/enable_fqdn.md) for your StarRocks cluster, you must assign a hostname to each instance.
+If you want to [enable FQDN access](../administration/management/enable_fqdn.md) for your StarRocks cluster, you must assign a hostname to each instance.
 
 In the file **/etc/hosts** on each instance, you must specify the IP addresses and corresponding hostnames of all the other instances in the cluster.
 
@@ -380,7 +380,7 @@ You must configure time synchronization between nodes within your StarRocks clus
 4. Check the connectivity and monitoring status of the NTP service.
 
    ```Bash
-   netstat -tlunp | grep ntp
+   netstat -tunlp | grep ntp
    ```
 
 5. Check if your application is synchronized with the NTP server.

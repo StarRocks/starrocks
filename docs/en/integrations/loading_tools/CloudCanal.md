@@ -23,7 +23,7 @@ CloudCanal help users build a modern data stack in a simple way.
 - In the current community edition with a maximum memory configuration of 2GB, if DataJobs encounter OOM exceptions or significant GC pauses, it is recommended to reduce the batch size to minimize memory usage.
   - For Full DataTask, you can adjust the `fullBatchSize` and `fullRingBufferSize` parameters.
   - For Incremental DataTask, the `increBatchSize` and `increRingBufferSize` parameters can be adjusted accordingly.
-- Supported Source endpoints and features：
+- Supported Source endpoints and features:
 
   | Source Endpoints \ Feature | Schema Migration | Full Data | Incremental | Verification |
     | --- | --- | --- | --- | --- |
@@ -74,7 +74,7 @@ Once the DataSource has been added successfully, you can follow these steps to c
 
 ![image.png](../../assets/3.11-4.png)
 
-- Select the source tables you want to subscribe to. Please note that the target StarRocks tables automatically after Schema Migration are primary key tables, so source tables without a primary key are not currently supported**
+- Select the source tables you want to subscribe to. Please note that the target StarRocks tables automatically after Schema Migration are Primary Key tables, so source tables without a primary key are not currently supported**
 
 - Click Next Step
 

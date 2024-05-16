@@ -18,6 +18,7 @@
 
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
+#include "udf/java/java_udf.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
@@ -49,6 +50,7 @@ static const std::map<std::string, std::string> get_cloud_properties(const FSOpt
 
 static Status create_hdfs_fs_handle(const std::string& namenode, const std::shared_ptr<HdfsFsClient>& hdfs_client,
                                     const FSOptions& options) {
+    RETURN_IF_ERROR(detect_java_runtime());
     auto hdfs_builder = hdfsNewBuilder();
     hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
     const THdfsProperties* properties = options.hdfs_properties();

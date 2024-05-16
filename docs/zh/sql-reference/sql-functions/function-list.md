@@ -4,12 +4,12 @@ displayed_sidebar: "Chinese"
 
 # 函数列表
 
-StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时使用。除了常见的函数分类，StarRocks 也支持 ARRAY、JSON、MAP、STRUCT 等半结构化函数，支持 [Lambda 高阶函数](Lambda_expression.md)。如果以上函数都不符合您的需求，您还可以自行编写 [Java UDF](JAVA_UDF.md) 来满足业务需求。
+StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时使用。除了常见的函数分类，StarRocks 也支持 ARRAY、JSON、MAP、STRUCT 等半结构化函数，支持 [Lambda 高阶函数](Lambda_expression.md)。如果以上函数都不符合您的需求，您还可以自行编写 [Java UDF](JAVA_UDF.md) 来满足业务需求。StarRocks 还提供 [Hive Bitmap UDF](../../integrations/hive_bitmap_udf.md) 功能，您可以在 Hive 里计算生成 Bitmap 后，再导入 StarRocks；将 StarRocks 里生成的 Bitmap，导出到 Hive，方便其它系统使用。
 
 您可以按照以下分类来查找目标函数。
 
 - [函数列表](#函数列表)
-  - [日期函数](#日期函数)
+  - [时间日期函数](#时间日期函数)
   - [字符串函数](#字符串函数)
   - [聚合函数](#聚合函数)
   - [数学函数](#数学函数)
@@ -29,23 +29,24 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
   - [工具函数](#工具函数)
   - [地理位置函数](#地理位置函数)
   - [Hash 函数](#hash-函数)
+  - [字典函数](#字典函数)
 
-## 日期函数
+## 时间日期函数
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 | [add_months](./date-time-functions/add_months.md)  |   在给定的日期（DATE、DATETIME）上增加一个整数月。     |
-| [adddate，days_add](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
+| [adddate](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
 | [convert_tz](./date-time-functions/convert_tz.md)          |   将给定的时间转化为另一个时区的时间。  |
 | [current_date，curdate](./date-time-functions/curdate.md)          |   获取当前的日期，以 DATE 类型返回。  |
 | [current_time，curtime](./date-time-functions/curtime.md)      |  获取当前的时间，以 TIME 类型返回。  |
 | [current_timestamp](./date-time-functions/current_timestamp.md)      |  获取当前时间，以 DATETIME 类型返回。   |
 | [date](./date-time-functions/date.md)      |  从日期或时间日期表达式中截取日期部分。  |
-| [date_add](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
-|[date_diff](./date-time-functions/date_diff.md)| 根据指定的时间单位返回两个日期的差值。 |
+| [date_add，adddate](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
+| [date_diff](./date-time-functions/date_diff.md)| 根据指定的时间单位返回两个日期的差值。 |
 | [date_format](./date-time-functions/date_format.md)      |  按照 format 指定的格式来显示日期/时间数据。   |
 | [date_slice](./date-time-functions/date_slice.md)      |  根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。  |
-| [date_sub, subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
+| [date_sub，subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
 | [date_trunc](./date-time-functions/date_trunc.md)     |    根据指定的精度级别，将一个日期时间截断。  |
 | [datediff](./date-time-functions/datediff.md)   |  计算两个日期的差值，结果精确到天。        |
 | [day](./date-time-functions/day.md) | 返回指定日期中的天信息。|
@@ -54,7 +55,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [dayofweek](./date-time-functions/dayofweek.md)| 返回指定日期的工作日索引值。  |
 | [dayofweek_iso](./date-time-functions/day_of_week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一周内的星期几。  |
 | [dayofyear](./date-time-functions/dayofyear.md)|  计算指定日期为对应年中的哪一天。   |
-| [days_add](./date-time-functions/adddate.md)| 向日期添加指定的时间间隔。  |
+| [days_add](./date-time-functions/days_add.md)| 向日期添加指定的天数。  |
 | [days_diff](./date-time-functions/days_diff.md)|  计算开始时间和结束时间相差几天。 |
 | [days_sub](./date-time-functions/days_sub.md)| 从给定日期或者日期时间中减去指定的天数，获得新的 DATETIME 结果。  |
 | [from_days](./date-time-functions/from_days.md)|  通过计算当前时间距离 0000-01-01 的天数，计算出当前是时间哪一天。 |
@@ -68,6 +69,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [makedate](./date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
 | [microseconds_add](./date-time-functions/microseconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为微秒。  |
 | [microseconds_sub](./date-time-functions/microseconds_sub.md)| 从一个日期时间中减去指定的时间间隔，单位为微秒。  |
+| [milliseconds_diff](./date-time-functions/milliseconds_diff.md)| 计算开始时间和结束时间相差多少毫秒。  |
 | [minute](./date-time-functions/minute.md)| 获得日期中的分钟的信息，返回值范围为 0~59。  |
 | [minutes_add](./date-time-functions/minutes_add.md)| 给指定的日期时间或日期增加指定的分钟数。|
 | [minutes_diff](./date-time-functions/minutes_diff.md)| 计算开始时间和结束时间相差多少分钟。  |
@@ -101,13 +103,14 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [to_tera_timestamp](./date-time-functions/to_tera_timestamp.md)| 将某一个 VARCHAR 类型的值按指定的格式转换成 DATETIME 类型的值。  |
 | [unix_timestamp](./date-time-functions/unix_timestamp.md)| 将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。  |
 | [utc_timestamp](./date-time-functions/utc_timestamp.md)| 返回当前 UTC 日期时间。  |
-| [week_iso](./date-time-functions/week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一年内的第几个周。  |
 | [week](./date-time-functions/week.md)| 根据指定的周数计算逻辑，计算指定的日期时间属于一年中的第几周。  |
-| [weekofyear](./date-time-functions/weekofyear.md)|  计算指定的日期时间属于一年中的第几周。 |
+| [week_iso](./date-time-functions/week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一年内的第几个周。  |
+| [weekofyear](./date-time-functions/weekofyear.md)| 计算指定的日期时间属于一年中的第几周。 |
 | [weeks_add](./date-time-functions/weeks_add.md)|  向原始的日期时间加上指定周数。 |
 | [weeks_diff](./date-time-functions/weeks_diff.md)|  计算开始时间和结束时间相差几周。 |
 | [weeks_sub](./date-time-functions/weeks_sub.md)| 从原始的日期中减去若干周数。  |
 | [year](./date-time-functions/year.md)|  返回指定日期时间中的年份。 |
+| [yearweek](./date-time-functions/yearweek.md)| 返回给定日期对应的年份和周数。 |
 | [years_add](./date-time-functions/years_add.md)| 向原始的日期时间添加指定的年数。  |
 | [years_diff](./date-time-functions/years_diff.md)|  计算开始时间和结束时间相差几年。 |
 | [years_sub](./date-time-functions/years_sub.md)  |  从指定的日期时间中减去指定年数。     |
@@ -137,6 +140,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [lpad](./string-functions/lpad.md) |根据指定的长度在字符串前面（左侧）追加字符。  |
 | [ltrim](./string-functions/ltrim.md) |  从字符串的左侧（开始部分）移除连续出现的空格或指定字符。 |
 | [money_format](./string-functions/money_format.md) |  将数字按照货币格式输出，整数部分每隔 3 位用逗号分隔，小数部分保留 2 位。  |
+| [ngram_search](./string-functions/ngram_search.md) |  计算两个字符串的 ngram 相似度。|
 | [null_or_empty](./string-functions/null_or_empty.md) | 如果字符串为空字符串或者 NULL 则返回 true，否则返回 false。 |
 | [parse_url](./string-functions/parse_url.md) |  从目标 URL 中提取一部分信息。 |
 | [repeat](./string-functions/repeat.md) | 将字符串重复 count 次输出，count 小于 1 时返回空字符串。  |
@@ -161,6 +165,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [upper](./string-functions/upper.md) | 将字符串转换为大写形式。  |
 | [url_decode](./string-functions/url_decode.md) | 将字符串从 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式转换回来。 |
 | [url_encode](./string-functions/url_encode.md)  | 将字符串根据 [application/x-www-form-urlencoded](https://www.w3.org/TR/html4/interact/forms.html#h-17.13.4.1) 格式进行编码。  |
+| [url_extract_host](./string-functions/url_extract_host.md)| 从一个 URL 中截取 host 部分。|
 | [url_extract_parameter](./string-functions/url_extract_parameter.md)   | 从一个 URL 的 query 部分，获取指定参数（`name`）的取值。  |
 
 ## 聚合函数
@@ -169,19 +174,19 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 |  [any_value](./aggregate-functions/any_value.md)| 在包含 GROUP BY 的聚合查询中，该函数用于从每个聚合分组中**随机**选择一行返回。 |
 |  [approx_count_distinct](./aggregate-functions/approx_count_distinct.md)| 返回类似于 COUNT(DISTINCT col) 结果的近似值。 |
-|  [array_agg](./array-functions/array_agg.md) | 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。  |
+|  [approx_top_k](./aggregate-functions/approx_top_k.md)| 返回表达式 `expr` 中最常出现的 `k` 个项目以及每个项目出现的近似次数。 |
+|  [array_agg](./array-functions/array_agg.md) | 将一列中的值（包括空值 null）串联成一个数组（多行转一行）。  |
 |  [avg](./aggregate-functions/avg.md)| 用于返回选中字段的平均值。 |
 |  [bitmap](./aggregate-functions/bitmap.md)| 通过 bitmap 函数实现聚合。 |
 |  [bitmap_agg](./bitmap-functions/bitmap_agg.md)| 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。 |
 |  [corr](./aggregate-functions/corr.md) | 返回两个随机变量的皮尔逊相关系数. |
 |  [covar_pop](./aggregate-functions/covar_pop.md)| 返回两个随机变量的总体协方差。 |
 |  [covar_samp](./aggregate-functions/covar_samp.md)| 返回两个随机变量的样本协方差。 |
-|  [count](./aggregate-functions/count.md)| 返回满足条件的行数。 |
+|  [count](./aggregate-functions/count.md)| 计算总行数。 |
+|  [count_if](./aggregate-functions/count_if.md)| 计算满足指定条件的记录数。 |
 |  [group_concat](./string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](./aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
 |  [grouping_id](./aggregate-functions/grouping_id.md)| 用于区分相同分组标准的分组统计结果。 |
-|  [hll_empty](./aggregate-functions/hll_empty.md)| 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。 |
-|  [hll_hash](./aggregate-functions/hll_hash.md)| 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。 |
 |  [hll_raw_agg](./aggregate-functions/hll_raw_agg.md)| 用于聚合 HLL 类型的字段，返回 HLL 类型。 |
 |  [hll_union](./aggregate-functions/hll_union.md)| 返回一组 HLL 值的并集。 |
 |  [hll_union_agg](./aggregate-functions/hll_union_agg.md)| 将多个 HLL 类型数据合并成一个 HLL。 |
@@ -213,6 +218,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [atan](./math-functions/atan.md)| 计算反正切值（单位为弧度）。 |
 |  [atan2](./math-functions/atan2.md)| 通过使用两个参数的符号确定象限，计算 x/y 的反正切的主值，返回值在 [-π, π] 范围内。 |
 |  [bin](./math-functions/bin.md)| 将输入的参数转成二进制。 |
+|  [cbrt](./math-functions/cbrt.md)  | 计算参数的立方根。|
 |  [ceil, dceil](./math-functions/ceil.md)| 返回大于或等于 x 的最小整数。 |
 |  [ceiling](./math-functions/ceiling.md)| 返回大于或等于 x 的最小整数。 |
 |  [conv](./math-functions/conv.md)| 对输入的参数进行进制转换。 |
@@ -221,6 +227,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [cosine_similarity](./math-functions/cos_similarity.md)| 计算两个向量的余弦夹角来评估向量之间的相似度。 |
 |  [cosine_similarity_norm](./math-functions/cos_similarity_norm.md)| 计算两个归一化向量的余弦夹角来评估向量之间的相似度。|
 |  [cot](./math-functions/cot.md)| 计算余切值（单位为弧度）。 |
+| [cbrt](./math-functions/cbrt.md)||
 |  [degrees](./math-functions/degrees.md)| 将参数 x 转成角度，x 是弧度。 |
 |  [divide](./math-functions/divide.md)| 除法函数，返回 x 除以 y 的结果， |
 |  [e](./math-functions/e.md)| 返回自然对数函数的底数。 |
@@ -258,12 +265,13 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 |  [all_match](./array-functions/all_match.md)| 判断数组中的所有元素是否都匹配谓词中指定的条件。 |
 |  [any_match](./array-functions/any_match.md)| 判断数组中是否有元素匹配谓词中指定的条件。 |
-|  [array_agg](./array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。 |
+|  [array_agg](./array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组（多行转一行）。 |
 |  [array_append](./array-functions/array_append.md)| 在数组末尾添加一个新的元素。 |
-|  [array_avg](./array-functions/array_avg.md)| 求取一个ARRAY中的所有数据的平均数。 |
+|  [array_avg](./array-functions/array_avg.md)| 求取一个 ARRAY 中的所有数据的平均数。 |
 |  [array_concat](./array-functions/array_concat.md)| 将多个数组拼接成一个数组。 |
 |  [array_contains](./array-functions/array_contains.md)| 检查数组中是否包含某个元素，是的话返回 1，否则返回 0。 |
-|  [array_contains_all](./array-functions/array_contains_all.md)| 检查数组 arr1 是否包含数组 arr2 中的所有元素。 |
+|  [array_contains_all](./array-functions/array_contains_all.md)| 检查数组 `arr1` 是否包含数组 `arr2` 中的所有元素。 |
+|  [array_contains_seq](./array-functions/array_contains_seq.md) | 检查数组 `arr2` 的所有元素是否以完全相同的顺序出现在数组 `arr1` 中 |
 |  [array_cum_sum](./array-functions/array_cum_sum.md)| 对数组中的元素进行向前累加。 |
 |  [array_difference](./array-functions/array_difference.md)| 对于数值型数组，返回相邻两个元素的差(从后者中减去前者)构成的数组。 |
 |  [array_distinct](./array-functions/array_distinct.md)| 数组元素去重。 |
@@ -334,6 +342,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [parse_json](./json-functions/json-constructor-functions/parse_json.md)|将字符串类型的数据构造为 JSON 类型的数据。|
 |  [箭头函数](./json-functions/json-query-and-processing-functions/arrow-function.md)| 箭头函数可以查询 JSON 对象中指定路径的值。|
 |  [cast](./json-functions/json-query-and-processing-functions/cast.md)| 实现 JSON 类型数据与 SQL 类型间的相互转换。|
+|  [get_json_bool](./json-functions/json-query-and-processing-functions/get_json_bool.md)| 解析并获取 `json_str` 内指定 `json_path` 下的布尔内容。|
 |  [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)| 解析并获取 JSON 字符串内指定路径中的浮点型内容。|
 |  [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)| 解析并获取 JSON 字符串内指定路径中的整型内容。|
 |  [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|
@@ -421,7 +430,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [like](./like-predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
 |  [regexp](./like-predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
 |  [regexp_extract](./like-predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
-|  [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md) |  |
+|  [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md) | 从 `str` 中提取与正则表达式 `pattern` 相匹配的子字符串并返回一个字符串数组。字符串必须匹配 `pos` 指定的正则分组。 |
 |  [regexp_replace](./like-predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
 
 ## 条件函数
@@ -438,7 +447,10 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
+|  [percentile_approx](./aggregate-functions/percentile_approx.md)| 返回第 p 个百分位点的近似值。 |
 |  [percentile_approx_raw](./percentile-functions/percentile_approx_raw.md)| 计算给定参数 x 的百分位数。 |
+|  [percentile_cont](./aggregate-functions/percentile_cont.md)| 计算精确百分位数。 |
+|  [percentile_disc](./aggregate-functions/percentile_disc.md)| 计算百分位数。 |
 |  [percentile_empty](./percentile-functions/percentile_empty.md)| 构造一个 percentile 类型的数值，主要用于 INSERT 或 Stream Load 导入时填充默认值。 |
 |  [percentile_hash](./percentile-functions/percentile_hash.md)| 将 double 类型数值构造成 percentile 类型数值。 |
 |  [percentile_union](./percentile-functions/percentile_union.md)| 用于对分组结果进行聚合。 |
@@ -448,6 +460,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 | [hll_cardinality](./scalar-functions/hll_cardinality.md) |  用于计算 HLL 类型值的基数。  |
+| [hll_empty](./scalar-functions/hll_empty.md)| 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。 |
+| [hll_hash](./scalar-functions/hll_hash.md)| 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。 |
 
 ## 工具函数
 
@@ -488,3 +502,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 | [murmur_hash3_32](./hash-functions/murmur_hash3_32.md) | 返回输入字符串的 32 位 murmur3 hash 值。 |
 | [xx_hash3_64](./hash-functions/xx_hash3_64.md) | 返回输入字符串的 64 位 xxhash3 值。 |
+
+## 字典函数
+
+| 函数                |                 功能      |
+|  :-:                |                :-:       |
+|  [dict_mapping](./dict-functions/dict_mapping.md)| 通过指定字典表和 key，返回该 key 所映射的 value。 |

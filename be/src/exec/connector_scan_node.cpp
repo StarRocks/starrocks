@@ -109,6 +109,9 @@ int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
 }
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
+
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
     bool stream_data_source = _data_source_provider->stream_data_source();
@@ -179,9 +182,13 @@ public:
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
+        connector_scan_node_open_limit.fetch_add(1, std::memory_order_relaxed);
         return Status::OK();
     }
-    void close(RuntimeState* state) { _data_source->close(state); }
+    void close(RuntimeState* state) {
+        _data_source->close(state);
+        connector_scan_node_open_limit.fetch_sub(1, std::memory_order_relaxed);
+    }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
@@ -684,9 +691,9 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
     _data_source_provider->peek_scan_ranges(scan_ranges);
-    return ScanNode::convert_scan_range_to_morsel_queue(scan_ranges, node_id, pipeline_dop,
-                                                        enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-                                                        num_total_scan_ranges);
+    return _data_source_provider->convert_scan_range_to_morsel_queue(
+            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+            num_total_scan_ranges);
 }
 
 } // namespace starrocks

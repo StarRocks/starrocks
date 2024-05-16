@@ -12,8 +12,7 @@ Compared to other data export methods supported by StarRocks, unloading data wit
 
 > **NOTE**
 >
-> - Please note that unloading data with INSERT INTO FILES does not support exporting data into local file systems.
-> - Currently,  INSERT INTO FILES only supports unloading data in the Parquet file format.
+> Please note that unloading data with INSERT INTO FILES does not support exporting data into local file systems.
 
 ## Preparation
 
@@ -109,6 +108,28 @@ FILES(
     "password" = "xxxxx",
     "compression" = "lz4",
     "single" = "true"
+)
+SELECT * FROM sales_records;
+```
+
+### Unload data into a single file and in S3 (MinIO)
+
+The following example unloads all data rows from `sales_records` into MinIO.
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "s3://huditest/unload/data3",
+    "format" = "parquet",
+    "aws.s3.access_key" = "admin",
+    "aws.s3.secret_key" = "password",
+    "aws.s3.region" = "us-west-2",
+    "aws.s3.use_instance_profile" = "false",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
+    "compression" = "zstd",
+    "single" = "true",
+    "aws.s3.endpoint" = "http://minio:9000"
 )
 SELECT * FROM sales_records;
 ```

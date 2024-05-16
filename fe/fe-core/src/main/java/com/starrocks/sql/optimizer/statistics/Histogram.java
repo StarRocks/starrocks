@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -35,7 +36,7 @@ public class Histogram {
         if (mcv != null) {
             totalRows += mcv.values().stream().reduce(Long::sum).orElse(0L);
         }
-        return totalRows;
+        return Math.max(1, totalRows);
     }
 
     public List<Bucket> getBuckets() {
@@ -44,5 +45,16 @@ public class Histogram {
 
     public Map<String, Long> getMCV() {
         return mcv;
+    }
+
+    public String getMcvString() {
+        int printMcvSize = 5;
+        StringBuilder sb = new StringBuilder();
+        sb.append("MCV: [");
+        mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .limit(printMcvSize)
+                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]"));
+        sb.append("]");
+        return sb.toString();
     }
 }

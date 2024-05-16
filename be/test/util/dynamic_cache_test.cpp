@@ -67,6 +67,7 @@ TEST(DynamicCacheTest, cache) {
     cache.clear_expired();
     ASSERT_EQ(4, cache.size());
     ASSERT_TRUE(cache.get(19) == nullptr);
+    ASSERT_EQ(4, cache.get_entry_sizes().size());
 }
 
 TEST(DynamicCacheTest, cache2) {

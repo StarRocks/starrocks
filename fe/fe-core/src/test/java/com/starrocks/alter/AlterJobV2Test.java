@@ -116,8 +116,7 @@ public class AlterJobV2Test {
         String showAlterStmtStr = "show alter table column from test;";
         ShowAlterStmt showAlterStmt =
                 (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showAlterStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
@@ -143,8 +142,7 @@ public class AlterJobV2Test {
         String showAlterStmtStr = "show alter table rollup from test;";
         ShowAlterStmt showAlterStmt =
                 (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showAlterStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
@@ -162,8 +160,7 @@ public class AlterJobV2Test {
         String showCreateTableStr = "show create table test.properties_change_test;";
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
 
@@ -178,7 +175,7 @@ public class AlterJobV2Test {
         // 5. check enable persistent index
         showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
-        showResultSet = showExecutor.execute();
+        showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
@@ -189,7 +186,8 @@ public class AlterJobV2Test {
             String sql = "CREATE MATERIALIZED VIEW test.mv2 DISTRIBUTED BY HASH(k1) " +
                     " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 FROM modify_column_test";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             // modify column which define in mv
             String alterStmtStr = "alter table test.modify_column_test modify column k2 varchar(10)";
@@ -200,6 +198,7 @@ public class AlterJobV2Test {
             MaterializedView mv2 = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv2");
             Assert.assertFalse(mv2.isActive());
         } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         }
     }
@@ -214,7 +213,8 @@ public class AlterJobV2Test {
                     " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
                     "AS SELECT * FROM modify_column_test3";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             String alterStmtStr = "alter table test.modify_column_test3 modify column k2 varchar(20)";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
@@ -239,7 +239,8 @@ public class AlterJobV2Test {
                     " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
                     "AS SELECT * FROM testModifyWithSelectStarMV2";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             String alterStmtStr = "alter table test.testModifyWithSelectStarMV2 add column k4 bigint";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
@@ -267,7 +268,8 @@ public class AlterJobV2Test {
                     " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
                     "AS SELECT * FROM modify_column_test5";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             String alterStmtStr = "alter table test.modify_column_test5 drop column k2";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
@@ -292,7 +294,8 @@ public class AlterJobV2Test {
             String sql = "CREATE MATERIALIZED VIEW test.mv4 DISTRIBUTED BY HASH(k1) " +
                     " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 + 1 FROM modify_column_test4";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             {
                 // modify column which not define in mv
@@ -322,6 +325,7 @@ public class AlterJobV2Test {
                 Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
             }
         } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         } finally {
             starRocksAssert.dropTable("modify_column_test4");
@@ -334,7 +338,8 @@ public class AlterJobV2Test {
             String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +
                     " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 FROM modify_column_test";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .createMaterializedView((CreateMaterializedViewStatement) statementBase);
 
             // modify column which not define in mv
             String alterStmtStr = "alter table test.modify_column_test modify column k3 varchar(10)";
@@ -353,7 +358,7 @@ public class AlterJobV2Test {
     @Test
     public void test() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.schema_change_test_load(k1 int, k2 int, k3 int) " +
-                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         String alterStmtStr = "alter table test.schema_change_test_load add column k4 int default '1'";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);

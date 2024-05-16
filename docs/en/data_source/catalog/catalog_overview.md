@@ -27,12 +27,15 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
   - [Hudi catalog](../catalog/hudi_catalog.md): used to query data from Hudi.
   - [Delta Lake catalog](../catalog/deltalake_catalog.md): used to query data from Delta Lake.
   - [JDBC catalog](../catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
+  - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
+  - [Paimon catalog](../catalog/paimon_catalog.md): used to query data from Paimon. Paimon catalogs are supported from v3.1 onwards.
+  - [Unified catalog](../catalog/unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
 
   StarRocks interacts with the following two components of external data sources when you query external data:
 
   - **Metastore service**: used by the FEs to access the metadata of external data sources. The FEs generate a query execution plan based on the metadata.
   - **Data storage system**: used to store external data. Both distributed file systems and object
-  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations, and then return the query result.
+  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs or CNs, all BEs or CNs scan the target external data in parallel, perform calculations, and then return the query result.
 
 ## Access catalog
 

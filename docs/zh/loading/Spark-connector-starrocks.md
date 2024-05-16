@@ -16,8 +16,9 @@ StarRocks 提供 Apache Spark™ 连接器 (StarRocks Connector for Apache Spark
 
 | Connector | Spark           | StarRocks | Java  | Scala |
 |----------|-----------------|-----------|-------| ---- |
-| 1.1.1 | 3.2, 3.3, 3.4 | 2.5 及以上 | 8 | 2.12 |
-| 1.1.0    | 3.2, 3.3, 3.4   | 2.5 及以上   | 8     | 2.12 |
+| 1.1.2    | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上   | 8    | 2.12  |
+| 1.1.1    | 3.2, 3.3, 3.4   | 2.5 及以上 | 8     | 2.12 |
+| 1.1.0    | 3.2, 3.3, 3.4   | 2.5 及以上 | 8     | 2.12 |
 
 > **注意**
 >
@@ -133,6 +134,7 @@ connector jar包的命名格式如下
   | StringType      | CHAR                                                         |
   | StringType      | VARCHAR                                                      |
   | StringType      | STRING                                                       |
+  | StringType      | JSON                                                       |
   | DateType        | DATE                                                         |
   | TimestampType   | DATETIME                                                     |
   | ArrayType       | ARRAY <br /> **说明:** <br /> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#导入至-array-列). |
@@ -179,6 +181,10 @@ DISTRIBUTED BY HASH(`id`)
 #### Spark 环境
 
 示例基于 Spark 3.2.4，使用 `spark-shell`，`pyspark` 和 `spark-sql` 进行演示，运行前请将 connector jar放置在 `$SPARK_HOME/jars` 目录下。
+
+#### 网络配置
+
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
 
 ### 使用 Spark DataFrame 写入数据
 
@@ -385,15 +391,15 @@ MySQL [test]> select * from score_board;
 
 ## 最佳实践
 
-### 导入至主键模型表
+### 导入至主键表
 
-本节将展示如何将数据导入到 StarRocks 主键模型表中，以实现部分更新和条件更新。部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
+本节将展示如何将数据导入到 StarRocks 主键表中，以实现部分更新和条件更新。部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
 
 以下示例使用 Spark SQL。
 
 #### 准备工作
 
-在 StarRocks 中创建一个名为 `test` 的数据库，并在其中创建一个名为 `score_board` 的主键模型表。
+在 StarRocks 中创建一个名为 `test` 的数据库，并在其中创建一个名为 `score_board` 的主键表。
 
 ```SQL
 CREATE DATABASE `test`;
@@ -617,7 +623,7 @@ DISTRIBUTED BY HASH(`id`);
 
 2. 在 Spark SQL 客户端中创建一个表。
 
-   Spark 表 schema 是从 StarRocks 表中推断出来的，而 Spark 不支持 HLL 类型。因此，您需要在 Spark 中自定义相应列的数据类型，例如配置选项 `"starrocks.column.types"="visit_users BIGINT"`，将其配置为 BIGINT 类型。在使用 Stream Load 来导入数据时，Spark connector 使用 [hll_hash](../sql-reference/sql-functions/aggregate-functions/hll_hash.md) 函数将 BIGINT 类型的数据转换为 HLL 类型。
+   Spark 表 schema 是从 StarRocks 表中推断出来的，而 Spark 不支持 HLL 类型。因此，您需要在 Spark 中自定义相应列的数据类型，例如配置选项 `"starrocks.column.types"="visit_users BIGINT"`，将其配置为 BIGINT 类型。在使用 Stream Load 来导入数据时，Spark connector 使用 [hll_hash](../sql-reference/sql-functions/scalar-functions/hll_hash.md) 函数将 BIGINT 类型的数据转换为 HLL 类型。
 
    在 `spark-sql` 中运行如下 DDL 语句：
 

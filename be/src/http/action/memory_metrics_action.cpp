@@ -51,6 +51,7 @@ void MemoryMetricsAction::handle(HttpRequest* req) {
                                                        "schema_change",
                                                        "column_pool",
                                                        "page_cache",
+                                                       "datacache",
                                                        "update",
                                                        "chunk_allocator",
                                                        "clone",

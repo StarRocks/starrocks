@@ -30,6 +30,7 @@ struct TabletBasicInfo {
     int64_t max_version{0};
     int64_t min_version{0};
     int64_t num_rowset{0};
+    int64_t num_segment{0};
     int64_t num_row{0};
     int64_t data_size{0};
     int64_t index_mem{0};
@@ -58,6 +59,8 @@ private:
     std::vector<TabletBasicInfo> _infos;
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
+
+    TGetTablesConfigResponse _tables_config_response;
 };
 
 } // namespace starrocks

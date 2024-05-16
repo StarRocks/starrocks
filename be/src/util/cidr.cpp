@@ -35,6 +35,13 @@
 #include "util/cidr.h"
 
 #include <arpa/inet.h>
+#include <sys/socket.h>
+
+#include <algorithm>
+#include <cstddef>
+#include <exception>
+#include <iterator>
+#include <ostream>
 
 #include "common/logging.h"
 #include "gutil/strings/numbers.h"
@@ -44,79 +51,86 @@ namespace starrocks {
 
 CIDR::CIDR() = default;
 
-void CIDR::reset() {
-    _address = 0;
-    _netmask = 0xffffffff;
-}
+constexpr std::uint8_t kIPv4Bits = 32;
+constexpr std::uint8_t kIPv6Bits = 128;
 
 bool CIDR::reset(const std::string& cidr_str) {
-    reset();
+    auto slash = std::find(std::begin(cidr_str), std::end(cidr_str), '/');
+    auto ip = (slash == std::end(cidr_str)) ? cidr_str : cidr_str.substr(0, slash - std::begin(cidr_str));
 
-    // check if have mask
-    std::string cidr_format_str = cidr_str;
-    size_t have_mask = cidr_str.find('/');
-    if (have_mask == string::npos) {
-        cidr_format_str.assign(cidr_str + "/32");
-    }
-    VLOG(2) << "cidr format str: " << cidr_format_str;
-
-    std::vector<std::string> cidr_items = strings::Split(cidr_format_str, "/");
-    if (cidr_items.size() != 2) {
-        LOG(WARNING) << "wrong CIDR format. network=" << cidr_str;
+    if (inet_pton(AF_INET, ip.c_str(), _address.data())) {
+        _family = AF_INET;
+        _netmask_len = kIPv4Bits;
+    } else if (inet_pton(AF_INET6, ip.c_str(), _address.data())) {
+        _family = AF_INET6;
+        _netmask_len = kIPv6Bits;
+    } else {
+        LOG(WARNING) << "Wrong CIDRIP format. network = " << cidr_str;
         return false;
     }
 
-    if (cidr_items[1].empty()) {
-        LOG(WARNING) << "wrong CIDR mask format. network=" << cidr_str;
+    if (slash == std::end(cidr_str)) {
+        return true;
+    }
+
+    std::size_t pos;
+    std::string suffix = std::string(slash + 1, std::end(cidr_str));
+    int len;
+    try {
+        len = std::stoi(suffix, &pos);
+    } catch (const std::exception& e) {
+        LOG(WARNING) << "Wrong CIDR format. network = " << cidr_str << ", reason = " << e.what();
         return false;
     }
 
-    uint32_t mask_length = 0;
-    if (!safe_strtou32(cidr_items[1].c_str(), &mask_length)) {
-        LOG(WARNING) << "wrong CIDR mask format. network=" << cidr_str;
-        return false;
-    }
-    if (mask_length > 32) {
-        LOG(WARNING) << "wrong CIDR mask format. network=" << cidr_str << ", mask_length=" << mask_length;
+    if (pos != suffix.size()) {
+        LOG(WARNING) << "Wrong CIDR format. network = " << cidr_str;
         return false;
     }
 
-    uint32_t address = 0;
-    if (!ip_to_int(cidr_items[0], &address)) {
-        LOG(WARNING) << "wrong CIDR IP value. network=" << cidr_str;
+    if (len < 0 || len > _netmask_len) {
+        LOG(WARNING) << "Wrong CIDR format. network = " << cidr_str;
         return false;
     }
-    _address = address;
-
-    _netmask = 0xffffffff;
-    _netmask = _netmask << (32 - mask_length);
+    _netmask_len = len;
     return true;
 }
 
 bool CIDR::ip_to_int(const std::string& ip_str, uint32_t* value) {
-    struct in_addr addr;
-    int flag = inet_aton(ip_str.c_str(), &addr);
-    if (flag == 0) {
-        return false;
+    struct in_addr addr_v4;
+    int flag = inet_aton(ip_str.c_str(), &addr_v4);
+    if (flag == 1) {
+        *value = ntohl(addr_v4.s_addr);
+        return true;
     }
-    *value = ntohl(addr.s_addr);
-    return true;
-}
-
-bool CIDR::contains(uint32_t ip_int) {
-    if ((_address & _netmask) == (ip_int & _netmask)) {
+    struct in6_addr addr_v6;
+    flag = inet_pton(AF_INET6, ip_str.c_str(), &addr_v6);
+    if (flag == 1) {
+        if (IN6_IS_ADDR_V4MAPPED(&addr_v6)) {
+            *value = ntohl(*(reinterpret_cast<uint32_t*>(&addr_v6.s6_addr[12])));
+            return true;
+        }
+        *value = static_cast<uint32_t>(addr_v6.s6_addr32[3]);
         return true;
     }
     return false;
 }
 
-bool CIDR::contains(const std::string& ip) {
-    uint32_t ip_int = 0;
-    if (!ip_to_int(ip, &ip_int)) {
+bool CIDR::contains(const CIDR& ip) const {
+    if ((_family != ip._family) || (_netmask_len > ip._netmask_len)) {
         return false;
     }
-
-    return contains(ip_int);
+    auto bytes = _netmask_len / 8;
+    auto cidr_begin = _address.cbegin();
+    auto ip_begin = ip._address.cbegin();
+    if (!std::equal(cidr_begin, cidr_begin + bytes, ip_begin, ip_begin + bytes)) {
+        return false;
+    }
+    if ((_netmask_len % 8) == 0) {
+        return true;
+    }
+    auto mask = (0xFF << (8 - (_netmask_len % 8))) & 0xFF;
+    return (_address[bytes] & mask) == (ip._address[bytes] & mask);
 }
 
 } // end namespace starrocks

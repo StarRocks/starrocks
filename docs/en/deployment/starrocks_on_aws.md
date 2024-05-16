@@ -45,7 +45,7 @@ All resources in a stack are defined by a template. Suppose you have created a t
 
       1. Configure the required parameters.
 
-         - When you choose to deploy StarRocks into a new VPC, pay attention to the following parameters：
+         - When you choose to deploy StarRocks into a new VPC, pay attention to the following parameters.
 
              | Type                            | Parameter                 | Required                                             | Description                                                  |
              | ------------------------------- | ------------------------- | ---------------------------------------------------- | ------------------------------------------------------------ |

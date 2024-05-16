@@ -28,8 +28,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -133,7 +133,6 @@ public class FrontendServiceImplTest {
                 throw new RuntimeException("test");
             }
         };
-
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
@@ -281,7 +280,9 @@ public class FrontendServiceImplTest {
                 .withView("create view v3 as select database()")
                 .withView("create view v4 as select user()")
                 .withView("create view v5 as select CONNECTION_ID()")
-                .withView("create view v6 as select CATALOG()");
+                .withView("create view v6 as select CATALOG()")
+
+                .withMaterializedView("create materialized view mv refresh async as select * from site_access_empty");
     }
 
     @AfterClass
@@ -291,9 +292,9 @@ public class FrontendServiceImplTest {
         String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
             DropTableStmt dropTableStmt2 = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL2, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt2);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt2);
         } catch (Exception ex) {
 
         }
@@ -397,6 +398,66 @@ public class FrontendServiceImplTest {
         partition = impl.createPartition(request);
         Assert.assertEquals(1, partition.partitions.size());
     }
+
+    @Test
+    public void testCreatePartitionWithSchemaChange() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        ((OlapTable) table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        ((OlapTable) table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    @Test
+    public void testCreatePartitionWithRollup() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        ((OlapTable) table).setState(OlapTable.OlapTableState.ROLLUP);
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        ((OlapTable) table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+
 
     @Test
     public void testCreatePartitionExceedLimit() throws TException {
@@ -640,7 +701,7 @@ public class FrontendServiceImplTest {
         params.setCurrent_user_ident(tUserIdentity);
 
         TGetTablesResult result = impl.getTableNames(params);
-        Assert.assertEquals(16, result.tables.size());
+        Assert.assertEquals(17, result.tables.size());
     }
 
     @Test
@@ -981,7 +1042,7 @@ public class FrontendServiceImplTest {
         Table table = db.getTable("site_access_day");
         UUID uuid = UUID.randomUUID();
         TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
                 new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
@@ -1026,8 +1087,8 @@ public class FrontendServiceImplTest {
         List<String> errMsg = status.getError_msgs();
         Assert.assertEquals(1, errMsg.size());
         Assert.assertEquals(
-                "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
-                        "No matching function with signature: str_to_date(varchar).",
+                "Expr 'str_to_date(`col1`)' analyze error: No matching function with signature: str_to_date(varchar), " +
+                        "derived column is 'event_day'",
                 errMsg.get(0));
     }
 
@@ -1100,7 +1161,35 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testMetaNotFound() throws UserException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "foo";
+        request.txnId = 1001L;
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setLoadId(new TUniqueId(1, 2));
+
+        Exception e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("unknown table"));
+
+        request.tbl = "v";
+        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("load table type is not OlapTable"));
+
+        request.tbl = "mv";
+        e = Assert.assertThrows(UserException.class, () -> impl.streamLoadPutImpl(request));
+        Assert.assertTrue(e.getMessage().contains("is a materialized view"));
+    }
+
+    @Test
     public void testAddListPartitionConcurrency() throws UserException, TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_list");

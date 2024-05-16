@@ -40,7 +40,7 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 
 ## StarRocks 是否支持动态修改 FE、BE 配置项？
 
-部分 FE 和 BE 节点的配置项支持动态修改。具体操作参考 [配置参数](../administration/FE_configuration.md)。
+部分 FE 和 BE 节点的配置项支持动态修改。具体操作参考 [配置参数](../administration/management/FE_configuration.md)。
 
 * 动态修改 FE 节点配置项：
   * 使用 SQL 方式动态修改：
@@ -92,7 +92,7 @@ GRANT SELECT_PRIV ON . TO 'test'@'%';
 
 **问题描述**
 
-该错误可能发生在往主键模型表 (Primary Key) 导入数据时，BE 节点磁盘空间不足，导致 BE Crash。扩容磁盘后，由于 PK 表目前还不支持 BE 内部磁盘间的均衡，数据存储无法负载均衡。
+该错误可能发生在往主键表 (Primary Key) 导入数据时，BE 节点磁盘空间不足，导致 BE Crash。扩容磁盘后，由于 PK 表目前还不支持 BE 内部磁盘间的均衡，数据存储无法负载均衡。
 
 **解决方案:**
 

@@ -70,14 +70,8 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     if (is_replication_txn) {
         std::vector<std::vector<TTabletId>> partitions(num_partition);
         for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
-            Status st = StorageEngine::instance()->replication_txn_manager()->get_txn_related_tablets(
+            StorageEngine::instance()->replication_txn_manager()->get_txn_related_tablets(
                     transaction_id, publish_version_req.partition_version_infos[i].partition_id, &partitions[i]);
-            if (!st.ok()) {
-                LOG(WARNING) << "failed to publish version for replication txn, get_txn_related_tablets failed: " << st
-                             << ", txn_id: " << transaction_id
-                             << ", partition_id: " << publish_version_req.partition_version_infos[i].partition_id;
-                return;
-            }
             num_active_tablet += partitions[i].size();
         }
 
@@ -112,12 +106,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
                 task.rowset = std::move(itr.second);
-                if (!task.rowset) {
-                    task.st = Status::NotFound(
-                            fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
-                    LOG(WARNING) << task.st;
-                    return;
-                }
+                task.rowset->rowset_meta()->set_gtid(publish_version_req.gtid);
             }
         }
     }
@@ -136,7 +125,12 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 tablet_span->SetAttribute("txn_id", transaction_id);
                 tablet_span->SetAttribute("tablet_id", task.tablet_id);
                 tablet_span->SetAttribute("version", task.version);
-
+                if (!is_replication_txn && !task.rowset) {
+                    task.st = Status::NotFound(
+                            fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
+                    LOG(WARNING) << task.st;
+                    return;
+                }
                 TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(task.tablet_id);
                 if (!tablet) {
                     // tablet may get dropped, it's ok to ignore this situation
@@ -159,9 +153,9 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                         std::string_view msg = task.st.message();
                         tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
                     } else {
-                        LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
-                                  << " tablet_max_version:" << tablet->max_continuous_version()
-                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id;
+                        VLOG(1) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
+                                << " tablet_max_version:" << tablet->max_continuous_version()
+                                << " partition:" << task.partition_id << " txn_id: " << task.txn_id;
                     }
                 } else {
                     task.st = StorageEngine::instance()->txn_manager()->publish_txn(
@@ -173,10 +167,10 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                         std::string_view msg = task.st.message();
                         tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
                     } else {
-                        LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
-                                  << " tablet_max_version:" << tablet->max_continuous_version()
-                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
-                                  << " rowset:" << task.rowset->rowset_id();
+                        VLOG(1) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
+                                << " tablet_max_version:" << tablet->max_continuous_version()
+                                << " partition:" << task.partition_id << " txn_id: " << task.txn_id
+                                << " rowset:" << task.rowset->rowset_id();
                     }
                 }
             });
@@ -257,14 +251,16 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 StorageEngine::instance()->replication_txn_manager()->clear_txn(transaction_id);
             });
         }
-        LOG(INFO) << "publish_version success. txn_id: " << transaction_id << " #partition:" << num_partition
-                  << " #tablet:" << tablet_tasks.size() << " time:" << publish_latency << "ms"
+        LOG(INFO) << "publish_version success. txn_id: " << transaction_id << " gtid: " << publish_version_req.gtid
+                  << " #partition:" << num_partition << " #tablet:" << tablet_tasks.size()
+                  << " time:" << publish_latency << "ms"
                   << " #already_finished:" << total_tablet_cnt - num_active_tablet;
     } else {
         StarRocksMetrics::instance()->publish_task_failed_total.increment(1);
-        LOG(WARNING) << "publish_version has error. txn_id: " << transaction_id << " #partition:" << num_partition
-                     << " #tablet:" << tablet_tasks.size() << " error_tablets(" << error_tablet_ids.size()
-                     << "):" << JoinInts(error_tablet_ids, ",") << " time:" << publish_latency << "ms"
+        LOG(WARNING) << "publish_version has error. txn_id: " << transaction_id << " gtid: " << publish_version_req.gtid
+                     << " #partition:" << num_partition << " #tablet:" << tablet_tasks.size() << " error_tablets("
+                     << error_tablet_ids.size() << "):" << JoinInts(error_tablet_ids, ",")
+                     << " time:" << publish_latency << "ms"
                      << " #already_finished:" << total_tablet_cnt - num_active_tablet;
     }
 }

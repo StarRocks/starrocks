@@ -21,8 +21,13 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -49,10 +54,6 @@ public class ExecuteAsStmtTest {
                 minTimes = 0;
                 result = auth;
 
-                globalStateMgr.isUsingNewPrivilege();
-                minTimes = 0;
-                result = false;
-
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser((UserIdentity) any);
                 minTimes = 0;
                 result = new HashSet<>();
@@ -64,6 +65,20 @@ public class ExecuteAsStmtTest {
                 ctx.getGlobalStateMgr();
                 minTimes = 0;
                 result = globalStateMgr;
+            }
+        };
+
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+
+            @Mock
+            public Analyzer getAnalyzer() {
+                return analyzer;
             }
         };
     }

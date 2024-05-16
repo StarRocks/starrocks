@@ -17,7 +17,6 @@ package com.starrocks.qe.scheduler.slot;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.compress.utils.Lists;
 import org.apache.logging.log4j.LogManager;
@@ -100,7 +99,6 @@ public class SlotRequestQueue {
         }
 
         int numAllocatedSlots = allocatedSlots.getNumSlots();
-        int numAllocatedDrivers = allocatedSlots.getNumDrivers();
         if (!isGlobalSlotAvailable(numAllocatedSlots) || isGlobalResourceOverloaded.getAsBoolean()) {
             return slotsToAllocate;
         }
@@ -127,14 +125,13 @@ public class SlotRequestQueue {
 
             ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(groupId);
             int numAllocatedSlotsOfGroup = allocatedSlots.getNumSlotsOfGroup(groupId);
-            AllocatedResource allocatedResource = peakSlotsToAllocateFromSubQueue(
-                    subQueue, group, numAllocatedSlots, numAllocatedSlotsOfGroup, numAllocatedDrivers, slotsToAllocate);
-            numAllocatedSlots += allocatedResource.numSlots;
-            numAllocatedDrivers += allocatedResource.numDrivers;
+            int numSlotsToAllocate = peakSlotsToAllocateFromSubQueue(
+                    subQueue, group, numAllocatedSlots, numAllocatedSlotsOfGroup, slotsToAllocate);
+            numAllocatedSlots += numSlotsToAllocate;
 
             // If the group of the current index peaks slots to allocate, update nextGroupIndex to make the next turn starts
             // from the next group index.
-            if (allocatedResource.numSlots > 0) {
+            if (numSlotsToAllocate > 0) {
                 nextGroupIndex = localNextGroupIndex;
             }
         }
@@ -163,45 +160,12 @@ public class SlotRequestQueue {
         return !isGroupResourceOverloaded.apply(group.getId());
     }
 
-    private int calculateSlotPipelineDop(final int numAllocatedDrivers, final int numFragmentsToAllocate) {
-        if (numFragmentsToAllocate <= 0) {
-            return 0;
-        }
-
-        if (!GlobalVariable.isQueryQueueDriverHighWaterEffective()) {
-            return 0;
-        }
-
-        final int hardLimit = GlobalVariable.getQueryQueueDriverHighWater();
-        if (numAllocatedDrivers + numFragmentsToAllocate >= hardLimit) {
-            return 1;
-        }
-
-        int dop = (hardLimit - numAllocatedDrivers) / numFragmentsToAllocate;
-        dop = Math.min(dop, BackendCoreStat.getDefaultDOP());
-
-        if (GlobalVariable.isQueryQueueDriverLowWaterEffective()) {
-            final int softLimit = GlobalVariable.getQueryQueueDriverLowWater();
-            int exceedSoftLimit = numAllocatedDrivers + numFragmentsToAllocate * dop - softLimit;
-            if (exceedSoftLimit > 0) {
-                dop = dop - dop * exceedSoftLimit / (hardLimit - softLimit);
-            }
-        }
-
-        dop = Math.max(1, dop);
-
-        return dop;
-    }
-
-    private AllocatedResource peakSlotsToAllocateFromSubQueue(LinkedHashMap<TUniqueId, LogicalSlot> subQueue,
-                                                              ResourceGroup group,
-                                                              final int numAllocatedSlots,
-                                                              final int numAllocatedSlotsOfGroup,
-                                                              final int numAllocatedDrivers,
-                                                              List<LogicalSlot> slotsToAllocate) {
+    private int peakSlotsToAllocateFromSubQueue(LinkedHashMap<TUniqueId, LogicalSlot> subQueue,
+                                                ResourceGroup group,
+                                                final int numAllocatedSlots,
+                                                final int numAllocatedSlotsOfGroup,
+                                                List<LogicalSlot> slotsToAllocate) {
         int numSlotsToAllocate = 0;
-        int numFragmentsToAllocate = 0;
-        int numDriversToAllocate = 0;
         for (LogicalSlot slot : subQueue.values()) {
             if (!isGlobalSlotAvailable(numAllocatedSlots + numSlotsToAllocate)) {
                 break;
@@ -213,33 +177,8 @@ public class SlotRequestQueue {
 
             slotsToAllocate.add(slot);
             numSlotsToAllocate += slot.getNumPhysicalSlots();
-
-            if (slot.isAdaptiveDop()) {
-                numFragmentsToAllocate += slot.getNumFragments();
-            } else {
-                numDriversToAllocate += slot.getNumDrivers();
-            }
         }
 
-        int dop = calculateSlotPipelineDop(numAllocatedDrivers + numSlotsToAllocate, numFragmentsToAllocate);
-
-        for (LogicalSlot slot : subQueue.values()) {
-            if (slot.isAdaptiveDop()) {
-                slot.setPipelineDop(dop);
-                numDriversToAllocate += slot.getNumDrivers();
-            }
-        }
-
-        return new AllocatedResource(numSlotsToAllocate, numDriversToAllocate);
-    }
-
-    private static class AllocatedResource {
-        private final int numSlots;
-        private final int numDrivers;
-
-        public AllocatedResource(int numSlots, int numDrivers) {
-            this.numSlots = numSlots;
-            this.numDrivers = numDrivers;
-        }
+        return numSlotsToAllocate;
     }
 }

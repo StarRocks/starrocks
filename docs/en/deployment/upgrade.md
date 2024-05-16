@@ -14,6 +14,10 @@ Review the information in this section before upgrading, and perform any recomme
 
 The version of StarRocks is represented by three numbers in the form **Major.Minor.Patch**, for example, `2.5.4`. The first number represents the major version of StarRocks, the second number represents the minor version, and the third number represents the patch version.
 
+> **CAUTION**
+>
+> Please note that you cannot upgrade an existing shared-nothing cluster to a shared-data cluster, or vice versa. You must deploy a new shared-data cluster.
+
 ### Upgrade paths
 
 - **For patch version upgrade**

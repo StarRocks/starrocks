@@ -41,6 +41,7 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -50,6 +51,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -76,6 +78,7 @@ import java.util.function.Function;
 
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class HiveMetadataTest {
     private HiveMetaClient client;
@@ -149,7 +152,7 @@ public class HiveMetadataTest {
 
     @Test
     public void testGetPartitionKeys() {
-        Assert.assertEquals(Lists.newArrayList("col1"), hiveMetadata.listPartitionNames("db1", "tbl1"));
+        Assert.assertEquals(Lists.newArrayList("col1"), hiveMetadata.listPartitionNames("db1", "tbl1", -1));
     }
 
     @Test
@@ -673,5 +676,51 @@ public class HiveMetadataTest {
         Partition remotePartition = new Partition(map, null, null, null, false);
         HivePartition hivePartition = new HivePartition(null, null, null, null, null, null, map);
         Assert.assertTrue(HiveCommitter.checkIsSamePartition(remotePartition, hivePartition));
+    }
+
+    @Test
+    public void testCreateTableTimeout() throws Exception {
+        AnalyzeTestUtil.init();
+        String stmt = "create table hive_catalog.hive_db.hive_table (k1 int, k2 int)";
+        String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        starRocksAssert.withCatalog(sql);
+        new MockUp<HiveMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public Path getDefaultLocation(String dbName, String tableName) {
+                return new Path("xxxxx");
+            }
+
+            @Mock
+            public boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
+
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public void createDirectory(Path path, Configuration conf) {
+
+            }
+        };
+
+        new MockUp<CachingHiveMetastore>() {
+            @Mock
+            public void createTable(String dbName, Table table) {
+                throw new StarRocksConnectorException("timeout");
+            }
+        };
+
+        CreateTableStmt createTableStmt =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        Assert.assertTrue(hiveMetadata.createTable(createTableStmt));
     }
 }

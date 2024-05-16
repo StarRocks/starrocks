@@ -25,15 +25,17 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.connector.ConnectorColumnStatsCacheLoader;
-import com.starrocks.connector.ConnectorTableColumnKey;
-import com.starrocks.connector.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
+import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
+import com.starrocks.connector.statistics.ConnectorTableColumnKey;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +44,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class CachedStatisticStorage implements StatisticStorage {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
@@ -77,31 +80,38 @@ public class CachedStatisticStorage implements StatisticStorage {
             .executor(statsCacheRefresherExecutor)
             .buildAsync(new ColumnHistogramStatsCacheLoader());
 
+    AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>> connectorHistogramCache = Caffeine.newBuilder()
+            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+            .maximumSize(Config.statistic_cache_columns)
+            .executor(statsCacheRefresherExecutor)
+            .buildAsync(new ConnectorHistogramColumnStatsCacheLoader());
+
     @Override
-    public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
+    public Map<Long, TableStatistic> getTableStatistics(Long tableId, Collection<Partition> partitions) {
         // get Statistics Table column info, just return default column statistics
         if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
-            return TableStatistic.unknown();
+            return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> TableStatistic.unknown()));
         }
 
+        List<TableStatsCacheKey> keys = partitions.stream().map(p -> new TableStatsCacheKey(tableId, p.getId()))
+                .collect(Collectors.toList());
+
         try {
-            CompletableFuture<Optional<TableStatistic>> result =
-                    tableStatsCache.get(new TableStatsCacheKey(tableId, partitionId));
+            CompletableFuture<Map<TableStatsCacheKey, Optional<TableStatistic>>> result = tableStatsCache.getAll(keys);
             if (result.isDone()) {
-                Optional<TableStatistic> realResult;
-                realResult = result.get();
-                return realResult.orElseGet(TableStatistic::unknown);
-            } else {
-                return TableStatistic.unknown();
+                Map<TableStatsCacheKey, Optional<TableStatistic>> data = result.get();
+                return keys.stream().collect(Collectors.toMap(
+                        TableStatsCacheKey::getPartitionId,
+                        k -> data.getOrDefault(k, Optional.empty()).orElse(TableStatistic.unknown())));
             }
         } catch (InterruptedException e) {
             LOG.warn(e);
             Thread.currentThread().interrupt();
-            return TableStatistic.unknown();
         } catch (Exception e) {
             LOG.warn(e);
-            return TableStatistic.unknown();
         }
+        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> TableStatistic.unknown()));
     }
 
     @Override
@@ -368,7 +378,7 @@ public class CachedStatisticStorage implements StatisticStorage {
 
         List<String> columnHasHistogram = new ArrayList<>();
         for (String columnName : columns) {
-            if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
+            if (GlobalStateMgr.getCurrentState().getAnalyzeMgr().getHistogramStatsMetaMap()
                     .get(new Pair<>(table.getId(), columnName)) != null) {
                 columnHasHistogram.add(columnName);
             }
@@ -403,6 +413,37 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     @Override
+    public Map<String, Histogram> getConnectorHistogramStatistics(Table table, List<String> columns) {
+        Preconditions.checkState(table != null);
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String columnName : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), columnName));
+        }
+
+        try {
+            CompletableFuture<Map<ConnectorTableColumnKey, Optional<Histogram>>> result =
+                    connectorHistogramCache.getAll(cacheKeys);
+            if (result.isDone()) {
+                Map<ConnectorTableColumnKey, Optional<Histogram>> realResult = result.get();
+
+                Map<String, Histogram> histogramStats = Maps.newHashMap();
+                for (String columnName : columns) {
+                    Optional<Histogram> histogramStatistics =
+                            realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), columnName), Optional.empty());
+                    histogramStatistics.ifPresent(histogram -> histogramStats.put(columnName, histogram));
+                }
+                return histogramStats;
+            } else {
+                return Maps.newHashMap();
+            }
+        } catch (Exception e) {
+            LOG.warn(e);
+            return Maps.newHashMap();
+        }
+    }
+
+    @Override
     public void expireHistogramStatistics(Long tableId, List<String> columns) {
         Preconditions.checkNotNull(columns);
 
@@ -412,6 +453,19 @@ public class CachedStatisticStorage implements StatisticStorage {
             allKeys.add(key);
         }
         histogramCache.synchronous().invalidateAll(allKeys);
+    }
+
+    @Override
+    public void expireConnectorHistogramStatistics(Table table, List<String> columns) {
+        if (table == null || columns == null) {
+            return;
+        }
+        List<ConnectorTableColumnKey> allKeys = Lists.newArrayList();
+        for (String column : columns) {
+            ConnectorTableColumnKey key = new ConnectorTableColumnKey(table.getUUID(), column);
+            allKeys.add(key);
+        }
+        connectorHistogramCache.synchronous().invalidateAll(allKeys);
     }
 
     private List<ColumnStatistic> getDefaultColumnStatisticList(List<String> columns) {

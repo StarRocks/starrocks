@@ -1,0 +1,68 @@
+-- name: test_agg_join_on_multi_tables_rewrite
+set enable_view_based_mv_rewrite = true;
+
+CREATE TABLE `t1` (
+`v4` bigint NULL COMMENT "",
+`v5` bigint NULL COMMENT "",
+`v6` bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v4`, `v5`, v6)
+DISTRIBUTED BY HASH(`v4`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+INSERT INTO `t1` (`v4`, `v5`, `v6`) VALUES (1, 10, 100);
+INSERT INTO `t1` (`v4`, `v5`, `v6`) VALUES (2, 20, 200);
+INSERT INTO `t1` (`v4`, `v5`, `v6`) VALUES (3, 30, 300);
+INSERT INTO `t1` (`v4`, `v5`, `v6`) VALUES (4, 40, 400);
+INSERT INTO `t1` (`v4`, `v5`, `v6`) VALUES (5, 50, 500);
+
+CREATE TABLE `t2` (
+`c4` bigint NULL COMMENT "",
+`c5` bigint NULL COMMENT "",
+`c6` bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c4`, `c5`, c6)
+DISTRIBUTED BY HASH(`c4`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO `t2` (`c4`, `c5`, `c6`) VALUES (1, 1009, 10009);
+INSERT INTO `t2` (`c4`, `c5`, `c6`) VALUES (2, NULL, 10010);
+INSERT INTO `t2` (`c4`, `c5`, `c6`) VALUES (3, 1011, NULL);
+INSERT INTO `t2` (`c4`, `c5`, `c6`) VALUES (4, 1009, 10009);
+INSERT INTO `t2` (`c4`, `c5`, `c6`) VALUES (5, NULL, 10010);
+
+create view agg_view_1
+as
+select v4, sum(v5) as total from t1 group by v4;
+
+create materialized view mv_1
+DISTRIBUTED by hash(`v4`)
+refresh manual
+as
+select v4, total, c5, c6 from t2 join agg_view_1 on c4 = v4;
+
+refresh materialized view mv_1 with sync mode;
+
+function: check_hit_materialized_view("select v4, total, c5, c6 from t2 join agg_view_1 on c4 = v4", "mv_1")
+
+-- name: test_agg_join_on_single_tables_rewrite
+set enable_view_based_mv_rewrite = true;
+CREATE TABLE t1 (
+                    k1 INT,
+                    v1 INT,
+                    v2 INT)
+                DUPLICATE KEY(k1)
+                DISTRIBUTED BY HASH(k1);
+
+insert into t1 values (1,1,1),(2,1,1),(3,1,1),(1,2,3),(2,2,3),(3,2,3);
+
+create view v1 as select k1,sum(v1) as sum_v1 from t1 group by k1;
+
+create materialized view mv_2 refresh manual as select v1.k1,v1.sum_v1,t1.v1 from v1 join t1 on v1.k1=t1.k1;
+
+refresh materialized view mv_2 with sync mode;
+
+function: check_hit_materialized_view("select v1.k1,v1.sum_v1,t1.v1 from v1 join t1 on v1.k1=t1.k1 order by 1,3;", "mv_2")

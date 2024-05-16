@@ -101,6 +101,9 @@ Status StorageEngine::start_bg_threads() {
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
+    _pk_dump_thread = std::thread([this] { _pk_dump_thread_callback(nullptr); });
+    Thread::set_thread_name(_pk_dump_thread, "pk_dump");
+
 #ifdef USE_STAROS
     _local_pk_index_shared_data_gc_evict_thread =
             std::thread([this] { _local_pk_index_shared_data_gc_evict_thread_callback(nullptr); });
@@ -244,7 +247,7 @@ Status StorageEngine::start_bg_threads() {
 
     _clear_expired_replcation_snapshots_thread =
             std::thread([this]() { _clear_expired_replication_snapshots_callback(nullptr); });
-    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expiired_replication_snapshots");
+    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expired_replication_snapshots");
 
     if (!config::disable_storage_page_cache) {
         _adjust_cache_thread = std::thread([this] { _adjust_pagecache_callback(nullptr); });
@@ -414,11 +417,26 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
     return nullptr;
 }
 
+void* StorageEngine::_pk_dump_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(60);
+        // disable pk dump generation when pk_dump_interval_seconds less than 0
+        if (config::pk_dump_interval_seconds > 0) {
+            auto st = StorageEngine::instance()->tablet_manager()->generate_pk_dump();
+            if (!st.ok()) {
+                LOG(ERROR) << "generate pk dump failed, st: " << st;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 #ifdef USE_STAROS
 void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* arg) {
-    if (is_as_cn()) {
-        return nullptr;
-    }
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
@@ -852,9 +870,9 @@ void* StorageEngine::_clear_expired_replication_snapshots_callback(void* arg) {
         LOG(INFO) << "try to clear expired replication snapshots!";
         replication_txn_manager()->clear_expired_snapshots();
 
-        int32_t interval = config::clear_expired_replcation_snapshots_interval_seconds;
+        int32_t interval = config::clear_expired_replication_snapshots_interval_seconds;
         if (interval <= 0) {
-            LOG(WARNING) << "clear expired replcation snapshots interval seconds config is illegal:" << interval
+            LOG(WARNING) << "clear expired replication snapshots interval seconds config is illegal:" << interval
                          << "will be forced set to one hour";
             interval = 3600; // 1 hour
         }

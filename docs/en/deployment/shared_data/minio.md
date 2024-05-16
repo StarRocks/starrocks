@@ -118,22 +118,6 @@ The ARN of the IAM role that has privileges on your S3 bucket in which your data
 
 The external ID of the AWS account that is used for cross-account access to your S3 bucket.
 
-#### azure_blob_path
-
-The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`.
-
-#### azure_blob_endpoint
-
-The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`.
-
-#### azure_blob_shared_key
-
-The Shared Key used to authorize requests for your Azure Blob Storage.
-
-#### azure_blob_sas_token
-
-The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
-
 > **Note**
 >
 > Only credential-related configuration items can be modified after your shared-data StarRocks cluster is created. If you changed the original storage path-related configuration items, the databases and tables you created before the change become read-only, and you cannot load data into them.
@@ -154,19 +138,20 @@ enable_load_volume_from_conf = false
 
 <SharedDataUseIntro />
 
-The following example creates a storage volume `def_volume` for a MinIO bucket `defaultbucket` with Access Key and Secret Key credentials, enables the storage volume, and sets it as the default storage volume:
+The following example creates a storage volume `def_volume` for a MinIO bucket `defaultbucket` with Access Key and Secret Key credentials, enables the [Partitioned Prefix](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md#partitioned-prefix) feature, and sets it as the default storage volume:
 
 ```SQL
 CREATE STORAGE VOLUME def_volume
 TYPE = S3
-LOCATIONS = ("s3://defaultbucket/test/")
+LOCATIONS = ("s3://defaultbucket")
 PROPERTIES
 (
     "enabled" = "true",
     "aws.s3.region" = "us-west-2",
     "aws.s3.endpoint" = "https://hostname.domainname.com:portnumber",
     "aws.s3.access_key" = "xxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyy"
+    "aws.s3.secret_key" = "yyyyyyyyyy",
+    "aws.s3.enable_partitioned_prefix" = "true"
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;

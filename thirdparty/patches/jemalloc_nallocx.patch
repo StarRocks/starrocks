@@ -1,0 +1,11 @@
+--- src/jemalloc.c  2022-05-07 02:29:14.000000000 +0800
++++ src/jemalloc.c  2024-01-17 16:13:16.063123457 +0800
+@@ -3960,8 +3960,6 @@ je_nallocx(size_t size, int flags) {
+    size_t usize;
+    tsdn_t *tsdn;
+
+-   assert(size != 0);
+-
+    if (unlikely(malloc_init())) {
+        LOG("core.nallocx.exit", "result: %zu", ZU(0));
+        return 0;

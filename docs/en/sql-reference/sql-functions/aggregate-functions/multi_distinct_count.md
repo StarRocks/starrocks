@@ -26,7 +26,7 @@ Returns a numeric value. If no rows can be found, 0 is returned. This function i
 
 Suppose there is a table named `test`. Query the category and supplier of each order by `id`.
 
-~~~Plain
+```Plain
 select * from test order by id;
 +------+----------+----------+------------+
 | id   | country  | category | supplier   |
@@ -39,26 +39,26 @@ select * from test order by id;
 | 1006 | Japan    | D        | supplier_3 |
 | 1007 | Japan    | NULL     | supplier_5 |
 +------+----------+----------+------------+
-~~~
+```
 
 Example 1: Count the number of distinct values in the `category` column.
 
-~~~Plain
+```Plain
 select multi_distinct_count(category) from test;
 +--------------------------------+
 | multi_distinct_count(category) |
 +--------------------------------+
 |                              4 |
 +--------------------------------+
-~~~
+```
 
 Example 2: Count the number of distinct values in the `supplier` column.
 
-~~~Plain
+```Plain
 select multi_distinct_count(supplier) from test;
 +--------------------------------+
 | multi_distinct_count(supplier) |
 +--------------------------------+
 |                              5 |
 +--------------------------------+
-~~~
+```

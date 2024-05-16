@@ -755,9 +755,10 @@ public class AnalyzeDecimalV3Test {
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
             Expr expr = queryRelation.getOutputExpression().get(0);
+            Type decimal128p38s18 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
             Type decimal128p38s30 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 30);
-            Assert.assertEquals(expr.getType(), decimal128p38s30);
-            Assert.assertEquals(expr.getChild(0).getType(), decimal128p38s30);
+            Assert.assertEquals(decimal128p38s18, expr.getType());
+            Assert.assertEquals(decimal128p38s30, expr.getChild(0).getType());
         }
     }
 
@@ -893,7 +894,7 @@ public class AnalyzeDecimalV3Test {
             Assert.assertEquals(items.get(0).getType(), ScalarType.DOUBLE);
             Assert.assertEquals(items.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
-            Assert.assertEquals(items.get(2).getType(), ScalarType.DOUBLE);
+            Assert.assertEquals(items.get(2).getType(), ScalarType.FLOAT);
             Assert.assertEquals(items.get(3).getType(), ScalarType.createDecimalV3NarrowestType(3, 2));
             Assert.assertEquals(items.get(4).getType(), ScalarType.createDecimalV3TypeForZero(1));
         }

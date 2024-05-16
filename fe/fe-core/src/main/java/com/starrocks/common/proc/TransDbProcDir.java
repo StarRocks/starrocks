@@ -58,7 +58,7 @@ public class TransDbProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         List<List<Comparable>> infos = transactionMgr.getDbInfo();
         // order by dbId, asc
         ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0);

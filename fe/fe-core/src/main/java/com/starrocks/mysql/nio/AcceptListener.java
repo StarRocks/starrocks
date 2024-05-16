@@ -33,6 +33,7 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.qe.ConnectContext;
@@ -92,14 +93,15 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         if (!result.isSuccess()) {
                             throw new AfterConnectedException("mysql negotiate failed");
                         }
-                        if (connectScheduler.registerConnection(context)) {
+                        Pair<Boolean, String> registerResult = connectScheduler.registerConnection(context);
+                        if (registerResult.first) {
                             MysqlProto.sendResponsePacket(context);
                             connection.setCloseListener(
                                     streamConnection -> connectScheduler.unregisterConnection(context));
                         } else {
-                            context.getState().setError("Reach limit of connections");
+                            context.getState().setError(registerResult.second);
                             MysqlProto.sendResponsePacket(context);
-                            throw new AfterConnectedException("Reach limit of connections");
+                            throw new AfterConnectedException(registerResult.second);
                         }
                         context.setStartTime();
                         ConnectProcessor processor = new ConnectProcessor(context);
@@ -108,6 +110,7 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         // do not need to print log for this kind of exception.
                         // just clean up the context;
                         context.cleanup();
+                        context.getState().setError(e.getMessage());
                     } catch (Throwable e) {
                         if (e instanceof Error) {
                             LOG.error("connect processor exception because ", e);
@@ -116,6 +119,7 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                             LOG.warn("connect processor exception because ", e);
                         }
                         context.cleanup();
+                        context.getState().setError(e.getMessage());
                     } finally {
                         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
                                 result == null ? null : result.getAuthPacket());

@@ -28,10 +28,10 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 | ------------------------ | :----------------------------------------------------------- |
 |  fe_ip                   | FE 节点 IP。                                                  |
 |  fe_http_port            | FE 节点 HTTP Port。                                           |
-|  catalog_name            | 数据目录名称，当前仅支持 StarRocks 内表查询，即 `<catalog_name>` 仅支持为 `default_catalog`。|
+|  catalog_name            | 数据目录名称。3.2.0 版本仅支持查询 StarRocks 内部表，即 `<catalog_name>` 仅支持为 `default_catalog`。从 3.2.1 版本开始，支持查询[外部 Catalog](../../data_source/catalog/catalog_overview.md) 下的表。|
 |  database_name           | 数据库名称。如果未指定数据库名称，那么在 SQL query 语句中出现的表名前面需要加上 database 名，比如 `database_name.table_name`。 |
 
-- 指定 catalog, 跨 database 查询。SQL 语句中出现的表前面需要加上 database 名。
+- 指定 catalog，跨 database 查询。SQL 语句中出现的表前面需要加上 database 名。
 
    ```shell
    POST /api/v1/catalogs/<catalog_name>/sql
@@ -149,22 +149,40 @@ content-type 表示 response body 的格式。这里使用 Newline delimited JSO
 
 ### 发起查询
 
-```shell
-curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/test/sql' -u 'root:' -d '{"query": "select * from agg;"}' --header "Content-Type: application/json"
-```
+- 查询 StarRocks 内部表，即 `<catalog_name>` 为 `default_catalog`。
 
-返回结果：
+  ```shell
+  curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/test/sql' -u 'root:' -d '{"query": "select * from agg;"}' --header "Content-Type: application/json"
+  ```
 
-```json
-{"connectionId":49}
-{"meta":[{"name":"no","type":"int(11)"},{"name":"k","type":"decimal64(10, 2)"},{"name":"v","type":"decimal64(10, 2)"}]}
-{"data":[1,"10.00",null]}
-{"data":[2,"10.00","11.00"]}
-{"data":[2,"20.00","22.00"]}
-{"data":[2,"25.00",null]}
-{"data":[2,"30.00","35.00"]}
-{"statistics":{"scanRows":0,"scanBytes":0,"returnRows":5}}
-```
+  返回结果：
+
+  ```json
+  {"connectionId":49}
+  {"meta":[{"name":"no","type":"int(11)"},{"name":"k","type":"decimal64(10, 2)"},{"name":"v","type":"decimal64(10, 2)"}]}
+  {"data":[1,"10.00",null]}
+  {"data":[2,"10.00","11.00"]}
+  {"data":[2,"20.00","22.00"]}
+  {"data":[2,"25.00",null]}
+  {"data":[2,"30.00","35.00"]}
+  {"statistics":{"scanRows":0,"scanBytes":0,"returnRows":5}}
+  ```
+
+- 查询 Iceberg Catalog 下的表。
+
+  ```shell
+  curl -X POST 'http://172.26.93.145:8030/api/v1/catalogs/iceberg_catalog/databases/ywb/sql' -u 'root:' -d '{"query": "select * from iceberg_analyze;"}' --header "Content-Type: application/json"
+  ```
+
+  返回结果：
+
+  ```json
+  {"connectionId":13}
+  {"meta":[{"name":"k1","type":"int(11)"},{"name":"k2","type":"int(11)"}]}
+  {"data":[1,2]}
+  {"data":[1,1]}
+  {"statistics":{"scanRows":0,"scanBytes":0,"returnRows":2}}
+  ```
 
 ### 取消查询
 

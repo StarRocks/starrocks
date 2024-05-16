@@ -104,7 +104,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
     if (_iceberg_table->is_unpartitioned_table()) {
         if (_partition_writers.empty()) {
             tableInfo.partition_location = _iceberg_table_data_location;
-            auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
+            auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _unique_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
             RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({ICEBERG_UNPARTITIONED_TABLE_LOCATION, std::move(writer)});
@@ -140,7 +140,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         auto partition_writer = _partition_writers.find(partition_location);
         if (partition_writer == _partition_writers.end()) {
             tableInfo.partition_location = partition_location;
-            auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
+            auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _unique_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
             RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({partition_location, std::move(writer)});

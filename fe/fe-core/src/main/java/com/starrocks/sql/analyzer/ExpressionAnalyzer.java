@@ -47,6 +47,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
@@ -60,6 +61,7 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
@@ -91,6 +93,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -99,7 +102,6 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
-import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
@@ -376,7 +378,7 @@ public class ExpressionAnalyzer {
         }
     }
 
-    public static class Visitor extends AstVisitor<Void, Scope> {
+    public static class Visitor implements AstVisitor<Void, Scope> {
         private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
                 FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
         private static final List<String> SUB_DATE_FUNCTIONS =
@@ -497,6 +499,9 @@ public class ExpressionAnalyzer {
                 Type originalType = node.getType();
                 if (originalType == Type.ANY_MAP) {
                     Type keyType = node.getKeyCommonType();
+                    if (!keyType.isValidMapKeyType()) {
+                        throw new SemanticException("Map key don't supported type: " + keyType, node.getPos());
+                    }
                     Type valueType = node.getValueCommonType();
                     node.setType(new MapType(keyType, valueType));
                 }
@@ -656,7 +661,8 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
+            Type compatibleType =
+                    TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!Type.canCastTo(type1, compatibleType)) {
@@ -859,7 +865,7 @@ public class ExpressionAnalyzer {
 
             List<Expr> queryExpressions = Lists.newArrayList();
             node.collect(arg -> arg instanceof Subquery, queryExpressions);
-            if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+            if (!queryExpressions.isEmpty() && node.getChildren().size() > 2) {
                 throw new SemanticException("In Predicate only support literal expression list", node.getPos());
             }
 
@@ -874,7 +880,7 @@ public class ExpressionAnalyzer {
 
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
-                if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+                if (type.isJsonType() && !queryExpressions.isEmpty()) { // TODO: enable it after support join on JSON
                     throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -969,6 +975,26 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+        @Override
+        public Void visitMatchExpr(MatchExpr node, Scope scope) {
+            Type type1 = node.getChild(0).getType();
+            Type type2 = node.getChild(1).getType();
+
+            if (!type1.isStringType() && !type1.isNull()) {
+                throw new SemanticException("left operand of MATCH must be of type STRING with NOT NULL");
+            }
+
+            if (!(node.getChild(0) instanceof SlotRef)) {
+                throw new SemanticException("left operand of MATCH must be column ref");
+            }
+
+            if (!(node.getChild(1) instanceof StringLiteral) || type2.isNull()) {
+                throw new SemanticException("right operand of MATCH must be of type StringLiteral with NOT NULL");
+            }
+
+            return null;
+        }
+
         // 1. set type = Type.BOOLEAN
         // 2. check child type is metric
         private void predicateBaseAndCheck(Predicate node) {
@@ -1018,8 +1044,20 @@ public class ExpressionAnalyzer {
 
             // throw exception direct
             checkFunction(fnName, node, argumentTypes);
-
-            if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
+            if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
+                // For the typeof function, the parameter type of the function is the result of this function.
+                // At this time, the parameter type has been obtained. You can directly replace the current 
+                // function with StringLiteral. However, since the parent node of the current node in ast 
+                // cannot be obtained, this cannot be done directly. Replacement, here the StringLiteral is 
+                // stored in the parameter of the function, so that the StringLiteral can be obtained in the 
+                // subsequent rule rewriting, and then the typeof can be replaced.
+                Type originType = argumentTypes[0];
+                argumentTypes[0] = Type.STRING;
+                fn = new Function(new FunctionName("typeof_internal"), argumentTypes, Type.STRING, false);
+                Expr newChildExpr = new StringLiteral(originType.toTypeString());
+                node.getParams().exprs().set(0, newChildExpr);
+                node.setChild(0, newChildExpr);
+            } else if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 // Compatible with the logic of the original search function "count distinct"
                 // TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
@@ -1296,8 +1334,7 @@ public class ExpressionAnalyzer {
                         if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
                             throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
                         }
-                        if (!(expr instanceof IntLiteral) && !(expr instanceof LargeIntLiteral) &&
-                                !(expr instanceof SlotRef) && !(expr instanceof NullLiteral)) {
+                        if (!(expr.getType().isFixedPointType()) && !expr.getType().isNull()) {
                             throw new SemanticException(fnName + "'s parameter only support Integer");
                         }
                     }
@@ -1329,9 +1366,15 @@ public class ExpressionAnalyzer {
                         throw new SemanticException(fnName + " should have at least one input", node.getPos());
                     }
                     int start = argumentTypes.length - node.getParams().getOrderByElemNum();
-                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && start < 2) {
-                        throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
-                                node.getPos());
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT)) {
+                        if (start < 2) {
+                            throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
+                                    node.getPos());
+                        }
+                        if (node.getParams().isDistinct() && !node.getChild(start - 1).isConstant()) {
+                            throw new SemanticException(fnName + " distinct should use constant separator", node.getPos());
+                        }
+
                     } else if (fnName.equals(FunctionSet.ARRAY_AGG) && start != 1) {
                         throw new SemanticException(fnName + " should have exact one output expressions before" +
                                 " [ORDER BY]", node.getPos());
@@ -1681,6 +1724,9 @@ public class ExpressionAnalyzer {
             } else if (funcType.equalsIgnoreCase(FunctionSet.CATALOG)) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
+            } else if (funcType.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
+                node.setType(Type.VARCHAR);
+                node.setStrValue(session.getSessionId().toString());
             }
             return null;
         }
@@ -1688,33 +1734,27 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
-                if (node.getSetType() != null && node.getSetType().equals(SetType.USER)) {
-                    UserVariable userVariable = session.getUserVariables(node.getName());
-                    // If referring to an uninitialized variable, its value is NULL and a string type.
-                    if (userVariable == null) {
-                        node.setType(Type.STRING);
-                        node.setIsNull();
-                        return null;
-                    }
-
-                    Type variableType = userVariable.getEvaluatedExpression().getType();
-                    node.setType(variableType);
-
-                    if (userVariable.getEvaluatedExpression() instanceof NullLiteral) {
-                        node.setIsNull();
-                    } else {
-                        node.setValue(userVariable.getEvaluatedExpression().getRealObjectValue());
-                    }
-                } else {
-                    VariableMgr.fillValue(session.getSessionVariable(), node);
-                    if (!Strings.isNullOrEmpty(node.getName()) &&
-                            node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
-                        node.setType(Type.VARCHAR);
-                        node.setValue(SqlModeHelper.decode((long) node.getValue()));
-                    }
+                VariableMgr.fillValue(session.getSessionVariable(), node);
+                if (!Strings.isNullOrEmpty(node.getName()) &&
+                        node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
+                    node.setType(Type.VARCHAR);
+                    node.setValue(SqlModeHelper.decode((long) node.getValue()));
                 }
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
+            UserVariable userVariable = session.getUserVariable(node.getName());
+            if (userVariable == null) {
+                node.setValue(NullLiteral.create(Type.STRING));
+                node.setType(Type.STRING);
+            } else {
+                node.setType(userVariable.getEvaluatedExpression().getType());
+                node.setValue(userVariable.getEvaluatedExpression());
             }
             return null;
         }
@@ -1732,6 +1772,9 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitDictQueryExpr(DictQueryExpr node, Scope context) {
+            if (RunMode.isSharedDataMode()) {
+                throw new SemanticException("dict_mapping function do not support shared data mode");
+            }
             List<Expr> params = node.getParams().exprs();
             if (!(params.get(0) instanceof StringLiteral)) {
                 throw new SemanticException("dict_mapping function first param table_name should be string literal");
@@ -1778,23 +1821,23 @@ public class ExpressionAnalyzer {
                     valueColumn = column;
                 }
             }
-            // (table, keys..., value_column, strict_mode)
+            // (table, keys..., value_column, null_if_not_found)
             int valueColumnIdx;
-            int strictModeIdx;
+            int nullIfNotFoundIdx;
             if (params.size() == keyColumns.size() + 1) {
                 valueColumnIdx = -1;
-                strictModeIdx = -1;
+                nullIfNotFoundIdx = -1;
             } else if (params.size() == keyColumns.size() + 2) {
                 if (params.get(params.size() - 1).getType().getPrimitiveType().isStringType()) {
                     valueColumnIdx = params.size() - 1;
-                    strictModeIdx = -1;
+                    nullIfNotFoundIdx = -1;
                 } else {
-                    strictModeIdx = params.size() - 1;
+                    nullIfNotFoundIdx = params.size() - 1;
                     valueColumnIdx = -1;
                 }
             } else if (params.size() == keyColumns.size() + 3) {
                 valueColumnIdx = params.size() - 2;
-                strictModeIdx = params.size() - 1;
+                nullIfNotFoundIdx = params.size() - 1;
             } else {
                 throw new SemanticException(String.format("dict_mapping function param size should be %d - %d",
                     keyColumns.size() + 1, keyColumns.size() + 3));
@@ -1818,13 +1861,13 @@ public class ExpressionAnalyzer {
                 valueField = valueColumn.getName();
             }
 
-            boolean strictMode = false;
-            if (strictModeIdx >= 0) {
-                Expr strictModeExpr = params.get(strictModeIdx);
-                if (!(strictModeExpr instanceof BoolLiteral)) {
-                    throw new SemanticException("dict_mapping function strict_mode param should be bool constant");
+            boolean nullIfNotFound = false;
+            if (nullIfNotFoundIdx >= 0) {
+                Expr nullIfNotFoundExpr = params.get(nullIfNotFoundIdx);
+                if (!(nullIfNotFoundExpr instanceof BoolLiteral)) {
+                    throw new SemanticException("dict_mapping function null_if_not_found param should be bool constant");
                 }
-                strictMode = ((BoolLiteral) strictModeExpr).getValue();
+                nullIfNotFound = ((BoolLiteral) nullIfNotFoundExpr).getValue();
             }
 
             List<Type> expectTypes = new ArrayList<>();
@@ -1835,7 +1878,7 @@ public class ExpressionAnalyzer {
             if (valueColumnIdx >= 0) {
                 expectTypes.add(Type.VARCHAR);
             }
-            if (strictModeIdx >= 0) {
+            if (nullIfNotFoundIdx >= 0) {
                 expectTypes.add(Type.BOOLEAN);
             }
 
@@ -1850,13 +1893,23 @@ public class ExpressionAnalyzer {
                 if (valueColumnIdx >= 0) {
                     expectTypeNames.add("VARCHAR value_field_name");
                 }
-                if (strictModeIdx >= 0) {
-                    expectTypeNames.add("BOOLEAN strict_mode");
+                if (nullIfNotFoundIdx >= 0) {
+                    expectTypeNames.add("BOOLEAN null_if_not_found");
                 }
-                List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
-                throw new SemanticException(
-                        String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
-                            String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+
+                for (int i = 0; i < node.getChildren().size(); ++i) {
+                    Expr actual = node.getChildren().get(i);
+                    Type expectedType = expectTypes.get(i);
+                    if (!Type.canCastTo(actual.getType(), expectedType)) {
+                        List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
+                        throw new SemanticException(
+                                String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
+                                    String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+                    }
+
+                    Expr castExpr = new CastExpr(expectedType, actual);
+                    node.getChildren().set(i, castExpr);
+                }
             }
 
             Type valueType = ScalarType.createType(valueColumn.getType().getPrimitiveType());
@@ -1872,7 +1925,8 @@ public class ExpressionAnalyzer {
             List<String> keyFields = keyColumns.stream().map(Column::getName).collect(Collectors.toList());
             dictQueryExpr.setKey_fields(keyFields);
             dictQueryExpr.setValue_field(valueField);
-            dictQueryExpr.setStrict_mode(strictMode);
+            // For compatibility reason, we do not change the "strict_mode" variable in TDictQueryExpr
+            dictQueryExpr.setStrict_mode(!nullIfNotFound);
             node.setType(valueType);
 
             Function fn = new Function(FunctionName.createFnName(FunctionSet.DICT_MAPPING), actualTypes, valueType, false);
@@ -1929,7 +1983,7 @@ public class ExpressionAnalyzer {
                                             " but param give: " + Integer.toString(paramDictionaryKeysSize));
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getFullNameToDb().get(dictionary.getDbName());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dictionary.getDbName());
             Table table = db.getTable(dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());

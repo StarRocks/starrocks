@@ -60,8 +60,7 @@ public:
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
     bool has_spilled() { return _spiller && _spiller->spilled(); }
 
-    [[nodiscard]] Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
-                                                   spill::IOTaskExecutor& executor);
+    Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk);
 
     void finalize();
 
@@ -103,12 +102,12 @@ public:
             : _build_chunks(std::move(build_chunks)), _spillers(std::move(spillers)) {}
 
     // prefetch next chunk from spiller
-    Status prefetch(RuntimeState* state, spill::IOTaskExecutor& executor);
+    Status prefetch(RuntimeState* state);
 
     bool has_output();
 
     // return EOF if all data has been read
-    StatusOr<ChunkPtr> get_next(RuntimeState* state, spill::IOTaskExecutor& executor);
+    StatusOr<ChunkPtr> get_next(RuntimeState* state);
 
     // reset stream
     Status reset(RuntimeState* state, spill::Spiller* dummy_spiller);

@@ -22,7 +22,6 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,7 +29,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Backend;
 import org.junit.Before;
@@ -60,9 +59,9 @@ public class SystemHandlerTest {
         systemHandler = new SystemHandler();
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = RuntimeException.class)
     public void testModifyBackendAddressLogic() throws UserException {
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox-fqdn");
+        ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
         systemHandler.process(clauses, null, null);
@@ -82,7 +81,7 @@ public class SystemHandlerTest {
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
-        expectedException.expect(DdlException.class);
+        expectedException.expect(RuntimeException.class);
         expectedException.expectMessage("Backend does not exist");
         systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
     }
@@ -93,7 +92,7 @@ public class SystemHandlerTest {
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
-        expectedException.expect(DdlException.class);
+        expectedException.expect(RuntimeException.class);
         expectedException.expectMessage("It will cause insufficient BE number");
         systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
     }
@@ -111,11 +110,11 @@ public class SystemHandlerTest {
         Map<String, DiskInfo> diskInfoMap = Maps.newHashMap();
         diskInfoMap.put("/data", diskInfo);
 
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
+        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
             backend.setDisks(ImmutableMap.copyOf(diskInfoMap));
         }
 
-        expectedException.expect(DdlException.class);
+        expectedException.expect(RuntimeException.class);
         expectedException.expectMessage("It will cause insufficient disk space");
         systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
     }
@@ -128,7 +127,7 @@ public class SystemHandlerTest {
 
         Backend backend4 = new Backend(100, "host4", 123);
         backend4.setAlive(true);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend4);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend4);
 
         DiskInfo diskInfo = new DiskInfo("/data");
         diskInfo.setAvailableCapacityB(900);
@@ -137,7 +136,7 @@ public class SystemHandlerTest {
         Map<String, DiskInfo> diskInfoMap = Maps.newHashMap();
         diskInfoMap.put("/data", diskInfo);
 
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
+        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
             backend.setDisks(ImmutableMap.copyOf(diskInfoMap));
         }
 

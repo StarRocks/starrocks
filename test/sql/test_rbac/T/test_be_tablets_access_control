@@ -1,0 +1,14 @@
+-- name: test_select_from_be_tablets_with_any_priv
+create database test_select_from_be_tablets_with_any_priv_db;
+create table test_select_from_be_tablets_with_any_priv_db.test11 (id int) duplicate key (id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+create table test_select_from_be_tablets_with_any_priv_db.test22 (id int) duplicate key (id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+
+create user IF NOT EXISTS u1bt;
+grant select on table test_select_from_be_tablets_with_any_priv_db.test11 to u1bt;
+grant impersonate on user root to u1bt;
+
+execute as u1bt with no revert;
+select count(*) from information_schema.be_tablets;
+
+execute as root with no revert;
+drop user u1bt;

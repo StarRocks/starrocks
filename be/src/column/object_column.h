@@ -22,20 +22,10 @@
 #include "common/object_pool.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
+#include "util/json.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {
-
-//class Object {
-//    Object();
-//
-//    Object(const Slice& s);
-//
-//    void clear();
-//
-//    size_t serialize_size() const;
-//    size_t serialize(uint8_t* dst) const;
-//};
 
 template <typename T>
 class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
@@ -133,6 +123,8 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
+    bool deserialize_and_append(const Slice& src);
+
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
@@ -153,7 +145,7 @@ public:
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
     std::string get_name() const override { return std::string{"object"}; }
 
@@ -238,6 +230,8 @@ public:
 
     bool has_large_column() const override { return false; }
 
+    void check_or_die() const {}
+
 private:
     // add this to avoid warning clang-diagnostic-overloaded-virtual
     using Column::append;
@@ -258,8 +252,6 @@ private:
 
     // Currently, only for data loading
     void _build_slices() const;
-
-    void check_or_die() const override {}
 
 private:
     Buffer<T> _pool;

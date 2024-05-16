@@ -40,6 +40,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.HeartbeatMgr.BrokerHeartbeatHandler;
 import com.starrocks.system.HeartbeatMgr.FrontendHeartbeatHandler;
@@ -71,13 +72,16 @@ public class HeartbeatMgrTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
+    @Mocked
+    private NodeMgr nodeMgr;
+
     @Before
     public void setUp() {
         new Expectations() {
             {
-                globalStateMgr.getSelfNode();
+                globalStateMgr.getNodeMgr();
                 minTimes = 0;
-                result = Pair.create("192.168.1.3", 9010); // not self
+                result = nodeMgr;
 
                 globalStateMgr.isReady();
                 minTimes = 0;
@@ -86,6 +90,14 @@ public class HeartbeatMgrTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getSelfNode();
+                minTimes = 0;
+                result = Pair.create("192.168.1.3", 9010); // not self
             }
         };
     }
@@ -106,7 +118,7 @@ public class HeartbeatMgrTest {
         };
 
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "test", "192.168.1.1", 9010);
-        FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(fe, 12345, "abcd");
+        FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(fe, "abcd");
         HeartbeatResponse response = handler.call();
 
         Assert.assertTrue(response instanceof FrontendHbResponse);
@@ -119,7 +131,7 @@ public class HeartbeatMgrTest {
         Assert.assertEquals("2.0-ac45651a", hbResponse.getFeVersion());
 
         Frontend fe2 = new Frontend(FrontendNodeType.FOLLOWER, "test2", "192.168.1.2", 9010);
-        handler = new FrontendHeartbeatHandler(fe2, 12345, "abcd");
+        handler = new FrontendHeartbeatHandler(fe2, "abcd");
         response = handler.call();
 
         Assert.assertTrue(response instanceof FrontendHbResponse);

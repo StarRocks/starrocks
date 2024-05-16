@@ -62,8 +62,7 @@ public class ShowTablesTest {
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
         ShowTableStmt stmt = new ShowTableStmt("testDb", false, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testMv", resultSet.getString(0));
@@ -78,8 +77,7 @@ public class ShowTablesTest {
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
         ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testMv", resultSet.getString(0));
@@ -95,20 +93,19 @@ public class ShowTablesTest {
         ctx.setCurrentCatalog("hive_catalog");
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowTableStmt stmt = new ShowTableStmt("hive_db", true, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertFalse(resultSet.next());
 
         Assert.assertThrows(ErrorReportException.class,
-                () -> GlobalStateMgr.getCurrentState().changeCatalog(ctx, "hive_catalog"));
+                () -> ctx.changeCatalog("hive_catalog"));
         Assert.assertThrows(ErrorReportException.class,
-                () -> GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.hive_db"));
+                () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
 
         String sql = "grant usage on catalog hive_catalog to test_user";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
         Assert.assertThrows(ErrorReportException.class,
-                () -> GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.hive_db"));
+                () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
 
         ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }
@@ -117,7 +114,6 @@ public class ShowTablesTest {
     public void testShowData() {
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowDataStmt stmt = new ShowDataStmt("test", "testTbl", null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        Assert.assertThrows(ErrorReportException.class, executor::execute);
+        Assert.assertThrows(ErrorReportException.class, () -> ShowExecutor.execute(stmt, ctx));
     }
 }

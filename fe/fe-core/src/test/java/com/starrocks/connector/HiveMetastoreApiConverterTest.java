@@ -70,8 +70,26 @@ public class HiveMetastoreApiConverterTest {
     }
 
     @Test
-    public void testToFullSchemasForHudiTable() {
-        List<Column> columns = HiveMetastoreApiConverter.toFullSchemasForHudiTable(hudiSchema);
+    public void testToFullSchemasForHudiTable(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient) {
+        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "bigint", ""));
+        List<FieldSchema> unPartKeys = Lists.newArrayList();
+        unPartKeys.add(new FieldSchema("_hoodie_commit_time", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_commit_seqno", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_record_key", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_partition_path", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_file_name", "string", ""));
+        unPartKeys.add(new FieldSchema("col2", "int", ""));
+        new Expectations() {
+            {
+                table.getSd().getCols();
+                result = unPartKeys;
+
+                table.getPartitionKeys();
+                result = partKeys;
+            }
+        };
+
+        List<Column> columns = HiveMetastoreApiConverter.toFullSchemasForHudiTable(table, hudiSchema);
         Assert.assertEquals(7, columns.size());
     }
 

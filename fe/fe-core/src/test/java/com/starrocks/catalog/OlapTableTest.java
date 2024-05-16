@@ -37,13 +37,9 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.backup.mv.MvRestoreContext;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -51,6 +47,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.IndexDef;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -155,7 +152,7 @@ public class OlapTableTest {
         olapTable.copyOnlyForQuery(copied);
 
         Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
-        Assert.assertEquals(olapTable.hasForbitGlobalDict(), copied.hasForbitGlobalDict());
+        Assert.assertEquals(olapTable.hasForbiddenGlobalDict(), copied.hasForbiddenGlobalDict());
         Assert.assertEquals(olapTable, copied);
     }
 

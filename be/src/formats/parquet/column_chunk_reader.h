@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -26,13 +28,22 @@
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
 #include "formats/parquet/page_reader.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 class BlockCompressionCodec;
+class NullableColumn;
+
+namespace io {
+class SeekableInputStream;
+} // namespace io
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -53,7 +64,12 @@ public:
 
     Status skip_page();
 
-    Status skip_values(size_t num) { return _cur_decoder->skip(num); }
+    Status skip_values(size_t num) {
+        if (num == 0) {
+            return Status::OK();
+        }
+        return _cur_decoder->skip(num);
+    }
 
     Status next_page();
 
@@ -63,28 +79,14 @@ public:
 
     uint32_t num_values() const { return _num_values; }
 
-    // Try to decode n definition levels into 'levels'
-    // return number of decoded levels.
-    // If the returned value is less than input n, this means current page don't have
-    // enough levels.
-    // User should call next_page() to get more levels
-    size_t decode_def_levels(size_t n, level_t* levels) {
-        SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-        DCHECK_GT(_max_def_level, 0);
-        return _def_level_decoder.decode_batch(n, levels);
-    }
-
     LevelDecoder& def_level_decoder() { return _def_level_decoder; }
     LevelDecoder& rep_level_decoder() { return _rep_level_decoder; }
 
-    size_t decode_rep_levels(size_t n, level_t* levels) {
-        SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-        DCHECK_GT(_max_rep_level, 0);
-        return _rep_level_decoder.decode_batch(n, levels);
-    }
-
     Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
+        if (_no_null()) {
+            return _cur_decoder->next_batch(n, content_type, dst);
+        }
         size_t idx = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];
@@ -142,6 +144,11 @@ private:
     Status _try_load_dictionary();
 
     Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed);
+
+    bool _no_null() {
+        return metadata().__isset.statistics && metadata().statistics.__isset.null_count &&
+               metadata().statistics.null_count == 0;
+    }
 
 private:
     enum PageParseState {

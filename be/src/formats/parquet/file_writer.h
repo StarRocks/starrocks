@@ -20,21 +20,53 @@
 #include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
+#include <arrow/result.h>
 #include <gen_cpp/DataSinks_types.h>
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+#include <parquet/file_writer.h>
+#include <parquet/platform.h>
+#include <parquet/properties.h>
+#include <parquet/schema.h>
+#include <parquet/types.h>
+#include <stdint.h>
 
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "util/priority_thread_pool.hpp"
+#include "util/runtime_profile.h"
+
+namespace parquet {
+class FileMetaData;
+} // namespace parquet
+namespace starrocks {
+class Chunk;
+class ExprContext;
+class PriorityThreadPool;
+class RuntimeState;
+} // namespace starrocks
 
 namespace starrocks::parquet {
 

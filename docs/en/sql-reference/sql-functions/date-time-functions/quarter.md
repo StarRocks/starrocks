@@ -66,7 +66,7 @@ SELECT QUARTER(NOW());
 
 SELECT QUARTER(CURDATE());
 +--------------------+
-| quartr(curdate()) |
+| quarter(curdate()) |
 +--------------------+
 |                  4 |
 +--------------------+

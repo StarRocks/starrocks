@@ -9,9 +9,11 @@ displayed_sidebar: "Chinese"
 
 查看单个用户的最大连接数。
 
-> **注意**
->
-> 当前用户可以查询自己的 property。但只有拥有 `user_admin` 角色的用户才可以查看其他用户的 property。
+:::tip
+
+当前用户可以查询自己的 property。但只有拥有 `user_admin` 角色的用户才可以查看其他用户的 property。
+
+:::
 
 ## 语法
 

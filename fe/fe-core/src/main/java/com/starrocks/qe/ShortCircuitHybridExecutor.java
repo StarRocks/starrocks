@@ -66,8 +66,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
     public ShortCircuitHybridExecutor(ConnectContext context, PlanFragment planFragment,
                                       List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
-                                      boolean isBinaryRow, boolean enableProfile) {
-        super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile);
+                                      boolean isBinaryRow, boolean enableProfile, String protocol) {
+        super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile, protocol);
     }
 
     @Override
@@ -95,7 +95,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
             PBackendService service = BrpcProxy.getBackendService(beAddress);
             try {
                 PExecShortCircuitRequest pRequest = new PExecShortCircuitRequest();
-                pRequest.setRequest(tRequest);
+                pRequest.setAttachmentProtocol(protocol);
+                pRequest.setRequest(tRequest, protocol);
                 watch.start();
                 Future<PExecShortCircuitResult> future = service.execShortCircuit(pRequest);
                 PExecShortCircuitResult shortCircuitResult = future.get(
@@ -190,7 +191,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
     private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() {
         SetMultimap<TNetworkAddress, TabletWithVersion> backend2Tablets = HashMultimap.create();
         scanRangeLocations.forEach(range -> {
-            ImmutableMap<Long, Backend> idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+            ImmutableMap<Long, Backend> idToBackend =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
             TInternalScanRange internalScanRange = range.getScan_range().getInternal_scan_range();
             TabletWithVersion tabletWithVersion = new TabletWithVersion(internalScanRange.getTablet_id(),

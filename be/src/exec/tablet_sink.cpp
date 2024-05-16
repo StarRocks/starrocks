@@ -98,6 +98,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
+    _write_txn_log = table_sink.write_txn_log;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
@@ -166,6 +167,16 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     // init _colocate_mv_index: Only use colocate mv when both FE/BE's config are set true.
     if (table_sink.__isset.enable_colocate_mv_index) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
+    }
+
+    // Query context is only available for pipeline engine
+    auto query_ctx = state->query_ctx();
+    if (query_ctx) {
+        _load_channel_profile_config.set_enable_profile(query_ctx->get_enable_profile_flag());
+        _load_channel_profile_config.set_big_query_profile_threshold_ns(
+                query_ctx->get_big_query_profile_threshold_ns());
+        _load_channel_profile_config.set_runtime_profile_report_interval_ns(
+                query_ctx->get_runtime_profile_report_interval_ns());
     }
 
     return Status::OK();
@@ -438,6 +449,10 @@ Status OlapTableSink::_update_immutable_partition(const std::set<int64_t>& parti
     for (auto partition_id : partition_ids_to_be_updated) {
         request.partition_ids.push_back(partition_id);
     }
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
 
     RETURN_IF_ERROR(_vectorized_partition->remove_partitions(request.partition_ids));
 
@@ -668,8 +683,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                 }
                 for (auto i : invalid_row_indexs) {
                     if (state->enable_log_rejected_record()) {
-                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(),
-                                                              chunk->source_filename());
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(), "");
                     } else {
                         break;
                     }
@@ -817,7 +831,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     if (_tablet_sink_sender == nullptr) {
         return close_status;
     }
-    Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile);
+    Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile, _write_txn_log);
     if (!status.ok()) {
         _span->SetStatus(trace::StatusCode::kError, std::string(status.message()));
     }
@@ -895,8 +909,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
                     std::string error_msg =
                             strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg,
-                                                          chunk->source_filename());
+                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg, "");
                 }
             }
         }
@@ -932,8 +945,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                     _validate_selection[j] = VALID_SEL_FAILED;
                     // If enable_log_rejected_record is true, we need to log the rejected record.
                     if (nullable->is_null(j) && state->enable_log_rejected_record()) {
-                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
-                                                              chunk->source_filename());
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
                     }
                 }
 #if BE_TEST
@@ -973,8 +985,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         }
 #endif
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
                         }
                     }
                 }
@@ -1013,8 +1024,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg =
                                     strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
                                                         binary->get_slice(j).size, desc->col_name(), desc->type().len);
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
                         }
                     }
                 }
@@ -1039,8 +1049,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg = strings::Substitute(
                                     "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
                                     desc->col_name(), desc->type().debug_string());
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
-                                                                  chunk->source_filename());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
                         }
                     }
                 }

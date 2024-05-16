@@ -86,17 +86,14 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(PipeFileSystemTable.create());
             super.registerTableUnlocked(PipesSystemTable.create());
             super.registerTableUnlocked(BeDataCacheMetricsTable.create());
+            super.registerTableUnlocked(PartitionsMetaSystemTable.create());
+            super.registerTableUnlocked(TemporaryTablesTable.create());
         }
     }
 
     @Override
-    public void dropTableWithLock(String name) {
-        // Do nothing.
-    }
-
-    @Override
-    public void dropTable(String name) {
-        // Do nothing.
+    public Table dropTable(String name) {
+        return null;
     }
 
     @Override

@@ -49,6 +49,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"QUERY_REWRITE_STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -75,12 +76,8 @@ Status SchemaMaterializedViewsScanner::start(RuntimeState* state) {
         }
     }
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        int timeout_ms = state->query_options().query_timeout * 1000;
-        RETURN_IF_ERROR(SchemaHelper::get_db_names(*(_param->ip), _param->port, db_params, &_db_result, timeout_ms));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_db_names(_ss_state, db_params, &_db_result));
     return Status::OK();
 }
 
@@ -88,31 +85,30 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TMaterializedViewStatus& info = _mv_results.materialized_views[_table_index];
     std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
-    DatumArray datum_array{
-            Slice(info.id),
-            Slice(db_name),
-            Slice(info.name),
-            Slice(info.refresh_type),
-            Slice(info.is_active),
-            Slice(info.inactive_reason),
-            Slice(info.partition_type),
-            Slice(info.task_id),
-            Slice(info.task_name),
-            Slice(info.last_refresh_start_time),
-            Slice(info.last_refresh_finished_time),
-            Slice(info.last_refresh_duration),
-            Slice(info.last_refresh_state),
-            Slice(info.last_refresh_force_refresh),
-            Slice(info.last_refresh_start_partition),
-            Slice(info.last_refresh_end_partition),
-            Slice(info.last_refresh_base_refresh_partitions),
-            Slice(info.last_refresh_mv_refresh_partitions),
-            Slice(info.last_refresh_error_code),
-            Slice(info.last_refresh_error_message),
-            Slice(info.rows),
-            Slice(info.text),
-            Slice(info.extra_message),
-    };
+    DatumArray datum_array{Slice(info.id),
+                           Slice(db_name),
+                           Slice(info.name),
+                           Slice(info.refresh_type),
+                           Slice(info.is_active),
+                           Slice(info.inactive_reason),
+                           Slice(info.partition_type),
+                           Slice(info.task_id),
+                           Slice(info.task_name),
+                           Slice(info.last_refresh_start_time),
+                           Slice(info.last_refresh_finished_time),
+                           Slice(info.last_refresh_duration),
+                           Slice(info.last_refresh_state),
+                           Slice(info.last_refresh_force_refresh),
+                           Slice(info.last_refresh_start_partition),
+                           Slice(info.last_refresh_end_partition),
+                           Slice(info.last_refresh_base_refresh_partitions),
+                           Slice(info.last_refresh_mv_refresh_partitions),
+                           Slice(info.last_refresh_error_code),
+                           Slice(info.last_refresh_error_message),
+                           Slice(info.rows),
+                           Slice(info.text),
+                           Slice(info.extra_message),
+                           Slice(info.query_rewrite_status)};
 
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
@@ -124,6 +120,11 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
 Status SchemaMaterializedViewsScanner::get_materialized_views() {
     TGetTablesParams table_params;
     table_params.__set_db(_db_result.dbs[_db_index++]);
+    // table_name
+    std::string table_name;
+    if (_parse_expr_predicate("TABLE_NAME", table_name)) {
+        table_params.__set_table_name(table_name);
+    }
     if (nullptr != _param->wild) {
         table_params.__set_pattern(*(_param->wild));
     }
@@ -139,12 +140,7 @@ Status SchemaMaterializedViewsScanner::get_materialized_views() {
     }
     table_params.__set_type(TTableType::MATERIALIZED_VIEW);
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::list_materialized_view_status(*(_param->ip), _param->port, table_params, &_mv_results));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::list_materialized_view_status(_ss_state, table_params, &_mv_results));
     _table_index = 0;
     return Status::OK();
 }

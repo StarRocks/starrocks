@@ -14,6 +14,8 @@
 
 package com.starrocks.credential;
 
+import com.staros.proto.FileStoreInfo;
+import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -131,6 +133,59 @@ public class AWSCloudConfigurationTest {
         {
             AWSCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
             Assert.assertNotNull(credential);
+        }
+    }
+
+    @Test
+    public void testEnablePartitionedPrefixConfiguration() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.iam_role_arn", "arn");
+        properties.put("aws.s3.sts.endpoint", "endpoint");
+
+        {
+            CloudConfiguration cloudConfiguration =
+                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties, true);
+            Assert.assertNotNull(cloudConfiguration);
+            Assert.assertTrue(cloudConfiguration instanceof AWSCloudConfiguration);
+            FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
+            Assert.assertFalse(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
+            Assert.assertEquals(0, fsInfo.getS3FsInfo().getNumPartitionedPrefix());
+        }
+
+        properties.put("aws.s3.enable_partitioned_prefix", "true");
+        {
+            CloudConfiguration cloudConfiguration =
+                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+            Assert.assertTrue(cloudConfiguration instanceof AWSCloudConfiguration);
+            FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
+            Assert.assertTrue(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
+            // set default to 256
+            Assert.assertEquals(256, fsInfo.getS3FsInfo().getNumPartitionedPrefix());
+        }
+
+        properties.put("aws.s3.num_partitioned_prefix", "not_a_number");
+        {
+            // invalid number for partitioned_prefix property
+            Assert.assertThrows(IllegalArgumentException.class, () ->
+                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties));
+        }
+
+        properties.put("aws.s3.num_partitioned_prefix", "-12");
+        {
+            // must be positive integer
+            Assert.assertThrows(IllegalArgumentException.class, () ->
+                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties));
+        }
+        properties.put("aws.s3.num_partitioned_prefix", "1024");
+        {
+            CloudConfiguration cloudConfiguration =
+                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+            Assert.assertTrue(cloudConfiguration instanceof AWSCloudConfiguration);
+            FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
+            Assert.assertTrue(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
+            Assert.assertEquals(1024, fsInfo.getS3FsInfo().getNumPartitionedPrefix());
         }
     }
 }

@@ -42,6 +42,7 @@ public:
 
     virtual Status build(const std::string& timezone, const std::string& file_path, int64_t file_length,
                          std::shared_ptr<DefaultMORProcessor> mor_processor, std::vector<SlotDescriptor*> slots,
+                         TupleDescriptor* delete_column_tuple_desc, const TIcebergSchema* iceberg_equal_delete_schema,
                          RuntimeState* state) = 0;
 };
 
@@ -53,11 +54,29 @@ public:
 
     Status build(const std::string& timezone, const std::string& file_path, int64_t file_length,
                  std::shared_ptr<DefaultMORProcessor> mor_processor, std::vector<SlotDescriptor*> slots,
+                 TupleDescriptor* delete_column_tuple_desc, const TIcebergSchema* iceberg_equal_delete_schema,
                  RuntimeState* stage) override;
 
 private:
     FileSystem* _fs;
     std::string _datafile_path;
+};
+
+class ParquetEqualityDeleteBuilder : public EqualityDeleteBuilder {
+public:
+    ParquetEqualityDeleteBuilder(FileSystem* fs, std::string datafile_path)
+            : _fs(fs), _datafile_path(std::move(datafile_path)) {}
+    ~ParquetEqualityDeleteBuilder() override = default;
+
+    Status build(const std::string& timezone, const std::string& file_path, int64_t file_length,
+                 std::shared_ptr<DefaultMORProcessor> mor_processor, std::vector<SlotDescriptor*> slots,
+                 TupleDescriptor* delete_column_tuple_desc, const TIcebergSchema* iceberg_equal_delete_schema,
+                 RuntimeState* stage) override;
+
+private:
+    FileSystem* _fs;
+    std::string _datafile_path;
+    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
 
 class ORCPositionDeleteBuilder : public PositionDeleteBuilder {
@@ -108,7 +127,7 @@ public:
         } else if (delete_file.file_content == TIcebergFileContent::EQUALITY_DELETES) {
             return ORCEqualityDeleteBuilder(_fs, _datafile_path)
                     .build(timezone, delete_file.full_path, delete_file.length, std::move(mor_processor),
-                           std::move(slots), state);
+                           std::move(slots), nullptr, nullptr, state);
         } else {
             const auto s = strings::Substitute("Unsupported iceberg file content: $0", delete_file.file_content);
             LOG(WARNING) << s;
@@ -116,10 +135,17 @@ public:
         }
     }
 
-    Status build_parquet(const std::string& timezone, const TIcebergDeleteFile& delete_file) const {
+    Status build_parquet(const std::string& timezone, const TIcebergDeleteFile& delete_file,
+                         const std::vector<SlotDescriptor*>& slots, TupleDescriptor* delete_column_tuple_desc,
+                         const TIcebergSchema* iceberg_equal_delete_schema, RuntimeState* state,
+                         std::shared_ptr<DefaultMORProcessor> mor_processor) const {
         if (delete_file.file_content == TIcebergFileContent::POSITION_DELETES) {
             return ParquetPositionDeleteBuilder(_fs, _datafile_path)
                     .build(timezone, delete_file.full_path, delete_file.length, _need_skip_rowids);
+        } else if (delete_file.file_content == TIcebergFileContent::EQUALITY_DELETES) {
+            return ParquetEqualityDeleteBuilder(_fs, _datafile_path)
+                    .build(timezone, delete_file.full_path, delete_file.length, std::move(mor_processor),
+                           std::move(slots), delete_column_tuple_desc, iceberg_equal_delete_schema, state);
         } else {
             auto s = strings::Substitute("Unsupported iceberg file content: $0", delete_file.file_content);
             LOG(WARNING) << s;

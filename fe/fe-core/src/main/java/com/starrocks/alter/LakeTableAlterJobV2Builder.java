@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -21,14 +20,17 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.Utils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 
 import java.util.HashMap;
@@ -37,9 +39,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
-    private final LakeTable table;
 
-    public LakeTableAlterJobV2Builder(LakeTable table) {
+    // The table could be either an LakeTable or LakeMaterializedView
+    private final OlapTable table;
+
+    public LakeTableAlterJobV2Builder(OlapTable table) {
+        Preconditions.checkArgument(table.isCloudNativeTableOrMaterializedView());
         this.table = table;
     }
 
@@ -56,11 +61,13 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
+        schemaChangeJob.setWarehouseId(warehouseId);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
+        schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
         for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
             long originIndexId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
-            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PRFIX + table.getIndexNameById(originIndexId);
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameById(originIndexId);
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
             long shadowIndexId = globalStateMgr.getNextId();
 
@@ -79,8 +86,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds =
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
-                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId,
-                                     originTabletIds, properties);
+                                table.getPartitionFileCacheInfo(partitionId), shardGroupId,
+                                originTabletIds, properties, warehouseId);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -105,10 +112,13 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
 
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                          long groupId, List<Long> matchShardIds, Map<String, String> properties)
-        throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
-                properties);
+                                          long groupId, List<Long> matchShardIds, Map<String, String> properties,
+                                          long warehouseId)
+            throws DdlException {
+        WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties,
+                        Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouseId)
+                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
-
 }

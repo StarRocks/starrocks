@@ -41,6 +41,7 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -317,7 +318,7 @@ public class RepositoryTest {
             List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp, null);
             Assert.assertEquals(2, infos.size());
 
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
         }

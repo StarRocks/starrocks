@@ -68,6 +68,20 @@ static inline size_t get_utf8_small_index(const Slice& str, uint8_t* small_index
     return n;
 }
 
+static inline Slice truncate_utf8(const Slice& str, const size_t max_size) {
+    std::vector<size_t> index{};
+    const size_t utf8_length = get_utf8_index(str, &index);
+    size_t actual_size = 0;
+    if (utf8_length > max_size) {
+        // do truncate
+        actual_size = index[max_size];
+    } else {
+        // don't need to truncate
+        actual_size = str.size;
+    }
+    return {str.data, actual_size};
+}
+
 // table-driven is faster than computing as follow:
 /*
  *      uint8_t b = ~static_cast<uint8_t>(*p);

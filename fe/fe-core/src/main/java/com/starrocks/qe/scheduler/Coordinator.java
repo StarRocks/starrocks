@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -37,7 +38,10 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -65,13 +69,15 @@ public abstract class Coordinator {
                                                          List<PlanFragment> fragments,
                                                          List<ScanNode> scanNodes, String timezone, long startTime,
                                                          Map<String, String> sessionVariables,
-                                                         ConnectContext context, long execMemLimit);
+                                                         ConnectContext context, long execMemLimit,
+                                                         long warehouseId);
 
         Coordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
                                                 List<PlanFragment> fragments,
                                                 List<ScanNode> scanNodes, String timezone, long startTime,
                                                 Map<String, String> sessionVariables,
-                                                long execMemLimit);
+                                                long execMemLimit,
+                                                long warehouseId);
 
         Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
                                                 DescriptorTable descTable, List<PlanFragment> fragments,
@@ -175,7 +181,15 @@ public abstract class Coordinator {
 
     public abstract List<TTabletFailInfo> getFailInfos();
 
+    public static List<TabletFailInfo> getFailInfos(Coordinator coord) {
+        return coord == null ? Collections.emptyList() : TabletFailInfo.fromThrift(coord.getFailInfos());
+    }
+
     public abstract List<TTabletCommitInfo> getCommitInfos();
+
+    public static List<TabletCommitInfo> getCommitInfos(Coordinator coord) {
+        return coord == null ? Collections.emptyList() : TabletCommitInfo.fromThrift(coord.getCommitInfos());
+    }
 
     public abstract List<TSinkCommitInfo> getSinkCommitInfos();
 
@@ -186,6 +200,8 @@ public abstract class Coordinator {
     public abstract List<String> getRejectedRecordPaths();
 
     public abstract List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos();
+
+    public abstract DataCacheSelectMetrics getDataCacheSelectMetrics();
 
     // ------------------------------------------------------------------------------------
     // Methods for audit.
@@ -213,5 +229,4 @@ public abstract class Coordinator {
     public abstract void setTimeoutSecond(int timeoutSecond);
 
     public abstract boolean isProfileAlreadyReported();
-
 }

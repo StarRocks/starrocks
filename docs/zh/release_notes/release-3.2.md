@@ -4,6 +4,170 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+## 3.2.6
+
+发布日期：2024 年 4 月 18 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 外表权限丢失。[#44030](https://github.com/StarRocks/starrocks/pull/44030)
+
+
+## 3.2.5 (已下线)
+
+发布日期：2024 年 4 月 12 日
+
+:::tip
+
+此版本因存在 Hive/Iceberg catalog 等外表权限相关问题已经下线。
+
+- 问题：查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。
+- 影响范围：对于不涉及 Hive/Iceberg catalog 等外表权限的查询，不受影响。
+- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.2.6 后，通过 `REVOKE` 操作删除其中一条即可。
+
+:::
+
+### 新增特性
+
+- 支持 [dict_mapping](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/dict-functions/dict_mapping/) 列属性，能够极大地方便构建全局字典中的数据导入过程，用以加速计算精确去重等。
+
+### 行为变更
+
+- JSON 中的 null 值通过 `IS NULL` 等方式判断时，修改为按照 SQL 的 NULL 值计算。即，`SELECT parse_json('{"a": null}') -> 'a' IS NULL` 会返回 `true`（原来是返回 `false` ）。 [#42765](https://github.com/StarRocks/starrocks/pull/42765)
+
+### 功能优化
+
+- 优化 FILES 表函数自动探测文件 Schema 时的列类型合并规则。当不同文件中存在同名但类型不同的列时，FILES 会尽可能将更大粒度的类型作为最终的探测类型，比如分别为 FLOAT 和 INT 类型的同名列，最终返回 DOUBLE 类型。[#40959](https://github.com/StarRocks/starrocks/pull/40959)
+- 主键表支持 Size-tiered Compaction 以减少 I/O 放大问题。[#41130](https://github.com/StarRocks/starrocks/pull/41130)
+- 通过 Broker Load 导入 ORC 格式的数据，在 TIMESTAMP 类型的数据转化为 StarRocks 中的 DATETIME 类型的数据时，新增支持保留微秒信息。[#42179](https://github.com/StarRocks/starrocks/pull/42179)
+- 优化 Routine Load 报错信息。[#41306](https://github.com/StarRocks/starrocks/pull/41306)
+- 优化 FILES 表函数转换数据类型失败时的报错信息。[#42717](https://github.com/StarRocks/starrocks/pull/42717)
+
+### 问题修复
+
+修复了如下问题：
+
+- 删除系统视图后 FE 启动失败。修复后禁止删除系统视图。[#43552](https://github.com/StarRocks/starrocks/pull/43552)
+- 主键表 Sort Key 存在重复列情况下 BE Crash。修复后禁止 Sort Key 存在重复列。[#43206](https://github.com/StarRocks/starrocks/pull/43206)
+- 当 JSON 对象为 NULL 时，to_json 函数返回错误。修复后，当 JSON 对象为 NULL 时，该函数返回 NULL 。[#42171](https://github.com/StarRocks/starrocks/pull/42171)
+- 对于存算分离中的主键表，本地持久化索引的垃圾回收 (Garbage Collection) 和淘汰线程对 CN 节点没有生效，导致无用数据没有被删除。[#41955](https://github.com/StarRocks/starrocks/pull/41955)
+- 存算分离模式下，修改主键表 `enable_persistent_index` 属性报错。[#42890](https://github.com/StarRocks/starrocks/pull/42890)
+- 存算分离模式下，主键表部分列更新时未更新列的值被修改为 NULL。[#42355](https://github.com/StarRocks/starrocks/pull/42355)
+- 物化视图在基表为逻辑视图情况下改写失败。[#42173](https://github.com/StarRocks/starrocks/pull/42173)
+- 跨集群同步工具在迁移主键表到存算分离集群时 CN Crash。[#42260](https://github.com/StarRocks/starrocks/pull/42260)
+- 外表物化视图范围分区不连续。[#41957](https://github.com/StarRocks/starrocks/pull/41957)
+
+## 3.2.4 (已下线)
+
+发布日期：2024 年 3 月 12 日
+
+:::tip
+
+此版本因存在 Hive/Iceberg catalog 等外表权限相关问题已经下线。
+
+- 问题：查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。
+- 影响范围：对于不涉及 Hive/Iceberg catalog 等外表权限的查询，不受影响。
+- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.2.6 后，通过 `REVOKE` 操作删除其中一条即可。
+
+:::
+
+### 新增特性
+
+- 存算分离集群中的云原生主键表支持 Size-tiered 模式 Compaction，以减轻导入较多小文件时 Compaction 的写放大问题。[#41034](https://github.com/StarRocks/starrocks/pull/41034)
+- Storage Volume 支持 HDFS 的参数化配置，包括 Simple 认证方式支持配置 username，Kerberos 认证，NameNode HA，以及 ViewFS。 
+- 新增日期函数 `milliseconds_diff`。[#38171](https://github.com/StarRocks/starrocks/pull/38171)
+- 新增 Session 变量 `catalog`，用于指定当前会话所在的 Catalog。[#41329](https://github.com/StarRocks/starrocks/pull/41329)
+- Hint 中支持设置[用户自定义变量](https://docs.starrocks.io/zh/docs/administration/Query_planning/#%E7%94%A8%E6%88%B7%E8%87%AA%E5%AE%9A%E4%B9%89%E5%8F%98%E9%87%8F-hint)。[#40746](https://github.com/StarRocks/starrocks/pull/40746)
+- Hive Catalog 支持 CREATE TABLE LIKE。[#37685](https://github.com/StarRocks/starrocks/pull/37685) 
+- 新增 `information_schema.partitions_meta` 视图，提供丰富的 PARTITION 元信息。[#39265](https://github.com/StarRocks/starrocks/pull/39265)
+- 新增 `sys.fe_memory_usage` 视图，提供 StarRocks 的内存使用信息。[#40464](https://github.com/StarRocks/starrocks/pull/40464)
+
+### 行为变更
+
+- `cbo_decimal_cast_string_strict` 用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。默认值是 `true`，即执行严格转换（按 Scale 截断补 `0`）。在历史版本中没有严格按照 DECIMAL 类型进行补齐，从而在 DECIMAL 与 STRING 类型进行比等时会产生不同效果。[#40619](https://github.com/StarRocks/starrocks/pull/40619)
+- Iceberg Catalog 的参数 `enable_iceberg_metadata_cache` 默认值改为 `false`。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。[#41826](https://github.com/StarRocks/starrocks/pull/41826)
+- 修改能发起物化视图刷新任务的用户，从原本的 `root` 用户变成创建物化视图的用户，已有的物化视图不受影响。[#40670](https://github.com/StarRocks/starrocks/pull/40670)  
+- 常量和字符串类型的列进行比较时，默认按字符串进行比较，用户可以通过设置变量 `cbo_eq_base_type` 来调整默认行为。将 `cbo_eq_base_type` 设置为 `decimal` 可以改为按数值进行比较。[#40619](https://github.com/StarRocks/starrocks/pull/40619)
+
+### 功能优化
+
+- 存算分离架构中，支持将数据分区存储于兼容 S3 的存储桶中的不同分区（子路径）中，分区路径使用统一前缀。此举可以提升 StarRocks 对 S3 文件的读写访问效率。[#41627](https://github.com/StarRocks/starrocks/pull/41627)
+- 支持通过 `s3_compatible_fs_list` 参数设置可以使用 AWS SDK 接入的 S3 兼容对象存储。同时支持通过 `fallback_to_hadoop_fs_list` 参数配置需要通过 HDFS 的 Schema 接入的非 S3 兼容对象存储（该方法需要使用厂商提供的 JAR 包）。[#41123](https://github.com/StarRocks/starrocks/pull/41123)
+- 优化 Trino 语法兼容性，支持 Trino 的 `current_catalog`、`current_schema`、`to_char`、`from_hex`、`to_date`、`to_timestamp` 以及 `index` 函数的语法转换。[#41217](https://github.com/StarRocks/starrocks/pull/41217) [#41319](https://github.com/StarRocks/starrocks/pull/41319) [#40803](https://github.com/StarRocks/starrocks/pull/40803)
+- 优化物化视图改写，支持基于逻辑视图创建的物化视图的改写。[#42173](https://github.com/StarRocks/starrocks/pull/42173)
+- 优化 STRING 向 DATETIME 类型转换的效率，性能约提升 35%~40%。[#41464](https://github.com/StarRocks/starrocks/pull/41464)
+- 聚合表中 BITMAP 类型的列支持指定聚合类型为 `replace_if_not_null`，从而支持部分列更新。[#42034](https://github.com/StarRocks/starrocks/pull/42034)
+- 优化 Broker Load 导入 ORC 小文件时的性能。[#41765](https://github.com/StarRocks/starrocks/pull/41765)
+- 行列混存表支持 Schema Change。[#40851](https://github.com/StarRocks/starrocks/pull/40851)
+- 行列混存表支持 BITMAP、HLL、JSON、ARRAY、MAP 和 STRUCT 等复杂类型。[#41476](https://github.com/StarRocks/starrocks/pull/41476)
+- 新增内部 SQL 日志，其中包含统计信息和物化视图等相关的日志信息。[#40453](https://github.com/StarRocks/starrocks/pull/40453)
+
+### 问题修复
+
+修复了如下问题：
+
+- 当创建 Hive 视图的查询语句中存在同一个表或视图的名称或别名大小写不一致的情况时，会出现 "Analyze Error" 的问题。[#40921](https://github.com/StarRocks/starrocks/pull/40921)
+- 主键表使用持久化索引会导致磁盘 I/O 打满。[#39959](https://github.com/StarRocks/starrocks/pull/39959)
+- 存算分离集群中，主键索引目录每 5 小时会被错误删除。 [#40745](https://github.com/StarRocks/starrocks/pull/40745)
+- 手动执行 ALTER TABLE COMPACT 后，Compaction 内存统计有异常。[#41150](https://github.com/StarRocks/starrocks/pull/41150)
+- 主键表 Publish 重试时可能会卡住。[#39890](https://github.com/StarRocks/starrocks/pull/39890)
+
+## 3.2.3
+
+发布日期：2024 年 2 月 8 日
+
+### 新增特性
+
+- 【公测中】支持行列混存的表存储格式，对于基于主键的高并发、低延时点查，以及数据部分列更新等场景有更好的性能。但目前还不支持 ALTER，Sort Key 和列模式部分列更新。
+- 支持异步物化视图的备份（BACKUP）和恢复（RESTORE）。
+- Broker Load 支持 JSON 格式的数据的导入。
+- 支持基于视图创建的物化视图的查询改写。例如，直接基于视图创建了物化视图，后续基于该视图的查询可以被改写到物化视图上。
+- 支持 CREATE OR REPLACE PIPE。 [#37658](https://github.com/StarRocks/starrocks/pull/37658)
+
+### 行为变更
+
+- 新增 Session 变量 `enable_strict_order_by`。当取值为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。[#37910](https://github.com/StarRocks/starrocks/pull/37910)
+- 新增 Session 变量 `enable_materialized_view_for_insert`，默认值为 `FALSE`，即物化视图默认不改写 INSERT INTO SELECT 语句中的查询。[#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- 单个查询在 Pipeline 框架中执行时所使用的内存限制不再受 `exec_mem_limit` 限制，仅由 `query_mem_limit` 限制。取值为 `0` 表示没有限制。 [#34120](https://github.com/StarRocks/starrocks/pull/34120) 
+
+### 参数变更
+
+- 新增 FE 配置项  `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。[#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- 新增 BE 配置项 `lake_pk_compaction_max_input_rowsets`，用于控制存算分离集群下主键表 Compaction 任务中允许的最大输入 Rowset 数量，优化 Compaction 时资源的使用。[#39611](https://github.com/StarRocks/starrocks/pull/39611)
+- 新增 Session 变量 `connector_sink_compression_codec`，用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法，可选算法包括 GZIP、BROTLI、ZSTD 以及 LZ4。 [#37912](https://github.com/StarRocks/starrocks/pull/37912)
+- 新增 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 `1`。[#36681](https://github.com/StarRocks/starrocks/pull/36681)
+- 新增 BE 配置项 `enable_lazy_delta_column_compaction`，默认取值是 `true`，表示不启用频繁的进行 Delta Column 的 Compaction。[#36654](https://github.com/StarRocks/starrocks/pull/36654)
+- 新增 FE 配置项 `default_mv_refresh_immediate`，用于控制物化视图创建完成后是否立刻进行刷新，默认值为 `true`，表示立刻刷新，`false` 表示延迟刷新。 [#37093](https://github.com/StarRocks/starrocks/pull/37093)
+- 调整 FE 配置项 `default_mv_refresh_partition_num` 默认值为 `1`，即单次物化视图刷新需更新多个分区时，任务将分批执行，一次只刷新一个分区。此举可以减少每次刷新占用的资源。 [#36560](https://github.com/StarRocks/starrocks/pull/36560)
+- 调整 BE/CN 配置项 `starlet_use_star_cache` 默认值为 `true`，即在存算分离模式下默认开启 block data cache。如果您在升级前将 BE/CN 参数 `starlet_cache_evict_high_water` 配置为 `X`，则需要将 BE/CN 参数 `starlet_star_cache_disk_size_percent` 配置为 `(1.0 - X) * 100`。例如，如果您将 `starlet_cache_evict_high_water` 设置为 0.3，则需要设置 `starlet_star_cache_disk_size_percent` 为 70。此举可以确保 file data cache 和 block data cache 不会超过磁盘容量上限。[#38200](https://github.com/StarRocks/starrocks/pull/38200)
+
+### 功能优化
+
+- 对于分区字段为 TIMESTAMP 类型的 Iceberg 表，新增 `yyyy-MM-ddTHH:mm` 和 `yyyy-MM-dd HH:mm` 两种数据格式的支持。[#39986](https://github.com/StarRocks/starrocks/pull/39986)
+- 监控 API 增加 Data Cache 相关指标。 [#40375](https://github.com/StarRocks/starrocks/pull/40375)
+- 优化 BE 的日志打印，避免日志过多。 [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
+- 视图 `information_schema.be_tablets` 中增加 `storage_medium` 字段。 [#37070](https://github.com/StarRocks/starrocks/pull/37070)
+- 支持在多个子查询中使用 `SET_VAR`。 [#36871](https://github.com/StarRocks/starrocks/pull/36871)
+- SHOW ROUTINE LOAD 返回结果中增加 `LatestSourcePosition`，记录数据源 Kafka 中 Topic 内各个分区的最新消息位点，便于检查导入延迟情况。[#38298](https://github.com/StarRocks/starrocks/pull/38298)
+- WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- 调整 Trash 文件的默认过期时间为 1 天（原来是 3 天）。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
+- 支持收集带 Partition Transform 的 Iceberg 表的统计信息。 [#39907](https://github.com/StarRocks/starrocks/pull/39907)
+- 优化 Rountine Load 的调度策略，慢任务不阻塞其他正常任务的执行。[#37638](https://github.com/StarRocks/starrocks/pull/37638)
+
+### 问题修复
+
+修复了如下问题：
+
+- ANALYZE TABLE 偶尔会卡住。 [#36836](https://github.com/StarRocks/starrocks/pull/36836)
+- PageCache 内存占用在有些情况下会超过 BE 动态参数 `storage_page_cache_limit` 设定的阈值。[#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- Hive Catalog 的元数据在 Hive 表新增字段后不会自动刷新。[#37549](https://github.com/StarRocks/starrocks/pull/37549)
+- 某些情况下 `bitmap_to_string` 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
+- `SELECT ... FROM ... INTO OUTFILE` 导出至 CSV 时，如果 FROM 子句中包含多个常量，执行时会报错："Unmatched number of columns"。[#38045](https://github.com/StarRocks/starrocks/pull/38045)
+- 查询表中半结构化数据时，某些情况下会导致 BE Crash。 [#40208](https://github.com/StarRocks/starrocks/pull/40208)
+
 ## 3.2.2
 
 发布日期：2023 年 12 月 30 日
@@ -70,7 +234,7 @@ displayed_sidebar: "Chinese"
 
 #### 存算分离
 
-- 支持[主键模型表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)的索引在本地磁盘的持久化。
+- 支持[主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)的索引在本地磁盘的持久化。
 - 支持 Data Cache 在多磁盘间均匀分布。
 
 #### 物化视图
@@ -112,7 +276,7 @@ displayed_sidebar: "Chinese"
 - hash 函数：xx_hash3_64
 - 聚合函数：approx_top_k
 - 窗口函数：cume_dist、percent_rank、session_number
-- 工具函数：dict_mapping、get_query_profile、is_role_in_session
+- 工具函数：get_query_profile、is_role_in_session
 
 #### 权限
 
@@ -158,12 +322,12 @@ displayed_sidebar: "Chinese"
 
 #### 导入、导出和存储  
 
-- 优化主键模型（Primary Key）表持久化索引功能，优化内存使用逻辑，同时降低 I/O 的读写放大。
-- 主键模型（Primary Key）表支持本地多块磁盘间数据均衡。
+- 优化主键表（Primary Key）表持久化索引功能，优化内存使用逻辑，同时降低 I/O 的读写放大。
+- 主键表（Primary Key）表支持本地多块磁盘间数据均衡。
 - 分区中数据可以随着时间推移自动进行降冷操作（List 分区方式暂不支持）。相对原来的设置，更方便进行分区冷热管理。有关详细信息，请参见[设置数据的初始存储介质、自动降冷时间](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE#设置数据的初始存储介质自动降冷时间和副本数)。
-- 主键模型数据写入时的 Publish 过程由异步改为同步，导入作业成功返回后数据立即可见。有关详细信息，请参见 [enable_sync_publish](https://docs.starrocks.io/zh/docs/administration/FE_configuration#enable_sync_publish)。
+- 主键表数据写入时的 Publish 过程由异步改为同步，导入作业成功返回后数据立即可见。有关详细信息，请参见 [enable_sync_publish](https://docs.starrocks.io/zh/docs/administration/FE_configuration#enable_sync_publish)。
 - 支持 Fast Schema Evolution 模式，由表属性 [`fast_schema_evolution`](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE#设置-fast-schema-evolution) 控制。启用该模式可以在进行加减列变更时提高执行速度并降低资源使用。该属性默认值是 `false`（即关闭）。不支持建表后通过 ALTER TABLE 修改该表属性。
-- 对于采用随机分桶的**明细模型**表，系统进行了优化，会根据集群信息及导入中的数据量大小[按需动态调整 Tablet 数量](https://docs.starrocks.io/zh/docs/table_design/Data_distribution#设置分桶数量)。
+- 对于采用随机分桶的**明细表**，系统进行了优化，会根据集群信息及导入中的数据量大小[按需动态调整 Tablet 数量](https://docs.starrocks.io/zh/docs/table_design/Data_distribution#设置分桶数量)。
 
 #### 查询
 
@@ -176,7 +340,7 @@ displayed_sidebar: "Chinese"
 
 #### 其他优化
 
-- 新增会话变量 `large_decimal_underlying_type =`` ``"panic"|"double"|"decimal"`，用以设置超出范围的 DECIMAL 类型数据的转换规则。其中 `panic` 表示直接报错，`double` 表示转换为 DOUBLE 类型，`decimal` 表示转换为 DECIMAL(38,s)。
+- 新增会话变量 `large_decimal_underlying_type = "panic"|"double"|"decimal"`，用以设置超出范围的 DECIMAL 类型数据的转换规则。其中 `panic` 表示直接报错，`double` 表示转换为 DOUBLE 类型，`decimal` 表示转换为 DECIMAL(38,s)。
 
 ### 开发者工具
 
@@ -241,7 +405,6 @@ displayed_sidebar: "Chinese"
   - 静态参数 `tc_max_total_thread_cache_bytes`
 - 默认值修改：
   - `disable_column_pool` 默认值从 `false` 变为 `true`。
-  - `txn_commit_rpc_timeout_ms` 默认值从 `20000` 变为 `60000`。
   - `thrift_port` 默认值从 `9060` 变为 `0`。
   - `enable_load_colocate_mv` 默认值从 `false` 变为 `true`。
   - `enable_pindex_minor_compaction` 默认值从 `false` 变为 `true`。
@@ -249,7 +412,7 @@ displayed_sidebar: "Chinese"
 #### 系统变量
 
 - 新增以下会话变量：
-  - `enable_per_bucket_optmize`
+  - `enable_per_bucket_optimize`
   - `enable_write_hive_external_table`
   - `hive_temp_staging_dir`
   - `spill_revocable_max_bytes`

@@ -8,7 +8,7 @@ storage_volume_drop
 -- !result
 DROP STORAGE VOLUME storage_volume_drop_1;
 -- result:
-E: (1064, "Unexpected exception: Storage volume 'storage_volume_drop_1' does not exist")
+E: (1064, "Storage volume 'storage_volume_drop_1' does not exist")
 -- !result
 DROP STORAGE VOLUME IF EXISTS storage_volume_drop_1;
 -- result:

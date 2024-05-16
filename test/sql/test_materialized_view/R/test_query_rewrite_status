@@ -1,0 +1,32 @@
+-- name: test_query_rewrite_status
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1(c1 int, c2 int, c3 int) ;
+-- result:
+-- !result
+create materialized view mv1 refresh manual as select * from t1;
+-- result:
+-- !result
+create materialized view mv2 refresh manual properties('enable_query_rewrite'='false') as select * from t1;
+-- result:
+-- !result
+create materialized view mv3 refresh manual as select c1, count(*) from t1 group by c1;
+-- result:
+-- !result
+alter materialized view mv3 inactive;
+-- result:
+-- !result
+create materialized view mv4 refresh manual as select c1, count(*) from t1 group by c1 limit 5;
+-- result:
+-- !result
+select table_name, query_rewrite_status from information_schema.materialized_views where TABLE_SCHEMA = 'db_${uuid0}' order by table_name;
+-- result:
+mv1	VALID
+mv2	INVALID: enable_query_rewrite=FALSE
+mv3	INVALID: MV is not active
+mv4	INVALID: no valid plan: MV contains non-SPJG operators(no view rewrite): LOGICAL_LIMIT
+-- !result

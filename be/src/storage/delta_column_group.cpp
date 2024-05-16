@@ -16,17 +16,16 @@
 
 #include <memory>
 
-#include "gen_cpp/olap_common.pb.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/rowset.h"
 #include "storage/utils.h"
 
 namespace starrocks {
 
-void DeltaColumnGroup::init(int64_t version, const std::vector<std::vector<uint32_t>>& column_ids,
+void DeltaColumnGroup::init(int64_t version, const std::vector<std::vector<ColumnUID>>& column_ids,
                             const std::vector<std::string>& column_files) {
     _version = version;
-    _column_ids = column_ids;
+    _column_uids = column_ids;
     _column_files = column_files;
     _calc_memory_usage();
 }
@@ -35,8 +34,8 @@ void DeltaColumnGroup::_calc_memory_usage() {
     size_t total_ids = 0;
     size_t total_column_name_size = 0;
 
-    for (int i = 0; i < _column_ids.size(); ++i) {
-        total_ids += _column_ids[i].size();
+    for (int i = 0; i < _column_uids.size(); ++i) {
+        total_ids += _column_uids[i].size();
         total_column_name_size += _column_files[i].length();
     }
 
@@ -62,7 +61,7 @@ bool DeltaColumnGroup::merge_by_version(DeltaColumnGroup& dcg, const std::string
 
     size_t orig_size = _column_files.size();
 
-    _column_ids.insert(_column_ids.end(), dcg.column_ids().begin(), dcg.column_ids().end());
+    _column_uids.insert(_column_uids.end(), dcg.column_ids().begin(), dcg.column_ids().end());
 
     _column_files.resize(_column_files.size() + dcg.relative_column_files().size());
     // update the file name suffix to finish merge
@@ -95,7 +94,7 @@ Status DeltaColumnGroup::load(int64_t version, const char* data, size_t length) 
         old_parsed = true;
     }
 
-    CHECK((parsed && !old_parsed) || (!parsed && old_parsed));
+    RETURN_ERROR_IF_FALSE((parsed && !old_parsed) || (!parsed && old_parsed));
 
     if (!parsed && old_parsed) {
         auto column_ids = dcg_pb.add_column_ids();
@@ -110,9 +109,9 @@ Status DeltaColumnGroup::load(int64_t version, const char* data, size_t length) 
         _column_files.push_back(column_file);
     }
     for (const auto& cids : dcg_pb.column_ids()) {
-        _column_ids.emplace_back(std::vector<uint32_t>());
+        _column_uids.emplace_back();
         for (const auto& cid : cids.column_ids()) {
-            _column_ids.back().push_back(cid);
+            _column_uids.back().push_back(cid);
         }
     }
     _calc_memory_usage();
@@ -124,7 +123,7 @@ std::string DeltaColumnGroup::save() const {
     for (const auto& column_file : _column_files) {
         dcg_pb.add_column_files(column_file);
     }
-    for (const auto& cids : _column_ids) {
+    for (const auto& cids : _column_uids) {
         auto* dcg_col_pb = dcg_pb.add_column_ids();
         for (const auto& cid : cids) {
             dcg_col_pb->add_column_ids(cid);
@@ -181,11 +180,11 @@ Status DeltaColumnGroupListSerializer::_deserialize_delta_column_group_list(cons
     DCHECK(dcgs_pb.versions_size() == dcgs_pb.dcgs_size());
     for (int i = 0; i < dcgs_pb.versions_size(); i++) {
         auto dcg = std::make_shared<DeltaColumnGroup>();
-        std::vector<std::vector<uint32_t>> column_ids;
+        std::vector<std::vector<ColumnUID>> column_ids;
         std::vector<std::string> column_files;
         DCHECK(dcgs_pb.dcgs(i).column_ids().size() == dcgs_pb.dcgs(i).column_files().size());
         for (int j = 0; j < dcgs_pb.dcgs(i).column_ids().size(); ++j) {
-            column_ids.emplace_back(std::vector<uint32_t>());
+            column_ids.emplace_back();
             for (const auto& cid : dcgs_pb.dcgs(i).column_ids(j).column_ids()) {
                 column_ids.back().push_back(cid);
             }

@@ -139,7 +139,9 @@ public:
             return _array_difference<TYPE_LARGEINT>(ctx, columns);
         } else if constexpr (lt_is_decimalv2<LT>) {
             return _array_difference<TYPE_DECIMALV2>(ctx, columns);
-        } else if constexpr (lt_is_decimal32<LT> || lt_is_decimal64<LT>) {
+        } else if constexpr (lt_is_decimal32<LT>) {
+            return _array_difference<TYPE_DECIMAL32>(ctx, columns);
+        } else if constexpr (lt_is_decimal64<LT>) {
             return _array_difference<TYPE_DECIMAL64>(ctx, columns);
         } else if constexpr (lt_is_decimal128<LT>) {
             return _array_difference<TYPE_DECIMAL128>(ctx, columns);
@@ -771,7 +773,7 @@ private:
 class ArrayJoin {
 public:
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
-        // TODO: optimize the performace of const sep or const null replace str
+        // TODO: optimize the performance of const sep or const null replace str
         DCHECK_GE(columns.size(), 2);
         size_t chunk_size = columns[0]->size();
 
@@ -789,7 +791,7 @@ private:
     static ColumnPtr _join_column_replace_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
                                                const ColumnPtr& null_replace_column, size_t chunk_size) {
         NullableBinaryColumnBuilder res;
-        // byte_size may be smaller or larger then actual used size
+        // byte_size may be smaller or larger than actual used size
         // byte_size is only one reserve size
         size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
                            ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size() +
@@ -1426,7 +1428,7 @@ private:
     }
 };
 
-// Todo:support datatime/data
+// Todo:support datetime/date
 template <LogicalType Type>
 class ArrayGenerate {
 public:

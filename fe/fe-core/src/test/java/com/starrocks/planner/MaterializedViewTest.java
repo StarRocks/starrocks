@@ -912,13 +912,44 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testAggregateWithGroupByKeyExpr() {
+    public void testAggregateWithGroupByKeyExpr1() {
+        setTracLogModule("MV");
         testRewriteOK("select empid, deptno," +
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
                 "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
                 .contains("  0:OlapScanNode\n" +
                         "     TABLE: mv0")
+                .contains("  1:Project\n" +
+                        "  |  <slot 9> : 9: empid\n" +
+                        "  |  <slot 10> : 10: deptno\n" +
+                        "  |  <slot 11> : 11: total\n" +
+                        "  |  <slot 14> : abs(9: empid)\n" +
+                        "  |  ")
+                .contains("  2:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(11: total)\n" +
+                        "  |  group by: 14: abs, 10: deptno");
+    }
+
+    @Test
+    public void testAggregateWithGroupByKeyExpr2() {
+        testRewriteOK("select empid, deptno," +
+                        " sum(salary) as total, " +
+                        " min(salary) as min_total, " +
+                        " max(salary) as max_total, " +
+                        " count(salary) + 1 as cnt" +
+                        " from emps group by empid, deptno ",
+                "select abs(empid), sum(salary) from emps group by abs(empid), deptno")
+                .contains("  0:OlapScanNode\n" +
+                        "     TABLE: mv0")
+                // only contains required columns from mv scan operator.
+                .contains("  1:Project\n" +
+                        "  |  <slot 9> : 9: empid\n" +
+                        "  |  <slot 10> : 10: deptno\n" +
+                        "  |  <slot 11> : 11: total\n" +
+                        "  |  <slot 16> : abs(9: empid)\n" +
+                        "  |  ")
                 .contains("  2:AGGREGATE (update serialize)\n" +
                         "  |  STREAMING\n" +
                         "  |  output: sum(11: total)\n" +
@@ -1801,7 +1832,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggJoinViewDelta() {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String mv = "SELECT" +
                 " `LO_ORDERKEY` as col1, C_CUSTKEY, S_SUPPKEY, P_PARTKEY," +
                 " sum(LO_QUANTITY) as total_quantity, sum(LO_ORDTOTALPRICE) as total_price, count(*) as num" +
@@ -2165,6 +2195,73 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testViewDeltaJoinUKFK15() {
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(0);
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "left outer join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteFail(mv, query);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK16() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "left outer join dependents using (empid)\n"
+                + "where dependents.name = 'name1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK17() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " join dependents using (empid)\n"
+                + "where dependents.name = 'name1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK18() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "full outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " full join dependents using (empid)\n"
+                + "where emps.empid = '1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFK19() {
+        // set join derive rewrite in view delta
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "left outer join depts b on (emps.deptno=b.deptno)\n"
+                + "full outer join dependents using (empid)";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + " inner join dependents using (empid)\n"
+                + "where emps.empid = '1'";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
     public void testViewDeltaJoinUKFKInMV1() {
         String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
                 + "join dependents using (empid)";
@@ -2249,6 +2346,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, query, constraint).
                 contains("0:OlapScanNode\n" +
                         "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV7() {
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(1);
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "left join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid; depts.deptno\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid);" +
+                "emps_no_constraint(deptno) references depts(deptno)\" ";
+        testRewriteFail(mv, query, constraint);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
     }
 
     @Test
@@ -2719,6 +2833,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testArrayAggDistinctWithRollup() {
+        String mv = "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;")
+                .notContain("array_unique_agg");
+        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id")
+                .contains("array_unique_agg");
+        testRewriteOK(mv, "select array_distinct(array_agg(tag_id)) from user_tags")
+                .contains("array_unique_agg");
+    }
+
+    @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -2837,11 +2962,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "bitmap_union(bitmap_hash(concat(user_name, \"b\"))), " +
                 "bitmap_union(bitmap_hash(concat(user_name, \"c\"))) from user_tags group by user_id, time;";
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setCboCteReuse(false);
         testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x " +
                 "from user_tags group by user_id;");
-        // FIXME: MV Rewrite should take care cte reuse node later.
-        connectContext.getSessionVariable().setCboCteReuse(false);
         testRewriteOK(mv, "select user_id, count(distinct user_name), " +
                 " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
                 " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id;");
@@ -5244,13 +5368,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
         PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
 
-        {
-            testRewriteFail(mv, query);
-        }
-
         // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+        testRewriteOK(mv, query);
+
         {
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("UNION");
@@ -5373,5 +5495,134 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid,\n" +
                 " sum(salary) as total, count(salary)  as cnt\n" +
                 " from emps group by empid having sum(salary) > 10");
+    }
+
+    @Test
+    public void testMultiLeftOuterJoin() {
+        {
+            String mv = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and t1a != 'xxx'";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("t1a != 'xxx'");
+        }
+
+        {
+            String mv = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and v3 = 1";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testColumnPruningWithPredicates() {
+        {
+            String mv = "select lo_orderkey, lo_orderdate, lo_linenumber," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_revenue) as total_revenue," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderkey, lo_orderdate, lo_linenumber";
+            String query = "select lo_orderdate," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderdate" +
+                    " having sum(lo_tax) > 100";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("4:Project\n" +
+                    "  |  <slot 6> : 21: lo_orderdate\n" +
+                    "  |  <slot 18> : 26: sum\n" +
+                    "  |  <slot 19> : 27: sum\n" +
+                    "  |  <slot 26> : clone(26: sum)\n" +
+                    "  |  <slot 27> : clone(27: sum)\n" +
+                    "  |  \n" +
+                    "  3:AGGREGATE (merge finalize)");
+        }
+
+        {
+            String mv = "select lo_orderdate, lo_linenumber, p_name, p_partkey" +
+                    " from lineorder join part on lo_partkey = p_partkey";
+            String query = "select lo_orderdate, lo_linenumber, p_name" +
+                    " from lineorder join part on lo_partkey = p_partkey" +
+                    " where p_partkey = 1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("1:Project\n" +
+                    "  |  <slot 2> : 28: lo_linenumber\n" +
+                    "  |  <slot 6> : 27: lo_orderdate\n" +
+                    "  |  <slot 19> : 29: p_name\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: mv0");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_orderdate, lo_linenumber," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_revenue) as total_revenue," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderkey, lo_orderdate, lo_linenumber";
+            String query = "select lo_orderdate," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " where lo_orderkey = 100" +
+                    " group by lo_orderdate";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("1:Project\n" +
+                    "|  <slot 21> : col$: lo_orderdate\n" +
+                    "|  <slot 23> : col$: total_quantity\n" +
+                    "|  <slot 25> : col$: total_tax");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_orderdate, lo_linenumber," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_revenue) as total_revenue," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderkey, lo_orderdate, lo_linenumber";
+            String query = "select lo_orderdate," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " where lo_orderkey = 100 and lo_linenumber = 1" +
+                    " group by lo_orderdate";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("1:Project\n" +
+                    "|  <slot 6> : col$: lo_orderdate\n" +
+                    "|  <slot 18> : col$: total_quantity\n" +
+                    "|  <slot 19> : col$: total_tax");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_orderdate, lo_linenumber," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_revenue) as total_revenue," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderkey, lo_orderdate, lo_linenumber";
+            String query = "select lo_orderdate," +
+                    " sum(lo_quantity) total_quantity," +
+                    " sum(lo_tax) as total_tax" +
+                    " from lineorder" +
+                    " group by lo_orderdate";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("1:AGGREGATE (update serialize)\n" +
+                    "|  STREAMING\n" +
+                    "|  output: sum(col$: total_quantity), sum(col$: total_tax)\n" +
+                    "|  group by: col$: lo_orderdate\n" +
+                    "|\n" +
+                    "0:OlapScanNode\n" +
+                    "TABLE: mv0");
+        }
     }
 }

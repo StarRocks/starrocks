@@ -1,0 +1,96 @@
+-- name: test_iceberg_v2
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+
+-- Currently only flink can write iceberg equality delete file. The table in the case was created in advance and some test data was inserted using flink. If you want test more cases, you could contact stephen5217@163.com
+
+
+-- unpartitioned table with orc (eq-delete && pos-delete) 
+/*
+ CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_orc_unpartitioned_table` (
+  `k1` INT NOT NULL,
+  `k2` VARCHAR(2147483647),
+  CONSTRAINT `7193cf04-1e4f-4aec-be16-2aa54bb92b4c` PRIMARY KEY (`k1`) NOT ENFORCED
+) WITH (
+  'write-format' = 'orc',
+  'write.upsert.enabled' = 'true'
+)
+*/
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table order by k1;
+
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table order by k2;
+
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table;
+
+select k1 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table group by k1 having count(1) > 1;
+
+-- partitioned table with orc (eq-delete && pos-delete)
+/*
+CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_orc_partitioned_table` (
+  `k1` INT NOT NULL,
+  `k2` VARCHAR(2147483647),
+  `k3` VARCHAR(2147483647) NOT NULL,
+  CONSTRAINT `cfcc11a4-b515-44e8-a6c2-5fe99a2e92ee` PRIMARY KEY (`k1`, `k3`) NOT ENFORCED
+) PARTITIONED BY (`k3`)
+WITH (
+  'write-format' = 'orc',
+  'write.upsert.enabled' = 'true'
+)
+*/
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k1;
+
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k2;
+
+select k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k1;
+
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table;
+
+select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table group by k1,k3 having count(1) > 1;
+
+-- unpartitioned table with parquet (eq-delete && pos-delete) 
+/*
+ CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_parquet_unpartitioned_table` (
+  `k1` INT NOT NULL,
+  `k2` VARCHAR(2147483647),
+  CONSTRAINT `7193cf04-1e4f-4aec-be16-2aa54bb92b4c` PRIMARY KEY (`k1`) NOT ENFORCED
+) WITH (
+  'write-format' = 'parquet',
+  'write.upsert.enabled' = 'true'
+)
+*/
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table order by k1;
+
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table order by k2;
+
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table;
+
+select k1 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table group by k1 having count(1) > 1;
+
+-- partitioned table with parquet (eq-delete && pos-delete)
+/*
+CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_parquet_partitioned_table` (
+  `k1` INT NOT NULL,
+  `k2` VARCHAR(2147483647),
+  `k3` VARCHAR(2147483647) NOT NULL,
+  CONSTRAINT `cfcc11a4-b515-44e8-a6c2-5fe99a2e92ee` PRIMARY KEY (`k1`, `k3`) NOT ENFORCED
+) PARTITIONED BY (`k3`)
+WITH (
+  'write-format' = 'parquet',
+  'write.upsert.enabled' = 'true'
+)
+*/
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table order by k1;
+
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table order by k2;
+
+select k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table order by k1;
+
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+
+select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table group by k1,k3 having count(1) > 1;
+
+drop catalog iceberg_sql_test_${uuid0};

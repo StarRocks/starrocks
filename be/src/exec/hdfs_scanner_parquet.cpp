@@ -31,7 +31,10 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
                                          scanner_params.materialize_slots, &_need_skip_rowids));
         for (const auto& tdelete_file : scanner_params.deletes) {
-            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(runtime_state->timezone(), *tdelete_file));
+            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(
+                    runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
+                    scanner_params.mor_params.delete_column_tuple_desc, scanner_params.iceberg_equal_delete_schema,
+                    runtime_state, _mor_processor));
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     }
@@ -39,6 +42,12 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 }
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
+    // if we have split tasks, we don't need to update counter
+    // and we will update those counters in sub io tasks.
+    if (has_split_tasks()) {
+        return;
+    }
+
     RuntimeProfile::Counter* request_bytes_read = nullptr;
     RuntimeProfile::Counter* request_bytes_read_uncompressed = nullptr;
     RuntimeProfile::Counter* level_decode_timer = nullptr;

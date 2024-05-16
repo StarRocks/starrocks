@@ -239,7 +239,7 @@ MySQL > SELECT * FROM order_mv;
 
 ## Rewrite and accelerate queries with the asynchronous materialized view
 
-StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views. For more information, please refer to [Query Rewrite with Materialized Views](./query_rewrite_with_materialized_views.md).
+StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views. From v3.3.0 onwards, StarRocks further supports text-based materialized view rewrite. For more information, please refer to [Query Rewrite with Materialized Views](./query_rewrite_with_materialized_views.md).
 
 Currently, StarRocks supports rewriting queries on asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a candidate materialized view. When querying data in external catalogs, StarRocks does not ensure a strong consistency of the results because StarRocks cannot perceive the data changes in external catalogs. For more about asynchronous materialized views that are created based on an external catalog, please refer to [Data lake query acceleration with materialized views](./data_lake_query_acceleration_with_materialized_views.md).
 
@@ -332,7 +332,7 @@ The following example checks the execution status of the materialized view that 
 2. Check the execution status in the table `task_runs` using the `TASK_NAME` you have found.
 
     ```Plain
-    mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
+    mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME\G
     *************************** 1. row ***************************
         QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
         TASK_NAME: mv-59299
@@ -360,7 +360,7 @@ DROP MATERIALIZED VIEW order_mv;
 
 ### Relevant session variables
 
-The following variables control the behaviour of an asynchronous materialized view:
+The following variables control the behavior of an asynchronous materialized view:
 
 - `analyze_mv`: Whether and how to analyze the materialized view after refresh. Valid values are an empty string (Do not analyze), `sample` (Sampled statistics collection), and `full` (Full statistics collection). Default is `sample`.
 - `enable_materialized_view_rewrite`: Whether to enable the automatic rewrite for materialized view. Valid values are `true` (Default since v2.5) and `false`.

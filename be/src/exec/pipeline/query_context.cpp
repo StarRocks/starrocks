@@ -151,6 +151,26 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
     });
 }
 
+MemTracker* QueryContext::operator_mem_tracker(int32_t plan_node_id) {
+    std::lock_guard<std::mutex> l(_operator_mem_trackers_lock);
+    auto it = _operator_mem_trackers.find(plan_node_id);
+    if (it != _operator_mem_trackers.end()) {
+        return it->second.get();
+    }
+    auto mem_tracker = std::make_shared<MemTracker>();
+    _operator_mem_trackers[plan_node_id] = mem_tracker;
+    return mem_tracker.get();
+}
+
+Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
+    Status st;
+    std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
+        st = _spill_manager->init_block_manager(query_options);
+    });
+    return st;
+}
+
 Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
     Status st = Status::OK();
     if (wg != nullptr) {
@@ -163,8 +183,6 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group
             } else {
                 st = maybe_token.status();
             }
-
-            _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
         });
     }
 
@@ -457,7 +475,7 @@ void QueryContextManager::report_fragments_with_same_host(
         if (reported[i] == false) {
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->all_pipelines_finished()) {
+            if (fragment_ctx->all_execution_groups_finished()) {
                 reported[i] = true;
                 continue;
             }
@@ -560,7 +578,7 @@ void QueryContextManager::report_fragments(
 
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->all_pipelines_finished()) {
+            if (fragment_ctx->all_execution_groups_finished()) {
                 continue;
             }
 
@@ -578,7 +596,8 @@ void QueryContextManager::report_fragments(
             auto* runtime_state = fragment_ctx->runtime_state();
             DCHECK(runtime_state != nullptr);
 
-            FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr, &fe_connection_status);
+            FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr,
+                                                    config::thrift_rpc_timeout_ms, &fe_connection_status);
             if (!fe_connection_status.ok()) {
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fe_addr;
@@ -631,7 +650,7 @@ void QueryContextManager::report_fragments(
                     fe_connection->batchReportExecStatus(res, report_batch);
                 } catch (TTransportException& e) {
                     LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-                    rpc_status = fe_connection.reopen();
+                    rpc_status = fe_connection.reopen(config::thrift_rpc_timeout_ms);
                     if (!rpc_status.ok()) {
                         LOG(WARNING) << "ReportExecStatus() to " << fe_addr << " failed after reopening connection:\n"
                                      << rpc_status.message();

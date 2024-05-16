@@ -19,11 +19,14 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/schema_change_utils.h"
 
+namespace starrocks {
+class TxnLogPB_OpSchemaChange;
+}
+
 namespace starrocks::lake {
 
 class TabletManager;
 class VersionedTablet;
-class TxnLogPB_OpSchemaChange;
 struct SchemaChangeParams;
 
 class SchemaChangeHandler {
@@ -33,8 +36,8 @@ public:
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
 
-    // for update tablet meta
     Status process_update_tablet_meta(const TUpdateTabletMetaInfoReq& request);
+
     DISALLOW_COPY_AND_MOVE(SchemaChangeHandler);
 
 private:

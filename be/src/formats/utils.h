@@ -15,6 +15,7 @@
 #pragma once
 
 #include <boost/algorithm/string.hpp>
+#include <future>
 #include <string>
 
 namespace starrocks {
@@ -25,4 +26,41 @@ public:
     }
 };
 
+template <typename T>
+std::future<T> make_ready_future(T&& t) {
+    std::promise<T> p;
+    p.set_value(std::forward<T>(t));
+    return p.get_future();
+}
+
+template <typename T>
+std::future<T> make_ready_future(const T& t) {
+    T copy = t;
+    std::promise<T> p;
+    p.set_value(std::forward<T>(copy));
+    return p.get_future();
+}
+
+template <typename R>
+bool is_ready(std::future<R> const& f) {
+    return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+}
+
+namespace formats {
+
+// file format
+inline static const std::string PARQUET = "parquet";
+inline static const std::string ORC = "orc";
+inline static const std::string CSV = "csv";
+inline static const std::string TEXTFILE = "textfile";
+
+// compression codec
+inline static const std::string COMPRESSION_CODEC = "compression_codec";
+inline static const std::string UNCOMPRESSED = "uncompressed";
+inline static const std::string SNAPPY = "snappy";
+inline static const std::string GZIP = "gzip";
+inline static const std::string ZSTD = "zstd";
+inline static const std::string LZ4 = "lz4";
+
+} // namespace formats
 } // namespace starrocks

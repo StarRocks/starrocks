@@ -37,6 +37,7 @@ package com.starrocks.http;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -99,12 +100,12 @@ public abstract class BaseAction implements IAction {
     }
 
     @Override
-    public void handleRequest(BaseRequest request) throws Exception {
+    public void handleRequest(BaseRequest request) {
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
         } catch (Exception e) {
-            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            LOG.warn("fail to process url: {}, exception: {}", request.getRequest().uri(), DebugUtil.getStackTrace(e));
             if (e instanceof AccessDeniedException) {
                 response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
                 writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
