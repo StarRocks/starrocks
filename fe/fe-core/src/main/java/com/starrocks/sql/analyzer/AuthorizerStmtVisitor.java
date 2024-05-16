@@ -270,8 +270,14 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             }
 
             if (table instanceof View) {
-                Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        tableName, PrivilegeType.SELECT);
+                // for privilege checking, treat hive view as table
+                if (table.getType() == Table.TableType.HIVE_VIEW) {
+                    Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            tableName, PrivilegeType.SELECT);
+                } else {
+                    Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            tableName, PrivilegeType.SELECT);
+                }
             } else if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
                 Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.OPERATE);
