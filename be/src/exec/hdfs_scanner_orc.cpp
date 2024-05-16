@@ -301,6 +301,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                                                  filter_ptr);
         if (!status.ok()) {
             LOG(WARNING) << "eval conjuncts fails: " << status.message();
+            _dict_filter_eval_cache.erase(slot_id);
             return false;
         }
 
