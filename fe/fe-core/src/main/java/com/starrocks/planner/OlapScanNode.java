@@ -526,7 +526,7 @@ public class OlapScanNode extends ScanNode {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
                 if (computeNodeIds.isEmpty()) {
-                    ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouseId);
+                    ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %d", warehouseId));
                 }
 
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,

@@ -73,7 +73,7 @@ public class SystemHandlerEPack extends SystemHandler {
                     .getWarehouse(warehouseName);
             // check if the warehouse exist
             if (warehouse == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
             }
 
             computeNode.setWorkerGroupId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
@@ -153,7 +153,7 @@ public class SystemHandlerEPack extends SystemHandler {
 
                 // check if the warehouse exist
                 if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName) == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+                    ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
                 }
 
                 for (Pair<String, Integer> pair : hostPortPairs) {
@@ -194,7 +194,7 @@ public class SystemHandlerEPack extends SystemHandler {
 
                 // check if the warehouse exist
                 if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName) == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+                    ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
                 }
 
                 for (Pair<String, Integer> pair : hostPortPairs) {

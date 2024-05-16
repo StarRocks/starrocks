@@ -108,7 +108,7 @@ public class WarehouseAnalyzer {
                 warehouseName = context.getCurrentWarehouseName();
             }
             if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
             }
             return null;
         }
