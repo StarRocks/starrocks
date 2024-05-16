@@ -23,15 +23,11 @@ import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
-import com.starrocks.analysis.IndexDef.IndexType;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;

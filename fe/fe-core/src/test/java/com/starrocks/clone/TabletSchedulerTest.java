@@ -30,6 +30,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -403,7 +404,7 @@ public class TabletSchedulerTest {
                 .setShortKeyColumnCount((short) 1)
                 .setSchemaHash(-1)
                 .setStorageType(TStorageType.COLUMN)
-                .addColumn(new Column())
+                .addColumn(new Column("k1", Type.INT))
                 .build().toTabletSchema();
 
         CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()

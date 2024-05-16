@@ -69,6 +69,8 @@ public:
                                                     const ColumnPredicate* del_predicate, SparseRange<>* range,
                                                     CompoundNodeType pred_relationn) override;
 
+    bool has_original_bloom_filter_index() const override;
+    bool has_ngram_bloom_filter_index() const override;
     [[nodiscard]] Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                         SparseRange<>* range) override;
 

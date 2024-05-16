@@ -355,8 +355,12 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(routineLoadJob, "maxBatchRows", 0);
         Deencapsulation.invoke(routineLoadJob, "updateNumOfData", 1L, 1L, 0L, 1L, 1L, false);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, Deencapsulation.getField(routineLoadJob, "state"));
-
+        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason reason = routineLoadJob.pauseReason;
+        Assert.assertEquals(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, reason.getCode());
+        Assert.assertEquals(
+                "Current error rows: 1 is more than max error num: 0. Check the 'TrackingSQL' field for detailed information",
+                reason.getMsg());
     }
 
     @Test

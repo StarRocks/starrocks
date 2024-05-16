@@ -36,7 +36,7 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
         mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
-        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(MVUnionRewriteMode.TRANSPARENT.getOrdinal());
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
     }
 
     @Before

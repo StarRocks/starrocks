@@ -270,6 +270,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
+    @ConfField
+    public static boolean enable_profile_log_compress = false;
+
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
@@ -2478,9 +2481,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
-    @ConfField(mutable = true)
-    public static String lake_compaction_warehouse = "default_warehouse";
-
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
@@ -2891,11 +2891,13 @@ public class Config extends ConfigBase {
      * Replication config
      */
     @ConfField
-    public static int replication_interval_ms = 10;
+    public static int replication_interval_ms = 100;
     @ConfField(mutable = true)
     public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_max_parallel_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_replica_count = 10240; // 10240
+    @ConfField(mutable = true)
+    public static int replication_max_parallel_data_size_mb = 1048576; // 1T
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
     @ConfField(mutable = true)

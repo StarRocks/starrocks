@@ -26,6 +26,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -341,9 +342,9 @@ public class CatalogRecycleBinLakeTableTest {
         Partition p2 = table1.getPartition("p2");
         Partition p3 = table1.getPartition("p3");
         Assert.assertNotNull(p1);
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1));
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2));
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3, WarehouseManager.DEFAULT_WAREHOUSE_ID));
 
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p1", dbName));
@@ -438,7 +439,7 @@ public class CatalogRecycleBinLakeTableTest {
                         "PROPERTIES('replication_num' = '1');", dbName));
 
         p1 = table2.getPartition("p1");
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1, WarehouseManager.DEFAULT_WAREHOUSE_ID));
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t2 DROP PARTITION p1", dbName));
         Assert.assertNull(table2.getPartition("p1"));

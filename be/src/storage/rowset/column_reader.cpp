@@ -366,19 +366,18 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
     for (const auto& pid : page_ids) {
         std::unique_ptr<BloomFilter> bf;
         RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
-        for (const auto* pred : predicates) {
+
+        const bool satisfy = std::ranges::any_of(predicates, [&](const ColumnPredicate* pred) {
             if constexpr (is_original_bf) {
-                if (pred->support_original_bloom_filter() && pred->original_bloom_filter(bf.get())) {
-                    bf_row_ranges.add(
-                            Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
-                }
+                return pred->support_original_bloom_filter() && pred->original_bloom_filter(bf.get());
             } else {
-                if (pred->support_ngram_bloom_filter() &&
-                    pred->ngram_bloom_filter(bf.get(), _get_reader_options_for_ngram())) {
-                    bf_row_ranges.add(
-                            Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
-                }
+                return pred->support_ngram_bloom_filter() &&
+                       pred->ngram_bloom_filter(bf.get(), _get_reader_options_for_ngram());
             }
+        });
+        if (satisfy) {
+            bf_row_ranges.add(
+                    Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
         }
     }
     *row_ranges = row_ranges->intersection(bf_row_ranges);

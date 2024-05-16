@@ -30,6 +30,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -275,21 +276,19 @@ public class InfoSchemaDbTest {
         Assert.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
     }
 
-
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
-        new MockUp<CreateFunctionStmt>() {
-            @Mock
-            public void analyze(ConnectContext context) throws AnalysisException {
-            }
-        };
-
         new MockUp<PrivilegeStmtAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }
         };
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
 
+            }
+        };
         String createSql = "CREATE FUNCTION db.MY_UDF_JSON_GET(string, string) RETURNS string " +
                 "properties ( " +
                 "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
@@ -325,8 +324,9 @@ public class InfoSchemaDbTest {
     @Test
     public void testShowExternalCatalogPrivilege(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws Exception {
 
-        String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
-                "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
+        String createCatalog =
+                "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
+                        "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(createCatalog, ctx);
         Assert.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
@@ -457,7 +457,6 @@ public class InfoSchemaDbTest {
         sql = "revoke select on all tables in database db from test_user";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.revoke(revokePrivilegeStmt);
-
 
         sql = "grant select on all views in database db to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

@@ -119,6 +119,8 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
+
 /**
  * Routine load job is a function which stream load data from streaming medium to starrocks.
  * This function is suitable for streaming load job which loading data continuously
@@ -806,7 +808,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     // remove all of task in jobs and change job state to paused
                     updateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                    "current error rows of job is more than max error num"),
+                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
                             isReplay);
                 }
             }
@@ -828,13 +830,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     .add("current_total_rows", currentTotalRows)
                     .add("current_error_rows", currentErrorRows)
                     .add("max_error_num", maxErrorNum)
-                    .add("msg", "current error rows is more than max error rows, begin to pause job")
+                    .add("msg", "current error rows is more than max error num, begin to pause job")
                     .build());
             if (!isReplay) {
                 // remove all of task in jobs and change job state to paused
                 updateState(JobState.PAUSED,
                         new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                "current error rows is more than max error num"),
+                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
                         isReplay);
             }
             // reset currentTotalNum and currentErrorNum

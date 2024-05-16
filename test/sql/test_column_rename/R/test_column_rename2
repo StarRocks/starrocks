@@ -105,5 +105,5 @@ alter table site_access rename column site_id to id;
 -- !result
 alter table site_access add column site_id int;
 -- result:
-E: (1064, 'Can not add column which already exists in physical column: site_id, you can remove `id` int(11) NULL DEFAULT "10" COMMENT "" and try again.')
+E: (1064, 'Can not add column which already exists in column id: site_id, you can remove `id` int(11) NULL DEFAULT "10" COMMENT "" and try again.')
 -- !result

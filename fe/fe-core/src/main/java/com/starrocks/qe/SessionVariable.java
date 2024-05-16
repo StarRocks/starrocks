@@ -86,6 +86,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
+import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -99,6 +100,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String USE_COMPUTE_NODES = "use_compute_nodes";
     public static final String PREFER_COMPUTE_NODE = "prefer_compute_node";
+    // The schedule policy of backend and compute nodes.
+    // The optional values are "compute_nodes_only" and "all_nodes".
+    public static final String COMPUTATION_FRAGMENT_SCHEDULING_POLICY = "computation_fragment_scheduling_policy";
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
 
     /**
@@ -495,6 +499,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String MATERIALIZED_VIEW_UNION_REWRITE_MODE = "materialized_view_union_rewrite_mode";
+    public static final String ENABLE_MATERIALIZED_VIEW_TRANSPARENT_UNION_REWRITE =
+            "enable_materialized_view_transparent_union_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
     public static final String ENABLE_MATERIALIZED_VIEW_AGG_PUSHDOWN_REWRITE = "enable_materialized_view_agg_pushdown_rewrite";
@@ -521,6 +527,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Access ORC columns by name. By default, columns in ORC files are accessed by
     // their ordinal position in the Hive table definition.
     public static final String ORC_USE_COLUMN_NAMES = "orc_use_column_names";
+
+    public static final String ENABLE_EXECUTION_ONLY = "enable_execution_only";
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -797,6 +805,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
     private boolean preferComputeNode = false;
 
+    @VariableMgr.VarAttr(name = COMPUTATION_FRAGMENT_SCHEDULING_POLICY)
+    private String computationFragmentSchedulingPolicy = COMPUTE_NODES_ONLY.name();
+
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
 
@@ -1024,6 +1035,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Add a global shuffle between the connector sink fragment and its child fragment.
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
+
+    // execute sql don't return result, for performance test
+    @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
+    private boolean enableExecutionOnly = false;
 
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
@@ -1429,6 +1444,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
 
+    public boolean isEnableExecutionOnly() {
+        return enableExecutionOnly;
+    }
+
     public boolean isCboPruneJsonSubfield() {
         return cboPruneJsonSubfield;
     }
@@ -1657,6 +1676,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VarAttr(name = MATERIALIZED_VIEW_UNION_REWRITE_MODE)
     private int materializedViewUnionRewriteMode = 0;
+
+    /**
+     * Whether to enable transparent union rewrite for materialized view which treats materialized view as always-consistent
+     * and then union rewrite.
+     */
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TRANSPARENT_UNION_REWRITE)
+    private boolean enableMaterializedViewTransparentUnionRewrite = true;
 
     /**
      * Whether to compensate partition predicates in mv rewrite, see
@@ -2227,6 +2253,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setPreferComputeNode(boolean preferComputeNode) {
         this.preferComputeNode = preferComputeNode;
+    }
+
+    public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
+        SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
+                Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                                   StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+            throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
+        }
+        this.computationFragmentSchedulingPolicy = StringUtils.upperCase(computationFragmentSchedulingPolicy);
+    }
+
+    public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
+        return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
     public boolean enableHiveColumnStats() {
@@ -3276,6 +3319,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewRewritePartitionCompensate(boolean enableMaterializedViewRewritePartitionCompensate) {
         this.enableMaterializedViewRewritePartitionCompensate = enableMaterializedViewRewritePartitionCompensate;
+    }
+
+    public boolean isEnableMaterializedViewTransparentUnionRewrite() {
+        return enableMaterializedViewTransparentUnionRewrite;
+    }
+
+    public void setEnableMaterializedViewTransparentUnionRewrite(boolean enableMaterializedViewTransparentUnionRewrite) {
+        this.enableMaterializedViewTransparentUnionRewrite = enableMaterializedViewTransparentUnionRewrite;
     }
 
     public boolean isEnableMaterializedViewPushDownRewrite() {
