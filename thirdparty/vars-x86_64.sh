@@ -22,10 +22,10 @@
 #####################################################
 
 # HADOOP
-HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz"
-HADOOP_NAME="hadoop-3.3.6.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.6"
-HADOOP_MD5SUM="1cbe1214299cd3bd282d33d3934b5cbd"
+HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz"
+HADOOP_NAME="hadoop-3.4.0.tar.gz"
+HADOOP_SOURCE="hadoop-3.4.0"
+HADOOP_MD5SUM="2f9244ab73169cf7bc0811d932067f6b"
 
 # OPEN JDK
 JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"
