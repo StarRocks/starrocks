@@ -81,7 +81,7 @@ public class InvertedIndexUtil {
             throw new SemanticException("The inverted index does not support shared data mode");
         }
         if (!Config.enable_experimental_gin) {
-            throw new SemanticException("The inverted index is OFF when enable_experimental_gin = false");
+            throw new SemanticException("The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
         String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);
