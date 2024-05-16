@@ -44,7 +44,7 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     auto pkey_schema = generate_pkey_schema();
     RowsetReleaseGuard guard(_rowset->shared_from_this());
     ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats));
-    DCHECK(segment_iters.size() == _rowset->num_segments(), "itrs.size != num_segments");
+    DCHECK(segment_iters.size() == _rowset->num_segments());
     // init delvec loader
     auto delvec_loader = std::make_unique<LocalDelvecLoader>(_tablet->data_dir()->get_meta());
     // init params
