@@ -21,6 +21,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 public class IcebergMetadataScannerFactory implements ScannerFactory {
     static ClassLoader classLoader;
@@ -28,7 +29,9 @@ public class IcebergMetadataScannerFactory implements ScannerFactory {
     static {
         String basePath = System.getenv("STARROCKS_HOME");
         File dir = new File(basePath + "/lib/iceberg-reader-lib");
-        List<File> preloadFiles = new ArrayList<>(Arrays.asList(dir.listFiles()));
+        List<File> preloadFiles = new ArrayList<>(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
+        dir = new File(basePath + "/lib/common-runtime-lib");
+        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
         classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, "iceberg metadata scanner");
     }
 

@@ -17,8 +17,7 @@
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <iceberg.version>1.5.0</iceberg.version>
         <slf4j.version>1.7.32</slf4j.version>
-        <hadoop.version>3.3.4</hadoop.version>
-        <awsv2.version>2.17.257</awsv2.version>
+        <hadoop.version>3.4.0</hadoop.version>
     </properties>
 
     <dependencies>
@@ -37,7 +36,7 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>url-connection-client</artifactId>
-            <version>${awsv2.version}</version>
+            <version>${aws-v2-sdk.version}</version>
             <exclusions>
                 <exclusion>
                     <artifactId>utils</artifactId>
@@ -54,6 +53,10 @@
                 <exclusion>
                     <groupId>org.apache.hadoop</groupId>
                     <artifactId>hadoop-common</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>bundle</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -86,12 +89,6 @@
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-core</artifactId>
             <version>${iceberg.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>bundle</artifactId>
-            <version>${awsv2.version}</version>
         </dependency>
 
         <dependency>
@@ -128,12 +125,12 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>3.3.6</version>
+            <version>${hadoop.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
-            <version>3.3.6</version>
+            <version>${hadoop.version}</version>
         </dependency>
 
     </dependencies>

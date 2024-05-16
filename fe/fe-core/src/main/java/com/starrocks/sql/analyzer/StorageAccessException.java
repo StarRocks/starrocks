@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.amazonaws.services.s3.model.AmazonS3Exception;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
  * Access remote storage(s3/gcs/oss/hdfs) exception
@@ -35,10 +35,10 @@ public class StorageAccessException extends RuntimeException {
     public String getMessage() {
         StringBuilder builder = new StringBuilder("Access storage error. ");
         Throwable rootCause = getRootCause();
-        if (rootCause instanceof AmazonS3Exception) {
-            AmazonS3Exception s3Exception = (AmazonS3Exception) rootCause;
-            builder.append("Error code: ").append(s3Exception.getErrorCode()).append(". ");
-            builder.append("Error message: ").append(s3Exception.getErrorMessage()).append(". ");
+        if (rootCause instanceof S3Exception) {
+            S3Exception s3Exception = (S3Exception) rootCause;
+            builder.append("Error code: ").append(s3Exception.awsErrorDetails().errorCode()).append(". ");
+            builder.append("Error message: ").append(s3Exception.awsErrorDetails().errorMessage()).append(". ");
         } else {
             builder.append("Error message: ").append(rootCause.getMessage());
         }

@@ -14,21 +14,20 @@
 
 package com.starrocks.connector.hive;
 
-import com.amazonaws.services.glue.model.Column;
-import com.amazonaws.services.glue.model.SerDeInfo;
-import com.amazonaws.services.glue.model.StorageDescriptor;
-import com.amazonaws.services.glue.model.Table;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.glue.converters.CatalogToHiveConverter;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.services.glue.model.Column;
+import software.amazon.awssdk.services.glue.model.SerDeInfo;
+import software.amazon.awssdk.services.glue.model.StorageDescriptor;
+import software.amazon.awssdk.services.glue.model.Table;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static com.amazonaws.util.CollectionUtils.isNullOrEmpty;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_NAME;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_VALUE;
 import static java.lang.String.format;
@@ -36,83 +35,110 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static software.amazon.awssdk.utils.CollectionUtils.isNullOrEmpty;
 
 public class GlueToHiveConverterTest {
 
     @Test
     public void testConvertTable() {
-        com.amazonaws.services.glue.model.Table glueTable = new Table()
-                .withDatabaseName("test-db")
-                .withName("test-tbl")
-                .withOwner("owner")
-                .withParameters(ImmutableMap.of())
-                .withPartitionKeys(ImmutableList.of())
-                .withStorageDescriptor(getGlueTestStorageDescriptor())
-                .withTableType(TableType.EXTERNAL_TABLE.name())
-                .withViewOriginalText("originalText")
-                .withViewExpandedText("expandedText")
-                .withRetention(100);
+        String dbName = "test-db";
+        String tableName = "test-table";
+        String owner = "owner";
+        String viewOriginalText = "originalText";
+        String viewExpandedText = "expandedText";
+        int retention = 100;
 
-        org.apache.hadoop.hive.metastore.api.Table hmsTable = CatalogToHiveConverter.convertTable(glueTable, "test-db");
-        assertEquals(hmsTable.getTableName(), glueTable.getName());
-        assertEquals(hmsTable.getDbName(), glueTable.getDatabaseName());
-        assertEquals(hmsTable.getTableType(), glueTable.getTableType());
-        assertEquals(hmsTable.getOwner(), glueTable.getOwner());
-        assertEquals(hmsTable.getParameters(), glueTable.getParameters());
-        assertColumnList(hmsTable.getSd().getCols(), glueTable.getStorageDescriptor().getColumns());
-        assertColumnList(hmsTable.getPartitionKeys(), glueTable.getPartitionKeys());
-        assertStorage(hmsTable.getSd(), glueTable.getStorageDescriptor());
-        assertEquals(hmsTable.getViewOriginalText(), glueTable.getViewOriginalText());
-        assertEquals(hmsTable.getViewExpandedText(), glueTable.getViewExpandedText());
-        assertEquals(hmsTable.getRetention(), glueTable.getRetention());
+        StorageDescriptor sd = getGlueTestStorageDescriptor();
+
+        Table.Builder glueTable = Table.builder()
+                .databaseName(dbName)
+                .name(tableName)
+                .owner(owner)
+                .parameters(ImmutableMap.of())
+                .partitionKeys(ImmutableList.of())
+                .storageDescriptor(sd)
+                .tableType(TableType.EXTERNAL_TABLE.name())
+                .viewOriginalText(viewOriginalText)
+                .viewExpandedText(viewExpandedText)
+                .retention(retention);
+
+        org.apache.hadoop.hive.metastore.api.Table hmsTable =
+                CatalogToHiveConverter.convertTable(glueTable.build(), "test-db");
+        assertEquals(hmsTable.getTableName(), tableName);
+        assertEquals(hmsTable.getDbName(), dbName);
+        assertEquals(hmsTable.getTableType(), TableType.EXTERNAL_TABLE.name());
+        assertEquals(hmsTable.getOwner(), owner);
+        assertEquals(hmsTable.getParameters(), ImmutableMap.of());
+        assertColumnList(hmsTable.getSd().getCols(), sd.columns());
+        assertColumnList(hmsTable.getPartitionKeys(), ImmutableList.of());
+        assertStorage(hmsTable.getSd(), getGlueTestStorageDescriptor());
+        assertEquals(hmsTable.getViewOriginalText(), viewOriginalText);
+        assertEquals(hmsTable.getViewExpandedText(), viewExpandedText);
+        assertEquals(hmsTable.getRetention(), retention);
     }
 
     @Test
     public void testConvertIcebergTableWithoutSd() {
-        com.amazonaws.services.glue.model.Table glueTable = new Table()
-                .withDatabaseName("test-db")
-                .withName("test-tbl")
-                .withOwner("owner")
-                .withParameters(ImmutableMap.of(ICEBERG_TABLE_TYPE_NAME, ICEBERG_TABLE_TYPE_VALUE))
-                .withPartitionKeys(ImmutableList.of())
-                .withStorageDescriptor(null)
-                .withTableType(TableType.EXTERNAL_TABLE.name())
-                .withViewOriginalText("originalText")
-                .withViewExpandedText("expandedText")
-                .withRetention(100);
+        String dbName = "test-db";
+        String tableName = "test-tbl";
+        String owner = "owner";
+        String viewOriginalText = "originalText";
+        String viewExpandedText = "expandedText";
+        int retention = 100;
 
-        org.apache.hadoop.hive.metastore.api.Table hmsTable = CatalogToHiveConverter.convertTable(glueTable, "test-db");
-        assertEquals(hmsTable.getTableName(), glueTable.getName());
-        assertEquals(hmsTable.getDbName(), glueTable.getDatabaseName());
-        assertEquals(hmsTable.getTableType(), glueTable.getTableType());
-        assertEquals(hmsTable.getOwner(), glueTable.getOwner());
-        assertEquals(hmsTable.getParameters(), glueTable.getParameters());
-        assertColumnList(hmsTable.getPartitionKeys(), glueTable.getPartitionKeys());
+        Table.Builder glueTable = Table.builder()
+                .databaseName(dbName)
+                .name(tableName)
+                .owner(owner)
+                .parameters(ImmutableMap.of(ICEBERG_TABLE_TYPE_NAME, ICEBERG_TABLE_TYPE_VALUE))
+                .partitionKeys(ImmutableList.of())
+                .storageDescriptor((StorageDescriptor) null)
+                .tableType(TableType.EXTERNAL_TABLE.name())
+                .viewOriginalText(viewOriginalText)
+                .viewExpandedText(viewExpandedText)
+                .retention(retention);
+
+        org.apache.hadoop.hive.metastore.api.Table hmsTable =
+                CatalogToHiveConverter.convertTable(glueTable.build(), dbName);
+        assertEquals(hmsTable.getTableName(), tableName);
+        assertEquals(hmsTable.getDbName(), dbName);
+        assertEquals(hmsTable.getTableType(), TableType.EXTERNAL_TABLE.name());
+        assertEquals(hmsTable.getOwner(), owner);
+        assertEquals(hmsTable.getParameters(), ImmutableMap.of(ICEBERG_TABLE_TYPE_NAME, ICEBERG_TABLE_TYPE_VALUE));
+        assertColumnList(hmsTable.getPartitionKeys(), ImmutableList.of());
         assertNotNull(hmsTable.getSd()); // dummy Sd
-        assertEquals(hmsTable.getViewOriginalText(), glueTable.getViewOriginalText());
-        assertEquals(hmsTable.getViewExpandedText(), glueTable.getViewExpandedText());
-        assertEquals(hmsTable.getRetention(), glueTable.getRetention());
+        assertEquals(hmsTable.getViewOriginalText(), viewOriginalText);
+        assertEquals(hmsTable.getViewExpandedText(), viewExpandedText);
+        assertEquals(hmsTable.getRetention(), retention);
     }
 
     @Test
     public void testConvertTableWithoutSd() {
-        com.amazonaws.services.glue.model.Table glueTable = new Table()
-                .withDatabaseName("test-db")
-                .withName("test-tbl")
-                .withOwner("owner")
-                .withParameters(ImmutableMap.of())
-                .withPartitionKeys(ImmutableList.of())
-                .withStorageDescriptor(null)
-                .withTableType(TableType.EXTERNAL_TABLE.name())
-                .withViewOriginalText("originalText")
-                .withViewExpandedText("expandedText")
-                .withRetention(100);
+        String dbName = "test-db";
+        String tableName = "test-tbl";
+        String owner = "owner";
+        String viewOriginalText = "originalText";
+        String viewExpandedText = "expandedText";
+        int retention = 100;
 
-        assertThrows(StarRocksConnectorException.class, () -> CatalogToHiveConverter.convertTable(glueTable, "test-db"));
+        Table.Builder glueTable = Table.builder()
+                .databaseName(dbName)
+                .name(tableName)
+                .owner(owner)
+                .parameters(ImmutableMap.of())
+                .partitionKeys(ImmutableList.of())
+                .storageDescriptor((StorageDescriptor) null)
+                .tableType(TableType.EXTERNAL_TABLE.name())
+                .viewOriginalText(viewOriginalText)
+                .viewExpandedText(viewExpandedText)
+                .retention(retention);
+
+        assertThrows(StarRocksConnectorException.class,
+                () -> CatalogToHiveConverter.convertTable(glueTable.build(), dbName));
     }
 
     private static void assertColumnList(List<org.apache.hadoop.hive.metastore.api.FieldSchema> actual,
-                                         List<com.amazonaws.services.glue.model.Column> expected) {
+                                         List<software.amazon.awssdk.services.glue.model.Column> expected) {
         if (expected == null) {
             assertNull(actual);
         }
@@ -124,21 +150,21 @@ public class GlueToHiveConverterTest {
     }
 
     private static void assertColumn(org.apache.hadoop.hive.metastore.api.FieldSchema actual,
-                                     com.amazonaws.services.glue.model.Column expected) {
-        assertEquals(actual.getName(), expected.getName());
-        assertEquals(actual.getType(), expected.getType());
-        assertEquals(actual.getComment(), expected.getComment());
+                                     software.amazon.awssdk.services.glue.model.Column expected) {
+        assertEquals(actual.getName(), expected.name());
+        assertEquals(actual.getType(), expected.type());
+        assertEquals(actual.getComment(), expected.comment());
     }
 
     private static void assertStorage(org.apache.hadoop.hive.metastore.api.StorageDescriptor actual,
-                                      com.amazonaws.services.glue.model.StorageDescriptor expected) {
-        assertEquals(actual.getLocation(), expected.getLocation());
-        assertEquals(actual.getSerdeInfo().getSerializationLib(), expected.getSerdeInfo().getSerializationLibrary());
-        assertEquals(actual.getInputFormat(), expected.getInputFormat());
-        assertEquals(actual.getOutputFormat(), expected.getOutputFormat());
-        if (!isNullOrEmpty(expected.getBucketColumns())) {
-            assertEquals(actual.getBucketCols(), expected.getBucketColumns());
-            assertEquals(actual.getBucketColsSize(), expected.getNumberOfBuckets().intValue());
+                                      software.amazon.awssdk.services.glue.model.StorageDescriptor expected) {
+        assertEquals(actual.getLocation(), expected.location());
+        assertEquals(actual.getSerdeInfo().getSerializationLib(), expected.serdeInfo().serializationLibrary());
+        assertEquals(actual.getInputFormat(), expected.inputFormat());
+        assertEquals(actual.getOutputFormat(), expected.outputFormat());
+        if (!isNullOrEmpty(expected.bucketColumns())) {
+            assertEquals(actual.getBucketCols(), expected.bucketColumns());
+            assertEquals(actual.getBucketColsSize(), expected.numberOfBuckets().intValue());
         }
     }
 
@@ -147,10 +173,10 @@ public class GlueToHiveConverterTest {
     }
 
     public static Column getGlueTestColumn(String type) {
-        return new Column()
-                .withName("test-col" + generateRandom())
-                .withType(type)
-                .withComment("column comment");
+        return Column.builder()
+                .name("test-col" + generateRandom())
+                .type(type)
+                .comment("column comment").build();
     }
 
     private static String generateRandom() {
@@ -162,18 +188,18 @@ public class GlueToHiveConverterTest {
     }
 
     public static StorageDescriptor getGlueTestStorageDescriptor(List<Column> columns, String serde) {
-        return new StorageDescriptor()
-                .withBucketColumns(ImmutableList.of("test-bucket-col"))
-                .withColumns(columns)
-                .withParameters(ImmutableMap.of())
-                .withSerdeInfo(new SerDeInfo()
-                        .withSerializationLibrary(serde)
-                        .withParameters(ImmutableMap.of()))
-                .withInputFormat("InputFormat")
-                .withOutputFormat("OutputFormat")
-                .withLocation("/test-tbl")
-                .withNumberOfBuckets(1)
-                .withCompressed(false)
-                .withStoredAsSubDirectories(false);
+        return StorageDescriptor.builder()
+                .bucketColumns(ImmutableList.of("test-bucket-col"))
+                .columns(columns)
+                .parameters(ImmutableMap.of())
+                .serdeInfo(SerDeInfo.builder()
+                        .serializationLibrary(serde)
+                        .parameters(ImmutableMap.of()).build())
+                .inputFormat("InputFormat")
+                .outputFormat("OutputFormat")
+                .location("/test-tbl")
+                .numberOfBuckets(1)
+                .compressed(false)
+                .storedAsSubDirectories(false).build();
     }
 }

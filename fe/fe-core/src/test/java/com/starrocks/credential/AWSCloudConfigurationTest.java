@@ -126,7 +126,7 @@ public class AWSCloudConfigurationTest {
         {
             AWSCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
             Assert.assertNotNull(credential);
-            Assert.assertThrows(IllegalArgumentException.class, credential::generateAWSCredentialsProvider);
+            Assert.assertThrows(NullPointerException.class, credential::generateAWSCredentialsProvider);
         }
 
         hiveConf.set("aws.glue.sts.region", "region");

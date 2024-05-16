@@ -15,8 +15,8 @@
 
 package com.starrocks.connector.hive.glue.converters;
 
-import com.amazonaws.services.glue.model.Table;
 import com.google.gson.Gson;
+import software.amazon.awssdk.services.glue.model.Table;
 
 public class ConverterUtils {
 
