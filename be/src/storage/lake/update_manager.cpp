@@ -90,9 +90,9 @@ void PersistentIndexBlockCache::update_memory_usage() {
     _memory_usage = current_mem_usage;
 }
 
-StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
-                                                           int64_t base_version, int64_t new_version,
-                                                           std::unique_ptr<std::lock_guard<std::timed_mutex>>& guard) {
+StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
+        const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -357,7 +357,7 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
-    std::unique_ptr<std::lock_guard<std::timed_mutex>> guard = nullptr;
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard = nullptr;
     // Fetch lock guard before check `is_load()`
     if (need_lock) {
         guard = index.try_fetch_guard();
