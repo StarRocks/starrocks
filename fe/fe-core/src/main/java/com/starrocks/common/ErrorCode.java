@@ -347,7 +347,10 @@ public enum ErrorCode {
                     "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
                     "to ensure such load jobs can succeed"),
     ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
-            "Inserted target column count: %d doesn't match select/value column count: %d");
+            "Inserted target column count: %d doesn't match select/value column count: %d"),
+    ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
+    ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
+            "Current error rows: %d is more than max error num: %d. Check the 'TrackingSQL' field for detailed information");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
