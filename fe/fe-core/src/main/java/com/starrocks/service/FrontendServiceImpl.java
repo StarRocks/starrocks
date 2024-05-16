@@ -44,6 +44,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -281,6 +282,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -1937,7 +1939,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
+        TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
+        if (txnState == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
+
         try {
+            // creating partition names is ordered
+            for (String partitionName : creatingPartitionNames) {
+                txnState.lockCreatePartition(partitionName);
+            }
+
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
@@ -1967,21 +1984,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
             return result;
+        } finally {
+            for (String partitionName : creatingPartitionNames) {
+                txnState.unlockCreatePartition(partitionName);
+            }
         }
 
 
         // build partition & tablets
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
-
-        TransactionState txnState =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
-        if (txnState == null) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
-            result.setStatus(errorStatus);
-            return result;
-        }
 
         if (txnState.getTransactionStatus().isFinalStatus()) {
             errorStatus.setError_msgs(Lists.newArrayList(
