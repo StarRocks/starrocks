@@ -947,10 +947,10 @@ class StarrocksSQLApiLib(object):
 
         # get records
         query_sql = """
-        select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",") 
+        select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",")
         from (
             select * from %s.%s where version=\"%s\" and log_type="R" order by sequence
-        ) a 
+        ) a
         group by file, log_type, name;
         """ % (
             T_R_DB,
@@ -1079,6 +1079,7 @@ class StarrocksSQLApiLib(object):
 
     def wait_load_finish(self, label, time_out=300):
         times = 0
+        load_state = ""
         while times < time_out:
             result = self.execute_sql('show load where label = "' + label + '"', True)
             log.info('show load where label = "' + label + '"')
@@ -1088,13 +1089,13 @@ class StarrocksSQLApiLib(object):
                 log.info(load_state)
                 if load_state == "CANCELLED":
                     log.info(result)
-                    return False
+                    break
                 elif load_state == "FINISHED":
                     log.info(result)
-                    return True
+                    break
             time.sleep(1)
             times += 1
-        tools.assert_less(times, time_out, "load failed, timeout 300s")
+        tools.assert_true(load_state in ("FINISHED", "CANCELLED"), "wait load finish error, timeout 300s")
 
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
