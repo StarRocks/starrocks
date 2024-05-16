@@ -296,7 +296,6 @@ public class TaskManager implements MemoryTrackable {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
         ExecuteOption option = new ExecuteOption(task.getSource().isMergeable());
-        option.setManual(true);
         return executeTask(taskName, option);
     }
 
