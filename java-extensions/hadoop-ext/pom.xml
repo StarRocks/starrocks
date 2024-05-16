@@ -19,14 +19,14 @@
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <iceberg.version>1.5.0</iceberg.version>
-        <awsv2.version>2.17.257</awsv2.version>
+        <hadoop.version>3.4.0</hadoop.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>3.3.6</version>
+            <version>${hadoop.version}</version>
         </dependency>
 
         <dependency>
@@ -39,7 +39,7 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
-            <version>${awsv2.version}</version>
+            <version>${aws-v2-sdk.version}</version>
             <scope>provided</scope>
         </dependency>
 
