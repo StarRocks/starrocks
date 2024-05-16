@@ -449,6 +449,11 @@ public class Coordinator {
     public void onFinished() {
         GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
         GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
+        // for async profile, if Be doesn't report profile in time, we upload the most complete profile
+        // into profile Manager here. IN other case, just do nothing here
+        if (profileDoneSignal != null) {
+            profileDoneSignal.countDownToZero(Status.OK);
+        }
     }
 
     public long getJobId() {
