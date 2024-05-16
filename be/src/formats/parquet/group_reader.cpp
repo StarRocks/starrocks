@@ -161,12 +161,11 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             active_chunk->merge(std::move(*lazy_chunk));
         }
 
-        _read_chunk->swap_chunk(*active_chunk);
-        *row_count = _read_chunk->num_rows();
+        *row_count = active_chunk->num_rows();
 
         SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
         // convert from _read_chunk to chunk.
-        RETURN_IF_ERROR(_fill_dst_chunk(_read_chunk, chunk));
+        RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, chunk));
         break;
     }
 
@@ -182,8 +181,7 @@ Status GroupReader::_read_range(const std::vector<int>& read_columns, const Rang
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id();
-        RETURN_IF_ERROR(
-                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
+        RETURN_IF_ERROR(_column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id)));
     }
 
     return Status::OK();
@@ -199,8 +197,7 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
         auto& column = _param.read_cols[col_idx];
         round_cost += _column_read_order_ctx->get_column_cost(col_idx);
         SlotId slot_id = column.slot_id();
-        RETURN_IF_ERROR(
-                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
+        RETURN_IF_ERROR(_column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id)));
 
         if (std::find(_dict_column_indices.begin(), _dict_column_indices.end(), col_idx) !=
             _dict_column_indices.end()) {
@@ -317,6 +314,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
             } else {
                 _active_column_indices.emplace_back(read_col_idx);
             }
+            _column_readers[slot_id]->set_can_lazy_decode(true);
         }
         ++read_col_idx;
     }
@@ -397,7 +395,6 @@ void GroupReader::_init_read_chunk() {
     }
     size_t chunk_size = _param.chunk_size;
     _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
-    _init_chunk_dict_column(&_read_chunk);
 }
 
 void GroupReader::_use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path) {
@@ -420,17 +417,6 @@ Status GroupReader::_rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered
     }
 
     return Status::OK();
-}
-
-void GroupReader::_init_chunk_dict_column(ChunkPtr* chunk) {
-    // replace dict filter column
-    for (int col_idx : _dict_column_indices) {
-        const auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id();
-        for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-            _column_readers[slot_id]->init_dict_column((*chunk)->get_column_by_slot_id(slot_id), sub_field_path, 0);
-        }
-    }
 }
 
 StatusOr<bool> GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter) {
