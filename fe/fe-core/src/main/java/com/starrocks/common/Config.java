@@ -2865,7 +2865,7 @@ public class Config extends ConfigBase {
      * Whether to use LockManager to manage lock usage
      */
     @ConfField
-    public static boolean lock_manager_enabled = false;
+    public static boolean lock_manager_enabled = true;
 
     /**
      * Number of Hash of Lock Table
