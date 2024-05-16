@@ -49,7 +49,6 @@ import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -60,6 +59,8 @@ import com.starrocks.task.CheckConsistencyTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Comparator;
 import java.util.Date;
@@ -108,8 +109,19 @@ public class ConsistencyChecker extends FrontendDaemon {
     }
 
     private boolean initWorkTime() {
-        Date startDate = TimeUtils.getTimeAsDate(Config.consistency_check_start_time);
-        Date endDate = TimeUtils.getTimeAsDate(Config.consistency_check_end_time);
+        // Using system time zone.
+        SimpleDateFormat hourFormat = new SimpleDateFormat("HH");
+        Date startDate;
+        Date endDate;
+        try {
+            startDate = hourFormat.parse(Config.consistency_check_start_time);
+            endDate = hourFormat.parse(Config.consistency_check_end_time);
+            LOG.info("parsed startDate: {}, endDate: {}", startDate, endDate);
+        } catch (ParseException e) {
+            LOG.error("failed to parse start/end time: {}, {}", Config.consistency_check_start_time,
+                    Config.consistency_check_end_time, e);
+            return false;
+        }
 
         if (startDate == null || endDate == null) {
             return false;
