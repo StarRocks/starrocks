@@ -958,7 +958,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             if (nullable->has_null()) {
                 NullData& nulls = nullable->null_column_data();
                 for (size_t j = 0; j < num_rows; ++j) {
-                    if (nulls[j]) {
+                    if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         std::stringstream ss;
                         ss << "NULL value in non-nullable column '" << desc->col_name() << "'";
