@@ -53,6 +53,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -137,14 +138,22 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MA
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "iceberg_catalog";
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
-    
+
     public static final IcebergCatalogProperties DEFAULT_CATALOG_PROPERTIES;
     public static final Map<String, String> DEFAULT_CONFIG = new HashMap<>();
-    
+
     static {
         DEFAULT_CONFIG.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732"); // non-exist ip, prevent to connect local service
         DEFAULT_CONFIG.put(ICEBERG_CATALOG_TYPE, "hive");
         DEFAULT_CATALOG_PROPERTIES = new IcebergCatalogProperties(DEFAULT_CONFIG);
+    }
+
+    @Mocked
+    private WarehouseManager warehouseManager;
+
+    public IcebergMetadataTest() {
+        warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
     }
 
     @Test
