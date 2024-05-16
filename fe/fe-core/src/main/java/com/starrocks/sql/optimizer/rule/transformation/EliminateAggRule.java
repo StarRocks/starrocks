@@ -111,6 +111,7 @@ public class EliminateAggRule extends TransformationRule {
         if (uniqueKeys.size() == 0) {
             return false;
         }
+
         if (uniqueKeys.size() != groupKeys.size()) {
             return false;
         }
@@ -131,13 +132,17 @@ public class EliminateAggRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
             ScalarOperator newOperator = handleAggregationFunction(fnName, entry.getValue());
             newProjectMap.put(entry.getKey(), newOperator);
+        }
+        if (!aggOp.getPartitionByColumns().isEmpty()) {
+            for (ColumnRefOperator columnRefOperator : aggOp.getPartitionByColumns()) {
+                newProjectMap.put(columnRefOperator, columnRefOperator);
+            }
         }
 
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
@@ -156,6 +161,10 @@ public class EliminateAggRule extends TransformationRule {
     }
 
     private ScalarOperator rewriteCountFunction(CallOperator callOperator) {
+        if (callOperator.getArguments().isEmpty()) {
+            return ConstantOperator.createInt(1);
+        }
+
         IsNullPredicateOperator isNullPredicateOperator =
                 new IsNullPredicateOperator(callOperator.getArguments().get(0));
         ArrayList<ScalarOperator> ifArgs = Lists.newArrayList();
