@@ -457,8 +457,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // metadata collect has been triggered by other rules or process if contains
         if (!scannedTables.contains(key)) {
-            try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.prepareTablesNum")) {
-                // Only record the number of tables that need to be prepared in parallel
+            synchronized (this) {
+                try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.prepareTablesNum")) {
+                    // Only record the number of tables that need to be prepared in parallel
+                }
             }
         }
         if (connectContext == null) {
