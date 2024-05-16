@@ -301,7 +301,18 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // do evaluation with dictionary.
+<<<<<<< HEAD
         ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(), filter_ptr);
+=======
+        Status status = ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(),
+                                                 filter_ptr);
+        if (!status.ok()) {
+            LOG(WARNING) << "eval conjuncts fails: " << status.message();
+            _dict_filter_eval_cache.erase(slot_id);
+            return false;
+        }
+
+>>>>>>> 665e651ab1 ([BugFix] Fix orc dict filter bug (#45647))
         if (dict_value_chunk->num_rows() == 0) {
             // release memory early.
             _dict_filter_eval_cache.clear();
