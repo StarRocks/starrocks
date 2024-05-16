@@ -456,12 +456,12 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        if (modColumn.generatedColumnExpr() == null && olapTable.hasGeneratedColumn()) {
+        if (!modColumn.isGeneratedColumn() && olapTable.hasGeneratedColumn()) {
             for (Column column : olapTable.getFullSchema()) {
                 if (!column.isGeneratedColumn()) {
                     continue;
                 }
-                List<SlotRef> slots = column.getGeneratedColumnRef();
+                List<SlotRef> slots = column.getGeneratedColumnRef(olapTable.getIdToColumn());
                 for (SlotRef slot : slots) {
                     if (slot.getColumnName().equals(modColumn.getName())) {
                         throw new DdlException("Do not support modify column: " + modColumn.getName() +

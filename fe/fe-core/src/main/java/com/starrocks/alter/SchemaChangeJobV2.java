@@ -542,8 +542,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         }
 
                         for (Column generatedColumn : diffGeneratedColumnSchema) {
-                            Column column = generatedColumn;
-                            Expr expr = column.generatedColumnExpr();
+                            Expr expr = generatedColumn.getGeneratedColumnExpr(tbl.getIdToColumn());
                             List<Expr> outputExprs = Lists.newArrayList();
 
                             for (Column col : tbl.getBaseSchema()) {
@@ -594,11 +593,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             generatedColumnExpr = Expr.analyzeAndCastFold(generatedColumnExpr);
 
                             int columnIndex = -1;
-                            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
-                                String originName = Column.removeNamePrefix(column.getName());
+                            if (generatedColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                                String originName = Column.removeNamePrefix(generatedColumn.getName());
                                 columnIndex = tbl.getFullSchema().indexOf(tbl.getColumn(originName));
                             } else {
-                                columnIndex = tbl.getFullSchema().indexOf(column);
+                                columnIndex = tbl.getFullSchema().indexOf(generatedColumn);
                             }
 
                             mcExprs.put(columnIndex, generatedColumnExpr.treeToThrift());
