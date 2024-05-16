@@ -43,6 +43,8 @@ TEST_F(RowsMapperTest, test_write_read) {
     const std::string filename = std::string(kTestDirectory) + "test_write_read.crm";
     RowsMapperBuilder builder(filename);
     std::vector<uint64_t> rssid_rowids;
+    ASSERT_OK(builder.append(rssid_rowids));
+    ASSERT_FALSE(fs::path_exist(filename));
     generate_rssid_rowids(&rssid_rowids, 0, 1000, 11);
     ASSERT_OK(builder.append(rssid_rowids));
     rssid_rowids.clear();
