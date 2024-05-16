@@ -1580,7 +1580,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
-    private boolean enableScanDataCache = false;
+    private boolean enableScanDataCache = true;
 
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateDataCache = true;
@@ -1597,10 +1597,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_ASYNC_POPULATE_MODE)
-    private boolean enableDataCacheAsyncPopulateMode = false;
+    private boolean enableDataCacheAsyncPopulateMode = true;
 
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_IO_ADAPTOR)
-    private boolean enableDataCacheIOAdaptor = false;
+    private boolean enableDataCacheIOAdaptor = true;
 
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
