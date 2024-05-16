@@ -73,3 +73,26 @@ select * from information_schema.load_tracking_logs where job_id=0;
 select * from information_schema.load_tracking_logs where label="not exist";
 -- result:
 -- !result
+
+create database db_${uuid2};
+-- result:
+-- !result
+use db_${uuid2};
+-- result:
+-- !result
+CREATE TABLE ss (k1 bigint NOT NULL, k2 bigint NOT NULL, k3 bigint NOT NULL) duplicate key (k1) distributed by hash(k2) buckets 1 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values(null, null, null);
+-- result:
+[REGEX].*Insert has filtered data in strict mode.*
+-- !result
+[UC]id2=select job_id from information_schema.loads where database_name='db_${uuid2}';
+-- result:
+65080
+-- !result
+select tracking_log from information_schema.load_tracking_logs where job_id=${id2};
+-- result:
+Error: NULL value in non-nullable column 'k1'. Row: [NULL, NULL, NULL]
+
+-- !result
