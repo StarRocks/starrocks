@@ -2075,8 +2075,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     auto manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
     auto& version = version_info.version;
-    LOG(INFO) << "apply_compaction_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
-              << " rowset:" << rowset_id;
+    VLOG(1) << "apply_compaction_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
+            << " rowset:" << rowset_id;
     // 1. load index
     std::lock_guard lg(_index_lock);
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
@@ -2481,7 +2481,7 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         } else {
             dcg_deleted = res.value();
         }
-        LOG(INFO) << strings::Substitute(
+        VLOG(1) << strings::Substitute(
                 "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
                 "#delvec:$5 #dcgs:$6",
                 _debug_version_info(true), expire_time, min_readable_version, num_version_removed, num_rowset_removed,
@@ -4218,7 +4218,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
         if (!status.ok()) {
-            LOG(INFO) << err_msg_header << "build rowset writer failed";
+            LOG(WARNING) << err_msg_header << "build rowset writer failed";
             return Status::InternalError(err_msg_header + "build rowset writer failed");
         }
 
@@ -4442,7 +4442,7 @@ void TabletUpdates::_remove_unused_rowsets(bool drop_tablet) {
         _unused_rowsets.blocking_put(std::move(r));
     }
     if (removed > 0) {
-        LOG(INFO) << "_remove_unused_rowsets remove " << removed << " rowsets, tablet:" << _tablet.tablet_id();
+        VLOG(1) << "_remove_unused_rowsets remove " << removed << " rowsets, tablet:" << _tablet.tablet_id();
     }
 }
 
@@ -5236,7 +5236,7 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
         if (versions.empty()) {
             string msg = strings::Substitute("get_rowsets_for_snapshot: no version to clone $0 request_version:$1,",
                                              _debug_version_info(false), missing_version_ranges.back());
-            LOG(INFO) << msg;
+            VLOG(1) << msg;
             return Status::NotFound(msg);
         }
         size_t num_rowset_full_clone = _edit_version_infos.back()->rowsets.size();
