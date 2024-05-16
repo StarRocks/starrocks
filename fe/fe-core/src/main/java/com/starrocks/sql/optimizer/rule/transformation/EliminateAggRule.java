@@ -86,8 +86,7 @@ public class EliminateAggRule extends TransformationRule {
         if (groupKeys.isEmpty()) {
             return false;
         }
-        //if (aggOp.)
-
+        
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
             if (entry.getValue().isDistinct()) {
