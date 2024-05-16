@@ -1100,9 +1100,4 @@ public class TransactionState implements Writable {
             locker.unlock();
         }
     }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-
-    }
 }
