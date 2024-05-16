@@ -111,7 +111,7 @@ public:
 
     virtual ~ColumnReader() = default;
 
-    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) = 0;
+    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) = 0;
 
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
@@ -133,8 +133,7 @@ public:
         return Status::OK();
     }
 
-    virtual void init_dict_column(ColumnPtr& column, const std::vector<std::string>& sub_field_path,
-                                  const size_t& layer) {}
+    virtual void set_can_lazy_decode(bool can_lazy_decode) {}
 
     virtual Status filter_dict_column(const ColumnPtr& column, Filter* filter,
                                       const std::vector<std::string>& sub_field_path, const size_t& layer) {
