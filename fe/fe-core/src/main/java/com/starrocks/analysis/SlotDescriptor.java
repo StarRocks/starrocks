@@ -273,7 +273,11 @@ public class SlotDescriptor {
         tSlotDescriptor.setByteOffset(-1);
         tSlotDescriptor.setNullIndicatorByte(-1);
         tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
-        tSlotDescriptor.setColName(((column != null) ? column.getColumnId().getId() : ""));
+        String colName = "";
+        if (column != null) {
+            colName = column.isShadowColumn() ? column.getName() : column.getColumnId().getId();
+        }
+        tSlotDescriptor.setColName(colName);
         tSlotDescriptor.setSlotIdx(-1);
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);
