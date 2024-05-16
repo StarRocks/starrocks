@@ -218,6 +218,11 @@ do
             echo "nothing has been done with ${!NAME}"
             continue
         fi
+
+        if [ ! -d $TP_SOURCE_DIR/tmp_dir/${!SOURCE} ]; then
+            mkdir -p $TP_SOURCE_DIR/${!SOURCE}
+        fi
+
         mv $TP_SOURCE_DIR/tmp_dir/* $TP_SOURCE_DIR/${!SOURCE}
     else
         echo "${!SOURCE} already unpacked."

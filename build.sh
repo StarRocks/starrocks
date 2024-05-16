@@ -560,11 +560,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
 
-    if [ "${WITH_CACHELIB}" == "ON"  ]; then
-        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
-        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
-    fi
-
     if [ "${USE_AVX2KI}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/avx2ki
         cp ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ${STARROCKS_OUTPUT}/be/lib/avx2ki/libavx2neon.so.2.0.0
