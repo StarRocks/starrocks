@@ -62,4 +62,4 @@ If the default value or unit of a parameter is changed, explain why it is change
 
 ## Parameters invisible to users
 
-If a new parameter or variable is invisible to users, we still recommend that you add the description to documentation and **comment it out**. This is to shield this parameter from users but help internal users (RD and DBA) understand the meaning and usage of this parameter.
+Even though a new parameter or variable is invisible to users, we still recommend that you add the description to documentation and **comment it out**. This is to shield this parameter from users but help internal users (RD and DBA) understand the meaning and usage of this parameter.
