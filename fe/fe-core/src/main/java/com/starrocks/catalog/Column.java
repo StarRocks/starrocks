@@ -391,6 +391,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return generatedColumnExpr != null;
     }
 
+    public boolean isShadowColumn() {
+        return this.name.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX);
+    }
+
     public int getOlapColumnIndexSize() {
         PrimitiveType type = this.getPrimitiveType();
         if (type == PrimitiveType.CHAR) {

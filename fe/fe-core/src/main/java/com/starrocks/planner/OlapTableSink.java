@@ -303,7 +303,10 @@ public class OlapTableSink extends DataSink {
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
             List<Integer> columnSortKeyUids = Lists.newArrayList();
-            columns.addAll(indexMeta.getSchema().stream().map(column -> column.getColumnId().getId())
+            columns.addAll(indexMeta
+                    .getSchema()
+                    .stream()
+                    .map(column -> column.isShadowColumn() ? column.getName() : column.getColumnId().getId())
                     .collect(Collectors.toList()));
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
