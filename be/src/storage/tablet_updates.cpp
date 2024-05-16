@@ -1811,15 +1811,6 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
     _compaction_state = std::make_unique<CompactionState>();
-<<<<<<< HEAD
-    const auto status = _compaction_state->load(rowset.get());
-    if (!status.ok()) {
-        _compaction_state.reset();
-        std::string msg = strings::Substitute("_commit_compaction error: load compaction state failed: $0 $1",
-                                              status.to_string(), debug_string());
-        LOG(WARNING) << msg;
-        return status;
-=======
     if (!config::enable_light_pk_compaction_publish) {
         // Skip load compaction state when enable light pk compaction
         auto status = _compaction_state->load(rowset.get());
@@ -1830,7 +1821,6 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
             LOG(WARNING) << msg;
             return status;
         }
->>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
     }
     std::lock_guard wl(_lock);
     if (_edit_version_infos.empty()) {
@@ -1942,6 +1932,9 @@ bool TabletUpdates::_use_light_apply_compaction(Rowset* rowset) {
     if (!config::enable_light_pk_compaction_publish) {
         return false;
     }
+    if (rowset == nullptr) {
+        return false;
+    }
     // Is rows mapper file exist?
     return fs::path_exist(local_rows_mapper_filename(&_tablet, rowset->rowset_id_str()));
 }
@@ -1975,14 +1968,11 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     if (!_compaction_state) {
         _compaction_state = std::make_unique<CompactionState>();
     }
-<<<<<<< HEAD
-=======
     auto failure_handler = [&](const std::string& msg) {
         _compaction_state.reset();
         LOG(ERROR) << msg;
         _set_error(msg);
     };
->>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
     int64_t t_start = MonotonicMillis();
     auto manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
@@ -2045,27 +2035,11 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
-<<<<<<< HEAD
-    if (!(st = _compaction_state->load(output_rowset)).ok()) {
-        manager->index_cache().release(index_entry);
-        _compaction_state.reset();
-        std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
-                                              st.to_string(), debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
-=======
     if (!use_light_apply_compaction && !(st = _compaction_state->load(output_rowset)).ok()) {
+        manager->index_cache().release(index_entry);
         std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
                                               st.to_string(), debug_string());
         failure_handler(msg);
-        return;
-    }
-    st = index.prepare(version, 0);
-    if (!st.ok()) {
-        std::string msg = strings::Substitute("_apply_compaction_commit error: index prepare failed: $0 $1",
-                                              st.to_string(), debug_string());
-        failure_handler(msg);
->>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
         return;
     }
     index.prepare(version, 0);
@@ -2078,55 +2052,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     uint32_t max_rowset_id = 0;
     uint32_t max_src_rssid = 0;
 
-<<<<<<< HEAD
-    // Since value stored in info->inputs of CompactInfo is rowset id
-    // we should get the real max rssid here by segment number
-    uint32_t max_rowset_id = *std::max_element(info->inputs.begin(), info->inputs.end());
-    Rowset* rowset = _get_rowset(max_rowset_id).get();
-    if (rowset == nullptr) {
-        string msg = strings::Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
-                                         _tablet.tablet_id(), max_rowset_id);
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
-    }
-    uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
-
-    for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
-        if (st = _compaction_state->load_segments(output_rowset, i); !st.ok()) {
-            manager->index_cache().release(index_entry);
-            _compaction_state.reset();
-            std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
-                                                  st.to_string(), debug_string());
-            LOG(ERROR) << msg;
-            _set_error(msg);
-            return;
-        }
-        auto& pk_col = _compaction_state->pk_cols[i];
-        total_rows += pk_col->size();
-        uint32_t rssid = rowset_id + i;
-        tmp_deletes.clear();
-        if (rebuild_index) {
-            st = index.insert(rssid, 0, *pk_col);
-            if (!st.ok()) {
-                _compaction_state.reset();
-                std::string msg = strings::Substitute("_apply_compaction_commit error: index isnert failed: $0 $1",
-                                                      st.to_string(), debug_string());
-                LOG(ERROR) << msg;
-                _set_error(msg);
-                return;
-            }
-        } else {
-            // replace will not grow hashtable, so don't need to check memory limit
-            st = index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
-            if (!st.ok()) {
-                _compaction_state.reset();
-                std::string msg = strings::Substitute("_apply_compaction_commit error: index try replace failed: $0 $1",
-                                                      st.to_string(), debug_string());
-                LOG(ERROR) << msg;
-                _set_error(msg);
-                return;
-=======
     if (!use_light_apply_compaction) {
         // Since value stored in info->inputs of CompactInfo is rowset id
         // we should get the real max rssid here by segment number
@@ -2166,7 +2091,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                                                 st.to_string(), debug_string()));
                     return;
                 }
->>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
             }
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
             DelVectorPtr dv = std::make_shared<DelVector>();
@@ -2179,15 +2103,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             delvecs.emplace_back(rssid, dv);
             _compaction_state->release_segment(i);
         }
-<<<<<<< HEAD
-        manager->index_cache().update_object_size(index_entry, index.memory_usage());
-        DelVectorPtr dv = std::make_shared<DelVector>();
-        if (tmp_deletes.empty()) {
-            dv->init(version.major(), nullptr, 0);
-        } else {
-            dv->init(version.major(), tmp_deletes.data(), tmp_deletes.size());
-            total_deletes += tmp_deletes.size();
-=======
         // release memory
         _compaction_state.reset();
     } else {
@@ -2198,8 +2113,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             failure_handler(
                     strings::Substitute("_light_apply_compaction_commit error: $0 $1", st.to_string(), debug_string()));
             return;
->>>>>>> 0a6540b23b ([Enhancement] Faster PK table compaction transaction apply strategy (Part-2 local table) (#44622))
         }
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
     }
     int64_t t_index_delvec = MonotonicMillis();
 

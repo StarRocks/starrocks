@@ -1955,7 +1955,11 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index)
 void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 5;
-    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+    config::enable_light_pk_compaction_publish = true;
+    DeferOp unset_config([&] {
+        config::vertical_compaction_max_columns_per_group = orig;
+        config::enable_light_pk_compaction_publish = false;
+    });
 
     int N = 100;
     srand(GetCurrentTimeMicros());
@@ -1980,7 +1984,7 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     // stop apply
     best_tablet->updates()->stop_apply(true);
-    std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+    std::thread th([&]() { best_tablet->updates()->compaction(_compaction_mem_tracker.get()); });
     // check rows mapper file
     std::this_thread::sleep_for(std::chrono::seconds(1));
     // read from file
@@ -2253,7 +2257,11 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
 void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_persistent_index) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 1;
-    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+    config::enable_light_pk_compaction_publish = true;
+    DeferOp unset_config([&] {
+        config::vertical_compaction_max_columns_per_group = orig;
+        config::enable_light_pk_compaction_publish = false;
+    });
 
     int N = 100;
     srand(GetCurrentTimeMicros());
@@ -2278,7 +2286,7 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     // stop apply
     best_tablet->updates()->stop_apply(true);
-    std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+    std::thread th([&]() { best_tablet->updates()->compaction(_compaction_mem_tracker.get()); });
     // check rows mapper file
     std::this_thread::sleep_for(std::chrono::seconds(1));
     // read from file
