@@ -14,6 +14,7 @@
 
 #include "storage/async_delta_writer.h"
 
+#include <brpc/traceprintf.h>
 #include <fmt/format.h>
 
 #include "runtime/current_thread.h"
@@ -97,8 +98,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
 
 StatusOr<std::unique_ptr<AsyncDeltaWriter>> AsyncDeltaWriter::open(const DeltaWriterOptions& opt,
                                                                    MemTracker* mem_tracker) {
+    TRACEPRINTF("Enter open, tablet_id: %d", opt.tablet_id);
     auto res = DeltaWriter::open(opt, mem_tracker);
     if (!res.ok()) {
+        TRACEPRINTF("DeltaWriter open fail");
         return res.status();
     }
     auto w = std::make_unique<AsyncDeltaWriter>(private_type(0), std::move(res).value());

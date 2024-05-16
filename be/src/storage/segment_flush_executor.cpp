@@ -14,6 +14,7 @@
 
 #include "storage/segment_flush_executor.h"
 
+#include <brpc/traceprintf.h>
 #include <fmt/format.h>
 
 #include <atomic>
@@ -27,6 +28,7 @@
 #include "runtime/current_thread.h"
 #include "service/brpc.h"
 #include "storage/delta_writer.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -43,7 +45,8 @@ public:
               _cntl(cntl),
               _request(request),
               _response(response),
-              _done(done) {}
+              _done(done),
+              _create_time_ns(MonotonicNanos()) {}
 
     // Destructor which will respond to the brpc if run() or release() is not called.
     ~SegmentFlushTask() override {
@@ -67,6 +70,19 @@ public:
         if (!_run_or_released.compare_exchange_strong(expect, true)) {
             return;
         }
+        int64_t pending_time_ns = MonotonicNanos() - _create_time_ns;
+        scoped_refptr<Trace> trace(new Trace);
+        DeferOp defer([this, &pending_time_ns, &trace] {
+            if (_cntl->trace_id() > 0) {
+                LOG(INFO) << "Trace SegmentFlush, txn_id: " << _request->txn_id()
+                          << ", tablet_id: " << _request->tablet_id() << ", trace_id: " << _cntl->trace_id()
+                          << ", span_id: " << _cntl->span_id() << ", pending_time_ns: " << pending_time_ns << "\n"
+                          << trace.get()->DumpToString();
+            }
+        });
+        // only enable starrocks trace if brpc trace is enabled
+        ADOPT_TRACE(_cntl->trace_id() > 0 ? trace.get() : nullptr);
+        TRACE("Start to run");
 
         // if token status is not ok, respond with failure
         auto token_st = _flush_token->status();
@@ -133,6 +149,7 @@ private:
         }
 
         st.to_protobuf(_response->mutable_status());
+        TRACE("Send success response");
         _done->Run();
     }
 
@@ -142,6 +159,7 @@ private:
         tablet_info->set_node_id(_writer->node_id());
         tablet_info->set_schema_hash(0);
         st.to_protobuf(_response->mutable_status());
+        TRACE("Send fail response");
         _done->Run();
     }
 
@@ -153,19 +171,22 @@ private:
     google::protobuf::Closure* _done;
     // whether run() or release() has been called
     std::atomic<bool> _run_or_released = false;
+    int64_t _create_time_ns;
 };
 
-SegmentFlushToken::SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
-        : _flush_token(std::move(flush_pool_token)) {}
+SegmentFlushToken::SegmentFlushToken(ThreadPool* flush_pool, std::unique_ptr<ThreadPoolToken> flush_pool_token)
+        : _flush_pool(flush_pool), _flush_token(std::move(flush_pool_token)) {}
 
 Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
                                  const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
                                  google::protobuf::Closure* done) {
+    TRACEPRINTF("Enter submit");
     ClosureGuard closure_guard(done);
     Status token_st = status();
     if (!token_st.ok()) {
         Status st = Status::InternalError("Segment flush token is not ok. The status: " + token_st.to_string());
         st.to_protobuf(response->mutable_status());
+        TRACEPRINTF("Fail to submit because token status is not ok");
         return st;
     }
 
@@ -173,9 +194,11 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
     auto submit_st = _flush_token->submit(std::move(task));
     if (submit_st.ok()) {
         closure_guard.release();
+        TRACEPRINTF("Submit task, queueing task: %d", _flush_pool->num_queued_tasks());
     } else {
         task->release();
         submit_st.to_protobuf(response->mutable_status());
+        TRACEPRINTF("Fail to submit task");
     }
 
     return submit_st;
@@ -213,7 +236,7 @@ Status SegmentFlushExecutor::update_max_threads(int max_threads) {
 }
 
 std::unique_ptr<SegmentFlushToken> SegmentFlushExecutor::create_flush_token(ThreadPool::ExecutionMode execution_mode) {
-    return std::make_unique<SegmentFlushToken>(_flush_pool->new_token(execution_mode));
+    return std::make_unique<SegmentFlushToken>(_flush_pool.get(), _flush_pool->new_token(execution_mode));
 }
 
 } // namespace starrocks

@@ -89,12 +89,14 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     int64_t index_id = request.index_id();
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
 
+    TRACEPRINTF("Enter open, txn_id: %d, index_id: %d", request.txn_id(), index_id);
     Status st = Status::OK();
     {
         // We will `bthread::execution_queue_join()` in the destructor of AsyncDeltaWriter,
         // it will block the bthread, so we put its destructor outside the lock.
         std::shared_ptr<TabletsChannel> channel;
         std::lock_guard l(_lock);
+        TRACEPRINTF("Get tablet channels lock");
         if (_schema == nullptr) {
             _schema.reset(new OlapTableSchemaParam());
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
@@ -124,6 +126,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
     }
+    TRACEPRINTF("Finish open, status: %d", st.ok());
 }
 
 void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
@@ -190,6 +193,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                               PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+    TRACEPRINTF("Enter add_segment, txn_id: %d, index_id: %d", request->txn_id(), request->index_id());
     ClosureGuard closure_guard(done);
     _num_segment++;
     auto channel = get_tablets_channel(request->index_id());
@@ -207,6 +211,7 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
 
     local_tablets_channel->add_segment(cntl, request, response, done);
     closure_guard.release();
+    TRACEPRINTF("Leave add_segment");
 }
 
 void LoadChannel::cancel() {

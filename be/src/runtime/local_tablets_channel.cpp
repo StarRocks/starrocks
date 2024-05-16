@@ -74,7 +74,9 @@ LocalTabletsChannel::~LocalTabletsChannel() {
 
 Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                  std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
+    TRACEPRINTF("Enter open, is_incremental: %s", (is_incremental ? "true" : "false"));
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    TRACEPRINTF("Get shared lock");
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
@@ -100,12 +102,15 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
         }
     }
 
+    TRACEPRINTF("Finish open LocalTabletsChannel");
     return Status::OK();
 }
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                                       PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+    TRACEPRINTF("Enter add_segment");
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    TRACEPRINTF("Get shared lock");
     ClosureGuard closure_guard(done);
     auto it = _delta_writers.find(request->tablet_id());
     if (it == _delta_writers.end()) {
@@ -124,6 +129,7 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 
     delta_writer->write_segment(req);
     closure_guard.release();
+    TRACEPRINTF("Leave add_segment");
 }
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
@@ -571,6 +577,8 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
 }
 
 Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params) {
+    TRACEPRINTF("Enter _open_all_writers, num_tablets: %d, replicated_storage: %s", params.tablets_size(),
+                (params.is_replicated_storage() ? "true" : "false"));
     std::vector<SlotDescriptor*>* index_slots = nullptr;
     int32_t schema_hash = 0;
     for (auto& index : _schema->indexes()) {
@@ -646,10 +654,13 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             auto writer = std::move(res).value();
             _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
             tablet_ids.emplace_back(tablet.tablet_id());
+            TRACEPRINTF("Finish open AsyncDeltaWriter");
         } else {
             if (options.replica_state == Secondary) {
                 failed_tablet_ids.emplace_back(tablet.tablet_id());
+                TRACEPRINTF("Fail open secondary AsyncDeltaWriter");
             } else {
+                TRACEPRINTF("Fail open primary AsyncDeltaWriter");
                 return res.status();
             }
         }
@@ -774,7 +785,9 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
 
 Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                              std::shared_ptr<OlapTableSchemaParam> schema) {
+    TRACEPRINTF("Enter incremental_open, tablets_size: %d", params.tablets_size());
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    TRACEPRINTF("Get shared lock");
     std::vector<SlotDescriptor*>* index_slots = nullptr;
     int32_t schema_hash = 0;
     for (auto& index : _schema->indexes()) {
@@ -833,6 +846,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         }
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
+        TRACEPRINTF("Finish open AsyncDeltaWriter, status: %d", res.status().ok());
         RETURN_IF_ERROR(res.status());
         auto writer = std::move(res).value();
         ss << "[" << tablet.tablet_id() << ":" << writer->replica_state() << "]";
@@ -867,6 +881,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         LOG(INFO) << ss.str();
     }
 
+    TRACEPRINTF("Finish incremental_open LocalTabletsChannel");
     return Status::OK();
 }
 

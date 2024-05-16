@@ -43,7 +43,7 @@ class DeltaWriter;
 
 class SegmentFlushToken {
 public:
-    SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token);
+    SegmentFlushToken(ThreadPool* flush_pool, std::unique_ptr<ThreadPoolToken> flush_pool_token);
 
     Status submit(DeltaWriter* writer, brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                   PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
@@ -66,6 +66,7 @@ public:
     Status wait();
 
 private:
+    ThreadPool* _flush_pool;
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
     mutable SpinLock _status_lock;
