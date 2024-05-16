@@ -136,6 +136,8 @@ public class Config extends ConfigBase {
     public static String audit_log_roll_interval = "DAY";
     @ConfField
     public static String audit_log_delete_age = "30d";
+    @ConfField(mutable = true)
+    public static boolean audit_log_json_format = false;
 
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
