@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -85,6 +86,7 @@ public class EliminateAggRule extends TransformationRule {
         if (groupKeys.isEmpty()) {
             return false;
         }
+        //if (aggOp.)
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             String fnName = entry.getValue().getFnName();
@@ -134,18 +136,20 @@ public class EliminateAggRule extends TransformationRule {
         LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
 
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
-        aggOp.getAggregations().forEach((aggColumnRef, callOperator) -> {
-            ColumnRefOperator childColumnRefOperator = (ColumnRefOperator) callOperator.getArguments().get(0);
-            ScalarOperator newOperator;
 
-            if (isProjectColumnRef(childColumnRefOperator, projectOp)) {
-                ScalarOperator projectColumnRef = projectOp.getColumnRefMap().get(childColumnRefOperator);
-                newOperator = (projectColumnRef instanceof ColumnRefOperator) ?
-                        projectColumnRef :
-                        handleAggregationFunction(callOperator.getFnName(), (CallOperator) projectColumnRef);
-            } else {
-                newOperator = handleAggregationFunction(callOperator.getFnName(), callOperator);
-            }
+        aggOp.getAggregations().forEach((aggColumnRef, callOperator) -> {
+            Optional<ColumnRefOperator> childColumnRefOperator = getChildColumnRefOperator(callOperator);
+            ScalarOperator newOperator = childColumnRefOperator
+                    .filter(colRef -> isProjectColumnRef(colRef, projectOp))
+                    .map(colRef -> projectOp.getColumnRefMap().get(colRef))
+                    .map(projectColumnRef -> {
+                        if (projectColumnRef instanceof ColumnRefOperator) {
+                            return projectColumnRef;
+                        } else {
+                            return handleAggregationFunction(callOperator.getFnName(), (CallOperator) projectColumnRef);
+                        }
+                    })
+                    .orElseGet(() -> handleAggregationFunction(callOperator.getFnName(), callOperator));
 
             newProjectMap.put(aggColumnRef, newOperator);
         });
@@ -155,6 +159,11 @@ public class EliminateAggRule extends TransformationRule {
 
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
         return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
+    }
+
+    private Optional<ColumnRefOperator> getChildColumnRefOperator(CallOperator callOperator) {
+        return callOperator.getArguments().isEmpty() ? Optional.empty() :
+                Optional.of((ColumnRefOperator) callOperator.getArguments().get(0));
     }
 
     private boolean isProjectColumnRef(ColumnRefOperator columnRefOperator, LogicalProjectOperator projectOp) {
