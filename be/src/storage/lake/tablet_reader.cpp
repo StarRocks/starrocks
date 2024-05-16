@@ -33,6 +33,7 @@
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/seek_range.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
