@@ -60,6 +60,8 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
 
+    void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
+
     Status prepare();
 
     // Precondition: the last method called must have been `prepare()`.
@@ -117,6 +119,8 @@ private:
 
     MemPool _mempool;
     ObjectPool _obj_pool;
+
+    bool _is_asc_hint = true;
 
     // used for vertical compaction
     bool _is_vertical_merge = false;
