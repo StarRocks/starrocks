@@ -963,6 +963,8 @@ public class OlapScanNode extends ScanNode {
                         ConnectContext.get().getSessionVariable().getMaxParallelScanInstanceNum());
                 msg.olap_scan_node.setEnable_prune_column_after_index_filter(
                         ConnectContext.get().getSessionVariable().isEnablePruneColumnAfterIndexFilter());
+                msg.olap_scan_node.setEnable_gin_filter(
+                        ConnectContext.get().getSessionVariable().isEnableGinFilter());
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 

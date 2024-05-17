@@ -541,6 +541,7 @@ struct TOlapScanNode {
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
   35: optional bool enable_prune_column_after_index_filter
+  36: optional bool enable_gin_filter
 }
 
 struct TJDBCScanNode {

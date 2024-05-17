@@ -1931,6 +1931,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
 Status SegmentIterator::_apply_inverted_index() {
     DCHECK_EQ(_predicate_columns, _cid_to_predicates.size());
     RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF(!_opts.enable_gin_filter, Status::OK());
 
     RETURN_IF_ERROR(_init_inverted_index_iterators());
     RETURN_IF(!_has_inverted_index, Status::OK());
