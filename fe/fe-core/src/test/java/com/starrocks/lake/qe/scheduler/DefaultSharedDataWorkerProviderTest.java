@@ -130,13 +130,8 @@ public class DefaultSharedDataWorkerProviderTest {
 
     private WorkerProvider newWorkerProvider() {
         return factory.captureAvailableWorkers(
-<<<<<<< HEAD
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, -1);
-=======
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
-                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
->>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, 
+                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
     }
 
     private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {

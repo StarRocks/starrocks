@@ -21,11 +21,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
->>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -91,22 +88,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
-<<<<<<< HEAD
                                                              boolean preferComputeNode,
-                                                             int numUsedComputeNodes) {
+                                                             int numUsedComputeNodes,
+                                                            ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
+
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes);
-=======
-                                     boolean preferComputeNode, int numUsedComputeNodes,
-                                     ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                     long warehouseId) {
-
-            ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, 
-                                         computationFragmentSchedulingPolicy, warehouseId);
-
->>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, computationFragmentSchedulingPolicy);
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
             if (LOG.isDebugEnabled()) {
@@ -312,17 +300,12 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
-<<<<<<< HEAD
-                                                                        int numUsedComputeNodes) {
-=======
-                                  int numUsedComputeNodes,
-                                  ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                  long warehouseId) {
+                                      int numUsedComputeNodes,
+                                      ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
         //define Node Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
         //get CN and BE from systemInfoService
->>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
         ImmutableMap<Long, ComputeNode> idToBackend

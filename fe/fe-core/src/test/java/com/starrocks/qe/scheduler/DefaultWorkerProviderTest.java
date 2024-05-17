@@ -121,15 +121,8 @@ public class DefaultWorkerProviderTest {
             // Reset nextComputeNodeIndex.
             nextComputeNodeIndex.setRef(0);
 
-<<<<<<< HEAD
             workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), true,
-                    numUsedComputeNodes);
-=======
-            workerProvider =
-                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
-                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
->>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
+                    numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
