@@ -317,7 +317,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             }
             Tablet tablet = index.getTablet(getTabletId());
             Preconditions.checkNotNull(tablet, getTabletId());
-            if (!tbl.isCloudNativeTable()) {
+            if (!tbl.isCloudNativeTableOrMaterializedView()) {
                 Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
                 if (replica == null) {
                     throw new MetaNotFoundException("replica " + getNewReplicaId() + " does not exist");
