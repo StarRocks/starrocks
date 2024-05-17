@@ -276,7 +276,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                     "WHERE l_orderkey>1 GROUP BY `l_suppkey`;";
             String plan = getFragmentPlan(query);
             System.out.println(plan);
-            PlanTestBase.assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+            PlanTestBase.assertContains(plan, "AGGREGATE (update serialize)\n" +
                             "  |  STREAMING\n" +
                             "  |  output: sum(21: sum(l_orderkey))\n" +
                             "  |  group by: 19: l_suppkey");
