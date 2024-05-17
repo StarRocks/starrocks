@@ -180,7 +180,7 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     auto start_time = MonotonicMillis();
     DeferOp defer([&trace, &txn_id, &trace_id, &span_id, &start_time] {
         auto elapsed = MonotonicMillis() - start_time;
-        if (trace.get()) {
+        if (trace.get() && elapsed > config::slow_load_rpc_threshold_ms) {
             LOG(INFO) << "Trace LoadChannelMgr::cancel, txn_id: " << txn_id << ", brpc_trace_id: " << trace_id
                       << ", brpc_span_id: " << span_id << ", elapsed: " << elapsed << " ms\n"
                       << trace.get()->DumpToString();

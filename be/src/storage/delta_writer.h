@@ -93,7 +93,7 @@ public:
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     // [thread-safe]
-    [[nodiscard]] Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
+    [[nodiscard]] Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data, Trace* trace = nullptr);
 
     // Flush all in-memory data to disk, without waiting.
     // Subsequent `write()`s to this DeltaWriter will fail after this method returned.

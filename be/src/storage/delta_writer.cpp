@@ -418,7 +418,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return st;
 }
 
-Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
+Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& data, Trace* trace) {
     auto state = get_state();
     if (state != kWriting) {
         auto err_st = get_err_status();
@@ -450,9 +450,8 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
     VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
             << ", duration: " << duration_ns / 1000 << "us, io_time: " << io_time_us << "us";
-    TRACE("Flush segment, txn_id: $0, tablet_id: $1, total_time: $2 us, io_time: $3 us, "
-          "segment: $",
-          _opt.txn_id, _opt.tablet_id, (duration_ns / 1000), io_time_us, segment_pb.DebugString());
+    TRACE_TO(trace, "Flush segment, txn_id: $0, tablet_id: $1, total_time: $2 us, io_time: $3 us, segment_size: $4",
+             _opt.txn_id, _opt.tablet_id, (duration_ns / 1000), io_time_us, segment_pb.data_size());
     return Status::OK();
 }
 

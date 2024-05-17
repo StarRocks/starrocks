@@ -77,10 +77,10 @@ public:
         auto trace_id = _cntl->trace_id();
         auto span_id = _cntl->span_id();
         scoped_refptr<Trace> trace(config::enable_load_rpc_trace ? new Trace : nullptr);
-        auto start_time = MonotonicMillis();
+        auto start_time = _create_time_ns / 1000000;
         DeferOp defer([&pending_time_ns, &trace, &txn_id, &tablet_id, &trace_id, &span_id, &start_time] {
-            if (trace.get()) {
-                auto elapsed = MonotonicMillis() - start_time;
+            auto elapsed = MonotonicMillis() - start_time;
+            if (trace.get() && elapsed > config::slow_load_rpc_threshold_ms) {
                 LOG(INFO) << "Trace SegmentFlush::run, txn_id: " << txn_id << ", tablet_id: " << tablet_id
                           << ", trace_id: " << trace_id << ", span_id: " << span_id
                           << ", pending_time_ns: " << pending_time_ns << ", elapsed: " << elapsed << " ms\n"
@@ -100,7 +100,7 @@ public:
         auto st = Status::OK();
         if (_request->has_segment() && _cntl->request_attachment().size() > 0) {
             auto& segment_pb = _request->segment();
-            st = _writer->write_segment(segment_pb, _cntl->request_attachment());
+            st = _writer->write_segment(segment_pb, _cntl->request_attachment(), trace.get());
         } else if (!_request->eos()) {
             st = Status::InternalError(fmt::format("request {} has no segment", _request->DebugString()));
         }
