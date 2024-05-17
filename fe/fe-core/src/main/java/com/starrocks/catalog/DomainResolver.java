@@ -39,8 +39,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
+import com.starrocks.mysql.privilege.Auth;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

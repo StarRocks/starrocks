@@ -61,7 +61,6 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
