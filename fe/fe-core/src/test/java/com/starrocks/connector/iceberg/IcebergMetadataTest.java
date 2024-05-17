@@ -1290,7 +1290,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 new IcebergCatalogProperties(DEFAULT_CONFIG));
         ConnectContext.get().getSessionVariable().setEnableIcebergColumnStatistics(false);
 
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null, null);
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
@@ -1328,7 +1328,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), catalogProperties);
 
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null, null);
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {

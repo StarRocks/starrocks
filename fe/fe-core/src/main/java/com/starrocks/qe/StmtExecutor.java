@@ -1020,6 +1020,13 @@ public class StmtExecutor {
         boolean isSchedulerExplain = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
         boolean isOutfileQuery = (parsedStmt instanceof QueryStatement) && ((QueryStatement) parsedStmt).hasOutFileClause();
+        if (isOutfileQuery) {
+            Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(parsedStmt);
+            boolean hasTemporaryTable = tables.values().stream().anyMatch(t -> t.isTemporaryTable());
+            if (hasTemporaryTable) {
+                throw new SemanticException("temporary table doesn't support select outfile statement");
+            }
+        }
         boolean executeInFe = !isExplainAnalyze && !isSchedulerExplain && !isOutfileQuery
                 && canExecuteInFe(context, execPlan.getPhysicalPlan());
 
@@ -1068,17 +1075,6 @@ public class StmtExecutor {
         coord.setExecPlan(execPlan);
 
         RowBatch batch;
-        boolean isOutfileQuery = false;
-        if (queryStmt instanceof QueryStatement) {
-            isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
-            if (isOutfileQuery) {
-                Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(queryStmt);
-                boolean hasTemporaryTable = tables.values().stream().anyMatch(t -> t.isTemporaryTable());
-                if (hasTemporaryTable) {
-                    throw new SemanticException("temporary table doesn't support select outfile statement");
-                }
-            }
-        }
 
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan);
