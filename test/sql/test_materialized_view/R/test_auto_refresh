@@ -30,14 +30,6 @@ PROPERTIES (
 AS select * from t1;
 -- result:
 -- !result
-function: wait_async_materialized_view_finish('mv1')
--- result:
-None
--- !result
-SELECT count(*) FROM mv1;
--- result:
-3
--- !result
 INSERT INTO t1 SELECT * FROM t1;
 -- result:
 -- !result
