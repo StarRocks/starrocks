@@ -62,6 +62,14 @@ public class UKFKConstraints {
     }
 
     public static UKFKConstraints inheritFrom(UKFKConstraints from, ColumnRefSet toOutputColumns) {
+        boolean allUniqueKeysContained = from.uniqueKeys.keySet().stream()
+                .allMatch(toOutputColumns::contains);
+        boolean allForeignKeysContained = from.foreignKeys.keySet().stream()
+                .allMatch(toOutputColumns::contains);
+        if (!allUniqueKeysContained || !allForeignKeysContained) {
+            return new UKFKConstraints();
+        }
+
         UKFKConstraints clone = new UKFKConstraints();
         from.uniqueKeys.entrySet().stream()
                 .filter(entry -> toOutputColumns.contains(entry.getKey()))
