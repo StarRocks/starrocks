@@ -41,7 +41,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -83,15 +82,12 @@ public class EliminateAggRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
         List<ColumnRefOperator> groupKeys = aggOp.getGroupingKeys();
-        if (groupKeys.isEmpty()) {
-            return false;
-        }
-        
+
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
-            String fnName = entry.getValue().getFnName();
             if (entry.getValue().isDistinct()) {
                 return false;
             }
+            String fnName = entry.getValue().getFnName();
             if (!(fnName.equals(FunctionSet.SUM) || fnName.equals(FunctionSet.COUNT) ||
                     fnName.equals(FunctionSet.AVG) ||
                     fnName.equals(FunctionSet.FIRST_VALUE) ||
@@ -108,6 +104,8 @@ public class EliminateAggRule extends TransformationRule {
         OptExpression childOptExpression = input.inputAt(0);
         Map<Integer, UKFKConstraints.UniqueConstraintWrapper> uniqueKeys =
                 childOptExpression.getConstraints().getUniqueKeys();
+        Set<Integer> uniqueColumnRefIds =
+                uniqueKeys.keySet().stream().collect(Collectors.toSet());
 
         if (uniqueKeys.size() == 0) {
             return false;
@@ -119,8 +117,6 @@ public class EliminateAggRule extends TransformationRule {
         Set<Integer> groupColumnRefIds = groupKeys.stream()
                 .map(ColumnRefOperator::getId)
                 .collect(Collectors.toSet());
-        Set<Integer> uniqueColumnRefIds =
-                uniqueKeys.keySet().stream().collect(Collectors.toSet());
 
         if (!groupColumnRefIds.equals(uniqueColumnRefIds)) {
             return false;
@@ -133,25 +129,30 @@ public class EliminateAggRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
         LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
-
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
 
-        aggOp.getAggregations().forEach((aggColumnRef, callOperator) -> {
-            Optional<ColumnRefOperator> childColumnRefOperator = getChildColumnRefOperator(callOperator);
-            ScalarOperator newOperator = childColumnRefOperator
-                    .filter(colRef -> isProjectColumnRef(colRef, projectOp))
-                    .map(colRef -> projectOp.getColumnRefMap().get(colRef))
-                    .map(projectColumnRef -> {
-                        if (projectColumnRef instanceof ColumnRefOperator) {
-                            return projectColumnRef;
-                        } else {
-                            return handleAggregationFunction(callOperator.getFnName(), (CallOperator) projectColumnRef);
-                        }
-                    })
-                    .orElseGet(() -> handleAggregationFunction(callOperator.getFnName(), callOperator));
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
+            ColumnRefOperator aggColumnRef = entry.getKey();
+            CallOperator callOperator = entry.getValue();
+            String fnName = callOperator.getFnName();
+            ScalarOperator newOperator;
 
+            if (callOperator.getArguments().isEmpty()) {
+                // 1. select count(*) from demo group by pk
+                newOperator = handleAggregationFunction(fnName, callOperator);
+            } else {
+                ScalarOperator scalarOperator = callOperator.getArguments().get(0);
+                if (isColumnRefType(scalarOperator) && projectOp.getColumnRefMap().containsKey(scalarOperator)) {
+                    // 2. select pk, count(*) from demo group by pk
+                    // 3. select pk, sum(t0 + t1) from demo group by pk
+                    ScalarOperator projectColumnRef = projectOp.getColumnRefMap().get(scalarOperator);
+                    newOperator = handleAggregationFunction(fnName, (CallOperator) projectColumnRef);
+                } else {
+                    newOperator = handleAggregationFunction(fnName, callOperator);
+                }
+            }
             newProjectMap.put(aggColumnRef, newOperator);
-        });
+        }
 
         aggOp.getPartitionByColumns()
                 .forEach(columnRefOperator -> newProjectMap.put(columnRefOperator, columnRefOperator));
@@ -160,14 +161,8 @@ public class EliminateAggRule extends TransformationRule {
         return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
     }
 
-    private Optional<ColumnRefOperator> getChildColumnRefOperator(CallOperator callOperator) {
-        return callOperator.getArguments().isEmpty() ? Optional.empty() :
-                Optional.of((ColumnRefOperator) callOperator.getArguments().get(0));
-    }
-
-    private boolean isProjectColumnRef(ColumnRefOperator columnRefOperator, LogicalProjectOperator projectOp) {
-        return OperatorType.VARIABLE.equals(columnRefOperator.getOpType()) &&
-                projectOp.getColumnRefMap().containsKey(columnRefOperator);
+    private boolean isColumnRefType(ScalarOperator scalarOperator) {
+        return scalarOperator instanceof ColumnRefOperator;
     }
 
     private ScalarOperator handleAggregationFunction(String fnName, CallOperator callOperator) {
@@ -206,7 +201,8 @@ public class EliminateAggRule extends TransformationRule {
         if (callOperator.getType().equals(argument.getType())) {
             return argument;
         }
-        return new CastOperator(callOperator.getType(), argument);
+        ScalarOperator scalarOperator = new CastOperator(callOperator.getType(), argument);
+        return scalarOperator;
     }
 
 }
