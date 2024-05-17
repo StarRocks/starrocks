@@ -19,6 +19,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.LocalWarehouse;
@@ -37,7 +38,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
@@ -49,7 +49,7 @@ public class WarehouseManager implements Writable {
     private Map<Long, Warehouse> idToWh = new HashMap<>();
     private Map<String, Warehouse> nameToWh = new HashMap<>();
 
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    protected final ReadWriteLock rwLock = new FairReentrantReadWriteLock();
 
     public WarehouseManager() {
     }

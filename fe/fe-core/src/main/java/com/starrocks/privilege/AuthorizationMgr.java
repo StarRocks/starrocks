@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -109,8 +110,8 @@ public class AuthorizationMgr {
         roleNameToId = new HashMap<>();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
-        userLock = new ReentrantReadWriteLock();
-        roleLock = new ReentrantReadWriteLock();
+        userLock = new FairReentrantReadWriteLock();
+        roleLock = new FairReentrantReadWriteLock();
     }
 
     public AuthorizationMgr(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
@@ -123,8 +124,8 @@ public class AuthorizationMgr {
         pluginId = this.provider.getPluginId();
         pluginVersion = this.provider.getPluginVersion();
         roleNameToId = new HashMap<>();
-        userLock = new ReentrantReadWriteLock();
-        roleLock = new ReentrantReadWriteLock();
+        userLock = new FairReentrantReadWriteLock();
+        roleLock = new FairReentrantReadWriteLock();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
         initBuiltinRolesAndUsers();
