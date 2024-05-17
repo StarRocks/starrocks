@@ -4683,6 +4683,11 @@ public class CreateMaterializedViewTest {
 
 
         // clean: remove backend 12011
+        modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                ":" + backend.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
         backend = systemInfoService.getBackend(12011);
         systemInfoService.dropBackend(backend);
     }
