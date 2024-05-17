@@ -26,13 +26,9 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
-import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -43,7 +39,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -93,25 +88,6 @@ public class CatalogUtils {
             }
         }
         return existPartitionNameSet;
-    }
-
-    public static Set<String> getPartitionNamesFromAddPartitionClause(AddPartitionClause addPartitionClause) {
-        Set<String> partitionNames = new TreeSet<>();
-        PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
-        if (partitionDesc instanceof SingleItemListPartitionDesc
-                || partitionDesc instanceof MultiItemListPartitionDesc
-                || partitionDesc instanceof SingleRangePartitionDesc) {
-            partitionNames.add(partitionDesc.getPartitionName());
-        } else if (partitionDesc instanceof RangePartitionDesc) {
-            for (PartitionDesc desc : ((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()) {
-                partitionNames.add(desc.getPartitionName());
-            }
-        } else if (partitionDesc instanceof ListPartitionDesc) {
-            for (PartitionDesc desc : (((ListPartitionDesc) partitionDesc).getPartitionDescs())) {
-                partitionNames.add(desc.getPartitionName());
-            }
-        }
-        return partitionNames;
     }
 
     // Used to temporarily disable some command on lake table and remove later.
