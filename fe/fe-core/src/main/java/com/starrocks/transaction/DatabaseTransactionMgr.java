@@ -993,12 +993,12 @@ public class DatabaseTransactionMgr {
                             }
                         }
                     }
-                    for (Long partitionId : droppedPartitionIds) {
-                        tableCommitInfo.removePartition(partitionId);
+                    for (Long id : droppedPartitionIds) {
+                        tableCommitInfo.removePartition(id);
                     }
                 }
-                for (Long tableId : droppedTableIds) {
-                    transactionState.removeTable(tableId);
+                for (Long id : droppedTableIds) {
+                    transactionState.removeTable(id);
                 }
             }
             if (hasError) {
