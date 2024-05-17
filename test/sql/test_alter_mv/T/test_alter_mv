@@ -1,0 +1,8 @@
+-- name: test_alter_mv_add_index
+CREATE TABLE t0(c0 INT, c1 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
+INSERT INTO t0 VALUES(1,1),(2,2),(1,3),(2,4);
+CREATE MATERIALIZED VIEW mv1 REFRESH IMMEDIATE MANUAL AS SELECT c0 AS k, count(c1) as cnt FROM t0 GROUP BY c0;
+CREATE INDEX index_cnt ON mv1(cnt) USING BITMAP COMMENT 'index1';
+function: wait_alter_table_finish()
+[UC] REFRESH MATERIALIZED VIEW mv1 FORCE WITH SYNC MODE;
+SELECT k, cnt FROM mv1 ORDER BY k;
