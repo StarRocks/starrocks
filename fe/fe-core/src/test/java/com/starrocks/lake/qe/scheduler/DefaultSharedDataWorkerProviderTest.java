@@ -32,6 +32,7 @@ import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.HostBlacklist;
 import com.starrocks.qe.NormalBackendSelector;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -131,7 +132,8 @@ public class DefaultSharedDataWorkerProviderTest {
     private WorkerProvider newWorkerProvider() {
         return factory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
-                -1, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {
