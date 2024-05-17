@@ -278,7 +278,7 @@ public interface ConnectorMetadata {
     default void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
     }
 
-    default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
+    default void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
     }
 
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {

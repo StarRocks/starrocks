@@ -1150,7 +1150,7 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
-        Table table = MetaUtils.getTable(context, analyzeStmt.getTableName());
+        Table table = MetaUtils.getSessionAwareTable(context, db, analyzeStmt.getTableName());
         if (StatisticUtils.isEmptyTable(table)) {
             return;
         }
