@@ -199,7 +199,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName) {
+    public List<String> listPartitionNames(String dbName, String tblName, long snapshotId) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 

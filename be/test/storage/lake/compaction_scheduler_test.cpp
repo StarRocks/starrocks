@@ -47,6 +47,15 @@ protected:
     std::shared_ptr<TabletMetadata> _tablet_metadata;
 };
 
+TEST_F(LakeCompactionSchedulerTest, test_task_queue) {
+    CompactionScheduler::WrapTaskQueues queue(10);
+    auto ctx = std::make_unique<CompactionTaskContext>(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
+                                                       false /* is_checker */, nullptr);
+    queue.set_target_size(5);
+    ASSERT_EQ(5, queue.target_size());
+    queue.put_by_txn_id(ctx->txn_id, ctx);
+}
+
 TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     std::vector<CompactionTaskInfo> tasks;
     _compaction_scheduler.list_tasks(&tasks);

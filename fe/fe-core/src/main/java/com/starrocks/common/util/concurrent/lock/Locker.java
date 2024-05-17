@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util.concurrent.lock;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
@@ -27,6 +28,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -259,6 +261,37 @@ public class Locker {
                             "former: {}, current stack trace: {}", type, databaseId, fullQualifiedName, endMs - startMs,
                     threadDump, LogUtil.getCurrentStackTrace());
         }
+    }
+
+    /**
+     * Try to lock databases in ascending order of id.
+     * @return: true if all databases are locked successfully, false otherwise.
+     */
+    public boolean tryLockDatabases(List<Database> dbs, LockType lockType, long timeout, TimeUnit unit) {
+        if (dbs == null) {
+            return false;
+        }
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        List<Database> lockedDbs = Lists.newArrayList();
+        boolean isLockSuccess = false;
+        long milliTimeout = timeout;
+        if (!unit.equals(TimeUnit.MILLISECONDS)) {
+            milliTimeout = TimeUnit.MILLISECONDS.convert(Duration.of(timeout, unit.toChronoUnit()));
+        }
+        try {
+            for (Database db : dbs) {
+                if (!tryLockDatabase(db, lockType, milliTimeout)) {
+                    return false;
+                }
+                lockedDbs.add(db);
+            }
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                lockedDbs.stream().forEach(t -> unLockDatabase(t, lockType));
+            }
+        }
+        return isLockSuccess;
     }
 
     /**

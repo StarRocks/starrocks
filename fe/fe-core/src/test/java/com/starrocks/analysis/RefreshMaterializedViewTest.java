@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -879,7 +880,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
             starRocksAssert.ddl("alter table mv_union_t4 add partition p20240325 values less than ('2024-03-25')");
             starRocksAssert.ddl("alter table mv_union_t1 add partition p20240326 values less than ('2024-03-26')");
 
-            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+            Exception e = Assert.assertThrows(DmlException.class, () ->
                     starRocksAssert.refreshMvPartition("refresh materialized view mv2"));
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }

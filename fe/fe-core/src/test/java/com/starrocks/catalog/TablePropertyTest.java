@@ -66,7 +66,7 @@ public class TablePropertyTest {
         DynamicPartitionProperty readDynamicPartitionProperty = readTableProperty.getDynamicPartitionProperty();
         DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(properties);
         Assert.assertEquals(readTableProperty.getProperties(), properties);
-        Assert.assertEquals(readDynamicPartitionProperty.getEnable(), dynamicPartitionProperty.getEnable());
+        Assert.assertEquals(readDynamicPartitionProperty.isEnabled(), dynamicPartitionProperty.isEnabled());
         Assert.assertEquals(readDynamicPartitionProperty.getBuckets(), dynamicPartitionProperty.getBuckets());
         Assert.assertEquals(readDynamicPartitionProperty.getPrefix(), dynamicPartitionProperty.getPrefix());
         Assert.assertEquals(readDynamicPartitionProperty.getStart(), dynamicPartitionProperty.getStart());

@@ -420,17 +420,18 @@ public class ExpressionTest extends PlanTestBase {
     @Test
     public void testCaseWhenOperatorReuse() throws Exception {
         String sql =
-                "select max(case when STRLEFT(DATE_FORMAT('2020-09-02 23:59:59', '%Y-%m'), 6) > 0 then v1 else v2 end),"
+                "select max(case when STRLEFT(DATE_FORMAT(v1, '%Y-%m'), 6) > 0 then v1 else v2 end),"
                         +
-                        "min(case when STRLEFT(DATE_FORMAT('2020-09-02 23:59:59', '%Y-%m'), 6) > 0 then v2 else v1 end),"
+                        "min(case when STRLEFT(DATE_FORMAT(v1, '%Y-%m'), 6) > 0 then v2 else v1 end),"
                         +
-                        "count(case when STRLEFT(DATE_FORMAT('2020-09-02 23:59:59', '%Y-%m'), 6) > 0 then v3 else v2 "
+                        "count(case when STRLEFT(DATE_FORMAT(v1, '%Y-%m'), 6) > 0 then v3 else v2 "
                         + "end) from t0";
         String planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: max(if(12: expr, 1: v1, 2: v2)), min(if(12: expr, 2: v2, 1: v1)), " +
-                "count(if(12: expr, 3: v3, 2: v2))");
-        Assert.assertTrue(planFragment.contains("<slot 10> : strleft('2020-09', 6)"));
+        assertContains(planFragment, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: max(if(14: expr, 1: v1, 2: v2)), min(if(14: expr, 2: v2, 1: v1)), " +
+                "count(if(14: expr, 3: v3, 2: v2))");
+        Assert.assertTrue(planFragment.contains("common expressions:\n" +
+                "  |  <slot 10> : CAST(1: v1 AS DATETIME)"));
     }
 
     @Test
@@ -479,8 +480,8 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select t2.tb from tall t1 join tall t2 " +
                 "on t1.tc = t2.tb and t2.tt = 123 and (t2.tt != 'ax') = t2.td;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PREDICATES: 20: tt = '123', " +
-                "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1"));
+        assertContains(plan, "PREDICATES: 20: tt = '123', " +
+                "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1");
     }
 
     @Test
@@ -509,7 +510,7 @@ public class ExpressionTest extends PlanTestBase {
         // v1 is bigint, bigint in varchar will cast bigint as varchar
         String sql = "select *  from t0 where v1 in ('a','b')";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) IN ('a', 'b')\n"));
+        assertContains(plan, "CAST(1: v1 AS VARCHAR(1048576)) IN ('a', 'b')");
     }
 
     @Test
@@ -603,7 +604,7 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select arr,array_length(arr) from (select array_map(x->x+1, [1,2]) as arr)T";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("common expressions"));
-        Assert.assertTrue(plan.contains("array_length(6: array_map)"));
+        Assert.assertTrue(plan.contains("array_length(5: array_map)"));
 
         sql = "select array_map(x->x+ 3 *c1 + 3*c1, c2) from test_array";
         plan = getFragmentPlan(sql);
@@ -775,24 +776,7 @@ public class ExpressionTest extends PlanTestBase {
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('1970-01-01', '1970-01-01', '1970-02-01') ",
                 "c4 IN ('1970-01-01', '1970-01-01', '1970-02-01')");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('292278994-08-17', '1970-01-01', '1970-02-01') ",
-                "c4 IN (CAST('292278994-08-17' AS DATE), '1970-01-01', '1970-02-01')");
-
-        // common expression
-        testPlanContains("SELECT " +
-                        "c4 IN ('292278994-08-17', '1970-02-01') AND " +
-                        "c5 IN ('292278994-08-17', '1970-02-01') AND " +
-                        "c5 IN ('292278994-08-17', '1970-02-01')  " +
-                        " FROM test_in_pred_norm",
-                "<slot 7> : ((5: c4 = '1970-02-01') OR (5: c4 = 8: cast)) AND ((6: c5 = '1970-02-01') OR (6: c5 = 8: cast))");
-
-        String plan = getFragmentPlan("SELECT " +
-                "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
-                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-18', '1970-02-01') AND " +
-                "c5 IN ('292278994-08-17', '1970-02-01') AND c5 IN ('292278994-08-17', '1970-02-01')  " +
-                " FROM test_in_pred_norm");
-        Assert.assertTrue("plan is " + plan, plan.contains("common expressions:"));
-        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 8> "));
-        Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 9> "));
+                "5: c4 IN (CAST('292278994-08-17' AS DATE), '1970-01-01', '1970-02-01')");
     }
 
     @Test
@@ -1801,6 +1785,14 @@ public class ExpressionTest extends PlanTestBase {
             sql = "select t1g = true from test_bool";
             plan = getVerboseExplain(sql);
             assertContains(plan, "[7: t1g, BIGINT, true] = 1");
+
+            sql = "select id_decimal < '123' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([10: id_decimal, DECIMAL64(10,2), true] as DOUBLE) < 123.0");
+
+            sql = "select id_bool < '123' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([11: id_bool, BOOLEAN, true] as DOUBLE) < 123.0");
         } finally {
             connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
         }
@@ -1853,6 +1845,11 @@ public class ExpressionTest extends PlanTestBase {
             sql = "select t1g = true from test_bool";
             plan = getVerboseExplain(sql);
             assertContains(plan, "[7: t1g, BIGINT, true] = 1");
+
+            sql = "select id_decimal > t1a from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan,
+                    "cast([10: id_decimal, DECIMAL64(10,2), true] as DOUBLE) > cast([1: t1a, VARCHAR, true] as DOUBLE)");
         } finally {
             connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
         }

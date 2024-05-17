@@ -14,6 +14,7 @@
 
 package com.starrocks.credential;
 
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;

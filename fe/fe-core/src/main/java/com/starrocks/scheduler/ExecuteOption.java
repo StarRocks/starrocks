@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonUtils;
 
@@ -29,28 +30,30 @@ public class ExecuteOption {
     private Map<String, String> taskRunProperties;
 
     @SerializedName("isMergeRedundant")
-    private boolean isMergeRedundant = false;
-    // indicates whether the current execution is manual
+    private final boolean isMergeRedundant;
 
+    // indicates whether the current execution is manual
     @SerializedName("isManual")
     private boolean isManual = false;
+
     @SerializedName("isSync")
     private boolean isSync = false;
 
     @SerializedName("isReplay")
     private boolean isReplay = false;
 
-    public ExecuteOption() {
-    }
-
-    public ExecuteOption(int priority) {
-        this.priority = priority;
+    public ExecuteOption(boolean isMergeRedundant) {
+        this.isMergeRedundant = isMergeRedundant;
     }
 
     public ExecuteOption(int priority, boolean isMergeRedundant, Map<String, String> taskRunProperties) {
         this.priority = priority;
         this.isMergeRedundant = isMergeRedundant;
         this.taskRunProperties = taskRunProperties;
+    }
+
+    public static ExecuteOption makeMergeRedundantOption() {
+        return new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, Maps.newHashMap());
     }
 
     public int getPriority() {
@@ -65,10 +68,6 @@ public class ExecuteOption {
         // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
         // hanging after removing it.
         return !isSync && isMergeRedundant;
-    }
-
-    public void setMergeRedundant(boolean mergeRedundant) {
-        this.isMergeRedundant = mergeRedundant;
     }
 
     public Map<String, String> getTaskRunProperties() {

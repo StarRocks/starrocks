@@ -290,7 +290,7 @@ Status DictionaryCacheWriter::ChunkUtil::uncompress_and_deserialize_chunk(const 
                                                                           faststring* uncompressed_buffer,
                                                                           const OlapTableSchemaParam* schema) {
     // build chunk meta
-    auto row_desc = std::make_unique<RowDescriptor>(schema->tuple_desc(), false);
+    auto row_desc = std::make_unique<RowDescriptor>(schema->tuple_desc());
     StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*row_desc, pchunk);
     if (!res.ok()) {
         return res.status();
