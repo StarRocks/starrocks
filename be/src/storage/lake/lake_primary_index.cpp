@@ -223,8 +223,7 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            lake_persistent_index->commit(builder);
-            return Status::OK();
+            return lake_persistent_index->commit(builder);
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
         }
