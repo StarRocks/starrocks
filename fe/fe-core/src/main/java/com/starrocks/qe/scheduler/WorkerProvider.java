@@ -41,13 +41,8 @@ public interface WorkerProvider {
          */
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
-<<<<<<< HEAD
-                                               int numUsedComputeNodes);
-=======
                                                int numUsedComputeNodes,
-                                               ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                               long warehouseId);
->>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
+                                               ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy);
     }
 
     /**
