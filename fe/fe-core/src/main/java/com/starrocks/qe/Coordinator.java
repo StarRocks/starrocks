@@ -706,6 +706,14 @@ public class Coordinator {
             if (!coordinatorPreprocessor.isUsePipeline()) {
                 this.queryOptions.setEnable_profile(true);
             }
+            if (queryOptions.getLoad_job_type() == TLoadJobType.BROKER
+                    && queryOptions.getBig_query_profile_threshold() == 0) {
+                queryOptions.setBig_query_profile_threshold(Config.default_big_load_profile_threshold_second * 1000);
+            }
+            // runtime load profile does not need to report too frequently
+            if (queryOptions.getRuntime_profile_report_interval() < 30) {
+                queryOptions.setRuntime_profile_report_interval(30);
+            }
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
             List<Long> relatedBackendIds = Lists.newArrayList(coordinatorPreprocessor.getAddressToBackendID().values());
@@ -1644,15 +1652,16 @@ public class Coordinator {
         long lastTime = lastRuntimeProfileUpdateTime.get();
         Supplier<RuntimeProfile> topProfileSupplier = this.topProfileSupplier;
         ExecPlan plan = execPlan;
-        if (topProfileSupplier != null && plan != null && connectContext != null &&
-                connectContext.isProfileEnabled() &&
+        if (topProfileSupplier != null && plan != null && ((connectContext != null &&
+                connectContext.isProfileEnabled()) || queryOptions.getLoad_job_type() == TLoadJobType.BROKER) &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.done || profileDoneSignal.getLeftMarks().size() > 1) &&
                 // Interval * 0.95 * 1000 to allow a certain range of deviation
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
+            profile.addChild(buildQueryProfile(
+                    connectContext.needMergeProfile() || queryOptions.getLoad_job_type() == TLoadJobType.BROKER));
             ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
             saveRunningProfile(profilingPlan, profile);
         }
