@@ -36,10 +36,10 @@ public class TestHiveScanner {
         params.put("hive_column_names",
                 "col_tinyint,col_smallint,col_int,col_bigint,col_float,col_double,col_decimal,col_string,col_char,col_varchar,col_boolean,col_timestamp,col_date,col_array,col_map,col_struct");
         params.put("hive_column_types",
-                "int#int#int#bigint#float#double#decimal(10,2)#string#char(10)#varchar(20)#boolean#timestamp#date#array<string>#map<string,int>#struct<name:string,age:int>");
+                "int#int#int#bigint#float#double#decimal(10,2)#string#char(10)#varchar(20)#boolean#timestamp#date#array<string>#map<string,int>#struct<name:string,age:int,gender:string>");
         params.put("input_format", "org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat");
         params.put("serde", "org.apache.hadoop.hive.serde2.avro.AvroSerDe");
-        params.put("required_fields", "col_tinyint,col_smallint,col_int,col_bigint,col_float,col_double,col_decimal");
+        params.put("required_fields", "col_tinyint,col_smallint,col_int,col_bigint,col_float,col_double,col_decimal,col_struct");
         params.put("SerDe.mongo.columns.mapping", "{\n\"id\":\"_id\",\n\"status\":\"status\"}");
         return params;
     }
