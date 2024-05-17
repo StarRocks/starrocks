@@ -1045,7 +1045,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         RETURN_IF_ERROR(
                 Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
 
-        int64_t max_file_size = 1024 * 1024 * 1024L;
+        int64_t max_file_size = TableInfo::DEFAULT_MAX_FILE_SIZE;
         if (target_table.__isset.target_max_file_size) {
             max_file_size = target_table.target_max_file_size;
         }

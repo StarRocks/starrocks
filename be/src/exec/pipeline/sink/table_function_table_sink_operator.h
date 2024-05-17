@@ -125,7 +125,7 @@ private:
     const std::vector<ExprContext*> _partition_exprs;
     const std::vector<std::string> _column_names;
     const std::vector<std::string> _partition_column_names;
-    const int64_t _max_file_size = 1024 * 1024 * 1024L;
+    const int64_t _max_file_size = TableInfo::DEFAULT_MAX_FILE_SIZE;
     const TCloudConfiguration _cloud_conf;
     FragmentContext* _fragment_ctx;
 
