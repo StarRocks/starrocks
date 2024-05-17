@@ -86,6 +86,7 @@ public:
     bool asc_hint = true;
 
     bool prune_column_after_index_filter = false;
+    bool enable_gin_filter = false;
 };
 
 } // namespace starrocks

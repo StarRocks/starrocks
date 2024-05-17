@@ -211,6 +211,9 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_olap_scan_node.enable_prune_column_after_index_filter;
     }
+    if (thrift_olap_scan_node.__isset.enable_gin_filter) {
+        _params.enable_gin_filter = thrift_olap_scan_node.enable_gin_filter;
+    }
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }

@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.server.RunMode;
@@ -78,6 +79,9 @@ public class InvertedIndexUtil {
         }
         if (RunMode.isSharedDataMode()) {
             throw new SemanticException("The inverted index does not support shared data mode");
+        }
+        if (!Config.enable_experimental_gin) {
+            throw new SemanticException("The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
         String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);

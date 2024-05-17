@@ -102,6 +102,7 @@ public:
     bool asc_hint = true;
 
     bool prune_column_after_index_filter = false;
+    bool enable_gin_filter = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
