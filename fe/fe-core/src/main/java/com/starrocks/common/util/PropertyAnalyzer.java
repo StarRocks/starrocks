@@ -606,6 +606,10 @@ public class PropertyAnalyzer {
     public static Long analyzeVersionInfo(Map<String, String> properties) throws AnalysisException {
         long versionInfo = Partition.PARTITION_INIT_VERSION;
         if (properties != null && properties.containsKey(PROPERTIES_VERSION_INFO)) {
+            if (RunMode.isSharedDataMode()) {
+                throw new AnalysisException(String.format("Does not support the table property \"%s\" in share data " +
+                                "mode, please remove it from the statement", PROPERTIES_VERSION_INFO));
+            }
             String versionInfoStr = properties.get(PROPERTIES_VERSION_INFO);
             try {
                 versionInfo = Long.parseLong(versionInfoStr);
