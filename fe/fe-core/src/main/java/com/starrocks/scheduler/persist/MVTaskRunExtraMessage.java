@@ -50,7 +50,7 @@ public class MVTaskRunExtraMessage implements Writable {
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();
 
     @SerializedName("executeOption")
-    private ExecuteOption executeOption = new ExecuteOption();
+    private ExecuteOption executeOption = new ExecuteOption(true);
 
     public MVTaskRunExtraMessage() {
     }

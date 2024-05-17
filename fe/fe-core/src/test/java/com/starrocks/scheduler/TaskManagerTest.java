@@ -127,7 +127,7 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun, new ExecuteOption());
+        taskRunManager.submitTaskRun(taskRun, new ExecuteOption(false));
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Constants.TaskRunState state = null;
 
@@ -537,8 +537,7 @@ public class TaskManagerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
-        ExecuteOption executeOption = new ExecuteOption();
-        executeOption.setMergeRedundant(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
         executeOption.setSync(isSync);
         return  executeOption;
     }
