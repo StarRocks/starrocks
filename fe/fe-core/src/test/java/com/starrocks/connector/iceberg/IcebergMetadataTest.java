@@ -53,6 +53,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AddColumnClause;
@@ -1290,7 +1291,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 new IcebergCatalogProperties(DEFAULT_CONFIG));
         ConnectContext.get().getSessionVariable().setEnableIcebergColumnStatistics(false);
 
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, new TemporaryTableMgr(), null, null);
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
@@ -1328,7 +1329,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), catalogProperties);
 
-        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, new TemporaryTableMgr(), null, null);
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
