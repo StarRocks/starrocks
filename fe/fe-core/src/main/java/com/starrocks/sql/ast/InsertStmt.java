@@ -34,6 +34,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -311,6 +312,7 @@ public class InsertStmt extends DmlStmt {
         String format = props.get("format");
         String partitionBy = props.get("partition_by");
         String compressionType = props.get("compression");
+        Optional<Integer> targetMaxFileSize = Optional.ofNullable(props.get("target_max_file_size")).map(Integer::parseInt);
 
         // validate properties
         if (path == null) {
@@ -342,7 +344,7 @@ public class InsertStmt extends DmlStmt {
         }
 
         if (writeSingleFile) {
-            return new TableFunctionTable(path, format, compressionType, columns, null, true, props);
+            return new TableFunctionTable(path, format, compressionType, columns, null, true, targetMaxFileSize, props);
         }
 
         if (partitionBy == null) {
@@ -350,7 +352,7 @@ public class InsertStmt extends DmlStmt {
             if (path.endsWith("/")) {
                 path += "data_";
             }
-            return new TableFunctionTable(path, format, compressionType, columns, null, false, props);
+            return new TableFunctionTable(path, format, compressionType, columns, null, false, targetMaxFileSize, props);
         }
 
         // extra validation for using partitionBy
@@ -383,6 +385,7 @@ public class InsertStmt extends DmlStmt {
             throw new SemanticException("partition column does not support type of " + type);
         }
 
-        return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, props);
+        return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, targetMaxFileSize,
+                props);
     }
 }

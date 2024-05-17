@@ -89,6 +89,7 @@ public class TableFunctionTable extends Table {
     @Nullable
     private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
+    private Optional<Integer> targetMaxFileSize = Optional.empty();
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -118,6 +119,7 @@ public class TableFunctionTable extends Table {
     // Ctor for unload data via table function
     public TableFunctionTable(String path, String format, String compressionType, List<Column> columns,
                               @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile,
+                              Optional<Integer> targetMaxFileSize,
                               Map<String, String> properties) {
         super(TableType.TABLE_FUNCTION);
         verify(!Strings.isNullOrEmpty(path), "path is null or empty");
@@ -127,6 +129,7 @@ public class TableFunctionTable extends Table {
         this.compressionType = compressionType;
         this.partitionColumnIDs = partitionColumnIDs;
         this.writeSingleFile = writeSingleFile;
+        this.targetMaxFileSize = targetMaxFileSize;
         this.properties = properties;
         super.setNewFullSchema(columns);
     }
@@ -166,6 +169,7 @@ public class TableFunctionTable extends Table {
         if (partitionColumnIDs != null) {
             tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
         }
+        targetMaxFileSize.ifPresent(tTableFunctionTable::setTarget_max_file_size);
         return tTableFunctionTable;
     }
 
