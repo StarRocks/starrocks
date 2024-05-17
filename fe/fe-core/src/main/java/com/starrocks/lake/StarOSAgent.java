@@ -48,6 +48,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
@@ -88,7 +89,7 @@ public class StarOSAgent {
         serviceId = "";
         workerToId = Maps.newHashMap();
         workerToNode = Maps.newHashMap();
-        rwLock = new ReentrantReadWriteLock();
+        rwLock = new FairReentrantReadWriteLock();
     }
 
     public boolean init(StarManagerServer server) {

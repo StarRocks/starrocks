@@ -33,6 +33,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -110,7 +111,7 @@ public class Pipe implements GsonPostProcessable {
     @SerializedName(value = "task_execution_variables")
     private Map<String, String> taskExecutionVariables;
 
-    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
     private Map<Long, PipeTaskDesc> runningTasks = new HashMap<>();
     private ErrorInfo lastErrorInfo = new ErrorInfo();
     private int failedTaskExecutionCount = 0;
@@ -659,7 +660,7 @@ public class Pipe implements GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         this.runningTasks = new HashMap<>();
-        this.lock = new ReentrantReadWriteLock();
+        this.lock = new FairReentrantReadWriteLock();
         this.lastErrorInfo = new ErrorInfo();
         pipeSource.initPipeId(id);
         processProperties(this.properties);
