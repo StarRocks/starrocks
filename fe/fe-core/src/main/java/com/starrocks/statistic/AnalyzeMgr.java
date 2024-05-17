@@ -469,9 +469,9 @@ public class AnalyzeMgr implements Writable {
         for (Map.Entry<Long, AnalyzeStatus> entry : analyzeStatusMap.entrySet()) {
             AnalyzeStatus analyzeStatus = entry.getValue();
             LocalDateTime endTime = analyzeStatus.getEndTime();
-            // After the last cleanup, if a table has successfully undergone automatic full statistics collection,
-            // and the collection completion time is one minute later than the last cleanup time,
-            // then during the next cleanup process, the expired statistics information of this table will be cleared.
+            // After the last cleanup, if a table has successfully undergone a scheduled full statistics collection,
+            // and the collection completion time is after the last cleanup time,
+            // then during the next cleanup process, the stale column statistics would be cleared.
             if (analyzeStatus instanceof NativeAnalyzeStatus
                     && analyzeStatus.getScheduleType() ==  StatsConstants.ScheduleType.SCHEDULE
                     && analyzeStatus.getStatus() == StatsConstants.ScheduleStatus.FINISH
@@ -482,6 +482,10 @@ public class AnalyzeMgr implements Writable {
                     tables.add(db.getTable(nativeAnalyzeStatus.getTableId()));
                 }
             }
+        }
+
+        if (tables.isEmpty()) {
+            lastCleanTime = LocalDateTime.now();
         }
 
         List<Long> tableIds = Lists.newArrayList();
