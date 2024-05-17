@@ -93,6 +93,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
@@ -134,6 +135,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -237,6 +239,10 @@ public class OlapTable extends Table {
     // with a new one that has the same 'indexName', the unique 'indexId' allows us to distinguish between them.
     @SerializedName(value = "maxIndexId")
     protected long maxIndexId = -1;
+
+    // the id of the session that created this table, only used in temporary table
+    @SerializedName(value = "sessionId")
+    protected UUID sessionId = null;
 
     protected BinlogConfig curBinlogConfig;
 
@@ -357,6 +363,7 @@ public class OlapTable extends Table {
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
         olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
+        olapTable.sessionId = this.sessionId;
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -452,6 +459,11 @@ public class OlapTable extends Table {
             return Lists.newArrayList();
         }
         return indexes.getIndexes();
+    }
+
+    @Override
+    public boolean isTemporaryTable() {
+        return this.sessionId != null;
     }
 
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
@@ -2814,6 +2826,14 @@ public class OlapTable extends Table {
         tableProperty.buildUseFastSchemaEvolution();
     }
 
+    public void setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public UUID getSessionId() {
+        return sessionId;
+    }
+
     @Override
     public void onReload() {
         analyzePartitionInfo();
@@ -2845,6 +2865,12 @@ public class OlapTable extends Table {
                             "the execution of dynamic partitioning", ex);
                 }
             }, "BackgroundDynamicPartitionThread").start();
+        }
+
+        if (isTemporaryTable()) {
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), name, id);
+            LOG.debug("add temporary table, name[{}] id[{}] session[{}]", name, id, sessionId);
         }
     }
 
