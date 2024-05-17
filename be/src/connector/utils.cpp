@@ -33,7 +33,7 @@ StatusOr<std::string> HiveUtils::make_partition_name(
             return Status::NotSupported("Partition value can't be null.");
         }
         auto type = column_evaluators[i]->type();
-        ASSIGN_OR_RETURN(auto value, column_value(type, column));
+        ASSIGN_OR_RETURN(auto value, column_value(type, column, 0));
         ss << column_names[i] << "=" << value << "/";
     }
     return ss.str();
@@ -47,7 +47,7 @@ StatusOr<std::string> HiveUtils::make_partition_name_nullable(
     for (size_t i = 0; i < column_evaluators.size(); i++) {
         ASSIGN_OR_RETURN(auto column, column_evaluators[i]->evaluate(chunk));
         auto type = column_evaluators[i]->type();
-        ASSIGN_OR_RETURN(auto value, column_value(type, column));
+        ASSIGN_OR_RETURN(auto value, column_value(type, column, 0));
         ss << column_names[i] << "=" << value << "/";
     }
     return ss.str();
@@ -64,8 +64,8 @@ std::vector<formats::FileColumnId> IcebergUtils::generate_parquet_field_ids(
 }
 
 // TODO(letian-jiang): translate org.apache.hadoop.hive.common.FileUtils#makePartName
-StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, const ColumnPtr& column) {
-    DCHECK_GT(column->size(), 0);
+StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int i) {
+    DCHECK(i < column->size() && i > 0);
     auto datum = column->get(0);
     if (datum.is_null()) {
         return "null";

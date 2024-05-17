@@ -43,8 +43,7 @@ public:
             const std::vector<std::string>& column_names,
             const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
 
-private:
-    static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
+    static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int idx);
 };
 
 class IcebergUtils {

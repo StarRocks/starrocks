@@ -52,6 +52,7 @@
 #include "util/cpu_info.h"
 #include "util/int96.h"
 #include "util/murmur_hash3.h"
+#include "boost/container_hash/hash.hpp"
 
 namespace starrocks {
 
@@ -397,6 +398,17 @@ struct hash<std::pair<starrocks::TUniqueId, int64_t>> {
         seed = starrocks::HashUtil::hash(&pair.first.hi, sizeof(pair.first.hi), seed);
         seed = starrocks::HashUtil::hash(&pair.second, sizeof(pair.second), seed);
         return seed;
+    }
+};
+
+template <typename T>
+struct hash<std::vector<T>> {
+    size_t operator()(const std::vector<T>& ts) const noexcept {
+        std::size_t hash_value = 0; // seed
+        for (auto& t : ts) {
+            boost::hash_combine<T>(hash_value, t);
+        }
+        return hash_value;
     }
 };
 
