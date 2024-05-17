@@ -265,6 +265,18 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
     }
 }
 
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_index_output(ChunkPtr* chunk) {
+    _probe_state->probe_index.resize((*chunk)->num_rows());
+    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_index_output(ChunkPtr* chunk) {
+    _probe_state->build_index.resize(_probe_state->count);
+    (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+}
+
 JoinHashTable JoinHashTable::clone_readable_table() {
     JoinHashTable ht;
 
@@ -932,5 +944,25 @@ void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Filter* filter) 
         }
     }
 }
+
+template class JoinHashMapForDirectMapping(TYPE_BOOLEAN);
+template class JoinHashMapForDirectMapping(TYPE_TINYINT);
+template class JoinHashMapForDirectMapping(TYPE_SMALLINT);
+template class JoinHashMapForOneKey(TYPE_INT);
+template class JoinHashMapForOneKey(TYPE_BIGINT);
+template class JoinHashMapForOneKey(TYPE_LARGEINT);
+template class JoinHashMapForOneKey(TYPE_FLOAT);
+template class JoinHashMapForOneKey(TYPE_DOUBLE);
+template class JoinHashMapForOneKey(TYPE_VARCHAR);
+template class JoinHashMapForOneKey(TYPE_DATE);
+template class JoinHashMapForOneKey(TYPE_DATETIME);
+template class JoinHashMapForOneKey(TYPE_DECIMALV2);
+template class JoinHashMapForOneKey(TYPE_DECIMAL32);
+template class JoinHashMapForOneKey(TYPE_DECIMAL64);
+template class JoinHashMapForOneKey(TYPE_DECIMAL128);
+template class JoinHashMapForSerializedKey(TYPE_VARCHAR);
+template class JoinHashMapForFixedSizeKey(TYPE_INT);
+template class JoinHashMapForFixedSizeKey(TYPE_BIGINT);
+template class JoinHashMapForFixedSizeKey(TYPE_LARGEINT);
 
 } // namespace starrocks

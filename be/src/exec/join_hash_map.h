@@ -559,6 +559,7 @@ public:
         return;
     }
 
+    template <bool is_remain>
     void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
         if ((*result_chunk)->num_rows() < _probe_state->count) {
             _probe_state->match_flag = JoinMatchFlag::NORMAL;
@@ -665,11 +666,16 @@ public:
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain);
     void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain);
+    template <bool is_remain>
+    void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
 private:
+    template <bool is_lazy>
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
+    template <bool is_lazy>
     void _probe_null_output(ChunkPtr* chunk, size_t count);
 
+    template <bool is_lazy>
     void _build_output(ChunkPtr* chunk);
     void _build_default_output(ChunkPtr* chunk, size_t count);
 
@@ -680,6 +686,9 @@ private:
     void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
 
     void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+
+    void _probe_index_output(ChunkPtr* chunk);
+    void _build_index_output(ChunkPtr* chunk);
 
     void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
     void _search_ht_remain(RuntimeState* state);
@@ -816,6 +825,8 @@ public:
     Status reset_probe_state(RuntimeState* state);
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+    template <bool is_remain>
+    Status lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
     void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
     // convert input column to spill schema order
