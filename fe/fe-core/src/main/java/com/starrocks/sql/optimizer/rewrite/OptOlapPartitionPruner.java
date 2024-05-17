@@ -31,6 +31,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -207,7 +208,7 @@ public class OptOlapPartitionPruner {
 
         scanPredicates.removeAll(prunedPartitionPredicates);
 
-        if (column.isAllowNull() && containsNullValue(column, minRange)
+        if (column.isAllowNull() && containsNullValue(minRange)
                 && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
             return null;
         }
@@ -375,16 +376,20 @@ public class OptOlapPartitionPruner {
         return false;
     }
 
-    private static boolean containsNullValue(Column column, PartitionKey minRange) {
+    private static boolean containsNullValue(PartitionKey minRange) {
         PartitionKey nullValue = new PartitionKey();
         try {
-            nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
+            for (int i = 0; i < minRange.getKeys().size(); ++i) {
+                LiteralExpr rangeKey = minRange.getKeys().get(i);
+                PrimitiveType type = minRange.getTypes().get(i);
+                nullValue.pushColumn(LiteralExpr.createInfinity(rangeKey.getType(), false), type);
+            }
+
             return minRange.compareTo(nullValue) <= 0;
         } catch (AnalysisException e) {
             return false;
         }
     }
-
 
     private static boolean checkFilterNullValue(List<ScalarOperator> scanPredicates, ScalarOperator predicate) {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
