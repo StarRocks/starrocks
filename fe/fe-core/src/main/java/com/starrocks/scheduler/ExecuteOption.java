@@ -15,28 +15,41 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
+
 import java.util.Map;
 
 public class ExecuteOption {
 
     private int priority = Constants.TaskRunPriority.LOWEST.value();
-    private boolean mergeRedundant = false;
     private Map<String, String> taskRunProperties;
+
+    @SerializedName("isMergeRedundant")
+    private final boolean mergeRedundant;
+
     // indicates whether the current execution is manual
+    @SerializedName("isManual")
     private boolean isManual = false;
+
+    @SerializedName("isSync")
     private boolean isSync = false;
 
-    public ExecuteOption() {
-    }
+    @SerializedName("isReplay")
+    private boolean isReplay = false;
 
-    public ExecuteOption(int priority) {
-        this.priority = priority;
+    public ExecuteOption(boolean isMergeRedundant) {
+        this.mergeRedundant = isMergeRedundant;
     }
 
     public ExecuteOption(int priority, boolean mergeRedundant, Map<String, String> taskRunProperties) {
         this.priority = priority;
         this.mergeRedundant = mergeRedundant;
         this.taskRunProperties = taskRunProperties;
+    }
+
+    public static ExecuteOption makeMergeRedundantOption() {
+        return new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, Maps.newHashMap());
     }
 
     public int getPriority() {
@@ -51,10 +64,6 @@ public class ExecuteOption {
         // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
         // hanging after removing it.
         return !isSync && mergeRedundant;
-    }
-
-    public void setMergeRedundant(boolean mergeRedundant) {
-        this.mergeRedundant = mergeRedundant;
     }
 
     public Map<String, String> getTaskRunProperties() {
@@ -75,6 +84,10 @@ public class ExecuteOption {
 
     public void setSync(boolean isSync) {
         this.isSync = isSync;
+    }
+
+    public void setReplay(boolean isReplay) {
+        this.isReplay = isReplay;
     }
 
     @Override
