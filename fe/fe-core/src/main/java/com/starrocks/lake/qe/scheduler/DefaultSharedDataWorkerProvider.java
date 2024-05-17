@@ -63,24 +63,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultSharedDataWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
-<<<<<<< HEAD
-                                                                       boolean preferComputeNode,
-                                                                       int numUsedComputeNodes) {
+                                       boolean preferComputeNode,
+                                       int numUsedComputeNodes,
+                                       ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
-=======
-                                               boolean preferComputeNode,
-                                               int numUsedComputeNodes,
-                                               ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                               long warehouseId) {
-
-            ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-            List<Long> computeNodeIds =
-                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            computeNodeIds.forEach(nodeId -> builder.put(nodeId,
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
-            ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
->>>>>>> ae7a4bfb73 ([Enhancement] adjust the BE and CN schedule policy (#44499))
             if (LOG.isDebugEnabled()) {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
