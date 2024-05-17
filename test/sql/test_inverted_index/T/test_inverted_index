@@ -748,12 +748,12 @@ SHOW CREATE TABLE t_alter_gin_col_into_other_type;
 SELECT * FROM t_alter_gin_col_into_other_type;
 DROP TABLE t_alter_gin_col_into_other_type;
 
--- name: test_gin_var
+-- name: test_gin_var @sequential
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
 ) ENGINE=OLAP
 DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
@@ -776,7 +776,7 @@ ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "false");
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
 ) ENGINE=OLAP
 DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
@@ -799,13 +799,13 @@ PROPERTIES (
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
-ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'english');
+ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'standard');
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 DROP TABLE t_gin_var;
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
 ) ENGINE=OLAP
 DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
