@@ -34,6 +34,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.LoadJobWithWarehouse;
 import com.starrocks.load.loadv2.LoadJob;
@@ -222,7 +223,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public void init() {
-        this.lock = new ReentrantReadWriteLock(true);
+        this.lock = new FairReentrantReadWriteLock();
         this.taskDeadlineMs = this.createTimeMs + this.timeoutMs;
         this.channels = Lists.newArrayListWithCapacity(this.channelNum);
         for (int i = 0; i < this.channelNum; i++) {
