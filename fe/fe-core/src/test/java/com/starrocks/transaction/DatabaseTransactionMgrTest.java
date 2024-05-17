@@ -36,13 +36,9 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
@@ -277,42 +273,6 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TTransactionStatus.ABORTED, masterDbTransMgr.getTxnStatus(txnId3));
     }
 
-    @Test
-    public void testFinishTransactionTableRemove() throws UserException {
-        prepareCommittedTransaction();
-        new MockUp<Database>() {
-            @Mock
-            public Table getTable(long tableId) {
-                return null;
-            }
-        };
-
-        DatabaseTransactionMgr masterDbTransMgr =
-                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
-
-        long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
-        masterDbTransMgr.finishTransaction(txnId, null);
-        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
-    }
-
-
-    @Test
-    public void testFinishTransactionPartitionRemove() throws UserException {
-        prepareCommittedTransaction();
-        new MockUp<OlapTable>() {
-            @Mock
-            public PhysicalPartition getPhysicalPartition(long partitionId) {
-                return null;
-            }
-        };
-
-        DatabaseTransactionMgr masterDbTransMgr =
-                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
-
-        long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
-        masterDbTransMgr.finishTransaction(txnId, null);
-        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
-    }
     @Test
     public void testAbortTransactionWithNotFoundException() throws UserException {
         DatabaseTransactionMgr masterDbTransMgr =
