@@ -15,6 +15,7 @@
 #include "storage/lake/persistent_index_memtable.h"
 
 #include "storage/lake/persistent_index_sstable.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -44,10 +45,12 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
         }
     }
     *num_found = nfound;
+    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
 Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("persistent_index_memtable_insert_us");
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
         auto size = keys[i].get_size();
@@ -61,6 +64,7 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
             return Status::AlreadyExist(msg);
         }
     }
+    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
@@ -83,6 +87,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
         }
     }
     *num_found = nfound;
+    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
@@ -97,6 +102,7 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
             update_index_value(&it->second, version, value);
         }
     }
+    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
