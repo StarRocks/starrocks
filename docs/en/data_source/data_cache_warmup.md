@@ -42,18 +42,17 @@ The following example loads all data from external table `lineitem`:
 
 ```plaintext
 mysql> cache select * from hive_catalog.test_db.lineitem;
-+---------+---------------------+------------------+----------------------+-------------------+
-| STATUS  | ALREADY_CACHED_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
-+---------+---------------------+------------------+----------------------+-------------------+
-| SUCCESS | 15.2MB              | 754.7MB          | 88.7ms               | 29.04%            |
-+---------+---------------------+------------------+----------------------+-------------------+
-1 row in set (36.56 sec)
++-----------------+------------------+----------------------+-------------------+
+| READ_CACHE_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
++-----------------+------------------+----------------------+-------------------+
+| 48.2MB          | 3.7GB            | 59ms                 | 96.83%            |
++-----------------+------------------+----------------------+-------------------+
+1 row in set (19.56 sec)
 ```
 
 Return fields:
 
-- `STATUS`: The execution result of the warmup task. Values: `SUCCESS` and `FAILED`. If the status is `FAILED`, an `ERROR_MSG` field is also returned, showing the error message.
-- `ALREADY_CACHED_SIZE`: The size of data cached in the data cache (Currently, there is a certain margin of error in this statistics, which will be improved in the future).
+- `READ_CACHE_SIZE`: The total size of data read from the data cache by all nodes.
 - `WRITE_CACHE_SIZE`: The total size of data written to the data cache by all nodes.
 - `AVG_WRITE_CACHE_TIME`: The average time taken by each node to write data to the data cache.
 - `TOTAL_CACHE_USAGE`: The space usage of the data cache of the entire cluster after this warmup task is complete. This metric can be used to assess whether the data cache has sufficient space.
@@ -64,24 +63,24 @@ You can specify columns and predicates to achieve fine-grained warmup, which hel
 
 ```plaintext
 mysql> cache select l_orderkey from hive_catalog.test_db.lineitem where l_shipdate='1994-10-28';
-+---------+---------------------+------------------+----------------------+-------------------+
-| STATUS  | ALREADY_CACHED_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
-+---------+---------------------+------------------+----------------------+-------------------+
-| SUCCESS | 1.3GB               | 15.1GB           | 12.2ms               | 75.81%            |
-+---------+---------------------+------------------+----------------------+-------------------+
-1 row in set (2 min 17.06 sec)
++-----------------+------------------+----------------------+-------------------+
+| READ_CACHE_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
++-----------------+------------------+----------------------+-------------------+
+| 957MB           | 713.5MB          | 3.6ms                | 97.33%            |
++-----------------+------------------+----------------------+-------------------+
+1 row in set (9.07 sec)
 ```
 
 The following example prefetches a specific column from a cloud-native table `lineorder` in a shared-data cluster:
 
 ```plaintext
 mysql> cache select lo_orderkey from ssb.lineorder;
-+---------+---------------------+------------------+----------------------+-------------------+
-| STATUS  | ALREADY_CACHED_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
-+---------+---------------------+------------------+----------------------+-------------------+
-| SUCCESS | 789.6MB             | 876MB            | 63.1ms               | 0.51%             |
-+---------+---------------------+------------------+----------------------+-------------------+
-1 row in set (1.60 sec)
++-----------------+------------------+----------------------+-------------------+
+| READ_CACHE_SIZE | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
++-----------------+------------------+----------------------+-------------------+
+| 118MB           | 558.9MB          | 200.6ms              | 4.66%             |
++-----------------+------------------+----------------------+-------------------+
+1 row in set (29.88 sec)
 ```
 
 ### Warm up in verbose mode
@@ -90,14 +89,14 @@ By default, the metrics returned by `CACHE SELECT` are metrics combined on multi
 
 ```plaintext
 mysql> cache select * from hive_catalog.test_db.lineitem properties("verbose"="true");
-+--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
-| BE_IP        | STATUS  | ALREADY_CACHED_SIZE | AVG_READ_CACHE_TIME | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
-+--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
-| 172.26.80.42 | SUCCESS | 115.4MB             | 461.4micros         | 5.2GB            | 1.2s                 | 16.35%            |
-| 172.26.80.44 | SUCCESS | 106.5MB             | 2ms                 | 4.8GB            | 837ms                | 15.13%            |
-| 172.26.80.43 | SUCCESS | 114.7MB             | 4.9ms               | 5.1GB            | 988.9ms              | 16.10%            |
-+--------------+---------+---------------------+---------------------+------------------+----------------------+-------------------+
-3 rows in set (42.87 sec)
++---------------+-----------------+---------------------+------------------+----------------------+-------------------+
+| IP            | READ_CACHE_SIZE | AVG_READ_CACHE_TIME | WRITE_CACHE_SIZE | AVG_WRITE_CACHE_TIME | TOTAL_CACHE_USAGE |
++---------------+-----------------+---------------------+------------------+----------------------+-------------------+
+| 172.26.80.233 | 376MB           | 127.8micros         | 0B               | 0s                   | 3.85%             |
+| 172.26.80.231 | 272.5MB         | 121.8micros         | 20.7MB           | 146.5micros          | 3.91%             |
+| 172.26.80.232 | 355.5MB         | 147.7micros         | 0B               | 0s                   | 3.91%             |
++---------------+-----------------+---------------------+------------------+----------------------+-------------------+
+3 rows in set (0.54 sec)
 ```
 
 In verbose mode,  an extra metric will be returned:
