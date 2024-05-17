@@ -23,15 +23,11 @@
 
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
-#include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/function_context.h"
-#include "formats/parquet/column_converter.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"
@@ -157,8 +153,6 @@ public:
     }
 
     virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
-
-    std::unique_ptr<ColumnConverter> converter;
 };
 
 } // namespace starrocks::parquet
