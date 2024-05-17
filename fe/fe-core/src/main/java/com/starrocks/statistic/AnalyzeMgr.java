@@ -54,6 +54,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -86,6 +87,8 @@ public class AnalyzeMgr implements Writable {
 
     private final Set<Long> dropPartitionIds = new ConcurrentSkipListSet<>();
     private final List<Pair<Long, Long>> checkTableIds = Lists.newArrayList(CHECK_ALL_TABLES);
+
+    private LocalDateTime lastCleanTime;
 
     public AnalyzeMgr() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -427,7 +430,8 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void clearStatisticFromDroppedPartition() {
-        checkAndDropPartitionStatistics();
+        clearStaleStatsWhenStarted();
+        clearStalePartitionStats();
         dropPartitionStatistics();
     }
 
@@ -449,7 +453,59 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
-    private void checkAndDropPartitionStatistics() {
+    private void clearStalePartitionStats() {
+        // It means FE is restarted, the previous step had cleared the stats.
+        if (lastCleanTime == null) {
+            lastCleanTime = LocalDateTime.now();
+            return;
+        }
+
+        //  do the clear task once every 12 hours.
+        if (Duration.between(lastCleanTime, LocalDateTime.now()).toSeconds() < Config.clear_stale_stats_interval_sec) {
+            return;
+        }
+
+        List<Table> tables = Lists.newArrayList();
+        for (Map.Entry<Long, AnalyzeStatus> entry : analyzeStatusMap.entrySet()) {
+            AnalyzeStatus analyzeStatus = entry.getValue();
+            LocalDateTime endTime = analyzeStatus.getEndTime();
+            // After the last cleanup, if a table has successfully undergone automatic full statistics collection,
+            // and the collection completion time is one minute later than the last cleanup time,
+            // then during the next cleanup process, the expired statistics information of this table will be cleared.
+            if (analyzeStatus instanceof NativeAnalyzeStatus
+                    && analyzeStatus.getScheduleType() ==  StatsConstants.ScheduleType.SCHEDULE
+                    && analyzeStatus.getStatus() == StatsConstants.ScheduleStatus.FINISH
+                    && endTime.isAfter(lastCleanTime)) {
+                NativeAnalyzeStatus nativeAnalyzeStatus = (NativeAnalyzeStatus) analyzeStatus;
+                Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeStatus.getDbId());
+                if (db != null && db.getTable(nativeAnalyzeStatus.getTableId()) != null) {
+                    tables.add(db.getTable(nativeAnalyzeStatus.getTableId()));
+                }
+            }
+        }
+
+        List<Long> tableIds = Lists.newArrayList();
+        int exprLimit = 50000;
+        for (int i = 0; i < tables.size(); i++) {
+            if (i == tables.size() - 1 || tableIds.size() + 1 == exprLimit) {
+                tableIds.add(tables.get(i).getId());
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setStatisticsConnection(true);
+                statsConnectCtx.getSessionVariable().setExprChildrenLimit(exprLimit * 2);
+                StatisticExecutor executor = new StatisticExecutor();
+                boolean res = executor.clearStaleColumnStatistics(statsConnectCtx, tableIds, lastCleanTime);
+                tableIds.clear();
+                lastCleanTime = LocalDateTime.now();
+                if (!res) {
+                    LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
+                }
+            } else {
+                tableIds.add(tables.get(i).getId());
+            }
+        }
+    }
+
+    private void clearStaleStatsWhenStarted() {
         if (!Config.statistic_check_expire_partition || checkTableIds.isEmpty()) {
             return;
         }
