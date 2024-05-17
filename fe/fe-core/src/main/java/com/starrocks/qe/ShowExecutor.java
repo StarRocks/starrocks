@@ -482,6 +482,7 @@ public class ShowExecutor {
                         continue;
                     }
 
+<<<<<<< HEAD
                     AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                     mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
                         Table baseTable = baseTableInfo.getTable();
@@ -494,6 +495,230 @@ public class ShowExecutor {
                                         PrivilegeType.SELECT);
                             } catch (AccessDeniedException e) {
                                 baseTableHasPrivilege.set(false);
+=======
+                    tableMap.put(tableName, table.getMysqlType());
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+
+            for (Map.Entry<String, String> entry : tableMap.entrySet()) {
+                if (statement.isVerbose()) {
+                    rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
+                } else {
+                    rows.add(Lists.newArrayList(entry.getKey()));
+                }
+            }
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowTemporaryTablesStatement(ShowTemporaryTableStmt statement, ConnectContext context) {
+            statement.setSessionId(context.getSessionId());
+
+            ShowTemporaryTableStmt showTemporaryTableStmt = statement;
+            List<List<String>> rows = Lists.newArrayList();
+            String catalogName = showTemporaryTableStmt.getCatalogName();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+
+            String dbName = showTemporaryTableStmt.getDb();
+            UUID sessionId = showTemporaryTableStmt.getSessionId();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
+            PatternMatcher matcher = null;
+            if (showTemporaryTableStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showTemporaryTableStmt.getPattern(),
+                        CaseSensibility.TABLE.getCaseSensibility());
+            }
+
+            Map<String, String> tableMap = Maps.newTreeMap();
+            MetaUtils.checkDbNullAndReport(db, showTemporaryTableStmt.getDb());
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                List<String> tableNames = temporaryTableMgr.listTemporaryTables(sessionId, db.getId());
+                for (String tableName : tableNames) {
+                    if (matcher != null && !matcher.match(tableName)) {
+                        continue;
+                    }
+                    rows.add(Lists.newArrayList(tableName));
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+
+            for (Map.Entry<String, String> entry : tableMap.entrySet()) {
+                rows.add(Lists.newArrayList(entry.getKey()));
+            }
+            return new ShowResultSet(showTemporaryTableStmt.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
+            List<List<String>> rows = Lists.newArrayList();
+            Database db = context.getGlobalStateMgr().getDb(statement.getDb());
+            ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                try {
+                    PatternMatcher matcher = null;
+                    if (statement.getPattern() != null) {
+                        matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                                CaseSensibility.TABLE.getCaseSensibility());
+                    }
+                    for (Table table : db.getTables()) {
+                        if (matcher != null && !matcher.match(table.getName())) {
+                            continue;
+                        }
+
+                        try {
+                            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                        } catch (AccessDeniedException e) {
+                            continue;
+                        }
+
+                        TTableInfo info = new TTableInfo();
+                        if (table.isNativeTableOrMaterializedView() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
+                            InformationSchemaDataSource.genNormalTableInfo(table, info);
+                        } else {
+                            InformationSchemaDataSource.genDefaultConfigInfo(info);
+                        }
+
+                        List<String> row = Lists.newArrayList();
+                        // Name
+                        row.add(table.getName());
+                        // Engine
+                        row.add(table.getEngine());
+                        // Version
+                        row.add(null);
+                        // Row_format
+                        row.add("");
+                        // Rows
+                        row.add(String.valueOf(info.getTable_rows()));
+                        // Avg_row_length
+                        row.add(String.valueOf(info.getAvg_row_length()));
+                        // Data_length
+                        row.add(String.valueOf(info.getData_length()));
+                        // Max_data_length
+                        row.add(null);
+                        // Index_length
+                        row.add(null);
+                        // Data_free
+                        row.add(null);
+                        // Auto_increment
+                        row.add(null);
+                        // Create_time
+                        row.add(DateUtils.formatTimestampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                        // Update_time
+                        row.add(DateUtils.formatTimestampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                        // Check_time
+                        row.add(null);
+                        // Collation
+                        row.add(InformationSchemaDataSource.UTF8_GENERAL_CI);
+                        // Checksum
+                        row.add(null);
+                        // Create_options
+                        row.add("");
+                        // Comment
+                        row.add(table.getDisplayComment());
+
+                        rows.add(row);
+                    }
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+            }
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitDescTableStmt(DescribeStmt statement, ConnectContext context) {
+            try {
+                return new ShowResultSet(statement.getMetaData(), statement.getResultRows());
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
+            String catalogName = statement.getCatalogName();
+            String dbName = statement.getDb();
+            List<List<String>> rows = Lists.newArrayList();
+
+            Database db;
+            if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
+                db = context.getGlobalStateMgr().getDb(dbName);
+            } else {
+                db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            }
+            MetaUtils.checkDbNullAndReport(db, statement.getDb());
+
+            StringBuilder createSqlBuilder = new StringBuilder();
+            createSqlBuilder.append("CREATE DATABASE `").append(statement.getDb()).append("`");
+            if (!Strings.isNullOrEmpty(db.getLocation())) {
+                createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
+            } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase() && db.getCatalogName().isEmpty()) {
+                String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
+                createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
+            }
+            rows.add(Lists.newArrayList(statement.getDb(), createSqlBuilder.toString()));
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
+            TableName tbl = statement.getTbl();
+            String catalogName = tbl.getCatalog();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return showCreateInternalCatalogTable(statement, context);
+            } else {
+                return showCreateExternalCatalogTable(statement, tbl, catalogName);
+            }
+        }
+
+        private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt, ConnectContext connectContext) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDb());
+            MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
+            List<List<String>> rows = Lists.newArrayList();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
+                if (table == null) {
+                    if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                    } else {
+                        // For Sync Materialized View, it is a mv index inside OLAP table,
+                        // so we can not get it from database.
+                        for (Table tbl : db.getTables()) {
+                            if (tbl.getType() == Table.TableType.OLAP) {
+                                OlapTable olapTable = (OlapTable) tbl;
+                                List<MaterializedIndexMeta> visibleMaterializedViews =
+                                        olapTable.getVisibleIndexMetas();
+                                for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+                                    if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
+                                        if (mvMeta.getOriginStmt() == null) {
+                                            String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
+                                            rows.add(Lists.newArrayList(showStmt.getTable(), buildCreateMVSql(olapTable,
+                                                    mvName, mvMeta), "utf8", "utf8_general_ci"));
+                                        } else {
+                                            rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
+                                                    "utf8", "utf8_general_ci"));
+                                        }
+                                        return new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
+                                    }
+                                }
+>>>>>>> 81081ebd1d ([BugFix] Fix bug when showing external db with storage volume info (#45753))
                             }
                         }
                     });
