@@ -46,6 +46,7 @@
 #include "util/faststring.h"
 #include "util/lru_cache.h"
 #include "util/starrocks_metrics.h"
+#include "util/trace.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -84,19 +85,29 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
     ClosureGuard done_guard(done);
-
+    scoped_refptr<Trace> trace(config::enable_load_rpc_trace ? new Trace : nullptr);
+    auto start_time = MonotonicMillis();
+    DeferOp defer([&trace, &request, cntl, &start_time] {
+        auto elapsed = MonotonicMillis() - start_time;
+        if (trace.get() && elapsed > config::slow_load_rpc_threshold_ms) {
+            LOG(INFO) << "Trace LoadChannel::open, txn_id: " << request.txn_id() << ", index_id: " << request.index_id()
+                      << ", brpc_trace_id: " << cntl->trace_id() << ", brpc_span_id: " << cntl->span_id()
+                      << ", elapsed: " << elapsed << " ms\n"
+                      << trace.get()->DumpToString();
+        }
+    });
+    TRACE_TO(trace.get(), "Enter open");
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     int64_t index_id = request.index_id();
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
 
-    TRACEPRINTF("Enter open, txn_id: %d, index_id: %d", request.txn_id(), index_id);
     Status st = Status::OK();
     {
         // We will `bthread::execution_queue_join()` in the destructor of AsyncDeltaWriter,
         // it will block the bthread, so we put its destructor outside the lock.
         std::shared_ptr<TabletsChannel> channel;
         std::lock_guard l(_lock);
-        TRACEPRINTF("Get tablet channels lock");
+        TRACE_TO(trace.get(), "Get tablet channels lock");
         if (_schema == nullptr) {
             _schema.reset(new OlapTableSchemaParam());
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
@@ -112,11 +123,11 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get());
             }
-            if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
+            if (st = channel->open(request, response, _schema, request.is_incremental(), trace.get()); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
         } else if (request.is_incremental()) {
-            st = it->second->incremental_open(request, response, _schema);
+            st = it->second->incremental_open(request, response, _schema, trace.get());
         }
     }
     LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();
@@ -126,7 +137,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
     }
-    TRACEPRINTF("Finish open, status: %d", st.ok());
+    TRACE_TO(trace.get(), "Finish open, status: $0", st.ok());
 }
 
 void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
@@ -193,7 +204,23 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                               PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
-    TRACEPRINTF("Enter add_segment, txn_id: %d, index_id: %d", request->txn_id(), request->index_id());
+    auto txn_id = request->txn_id();
+    auto tablet_id = request->tablet_id();
+    auto trace_id = cntl->trace_id();
+    auto span_id = cntl->span_id();
+    scoped_refptr<Trace> trace(config::enable_load_rpc_trace ? new Trace : nullptr);
+    auto start_time = MonotonicMillis();
+    DeferOp defer([&trace, &txn_id, &tablet_id, &trace_id, &span_id, &start_time] {
+        auto elapsed = MonotonicMillis() - start_time;
+        if (trace.get() && elapsed > config::slow_load_rpc_threshold_ms) {
+            LOG(INFO) << "Trace LoadChannel::add_segment, txn_id: " << txn_id << ", tablet_id: " << tablet_id
+                      << ", brpc_trace_id: " << trace_id << ", brpc_span_id: " << span_id << ", elapsed: " << elapsed
+                      << " ms\n"
+                      << trace.get()->DumpToString();
+        }
+    });
+    TRACE_TO(trace.get(), "Enter add_segment");
+
     ClosureGuard closure_guard(done);
     _num_segment++;
     auto channel = get_tablets_channel(request->index_id());
@@ -209,31 +236,32 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
         return;
     }
 
-    local_tablets_channel->add_segment(cntl, request, response, done);
+    local_tablets_channel->add_segment(cntl, request, response, done, trace.get());
     closure_guard.release();
-    TRACEPRINTF("Leave add_segment");
+    TRACE_TO(trace.get(), "Leave add_segment");
 }
 
-void LoadChannel::cancel() {
+void LoadChannel::cancel(Trace* trace) {
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
-        it.second->cancel();
+        it.second->cancel(trace);
     }
 }
 
-void LoadChannel::abort() {
+void LoadChannel::abort(Trace* trace) {
     _span->AddEvent("cancel");
     auto scoped = trace::Scope(_span);
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
-        it.second->abort();
+        it.second->abort(trace);
     }
 }
 
-void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason) {
+void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason,
+                        Trace* trace) {
     auto channel = get_tablets_channel(index_id);
     if (channel != nullptr) {
-        channel->abort(tablet_ids, reason);
+        channel->abort(tablet_ids, reason, trace);
     }
 }
 

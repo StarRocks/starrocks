@@ -56,8 +56,12 @@ class Trace;
     } while (0)
 
 // Like the above, but takes the trace pointer as an explicit argument.
-#define TRACE_TO(trace, format, substitutions...) \
-    (trace)->SubstituteAndTrace(__FILE__, __LINE__, (format), ##substitutions)
+#define TRACE_TO(trace, format, substitutions...)                                     \
+    do {                                                                              \
+        if (trace) {                                                                  \
+            trace->SubstituteAndTrace(__FILE__, __LINE__, (format), ##substitutions); \
+        }                                                                             \
+    } while (0)
 
 // Increment a counter associated with the current trace.
 //

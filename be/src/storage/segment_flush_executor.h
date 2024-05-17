@@ -38,6 +38,7 @@ class ExecEnv;
 class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
 class ThreadPoolToken;
+class Trace;
 
 class DeltaWriter;
 
@@ -46,7 +47,7 @@ public:
     SegmentFlushToken(ThreadPool* flush_pool, std::unique_ptr<ThreadPoolToken> flush_pool_token);
 
     Status submit(DeltaWriter* writer, brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                  PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+                  PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done, Trace* trace = nullptr);
 
     Status status() const {
         std::lock_guard l(_status_lock);

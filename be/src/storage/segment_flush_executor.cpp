@@ -71,17 +71,23 @@ public:
             return;
         }
         int64_t pending_time_ns = MonotonicNanos() - _create_time_ns;
-        scoped_refptr<Trace> trace(new Trace);
-        DeferOp defer([this, &pending_time_ns, &trace] {
-            if (_cntl->trace_id() > 0) {
-                LOG(INFO) << "Trace SegmentFlush, txn_id: " << _request->txn_id()
-                          << ", tablet_id: " << _request->tablet_id() << ", trace_id: " << _cntl->trace_id()
-                          << ", span_id: " << _cntl->span_id() << ", pending_time_ns: " << pending_time_ns << "\n"
+
+        auto txn_id = _request->txn_id();
+        auto tablet_id = _request->tablet_id();
+        auto trace_id = _cntl->trace_id();
+        auto span_id = _cntl->span_id();
+        scoped_refptr<Trace> trace(config::enable_load_rpc_trace ? new Trace : nullptr);
+        auto start_time = MonotonicMillis();
+        DeferOp defer([&pending_time_ns, &trace, &txn_id, &tablet_id, &trace_id, &span_id, &start_time] {
+            if (trace.get()) {
+                auto elapsed = MonotonicMillis() - start_time;
+                LOG(INFO) << "Trace SegmentFlush::run, txn_id: " << txn_id << ", tablet_id: " << tablet_id
+                          << ", trace_id: " << trace_id << ", span_id: " << span_id
+                          << ", pending_time_ns: " << pending_time_ns << ", elapsed: " << elapsed << " ms\n"
                           << trace.get()->DumpToString();
             }
         });
-        // only enable starrocks trace if brpc trace is enabled
-        ADOPT_TRACE(_cntl->trace_id() > 0 ? trace.get() : nullptr);
+        ADOPT_TRACE(trace.get());
         TRACE("Start to run");
 
         // if token status is not ok, respond with failure
@@ -179,14 +185,14 @@ SegmentFlushToken::SegmentFlushToken(ThreadPool* flush_pool, std::unique_ptr<Thr
 
 Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
                                  const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
-                                 google::protobuf::Closure* done) {
-    TRACEPRINTF("Enter submit");
+                                 google::protobuf::Closure* done, Trace* trace) {
+    TRACE_TO(trace, "Enter submit");
     ClosureGuard closure_guard(done);
     Status token_st = status();
     if (!token_st.ok()) {
         Status st = Status::InternalError("Segment flush token is not ok. The status: " + token_st.to_string());
         st.to_protobuf(response->mutable_status());
-        TRACEPRINTF("Fail to submit because token status is not ok");
+        TRACE_TO(trace, "Fail to submit because token status is not ok");
         return st;
     }
 
@@ -194,11 +200,11 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
     auto submit_st = _flush_token->submit(std::move(task));
     if (submit_st.ok()) {
         closure_guard.release();
-        TRACEPRINTF("Submit task, queueing task: %d", _flush_pool->num_queued_tasks());
+        TRACE_TO(trace, "Submit task, queueing task: $0", _flush_pool->num_queued_tasks());
     } else {
         task->release();
         submit_st.to_protobuf(response->mutable_status());
-        TRACEPRINTF("Fail to submit task");
+        TRACE_TO(trace, "Fail to submit task");
     }
 
     return submit_st;

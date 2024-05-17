@@ -49,6 +49,7 @@
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -73,10 +74,10 @@ LocalTabletsChannel::~LocalTabletsChannel() {
 }
 
 Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
-    TRACEPRINTF("Enter open, is_incremental: %s", (is_incremental ? "true" : "false"));
+                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental, Trace* trace) {
+    TRACE_TO(trace, "Enter open, is_incremental: $0", (is_incremental ? "true" : "false"));
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
-    TRACEPRINTF("Get shared lock");
+    TRACE_TO(trace, "Get shared lock");
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
@@ -93,7 +94,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
         _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }
 
-    RETURN_IF_ERROR(_open_all_writers(params));
+    RETURN_IF_ERROR(_open_all_writers(params, trace));
 
     for (auto& [id, writer] : _delta_writers) {
         if (writer->is_immutable()) {
@@ -102,15 +103,16 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
         }
     }
 
-    TRACEPRINTF("Finish open LocalTabletsChannel");
+    TRACE_TO(trace, "Finish open");
     return Status::OK();
 }
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
-    TRACEPRINTF("Enter add_segment");
+                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                                      Trace* trace) {
+    TRACE_TO(trace, "Enter add_segment");
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
-    TRACEPRINTF("Get shared lock");
+    TRACE_TO(trace, "Get shared lock");
     ClosureGuard closure_guard(done);
     auto it = _delta_writers.find(request->tablet_id());
     if (it == _delta_writers.end()) {
@@ -127,9 +129,9 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
     req.response = response;
     req.done = done;
 
-    delta_writer->write_segment(req);
+    delta_writer->write_segment(req, trace);
     closure_guard.release();
-    TRACEPRINTF("Leave add_segment");
+    TRACE_TO(trace, "Leave add_segment");
 }
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
@@ -576,9 +578,9 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
     return n - 1;
 }
 
-Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params) {
-    TRACEPRINTF("Enter _open_all_writers, num_tablets: %d, replicated_storage: %s", params.tablets_size(),
-                (params.is_replicated_storage() ? "true" : "false"));
+Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params, Trace* trace) {
+    TRACE_TO(trace, "Enter _open_all_writers, num_tablets: $0, replicated_storage: $1", params.tablets_size(),
+             (params.is_replicated_storage() ? "true" : "false"));
     std::vector<SlotDescriptor*>* index_slots = nullptr;
     int32_t schema_hash = 0;
     for (auto& index : _schema->indexes()) {
@@ -649,18 +651,18 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.partial_update_mode = params.partial_update_mode();
         options.immutable_tablet_size = params.immutable_tablet_size();
 
-        auto res = AsyncDeltaWriter::open(options, _mem_tracker);
+        auto res = AsyncDeltaWriter::open(options, _mem_tracker, trace);
         if (res.status().ok()) {
             auto writer = std::move(res).value();
             _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
             tablet_ids.emplace_back(tablet.tablet_id());
-            TRACEPRINTF("Finish open AsyncDeltaWriter");
+            TRACE_TO(trace, "Finish open AsyncDeltaWriter");
         } else {
             if (options.replica_state == Secondary) {
                 failed_tablet_ids.emplace_back(tablet.tablet_id());
-                TRACEPRINTF("Fail open secondary AsyncDeltaWriter");
+                TRACE_TO(trace, "Fail open secondary AsyncDeltaWriter");
             } else {
-                TRACEPRINTF("Fail open primary AsyncDeltaWriter");
+                TRACE_TO(trace, "Fail open primary AsyncDeltaWriter");
                 return res.status();
             }
         }
@@ -691,18 +693,22 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     return Status::OK();
 }
 
-void LocalTabletsChannel::cancel() {
+void LocalTabletsChannel::cancel(Trace* trace) {
+    TRACE_TO(trace, "cancel index: $0", _index_id);
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     for (auto& it : _delta_writers) {
+        TRACE_TO(trace, "cancel tablet: $0", it.second->writer()->tablet()->tablet_id());
         it.second->cancel(Status::Cancelled("cancel"));
     }
 }
 
-void LocalTabletsChannel::abort() {
+void LocalTabletsChannel::abort(Trace* trace) {
+    TRACE_TO(trace, "abort index: $0", _index_id);
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     vector<int64_t> tablet_ids;
     tablet_ids.reserve(_delta_writers.size());
     for (auto& it : _delta_writers) {
+        TRACE_TO(trace, "abort tablet: $0", it.second->writer()->tablet()->tablet_id());
         (void)it.second->abort(false);
         tablet_ids.emplace_back(it.first);
     }
@@ -713,13 +719,16 @@ void LocalTabletsChannel::abort() {
               << " tablet_ids:" << tablet_id_list_str;
 }
 
-void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) {
+void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason, Trace* trace) {
+    TRACE_TO(trace, "abort tablets in index: $0", _index_id);
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     bool abort_with_exception = !reason.empty();
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
         if (it != _delta_writers.end()) {
+            TRACE_TO(trace, "cancel tablet: $0", it->second->writer()->tablet()->tablet_id());
             it->second->cancel(Status::Cancelled(reason));
+            TRACE_TO(trace, "abort tablet: $0", it->second->writer()->tablet()->tablet_id());
             it->second->abort(abort_with_exception);
         }
     }
@@ -784,10 +793,10 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
 }
 
 Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                                             std::shared_ptr<OlapTableSchemaParam> schema) {
-    TRACEPRINTF("Enter incremental_open, tablets_size: %d", params.tablets_size());
+                                             std::shared_ptr<OlapTableSchemaParam> schema, Trace* trace) {
+    TRACE_TO(trace, "Enter incremental_open, tablets_size: $0", params.tablets_size());
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
-    TRACEPRINTF("Get shared lock");
+    TRACE_TO(trace, "Get shared lock");
     std::vector<SlotDescriptor*>* index_slots = nullptr;
     int32_t schema_hash = 0;
     for (auto& index : _schema->indexes()) {
@@ -846,7 +855,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         }
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
-        TRACEPRINTF("Finish open AsyncDeltaWriter, status: %d", res.status().ok());
+        TRACE_TO(trace, "Finish open AsyncDeltaWriter, status: $0", res.status().ok());
         RETURN_IF_ERROR(res.status());
         auto writer = std::move(res).value();
         ss << "[" << tablet.tablet_id() << ":" << writer->replica_state() << "]";
@@ -881,7 +890,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         LOG(INFO) << ss.str();
     }
 
-    TRACEPRINTF("Finish incremental_open LocalTabletsChannel");
+    TRACE_TO(trace, "Finish incremental_open LocalTabletsChannel");
     return Status::OK();
 }
 

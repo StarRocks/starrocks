@@ -44,6 +44,7 @@ class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
 class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
+class Trace;
 
 class TabletsChannel {
 public:
@@ -51,19 +52,20 @@ public:
     virtual ~TabletsChannel() = default;
 
     [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                                      std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
+                                      std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental,
+                                      Trace* trace = nullptr) = 0;
 
     virtual Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                                    std::shared_ptr<OlapTableSchemaParam> schema) = 0;
+                                    std::shared_ptr<OlapTableSchemaParam> schema, Trace* trace = nullptr) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response) = 0;
 
-    virtual void cancel() = 0;
+    virtual void cancel(Trace* trace = nullptr) = 0;
 
-    virtual void abort() = 0;
+    virtual void abort(Trace* trace = nullptr) = 0;
 
-    virtual void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) = 0;
+    virtual void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason, Trace* trace = nullptr) = 0;
 
     // timeout: in microseconds
     virtual bool drain_senders(int64_t timeout, const std::string& log_msg);

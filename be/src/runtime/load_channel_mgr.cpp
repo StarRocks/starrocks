@@ -34,7 +34,7 @@
 
 #include "runtime/load_channel_mgr.h"
 
-#include <brpc/traceprintf.h>
+#include <brpc/controller.h>
 
 #include <memory>
 
@@ -46,6 +46,7 @@
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -99,14 +100,12 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
 
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
-    TRACEPRINTF("Enter open, txn_id: %d", request.txn_id());
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
     int64_t txn_id = request.txn_id();
     std::shared_ptr<LoadChannel> channel;
     {
         std::lock_guard l(_lock);
-        TRACEPRINTF("Get lock");
         auto it = _load_channels.find(load_id);
         if (it != _load_channels.end()) {
             channel = it->second;
@@ -130,7 +129,6 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             return;
         }
     }
-    TRACEPRINTF("Start open channel");
     channel->open(cntl, request, response, done_guard.release());
 }
 
@@ -160,7 +158,6 @@ void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PT
 
 void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                                  PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
-    TRACEPRINTF("Enter add_segment, txn_id: %d, tablet_id: %d", request->txn_id(), request->tablet_id());
     ClosureGuard closure_guard(done);
     UniqueId load_id(request->id());
     auto channel = _find_load_channel(load_id);
@@ -175,14 +172,26 @@ void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddS
 
 void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request,
                             PTabletWriterCancelResult* response, google::protobuf::Closure* done) {
-    TRACEPRINTF("Enter cancel, txn_id: %d", request.txn_id());
     ClosureGuard done_guard(done);
+    scoped_refptr<Trace> trace(config::enable_load_rpc_trace ? new Trace : nullptr);
+    auto txn_id = request.txn_id();
+    auto trace_id = cntl->trace_id();
+    auto span_id = cntl->span_id();
+    auto start_time = MonotonicMillis();
+    DeferOp defer([&trace, &txn_id, &trace_id, &span_id, &start_time] {
+        auto elapsed = MonotonicMillis() - start_time;
+        if (trace.get()) {
+            LOG(INFO) << "Trace LoadChannelMgr::cancel, txn_id: " << txn_id << ", brpc_trace_id: " << trace_id
+                      << ", brpc_span_id: " << span_id << ", elapsed: " << elapsed << " ms\n"
+                      << trace.get()->DumpToString();
+        }
+    });
+    TRACE_TO(trace.get(), "Enter cancel");
     UniqueId load_id(request.id());
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
-            TRACEPRINTF("Start abort has_tablet_id");
-            channel->abort(request.index_id(), {request.tablet_id()}, request.reason());
+            channel->abort(request.index_id(), {request.tablet_id()}, request.reason(), trace.get());
         }
     } else if (request.tablet_ids_size() > 0) {
         auto channel = _find_load_channel(load_id);
@@ -191,15 +200,12 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
             for (auto& tablet_id : request.tablet_ids()) {
                 tablet_ids.emplace_back(tablet_id);
             }
-            TRACEPRINTF("Start abort, tablet size: %d", tablet_ids.size());
-            channel->abort(request.index_id(), tablet_ids, request.reason());
+            channel->abort(request.index_id(), tablet_ids, request.reason(), trace.get());
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
-            TRACEPRINTF("Start cancel load channel");
-            channel->cancel();
-            TRACEPRINTF("Start abort load channel");
-            channel->abort();
+            channel->cancel(trace.get());
+            channel->abort(trace.get());
         }
     }
 }

@@ -14,8 +14,6 @@
 
 #include "storage/delta_writer.h"
 
-#include <brpc/traceprintf.h>
-
 #include <utility>
 
 #include "io/io_profiler.h"
@@ -38,11 +36,12 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
-    TRACEPRINTF("Enter open, tablet_id: %d", opt.tablet_id);
+StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
+                                                         Trace* trace) {
+    TRACE_TO(trace, "Enter open, tablet_id: $0", opt.tablet_id);
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
     SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, false);
-    RETURN_IF_ERROR(writer->_init());
+    RETURN_IF_ERROR(writer->_init(trace));
     return std::move(writer);
 }
 
@@ -105,8 +104,8 @@ void DeltaWriter::_garbage_collection() {
     }
 }
 
-Status DeltaWriter::_init() {
-    TRACEPRINTF("Enter init, tablet_id: %d, %d", _opt.tablet_id, _opt.replica_state);
+Status DeltaWriter::_init(Trace* trace) {
+    TRACE_TO(trace, "Enter init, tablet_id: $0, $1", _opt.tablet_id, _opt.replica_state);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     _replica_state = _opt.replica_state;
@@ -189,10 +188,10 @@ Status DeltaWriter::_init() {
             }
         }
 
-        TRACEPRINTF("Get tablet, migration_probe_num: %d", migration_probe_num);
+        TRACE_TO(trace, "Get tablet, migration_probe_num: $0", migration_probe_num);
         std::lock_guard push_lock(_tablet->get_push_lock());
         auto st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
-        TRACEPRINTF("Prepare txn");
+        TRACE_TO(trace, "Prepare txn");
         if (!st.ok()) {
             _set_state(kAborted, st);
             return st;
@@ -331,7 +330,7 @@ Status DeltaWriter::_init() {
     VLOG(2) << "DeltaWriter [tablet_id=" << _opt.tablet_id << ", load_id=" << print_id(_opt.load_id)
             << ", replica_state=" << _replica_state_name(_replica_state) << "] open success.";
 
-    TRACEPRINTF("Finish init");
+    TRACE_TO(trace, "Finish init");
     return Status::OK();
 }
 
