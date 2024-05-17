@@ -95,15 +95,9 @@ using starrocks::DeltaColumnGroupList;
 using starrocks::PrimaryKeyDump;
 
 DEFINE_string(root_path, "", "storage root path");
-<<<<<<< HEAD
-DEFINE_string(operation, "get_meta",
+DEFINE_string(operation, "",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
               "show_meta, check_table_meta_consistency, print_lake_metadata, print_lake_txn_log");
-=======
-DEFINE_string(operation, "",
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, show_meta, "
-              "check_table_meta_consistency, print_lake_metadata, print_lake_txn_log, print_lake_schema");
->>>>>>> 2d9bebaaf3 ([Tool] fix meta_tool.sh (#45587))
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -124,47 +118,6 @@ DEFINE_bool(do_delete, false, "do delete files");
 DECLARE_bool(helpshort);
 
 std::string get_usage(const std::string& progname) {
-<<<<<<< HEAD
-    std::stringstream ss;
-    ss << progname << " is the StarRocks BE Meta tool.\n";
-    ss << "Stop BE first before use this tool.\n";
-    ss << "Usage:\n";
-    ss << "./meta_tool.sh --operation=get_meta --root_path=/path/to/storage/path "
-          "--tablet_id=tabletid [--schema_hash=schemahash]\n";
-    ss << "./meta_tool.sh --operation=load_meta --root_path=/path/to/storage/path "
-          "--json_meta_path=path\n";
-    ss << "./meta_tool.sh --operation=delete_meta "
-          "--root_path=/path/to/storage/path --tablet_id=tabletid "
-          "[--schema_hash=schemahash] | ./meta_tool --operation=delete_meta "
-          "--root_path=/path/to/storage/path --table_id=tableid\n";
-    ss << "./meta_tool.sh --operation=delete_meta --tablet_file=file_path\n";
-    ss << "./meta_tool.sh --operation=delete_rowset_meta "
-          "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
-          "--rowset_id=rowset_id\n";
-    ss << "./meta_tool.sh --operation=delete_persistent_index_meta "
-          "--root_path=/path/to/storage/path --tablet_id=tabletid | "
-          "./meta_tool.sh --operation=delete_persistent_index_meta "
-          "--root_path=/path/to/storage/path --table_id=tableid\n";
-    ss << "./meta_tool.sh --operation=compact_meta --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=get_meta_stats --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=ls --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=show_meta --pb_meta_path=path\n";
-    ss << "./meta_tool.sh --operation=show_segment_footer --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=dump_segment_data --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=print_pk_dump --file=/path/to/pk/dump/file\n";
-    ss << "./meta_tool.sh --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
-    ss << "./meta_tool.sh --operation=calc_checksum [--column_index=xx] --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
-          "--table_id=tableid\n";
-    ss << "./meta_tool --operation=scan_dcgs --root_path=/path/to/storage/path "
-          "--tablet_id=tabletid\n";
-    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
-    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
-    ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
-    ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=86400 --conf_file=path "
-          "--audit_file=path --do_delete=false\n";
-    return ss.str();
-=======
     constexpr const char* const usage_msg = R"(
   {progname} is the StarRocks BE Meta tool.
     [CAUTION] Stop BE first before using this tool if modification will be made.
@@ -195,8 +148,6 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=show_segment_footer --file=</path/to/segment/file>
     dump_segment_data:
       {progname} --operation=dump_segment_data --file=</path/to/segment/file>
-    dump_column_size:
-      {progname} --operation=dump_column_size --file=</path/to/segment/file>
     print_pk_dump:
       {progname} --operation=print_pk_dump --file=</path/to/pk/dump/file>
     dump_short_key_index:
@@ -222,7 +173,6 @@ std::string get_usage(const std::string& progname) {
 static void show_usage() {
     FLAGS_helpshort = true;
     google::HandleCommandLineHelpFlags();
->>>>>>> 2d9bebaaf3 ([Tool] fix meta_tool.sh (#45587))
 }
 
 void show_meta() {
