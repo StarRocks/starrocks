@@ -142,11 +142,16 @@ public class EliminateAggRule extends TransformationRule {
                 newOperator = handleAggregationFunction(fnName, callOperator);
             } else {
                 ScalarOperator scalarOperator = callOperator.getArguments().get(0);
-                if (isColumnRefType(scalarOperator) && projectOp.getColumnRefMap().containsKey(scalarOperator)) {
-                    // 2. select pk, count(*) from demo group by pk
-                    // 3. select pk, sum(t0 + t1) from demo group by pk
-                    ScalarOperator projectColumnRef = projectOp.getColumnRefMap().get(scalarOperator);
-                    newOperator = handleAggregationFunction(fnName, (CallOperator) projectColumnRef);
+                if (isColumnRefType(scalarOperator)) {
+                    ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator;
+                    ScalarOperator projectColumnRef = projectOp.getColumnRefMap().get(columnRef);
+                    if (projectColumnRef instanceof CallOperator) {
+                        // 2. select pk, sum(t0 + t1) from demo group by pk
+                        newOperator = handleAggregationFunction(fnName, (CallOperator) projectColumnRef);
+                    } else {
+                        // 3. select pk, count(t1) from demo group by pk
+                        newOperator = handleAggregationFunction(fnName, callOperator);
+                    }
                 } else {
                     newOperator = handleAggregationFunction(fnName, callOperator);
                 }
