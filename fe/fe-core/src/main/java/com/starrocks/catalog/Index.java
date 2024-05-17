@@ -171,7 +171,12 @@ public class Index implements Writable {
     @Override
     public int hashCode() {
         return 31 * (Long.hashCode(indexId) + indexName.hashCode()
+<<<<<<< HEAD
                 + columns.hashCode() + indexType.hashCode() + properties.hashCode());
+=======
+                + columns.hashCode() + ((indexType != null) ? indexType.hashCode() : 0) +
+                ((properties != null) ? properties.hashCode() : 0));
+>>>>>>> c1c634e18f ([BugFix] Fix miss tokenization for standard parser when writing GIN and compatibility when downgrade and then upgrade (#45813))
     }
 
     @Override
