@@ -67,6 +67,7 @@ set(EXEC_FILES
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
+        ./exec/jni_scanner_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
         ./exec/json_scanner_test.cpp
@@ -416,6 +417,7 @@ set(EXEC_FILES
         ./service/service_be/internal_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
         ./storage/delta_writer_test.cpp
+        ./storage/rows_mapper_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

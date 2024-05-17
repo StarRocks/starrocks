@@ -40,6 +40,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
@@ -225,6 +226,8 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 // second: Do handle function for statement.
 public class StmtExecutor {
     private static final Logger LOG = LogManager.getLogger(StmtExecutor.class);
+    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
+    private static final Gson GSON = new Gson();
 
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
@@ -897,6 +900,21 @@ public class StmtExecutor {
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
+                String jsonString = GSON.toJson(queryDetail);
+                if (Config.enable_profile_log_compress) {
+                    byte[] jsonBytes;
+                    try {
+                        jsonBytes = CompressionUtils.gzipCompressString(jsonString);
+                        PROFILE_LOG.info(jsonBytes);
+                    } catch (IOException e) {
+                        LOG.warn("Compress queryDetail string failed, length: {}, reason: {}",
+                                jsonString.length(), e.getMessage());
+                    }
+                } else {
+                    PROFILE_LOG.info(jsonString);
+                }
+            }
         };
         return coord.tryProcessProfileAsync(task);
     }

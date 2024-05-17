@@ -160,7 +160,7 @@ CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
 // The sys log level, INFO, WARNING, ERROR, FATAL.
-CONF_String(sys_log_level, "INFO");
+CONF_mString(sys_log_level, "INFO");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
 CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
 // The log roll num.
@@ -1221,11 +1221,15 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 // the max length supported for varchar type
 CONF_mInt32(olap_string_max_length, "1048576");
 
+// Skip get from pk index when light pk compaction publish is enabled
+CONF_mBool(enable_light_pk_compaction_publish, "false");
+
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
 
 // Set to true to enable socket_keepalive option in brpc
 CONF_mBool(brpc_socket_keepalive, "false");
+CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
 } // namespace starrocks::config

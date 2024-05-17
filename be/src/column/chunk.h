@@ -50,6 +50,13 @@ public:
 
 class Chunk {
 public:
+    enum RESERVED_COLUMN_SLOT_ID {
+        HASH_JOIN_SPILL_HASH_SLOT_ID = -1,
+        SORT_ORDINAL_COLUMN_SLOT_ID = -2,
+        HASH_JOIN_BUILD_INDEX_SLOT_ID = -3,
+        HASH_JOIN_PROBE_INDEX_SLOT_ID = -4
+    };
+
     using ChunkPtr = std::shared_ptr<Chunk>;
     using SlotHashMap = phmap::flat_hash_map<SlotId, size_t, StdHash<SlotId>>;
     using ColumnIdHashMap = phmap::flat_hash_map<ColumnId, size_t, StdHash<SlotId>>;
@@ -125,12 +132,13 @@ public:
     void append_default();
 
     void remove_column_by_index(size_t idx);
+    void remove_column_by_slot_id(SlotId slot_id);
 
     // Remove multiple columns by their indexes.
     // For simplicity and better performance, we are assuming |indexes| all all valid
     // and is sorted in ascending order, if it's not, unexpected columns may be removed (silently).
     // |indexes| can be empty and no column will be removed in this case.
-    [[maybe_unused]] void remove_columns_by_index(const std::vector<size_t>& indexes);
+    void remove_columns_by_index(const std::vector<size_t>& indexes);
 
     // schema must exists.
     const ColumnPtr& get_column_by_name(const std::string& column_name) const;
@@ -158,10 +166,6 @@ public:
     size_t get_index_by_slot_id(SlotId slot_id) { return _slot_id_to_index[slot_id]; }
 
     void set_columns(const Columns& columns) { _columns = columns; }
-
-    void set_source_filename(const std::string& source_filename) { _source_filename = source_filename; }
-
-    const std::string& source_filename() const { return _source_filename; }
 
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
     // not clone tuple column
@@ -317,7 +321,6 @@ private:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
     ChunkExtraDataPtr _extra_data;
-    std::string _source_filename;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {

@@ -1071,6 +1071,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
 - 引入版本：v3.3.0
 
+##### enable_legacy_compatibility_for_replication
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为跨集群数据迁移开启旧版本兼容。新旧版本的集群间可能存在行为差异，从而导致跨集群数据迁移时出现问题。因此在数据迁移前，您需要为目标集群开启旧版本兼容，并在数据迁移完成后关闭。`true` 表示开启兼容。
+- 引入版本：v3.1.10, v3.2.6
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
@@ -2198,7 +2207,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### task_check_interval_second
 
-- 默认值：4 * 3600
+- 默认值：3600
 - 类型：Int
 - 单位：Seconds
 - 是否动态：否
@@ -2470,16 +2479,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<!--
 ##### tablet_sched_be_down_tolerate_time_s
 
 - 默认值：900
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：调度器容忍 BE 节点保持不存活状态的最长时间。超时之后该节点上的 Tablet 会被迁移到其他存活的 BE 节点上。
+- 引入版本：2.5.7
 
 <!--
 ##### tablet_sched_colocate_be_down_tolerate_time_s

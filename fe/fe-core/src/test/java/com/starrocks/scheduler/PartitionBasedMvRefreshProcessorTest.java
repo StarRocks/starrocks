@@ -53,7 +53,6 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -581,10 +580,11 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     initAndExecuteTaskRun(taskRun);
 
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-                    TaskRun run = tm.getTaskRunManager().getRunnableTaskRun(taskId);
+                    TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+                    TaskRun run = taskRunScheduler.getRunnableTaskRun(taskId);
                     Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), run.getStatus().getPriority());
 
-                    while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+                    while (taskRunScheduler.getRunningTaskCount() > 0) {
                         Thread.sleep(100);
                     }
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
@@ -3075,16 +3075,18 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     // without db name
                     Assert.assertFalse(tm.showTaskRunStatus(null).isEmpty());
                     Assert.assertFalse(tm.showTasks(null).isEmpty());
-                    Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(null).isEmpty());
+                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null).isEmpty());
 
                     // specific db
                     Assert.assertFalse(tm.showTaskRunStatus(TEST_DB_NAME).isEmpty());
                     Assert.assertFalse(tm.showTasks(TEST_DB_NAME).isEmpty());
-                    Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(TEST_DB_NAME).isEmpty());
+                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME).isEmpty());
 
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-                    Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));
-                    while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+                    TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+                    Assert.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
+
+                    while (taskRunScheduler.getRunningTaskCount() > 0) {
                         Thread.sleep(100);
                     }
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");

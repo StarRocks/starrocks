@@ -18,7 +18,7 @@
 
 ##############################################################
 # This script is used to compile StarRocks
-# Usage: 
+# Usage:
 #    sh build.sh --help
 # Eg:
 #    sh build.sh                                      build all
@@ -123,6 +123,7 @@ OPTS=$(getopt \
   -l 'without-gcov' \
   -l 'without-java-ext' \
   -l 'without-starcache' \
+  -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -o 'j:' \

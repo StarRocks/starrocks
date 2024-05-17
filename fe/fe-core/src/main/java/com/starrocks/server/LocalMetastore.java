@@ -3414,6 +3414,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
                         materializedView.isCloudNativeMaterializedView());
             }
+
+            // ORDER BY() -> sortKeys
+            if (CollectionUtils.isNotEmpty(materializedView.getTableProperty().getMvSortKeys())) {
+                materializedView.getTableProperty().putMvSortKeys();
+            }
+
             // lake storage info
             if (materializedView.isCloudNativeMaterializedView()) {
                 String volume = "";

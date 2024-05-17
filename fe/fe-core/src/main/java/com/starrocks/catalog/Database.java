@@ -58,6 +58,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -905,6 +906,10 @@ public class Database extends MetaObject implements Writable {
     public boolean isSystemDatabase() {
         return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
                 fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
+    }
+
+    public boolean isStatisticsDatabase() {
+        return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
     }
 
     // the invoker should hold db's writeLock

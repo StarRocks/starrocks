@@ -33,6 +33,7 @@
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/seek_range.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
@@ -111,9 +112,20 @@ Status TabletReader::do_get_next(Chunk* chunk) {
     return Status::OK();
 }
 
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+    return _collect_iter->get_next(chunk, rssid_rowids);
+}
+
 Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     DCHECK(_is_vertical_merge);
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
+    return Status::OK();
+}
+
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                                 std::vector<uint64_t>* rssid_rowids) {
+    DCHECK(_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks, rssid_rowids));
     return Status::OK();
 }
 
@@ -147,6 +159,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _tablet_metadata->version();
+    }
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
     }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
@@ -277,7 +292,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
         } else {
-            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = new_heap_merge_iterator(
+                    seg_iters,
+                    (keys_type == PRIMARY_KEYS) && StorageEngine::instance()->enable_light_pk_compaction_publish());
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {
@@ -296,6 +313,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
+        if (!_is_asc_hint) {
+            std::reverse(seg_iters.begin(), seg_iters.end());
+        }
         //             UnionIterator
         //                   |
         //       +-----------+-----------+

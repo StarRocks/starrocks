@@ -193,13 +193,13 @@ public:
         return _t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket;
     }
     bool is_asc_hint() const override {
-        if (sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
+        if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
             return _t_lake_scan_node.output_asc_hint;
         }
         return true;
     }
     std::optional<bool> partition_order_hint() const override {
-        if (sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.partition_order_hint) {
+        if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.partition_order_hint) {
             return _t_lake_scan_node.partition_order_hint;
         }
         return std::nullopt;
@@ -504,6 +504,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
     RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
+    _reader->set_is_asc_hint(_provider->is_asc_hint());
 
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));

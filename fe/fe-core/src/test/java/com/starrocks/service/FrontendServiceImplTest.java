@@ -1132,6 +1132,12 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testAddListPartitionConcurrency() throws UserException, TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_list");

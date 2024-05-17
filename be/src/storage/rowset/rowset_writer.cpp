@@ -57,6 +57,7 @@
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
@@ -124,6 +125,14 @@ Status RowsetWriter::init() {
     }
 
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+
+    if (_context.is_pk_compaction) {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+        if (tablet != nullptr) {
+            _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(
+                    local_rows_mapper_filename(tablet.get(), _context.rowset_id.to_string()));
+        }
+    }
     return Status::OK();
 }
 
@@ -221,6 +230,9 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     RowsetSharedPtr rowset;
     RETURN_IF_ERROR(
             RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->finalize());
+    }
     _already_built = true;
     return rowset;
 }
@@ -453,6 +465,11 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
 }
 
 Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk) {
+    std::vector<uint64_t> empty_rssid_rowids;
+    return add_chunk(chunk, empty_rssid_rowids);
+}
+
+Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) {
     if (_segment_writer == nullptr) {
         ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
@@ -462,6 +479,9 @@ Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk) {
     }
 
     RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+    }
     _num_rows_written += static_cast<int64_t>(chunk.num_rows());
     _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
     return Status::OK();
@@ -1042,6 +1062,12 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
 }
 
 Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
+    std::vector<uint64_t> empty_rssid_rowids;
+    return add_columns(chunk, column_indexes, is_key, empty_rssid_rowids);
+}
+
+Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key,
+                                         const std::vector<uint64_t>& rssid_rowids) {
     const size_t chunk_num_rows = chunk.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
@@ -1050,6 +1076,9 @@ Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<u
         _segment_writers.emplace_back(std::move(segment_writer).value());
         _current_writer_index = 0;
         RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
+        if (_rows_mapper_builder != nullptr) {
+            RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+        }
     } else if (is_key) {
         // key columns
         if (_segment_writers[_current_writer_index]->num_rows_written() + chunk_num_rows >=
@@ -1061,6 +1090,9 @@ Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<u
             ++_current_writer_index;
         }
         RETURN_IF_ERROR(_segment_writers[_current_writer_index]->append_chunk(chunk));
+        if (_rows_mapper_builder != nullptr) {
+            RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+        }
     } else {
         // non key columns
         uint32_t num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();

@@ -59,6 +59,7 @@ under the License.
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <odps.version>0.45.5-public</odps.version>
         <hikaricp.version>3.4.5</hikaricp.version>
+        <kafka-clients.version>3.4.0</kafka-clients.version>
     </properties>
 
     <profiles>
@@ -445,6 +446,12 @@ under the License.
                 <groupId>com.github.oshi</groupId>
                 <artifactId>oshi-core</artifactId>
                 <version>6.2.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka-clients</artifactId>
+                <version>${kafka-clients.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.jboss.xnio/xnio-nio -->

@@ -453,6 +453,9 @@ public class DefaultCoordinator extends Coordinator {
     public void onFinished() {
         GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
         GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
+        // for async profile, if Be doesn't report profile in time, we upload the most complete profile
+        // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
+        queryProfile.finishAllInstances(Status.OK);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -515,6 +518,13 @@ public class DefaultCoordinator extends Coordinator {
             // so we only set enable_profile to true when use non-pipeline engine.
             if (!jobSpec.isEnablePipeline()) {
                 jobSpec.getQueryOptions().setEnable_profile(true);
+            }
+            if (jobSpec.isBrokerLoad() && jobSpec.getQueryOptions().getBig_query_profile_threshold() == 0) {
+                jobSpec.getQueryOptions().setBig_query_profile_threshold(Config.default_big_load_profile_threshold_second * 1000);
+            }
+            // runtime load profile does not need to report too frequently
+            if (jobSpec.getQueryOptions().getRuntime_profile_report_interval() < 30) {
+                jobSpec.getQueryOptions().setRuntime_profile_report_interval(30);
             }
             List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
             GlobalStateMgr.getCurrentState().getLoadMgr().initJobProgress(

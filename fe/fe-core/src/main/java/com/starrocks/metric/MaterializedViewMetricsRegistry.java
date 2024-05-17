@@ -17,20 +17,20 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class MaterializedViewMetricsRegistry {
+    private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsRegistry.class);
 
     private final MetricRegistry metricRegistry = new MetricRegistry();
     private final Map<MvId, MaterializedViewMetricsEntity> idToMVMetrics;
@@ -67,44 +67,46 @@ public class MaterializedViewMetricsRegistry {
 
     // collect materialized-view-level metrics
     public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
-        for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-            if (null == db) {
+        MaterializedViewMetricsRegistry instance = MaterializedViewMetricsRegistry.getInstance();
+        for (Map.Entry<MvId, MaterializedViewMetricsEntity> e : instance.idToMVMetrics.entrySet()) {
+            IMaterializedViewMetricsEntity mvEntity = e.getValue();
+            if (mvEntity == null || mvEntity instanceof MaterializedViewMetricsBlackHoleEntity) {
                 continue;
             }
-            for (MaterializedView mv : db.getMaterializedViews()) {
-                IMaterializedViewMetricsEntity mvEntity =
-                        MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
-
-                for (Metric m : mvEntity.getMetrics()) {
-                    // minify metrics if needed
-                    if (minifyMetrics) {
-                        if (null == m.getValue()) {
-                            continue;
-                        }
-                        if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
-                            continue;
-                        }
+            MvId mvId = e.getKey();
+            MaterializedViewMetricsEntity entity = (MaterializedViewMetricsEntity) mvEntity;
+            if (Objects.isNull(entity.dbName) || Objects.isNull(entity.mvName)) {
+                LOG.debug("Invalid materialized view metrics entity, mvId: {}", mvId);
+                continue;
+            }
+            for (Metric m : entity.getMetrics()) {
+                // minify metrics if needed
+                if (minifyMetrics) {
+                    if (null == m.getValue()) {
+                        continue;
                     }
-                    m.addLabel(new MetricLabel("db_name", dbName))
-                            .addLabel(new MetricLabel("mv_name", mv.getName()))
-                            .addLabel(new MetricLabel("mv_id", String.valueOf(mv.getId())));
-                    visitor.visit(m);
+                    // ignore gauge metrics since it will try db lock and visit more metadata
+                    if (Metric.MetricType.GAUGE == m.type) {
+                        continue;
+                    }
+                    // ignore counter metrics with 0 value
+                    if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
+                        continue;
+                    }
                 }
+                m.addLabel(new MetricLabel("db_name", entity.dbName))
+                        .addLabel(new MetricLabel("mv_name", entity.mvName))
+                        .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())));
+                visitor.visit(m);
             }
         }
 
         // Histogram metrics should only output once
-        for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
-                .metricRegistry.getHistograms().entrySet()) {
-            if (minifyMetrics) {
-                if (e.getValue().getCount() == 0) {
-                    continue;
-                }
+        if (!minifyMetrics) {
+            for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
+                    .metricRegistry.getHistograms().entrySet()) {
+                visitor.visitHistogram(e.getKey(), e.getValue());
             }
-            visitor.visitHistogram(e.getKey(), e.getValue());
         }
     }
 }

@@ -22,6 +22,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -53,14 +54,17 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.lake_io_opts = {false, config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool))
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    std::vector<uint64_t> rssid_rowids;
+    rssid_rowids.reserve(chunk_size);
 
     int64_t reader_time_ns = 0;
+    const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
@@ -73,15 +77,27 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 #endif
         {
             SCOPED_RAW_TIMER(&reader_time_ns);
-            if (auto st = reader.get_next(chunk.get()); st.is_end_of_file()) {
+            auto st = Status::OK();
+            if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
+                st = reader.get_next(chunk.get(), &rssid_rowids);
+            } else {
+                st = reader.get_next(chunk.get());
+            }
+            if (st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
                 return st;
             }
         }
         ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
-        RETURN_IF_ERROR(writer->write(*chunk));
+        if (rssid_rowids.empty()) {
+            RETURN_IF_ERROR(writer->write(*chunk));
+        } else {
+            // pk table compaction
+            RETURN_IF_ERROR(writer->write(*chunk, rssid_rowids));
+        }
         chunk->reset();
+        rssid_rowids.clear();
 
         _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
         VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();

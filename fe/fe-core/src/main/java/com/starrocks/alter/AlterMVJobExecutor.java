@@ -34,7 +34,9 @@ import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -157,6 +159,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
                 String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                 SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+                try {
+                    VariableMgr.checkSystemVariableExist(variable);
+                } catch (DdlException e) {
+                    throw new SemanticException(e.getMessage());
+                }
                 setListItems.add(variable);
             }
             SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
@@ -277,7 +284,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             // for event triggered type, run task
             if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
-                taskManager.executeTask(task.getName());
+                taskManager.executeTask(task.getName(), ExecuteOption.makeMergeRedundantOption());
             }
 
             final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();

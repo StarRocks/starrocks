@@ -90,6 +90,8 @@ public:
 
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+    // Is pk compaction output writer
+    bool is_pk_compaction = false;
 };
 
 } // namespace starrocks

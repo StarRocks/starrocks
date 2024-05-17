@@ -267,6 +267,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
+    @ConfField
+    public static boolean enable_profile_log_compress = false;
+
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
@@ -336,7 +339,7 @@ public class Config extends ConfigBase {
      * It will run every *task_check_interval_second* to do background job.
      */
     @ConfField
-    public static int task_check_interval_second = 4 * 3600; // 4 hours
+    public static int task_check_interval_second = 1 * 3600; // 1 hour
 
     /**
      * for task set expire time
@@ -1145,7 +1148,7 @@ public class Config extends ConfigBase {
      * Maximal number of connections per FE.
      */
     @ConfField
-    public static int qe_max_connection = 1024;
+    public static int qe_max_connection = 4096;
 
     /**
      * Maximal number of thread in connection-scheduler-pool.
@@ -2568,6 +2571,14 @@ public class Config extends ConfigBase {
     public static String profile_info_format = "default";
 
     /**
+     * When the session variable `enable_profile` is set to `false` and `big_query_profile_threshold` is set to 0,
+     * the amount of time taken by a load exceeds the default_big_load_profile_threshold_second,
+     * a profile is generated for that load.
+     */
+    @ConfField(mutable = true)
+    public static long default_big_load_profile_threshold_second = 300;
+
+    /**
      * Max number of roles that can be granted to user including all direct roles and all parent roles
      * Used in new RBAC framework after 3.0 released
      **/
@@ -2733,6 +2744,19 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
 
+    @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
+    public static int max_mv_check_base_table_change_retry_times = 10;
+
+    @ConfField(mutable = true, comment = "The max retry times for materialized view refresh retry times when failed")
+    public static int max_mv_refresh_failure_retry_times = 1;
+
+    @ConfField(mutable = true, comment = "The max retry times when materialized view refresh try lock " +
+            "timeout failed")
+    public static int max_mv_refresh_try_lock_failure_retry_times = 3;
+
+    @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
+    public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
+
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
@@ -2839,11 +2863,13 @@ public class Config extends ConfigBase {
      * Replication config
      */
     @ConfField
-    public static int replication_interval_ms = 10;
+    public static int replication_interval_ms = 100;
     @ConfField(mutable = true)
     public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_max_parallel_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_replica_count = 10240; // 10240
+    @ConfField(mutable = true)
+    public static int replication_max_parallel_data_size_mb = 1048576; // 1T
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
     @ConfField(mutable = true)

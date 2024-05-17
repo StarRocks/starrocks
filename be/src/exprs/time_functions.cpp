@@ -2785,7 +2785,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_wdc(FunctionContext* context, const 
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + wdc->dow_weekday - datetime_weekday) % 7 + 1);
         result.append(date);
     }
-    return result.build(ColumnHelper::is_all_const(columns));
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, const Columns& columns) {
@@ -2809,7 +2809,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, con
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + dow_weekday - datetime_weekday) % 7 + 1);
         result.append(date);
     }
-    return result.build(ColumnHelper::is_all_const(columns));
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
 }
 
 Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -2876,7 +2876,7 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_wdc(FunctionContext* context, co
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - wdc->dow_weekday) % 7 + 1));
         result.append(date);
     }
-    return result.build(ColumnHelper::is_all_const(columns));
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context, const Columns& columns) {
@@ -2900,7 +2900,7 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context,
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - dow_weekday) % 7 + 1));
         result.append(date);
     }
-    return result.build(ColumnHelper::is_all_const(columns));
+    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
 }
 
 Status TimeFunctions::previous_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {

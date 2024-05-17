@@ -630,7 +630,7 @@ int64_t BinaryColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
 }
 
 template <typename T>
-void BinaryColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
+void BinaryColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     T start = _offsets[idx];
     T len = _offsets[idx + 1] - start;
     buf->push_string((const char*)_bytes.data() + start, len);
