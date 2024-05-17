@@ -23,11 +23,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-<<<<<<< HEAD
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-=======
-import java.util.stream.Collectors;
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 
 /*
  * This Lock is for exposing the getOwner() method,
