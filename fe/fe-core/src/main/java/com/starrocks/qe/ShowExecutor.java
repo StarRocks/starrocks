@@ -1077,7 +1077,8 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && !db.isSystemDatabase()) {
+        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && !db.isSystemDatabase()
+                && db.getCatalogName().isEmpty()) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
