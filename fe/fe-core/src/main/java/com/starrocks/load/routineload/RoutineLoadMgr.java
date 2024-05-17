@@ -93,15 +93,9 @@ import java.util.stream.Collectors;
 public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
 
-<<<<<<< HEAD
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
-    private ReentrantLock slotLock = new ReentrantLock();
-=======
-    // warehouse ==> {be : running tasks num}
-    private Map<Long, Map<Long, Integer>> warehouseNodeTasksNum = Maps.newHashMap();
     private ReentrantLock slotLock = new FairReentrantLock();
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 
     // routine load job meta
     private Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();

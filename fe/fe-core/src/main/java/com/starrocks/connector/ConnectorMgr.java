@@ -16,11 +16,7 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
-import com.starrocks.connector.exception.StarRocksConnectorException;
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 
 import java.util.ArrayList;
 import java.util.List;

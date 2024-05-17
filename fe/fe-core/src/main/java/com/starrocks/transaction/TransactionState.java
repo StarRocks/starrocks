@@ -51,7 +51,6 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnTypePB;
@@ -351,23 +350,6 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
-<<<<<<< HEAD
-=======
-    private final ReentrantReadWriteLock txnLock = new FairReentrantReadWriteLock();
-
-    public void writeLock() {
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            txnLock.writeLock().lock();
-        }
-    }
-
-    public void writeUnlock() {
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            txnLock.writeLock().unlock();
-        }
-    }
-
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
     public TransactionState() {
         this.dbId = -1;
         this.tableIdList = Lists.newArrayList();

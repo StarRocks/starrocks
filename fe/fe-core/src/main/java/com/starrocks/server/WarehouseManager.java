@@ -19,12 +19,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.LocalWarehouse;
@@ -54,11 +49,7 @@ public class WarehouseManager implements Writable {
     private Map<Long, Warehouse> idToWh = new HashMap<>();
     private Map<String, Warehouse> nameToWh = new HashMap<>();
 
-<<<<<<< HEAD
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-=======
     protected final ReadWriteLock rwLock = new FairReentrantReadWriteLock();
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 
     public WarehouseManager() {
     }

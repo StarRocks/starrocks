@@ -44,11 +44,8 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.Pair;
-=======
 import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -69,11 +66,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
-<<<<<<< HEAD
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
-=======
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 
 /**
  * This class represents the local olap tablet related metadata.

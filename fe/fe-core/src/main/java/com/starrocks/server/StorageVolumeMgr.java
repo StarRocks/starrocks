@@ -24,12 +24,8 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
-=======
 import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
-import com.starrocks.connector.share.credential.CloudConfigurationConstants;
->>>>>>> 6d00614433 ([Enhancement] Use fair lock to avoid lock starvation (#44662))
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
