@@ -127,13 +127,8 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-<<<<<<< HEAD
-        taskRunManager.submitTaskRun(taskRun, new ExecuteOption());
-        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-=======
         taskRunManager.submitTaskRun(taskRun, new ExecuteOption(false));
         List<TaskRunStatus> taskRuns = null;
->>>>>>> 34de8827d9 ([BugFix] Support MERGED state for task run (#45598))
         Constants.TaskRunState state = null;
 
         int retryCount = 0;

@@ -536,15 +536,7 @@ public class TaskManager implements MemoryTrackable {
         SubmitResult submitResult;
         try {
             createTask(task, false);
-<<<<<<< HEAD
             submitResult = executeTask(taskName);
-=======
-            if (task.getType() == Constants.TaskType.MANUAL) {
-                submitResult = executeTask(task.getName());
-            } else {
-                submitResult = new SubmitResult(null, SUBMITTED);
-            }
->>>>>>> 34de8827d9 ([BugFix] Support MERGED state for task run (#45598))
         } catch (DdlException ex) {
             if (ex.getMessage().contains("Failed to get task lock")) {
                 submitResult = new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
@@ -717,9 +709,6 @@ public class TaskManager implements MemoryTrackable {
                     LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
-<<<<<<< HEAD
-                TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-=======
                 ExecuteOption executeOption = new ExecuteOption(task.getSource().isMergeable());
                 executeOption.setReplay(true);
                 TaskRun taskRun = TaskRunBuilder
@@ -728,7 +717,6 @@ public class TaskManager implements MemoryTrackable {
                         .build();
 
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
->>>>>>> 34de8827d9 ([BugFix] Support MERGED state for task run (#45598))
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
                 if (!taskRunManager.arrangeTaskRun(taskRun)) {
                     LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
