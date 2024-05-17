@@ -128,7 +128,7 @@ public class TaskManagerTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
         taskRunManager.submitTaskRun(taskRun, new ExecuteOption(false));
-        List<TaskRunStatus> taskRuns = null;
+        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Constants.TaskRunState state = null;
 
         int retryCount = 0;
