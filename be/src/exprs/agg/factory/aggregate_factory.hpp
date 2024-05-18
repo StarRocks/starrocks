@@ -198,6 +198,12 @@ public:
     template <LogicalType PT>
     static AggregateFunctionPtr MakePercentileDiscAggregateFunction();
 
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeLowCardPercentileBinAggregateFunction();
+
+    template <LogicalType PT>
+    static AggregateFunctionPtr MakeLowCardPercentileCntAggregateFunction();
+
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
 
@@ -396,6 +402,16 @@ AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
 template <LogicalType PT>
 AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
+}
+
+template <LogicalType PT>
+AggregateFunctionPtr AggregateFactory::MakeLowCardPercentileBinAggregateFunction() {
+    return std::make_shared<LowCardPercentileBinAggregateFunction<PT>>();
+}
+
+template <LogicalType PT>
+AggregateFunctionPtr AggregateFactory::MakeLowCardPercentileCntAggregateFunction() {
+    return std::make_shared<LowCardPercentileCntAggregateFunction<PT>>();
 }
 
 template <LogicalType LT>
