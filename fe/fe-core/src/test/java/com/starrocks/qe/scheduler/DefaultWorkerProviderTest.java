@@ -168,8 +168,7 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
-                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             for (Long selectedWorkerId : selectedWorkerIdsList) {
                 Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
@@ -180,8 +179,7 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY, 
-                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
             for (Long selectedWorkerId : selectedWorkerIdsList) {
@@ -193,8 +191,7 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES, 
-                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES);
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
             //test ComputeNode

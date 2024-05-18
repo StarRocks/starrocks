@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.system.ComputeNode;
@@ -90,11 +89,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
                                                              int numUsedComputeNodes,
-                                                            ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
+                                                             ComputationFragmentSchedulingPolicy policy) {
 
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, computationFragmentSchedulingPolicy);
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, policy);
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
             if (LOG.isDebugEnabled()) {
