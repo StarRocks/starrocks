@@ -366,8 +366,7 @@ private:
                 entry.segment_itr = new_empty_iterator(schema, _chunk_size);
             } else {
                 if (rowset->rowset_meta()->is_segments_overlapping()) {
-                    entry.segment_itr = 
-                            std::move(new_heap_merge_iterator(res.value(), entry.need_rssid_rowids));
+                    entry.segment_itr = std::move(new_heap_merge_iterator(res.value(), entry.need_rssid_rowids));
                 } else {
                     entry.segment_itr = std::move(new_union_iterator(res.value()));
                 }
