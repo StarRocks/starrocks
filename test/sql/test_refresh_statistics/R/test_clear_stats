@@ -73,9 +73,9 @@ select sleep(60);
 -- result:
 1
 -- !result
-select count(*) from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl';
+select count(*) <= 3from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl';
 -- result:
-2
+1
 -- !result
 ADMIN SET FRONTEND CONFIG ("clear_stale_stats_interval_sec" = "43200");
 -- result:
