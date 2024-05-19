@@ -466,6 +466,7 @@ public class AnalyzeMgr implements Writable {
         }
 
         List<Table> tables = Lists.newArrayList();
+        LocalDateTime workTime = LocalDateTime.now();
         for (Map.Entry<Long, AnalyzeStatus> entry : analyzeStatusMap.entrySet()) {
             AnalyzeStatus analyzeStatus = entry.getValue();
             LocalDateTime endTime = analyzeStatus.getEndTime();
@@ -485,7 +486,7 @@ public class AnalyzeMgr implements Writable {
         }
 
         if (tables.isEmpty()) {
-            lastCleanTime = LocalDateTime.now();
+            lastCleanTime = workTime;
         }
 
         List<Long> tableIds = Lists.newArrayList();
