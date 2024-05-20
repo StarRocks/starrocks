@@ -142,6 +142,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.output_columns) {
         _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
     }
+    if (tnode.hash_join_node.__isset.late_materialization) {
+        _enable_late_materialization = tnode.hash_join_node.late_materialization;
+    }
     return Status::OK();
 }
 
@@ -197,7 +200,7 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->output_probe_column_timer = _output_probe_column_timer;
     param->build_output_slots = _output_slots;
     param->probe_output_slots = _output_slots;
-    param->enable_lazy_materialize = _enable_lazy_materialize;
+    param->enable_late_materialization = _enable_late_materialization;
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -467,7 +470,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     HashJoinerParam param(pool, _hash_join_node, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
-                          _output_slots, _output_slots, _distribution_mode, false, _enable_lazy_materialize);
+                          _output_slots, _output_slots, _distribution_mode, false, _enable_late_materialization);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // Create a shared RefCountedRuntimeFilterCollector

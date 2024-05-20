@@ -1,0 +1,175 @@
+-- name: test_lazy_materialize
+set pipeline_dop = 1;
+-- result:
+-- !result
+set join_late_materialization=true;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    t1_c1 INT NOT NULL,
+    t1_c2 INT NOT NULL,
+    t1_c3 INT NOT NULL,
+    t1_c4 INT NOT NULL,
+    t1_c5 INT NOT NULL
+)
+DUPLICATE KEY(t1_c1)
+DISTRIBUTED BY HASH(t1_c1) buckets 1;
+-- result:
+-- !result
+CREATE TABLE t2 (
+    t2_c1 INT NOT NULL,
+    t2_c2 INT NOT NULL,
+    t2_c3 INT NOT NULL,
+    t2_c4 INT NOT NULL,
+    t2_c5 INT NOT NULL
+)
+DUPLICATE KEY(t2_c1)
+DISTRIBUTED BY HASH(t2_c1) buckets 1;
+-- result:
+-- !result
+CREATE TABLE nullable_t1 (
+    t1_c1 INT,
+    t1_c2 INT,
+    t1_c3 INT,
+    t1_c4 INT,
+    t1_c5 INT
+)
+DUPLICATE KEY(t1_c1)
+DISTRIBUTED BY HASH(t1_c1) buckets 1;
+-- result:
+-- !result
+CREATE TABLE nullable_t2 (
+    t2_c1 INT,
+    t2_c2 INT,
+    t2_c3 INT,
+    t2_c4 INT,
+    t2_c5 INT
+)
+DUPLICATE KEY(t2_c1)
+DISTRIBUTED BY HASH(t2_c1) buckets 1;
+-- result:
+-- !result
+INSERT INTO t1 values
+(1, 11, 111, 1111, 11111),
+(2, 22, 222, 2222, 22222),
+(3, 33, 333, 3333, 33333),
+(4, 44, 444, 4444, 44444),
+(5, 55, 555, 5555, 55555);
+-- result:
+-- !result
+INSERT INTO t2 values
+(3, 44, 444, 444, 44444),
+(4, 33, 333, 333, 33333),
+(5, 55, 555, 5555, 55555),
+(6, 77, 777, 7777, 77777),
+(7, 66, 666, 6666, 66666);
+-- result:
+-- !result
+INSERT INTO nullable_t1 values
+(1, 11, 111, 1111, 11111),
+(2, 22, 222, 2222, 22222),
+(3, 33, null, 3333, 33333),
+(4, 44, 444, 4444, 44444),
+(5, 55, 555, 5555, 55555);
+-- result:
+-- !result
+INSERT INTO nullable_t2 values
+(3, 44, 444, 4444, 44444),
+(4, 33, 333, 3333, 33333),
+(5, 55, 555, 5555, 55555),
+(6, 77, 777, null, 77777),
+(7, 77, 666, 6666, 66666);
+-- result:
+-- !result
+select * from t1 inner join [broadcast] t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t1_c2;
+-- result:
+4	44	444	4444	44444	4	33	333	333	33333
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from t1 inner join [broadcast] t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t1_c2;
+-- result:
+444	4444	333	333
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from t1 inner join [broadcast] t2 on t1_c1=t2_c1 and t1_c2>t2_c2+55 order by t1_c2;
+-- result:
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from t1 right outer join [shuffle] t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t2_c2;
+-- result:
+444	4444	333	333
+None	None	444	444
+None	None	555	5555
+None	None	666	6666
+None	None	777	7777
+-- !result
+truncate table t2;
+-- result:
+-- !result
+select * from t1 left outer join [broadcast] t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t1_c2;
+-- result:
+1	11	111	1111	11111	None	None	None	None	None
+2	22	222	2222	22222	None	None	None	None	None
+3	33	333	3333	33333	None	None	None	None	None
+4	44	444	4444	44444	None	None	None	None	None
+5	55	555	5555	55555	None	None	None	None	None
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from t1 left outer join [broadcast] t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t1_c2;
+-- result:
+111	1111	None	None
+222	2222	None	None
+333	3333	None	None
+444	4444	None	None
+555	5555	None	None
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from t1 left outer join [broadcast] t2 on t1_c1=t2_c1 and t1_c2>t2_c2+55 order by t1_c2;
+-- result:
+111	1111	None	None
+222	2222	None	None
+333	3333	None	None
+444	4444	None	None
+555	5555	None	None
+-- !result
+select * from nullable_t1 inner join [broadcast] nullable_t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t1_c2;
+-- result:
+4	44	444	4444	44444	4	33	333	3333	33333
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from nullable_t1 inner join [broadcast] nullable_t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t1_c2;
+-- result:
+444	4444	333	3333
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from nullable_t1 inner join [broadcast] nullable_t2 on t1_c1=t2_c1 and t1_c2>t2_c2+55 order by t1_c2;
+-- result:
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from nullable_t1 right outer join [shuffle] nullable_t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t2_c2;
+-- result:
+444	4444	333	3333
+None	None	444	4444
+None	None	555	5555
+None	None	777	None
+None	None	666	6666
+-- !result
+truncate table nullable_t2;
+-- result:
+-- !result
+select * from nullable_t1 left outer join [broadcast] nullable_t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t1_c2;
+-- result:
+1	11	111	1111	11111	None	None	None	None	None
+2	22	222	2222	22222	None	None	None	None	None
+3	33	None	3333	33333	None	None	None	None	None
+4	44	444	4444	44444	None	None	None	None	None
+5	55	555	5555	55555	None	None	None	None	None
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from nullable_t1 left outer join [broadcast] nullable_t2 on t1_c1=t2_c1 and t1_c2>t2_c2 order by t1_c2;
+-- result:
+111	1111	None	None
+222	2222	None	None
+None	3333	None	None
+444	4444	None	None
+555	5555	None	None
+-- !result
+select t1_c3, t1_c4, t2_c3, t2_c4 from nullable_t1 left outer join [broadcast] nullable_t2 on t1_c1=t2_c1 and t1_c2>t2_c2+55 order by t1_c2;
+-- result:
+111	1111	None	None
+222	2222	None	None
+None	3333	None	None
+444	4444	None	None
+555	5555	None	None
+-- !result
