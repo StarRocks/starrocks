@@ -59,6 +59,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -339,7 +340,9 @@ public class SchemaScanNode extends ScanNode {
                     .map(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(id))
                     .collect(Collectors.toList());
         } else {
-            nodeList = Lists.newArrayList(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values());
+            nodeList = Lists.newArrayList();
+            nodeList.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends());
+            nodeList.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes());
         }
 
         for (ComputeNode node : nodeList) {
