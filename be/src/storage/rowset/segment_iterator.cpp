@@ -45,6 +45,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
+#include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/common.h"
@@ -99,29 +100,6 @@ static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Sch
     return lhs_index_key.compare(rhs);
 }
 
-struct BitmapContext {
-    struct ColumnContext {
-        SparseRange<> bitmap_ranges;
-        size_t cardinality;
-        std::vector<const PredicateColumnNode*> nodes;
-        bool has_is_null_pred = false;
-    };
-
-    struct NodeContext {
-        std::unordered_map<ColumnId, ColumnContext> col_contexts;
-        bool used = false;
-    };
-
-    /// Note that the address of a predicate node is used as the identity,
-    /// and therefore do not modify the related PredicateTree, which may cause the address to change.
-
-    std::unordered_map<const PredicateBaseNode*, bool> is_node_support_bitmap;
-
-    std::unordered_map<const PredicateBaseNode*, NodeContext> node_to_context;
-
-    std::unordered_set<const PredicateBaseNode*> nodes_to_erase;
-};
-
 class SegmentIterator final : public ChunkIterator {
 public:
     SegmentIterator(std::shared_ptr<Segment> segment, Schema _schema, SegmentReadOptions options);
@@ -141,11 +119,6 @@ protected:
     }
 
 private:
-    friend struct BitmapIndexInitializer;
-    friend struct BitmapIndexSeeker;
-    friend struct BitmapIndexEvaluator;
-    friend struct BitmapIndexPredicateEraser;
-
     struct ScanContext {
         ScanContext() = default;
 
@@ -285,8 +258,6 @@ private:
     // check field use low_cardinality global dict optimization
     bool _can_using_global_dict(const FieldPtr& field) const;
 
-    Status _init_bitmap_index_iterators(BitmapContext& ctx, const PredicateTree& pred_tree);
-
     Status _apply_bitmap_index();
 
     Status _apply_del_vector();
@@ -325,7 +296,7 @@ private:
     RawColumnIterators _column_iterators;
     std::vector<int> _io_coalesce_column_index;
     ColumnDecoders _column_decoders;
-    std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
+    BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
     std::map<ColumnId, ColumnOrPredicate> _del_predicates;
 
@@ -371,7 +342,6 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
-    bool _has_bitmap_index = false;
     bool _has_inverted_index = false;
 
     std::vector<InvertedIndexIterator*> _inverted_index_iterators;
@@ -386,6 +356,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
+          _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()) {
     // For small segment file (the number of rows is less than chunk_size),
     // the segment iterator will reserve a large amount of memory,
@@ -1442,7 +1413,7 @@ inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
     if (_opts.pred_tree.contains_column(field->id())) {
         return _predicate_need_rewrite[field->id()];
     } else {
-        return (_has_bitmap_index || !_opts.pred_tree.empty()) &&
+        return (_bitmap_index_evaluator.has_bitmap_index() || !_opts.pred_tree.empty()) &&
                _column_iterators[field->id()]->all_page_dict_encoded();
     }
 }
@@ -1811,112 +1782,6 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
     return Status::OK();
 }
 
-/// Initialize bitmap index iterators for the columns related to a PredicateTree.
-/// `ctx.is_node_support_bitmap` will be updated to indicate whether a predicate node can be applied bitmap to.
-/// Return true if the PredicateTree can be applied bitmap to.
-struct BitmapIndexInitializer {
-    StatusOr<bool> operator()(const PredicateColumnNode& node) {
-        DCHECK(parent_node_ctx != nullptr);
-
-        const auto* col_pred = node.col_pred();
-        const auto cid = col_pred->column_id();
-
-        if (!col_pred->support_bitmap_filter()) {
-            return false;
-        }
-
-        auto* bitmap_iter = parent->_bitmap_index_iterators[cid];
-        if (bitmap_iter == nullptr) {
-            const ColumnUID ucid = cid_2_ucid[cid];
-            // the column's index in this segment file
-            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, parent->_get_dcg_segment(ucid));
-            if (segment_ptr == nullptr) {
-                // find segment from delta column group failed, using main segment
-                segment_ptr = parent->_segment;
-            }
-
-            IndexReadOptions opts;
-            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
-            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
-            opts.lake_io_opts = parent->_opts.lake_io_opts;
-            opts.read_file = parent->_column_files[cid].get();
-            opts.stats = parent->_opts.stats;
-
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &parent->_bitmap_index_iterators[cid]));
-
-            bitmap_iter = parent->_bitmap_index_iterators[cid];
-        }
-
-        if (bitmap_iter != nullptr) {
-            ctx.is_node_support_bitmap[&node] = true;
-            auto& col_ctx = _get_or_create_column_context(bitmap_iter, cid);
-            col_ctx.nodes.emplace_back(&node);
-            return true;
-        }
-        return false;
-    }
-
-    template <CompoundNodeType Type>
-    StatusOr<bool> operator()(const PredicateCompoundNode<Type>& node) {
-        auto& node_ctx = ctx.node_to_context.emplace(&node, BitmapContext::NodeContext{}).first->second;
-        bool has_bitmap_index = Type == CompoundNodeType::AND ? false : true;
-        for (const auto& child : node.children()) {
-            parent_type = Type;
-            parent_node_ctx = &node_ctx;
-            ASSIGN_OR_RETURN(const auto child_has_bitmap_index, child.visit(*this));
-            if constexpr (Type == CompoundNodeType::AND) {
-                has_bitmap_index |= child_has_bitmap_index;
-            } else {
-                if (!child_has_bitmap_index) {
-                    has_bitmap_index = false;
-                    break;
-                }
-            }
-        }
-        ctx.is_node_support_bitmap[&node] = has_bitmap_index;
-        return has_bitmap_index;
-    }
-
-    BitmapContext::ColumnContext& _get_or_create_column_context(BitmapIndexIterator* bitmap_iter, ColumnId cid) {
-        auto it = parent_node_ctx->col_contexts.find(cid);
-        if (it == parent_node_ctx->col_contexts.end()) {
-            const auto cardinality = bitmap_iter->bitmap_nums();
-            if (parent_type == CompoundNodeType::AND) {
-                it = parent_node_ctx->col_contexts
-                             .emplace(cid, BitmapContext::ColumnContext{SparseRange<>{0, cardinality}, cardinality})
-                             .first;
-            } else {
-                it = parent_node_ctx->col_contexts
-                             .emplace(cid, BitmapContext::ColumnContext{SparseRange<>{}, cardinality})
-                             .first;
-            }
-        }
-        return it->second;
-    }
-
-    SegmentIterator* parent;
-    BitmapContext& ctx;
-    std::unordered_map<ColumnId, ColumnUID>& cid_2_ucid;
-
-    BitmapContext::NodeContext* parent_node_ctx = nullptr;
-    CompoundNodeType parent_type = CompoundNodeType::AND;
-};
-
-Status SegmentIterator::_init_bitmap_index_iterators(BitmapContext& ctx, const PredicateTree& pred_tree) {
-    DCHECK_EQ(_predicate_columns, pred_tree.num_columns());
-    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
-
-    _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
-
-    std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
-    for (auto& field : _schema.fields()) {
-        cid_2_ucid[field->id()] = field->uid();
-    }
-
-    ASSIGN_OR_RETURN(_has_bitmap_index, pred_tree.visit(BitmapIndexInitializer{this, ctx, cid_2_ucid}));
-    return Status::OK();
-}
-
 static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
                                              const std::unordered_set<const ColumnPredicate*>& erased_preds) {
     PredicateAndNode new_root;
@@ -1931,377 +1796,54 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
             &new_root, &useless_root);
     pred_tree = PredicateTree::create(std::move(new_root));
 }
-struct BitmapIndexSeeker {
-    enum class ResultType : uint8_t { ALWAYS_FALSE, ALWAYS_TRUE, NOT_USED, OK };
-
-    StatusOr<ResultType> operator()(const PredicateAndNode& node) {
-        if (!ctx.is_node_support_bitmap[&node]) {
-            return ResultType::NOT_USED;
-        }
-
-        DCHECK(ctx.node_to_context.find(&node) != ctx.node_to_context.end());
-        auto& node_ctx = ctx.node_to_context[&node];
-
-        std::vector<const PredicateBaseNode*> used_children;
-        size_t num_always_true_child = 0;
-
-        size_t mul_selected = 1;
-        size_t mul_cardinality = 1;
-        std::vector<ColumnId> cid_to_erase;
-        bool need_estimate_selectivity = false;
-
-        for (const auto& [cid, col_ctx] : node_ctx.col_contexts) {
-            for (const auto* col_node : col_ctx.nodes) {
-                ASSIGN_OR_RETURN(const auto used, _seek_column_node<CompoundNodeType::AND>(*col_node, node_ctx));
-                if (used) {
-                    used_children.emplace_back(col_node);
-                }
-            }
-
-            // ALWAYS_FALSE
-            if (col_ctx.bitmap_ranges.empty()) {
-                ctx.nodes_to_erase.emplace(&node);
-                return ResultType::ALWAYS_FALSE;
-            }
-
-            // ALWAYS_TRUE
-            if (col_ctx.bitmap_ranges.span_size() >= col_ctx.cardinality) {
-                cid_to_erase.emplace_back(cid);
-                num_always_true_child += col_ctx.nodes.size();
-            } else {
-                // OK
-                need_estimate_selectivity = true;
-                mul_selected *= col_ctx.bitmap_ranges.span_size();
-                mul_cardinality *= col_ctx.cardinality;
-            }
-        }
-
-        for (const auto& child : node.compound_children()) {
-            ASSIGN_OR_RETURN(const auto res_type, child.visit(*this));
-            switch (res_type) {
-            case ResultType::ALWAYS_FALSE:
-                ctx.nodes_to_erase.emplace(&node);
-                return ResultType::ALWAYS_FALSE;
-            case ResultType::ALWAYS_TRUE:
-                used_children.emplace_back(child.visit(
-                        [](const auto& child_node) { return static_cast<const PredicateBaseNode*>(&child_node); }));
-                num_always_true_child++;
-                break;
-            case ResultType::NOT_USED:
-                // Do nothing.
-                break;
-            case ResultType::OK:
-                used_children.emplace_back(child.visit(
-                        [](const auto& child_node) { return static_cast<const PredicateBaseNode*>(&child_node); }));
-                break;
-            }
-        }
-
-        if (num_always_true_child == node.num_children()) {
-            ctx.nodes_to_erase.emplace(&node);
-            return ResultType::ALWAYS_TRUE;
-        }
-
-        for (const auto& cid : cid_to_erase) {
-            node_ctx.col_contexts.erase(cid);
-        }
-
-        // ---------------------------------------------------------
-        // Estimate the selectivity of the bitmap index.
-        // ---------------------------------------------------------
-        if (num_always_true_child >= used_children.size() ||
-            (need_estimate_selectivity && mul_selected * 1000 > mul_cardinality * config::bitmap_max_filter_ratio)) {
-            return ResultType::NOT_USED;
-        }
-
-        ctx.nodes_to_erase.insert(used_children.begin(), used_children.end());
-
-        node_ctx.used = true;
-        return ResultType::OK;
-    }
-
-    StatusOr<ResultType> operator()(const PredicateOrNode& node) {
-        if (!ctx.is_node_support_bitmap[&node]) {
-            return ResultType::NOT_USED;
-        }
-
-        DCHECK(ctx.node_to_context.find(&node) != ctx.node_to_context.end());
-        auto& node_ctx = ctx.node_to_context[&node];
-
-        std::vector<const PredicateBaseNode*> used_children;
-        size_t num_always_false_child = 0;
-        bool has_not_used_child = false;
-
-        size_t mul_selected = 1;
-        size_t mul_cardinality = 1;
-        std::vector<ColumnId> cid_to_erase;
-        bool need_estimate_selectivity = false;
-
-        for (const auto& [cid, col_ctx] : node_ctx.col_contexts) {
-            for (const auto* col_node : col_ctx.nodes) {
-                ASSIGN_OR_RETURN(const auto used, _seek_column_node<CompoundNodeType::OR>(*col_node, node_ctx));
-                if (used) {
-                    used_children.emplace_back(col_node);
-                } else {
-                    has_not_used_child = true;
-                }
-            }
-
-            // ALWAYS_FALSE
-            if (col_ctx.bitmap_ranges.empty()) {
-                cid_to_erase.emplace_back(cid);
-                num_always_false_child += col_ctx.nodes.size();
-                continue;
-            }
-
-            // ALWAYS_TRUE
-            if (col_ctx.bitmap_ranges.span_size() >= col_ctx.cardinality) {
-                ctx.nodes_to_erase.emplace(&node);
-                return ResultType::ALWAYS_TRUE;
-            } else {
-                // OK
-                need_estimate_selectivity = true;
-                mul_selected *= col_ctx.bitmap_ranges.span_size();
-                mul_cardinality *= col_ctx.cardinality;
-            }
-        }
-
-        for (const auto& child : node.compound_children()) {
-            ASSIGN_OR_RETURN(const auto res_type, child.visit(*this));
-            switch (res_type) {
-            case ResultType::ALWAYS_FALSE:
-                used_children.emplace_back(child.visit(
-                        [](const auto& child_node) { return static_cast<const PredicateBaseNode*>(&child_node); }));
-                num_always_false_child++;
-                break;
-            case ResultType::ALWAYS_TRUE:
-                ctx.nodes_to_erase.emplace(&node);
-                return ResultType::ALWAYS_TRUE;
-            case ResultType::NOT_USED:
-                has_not_used_child = true;
-                break;
-            case ResultType::OK:
-                used_children.emplace_back(child.visit(
-                        [](const auto& child_node) { return static_cast<const PredicateBaseNode*>(&child_node); }));
-                break;
-            }
-        }
-
-        if (has_not_used_child) {
-            return ResultType::NOT_USED;
-        }
-
-        if (num_always_false_child == node.num_children()) {
-            ctx.nodes_to_erase.emplace(&node);
-            return ResultType::ALWAYS_FALSE;
-        }
-
-        for (const auto& cid : cid_to_erase) {
-            node_ctx.col_contexts.erase(cid);
-        }
-
-        // ---------------------------------------------------------
-        // Estimate the selectivity of the bitmap index.
-        // ---------------------------------------------------------
-        if (num_always_false_child >= used_children.size() ||
-            (need_estimate_selectivity && mul_selected * 1000 > mul_cardinality * config::bitmap_max_filter_ratio)) {
-            return ResultType::NOT_USED;
-        }
-
-        ctx.nodes_to_erase.insert(used_children.begin(), used_children.end());
-
-        node_ctx.used = true;
-        return ResultType::OK;
-    }
-
-    template <CompoundNodeType Type>
-    StatusOr<bool> _seek_column_node(const PredicateColumnNode& node,
-                                     BitmapContext::NodeContext& parent_node_ctx) const {
-        if (!ctx.is_node_support_bitmap[&node]) {
-            return false;
-        }
-
-        const auto* col_pred = node.col_pred();
-        const auto cid = col_pred->column_id();
-        auto* bitmap_iter = parent->_bitmap_index_iterators[cid];
-        if (bitmap_iter == nullptr) {
-            return false;
-        }
-
-        DCHECK(parent_node_ctx.col_contexts.find(cid) != parent_node_ctx.col_contexts.end());
-        auto& col_ctx = parent_node_ctx.col_contexts.find(cid)->second;
-
-        SparseRange<> r;
-        const Status st = col_pred->seek_bitmap_dictionary(bitmap_iter, &r);
-        if (st.ok()) {
-            if constexpr (Type == CompoundNodeType::AND) {
-                col_ctx.bitmap_ranges &= r;
-            } else {
-                col_ctx.bitmap_ranges |= r;
-            }
-            col_ctx.has_is_null_pred |= (col_pred->type() == PredicateType::kIsNull);
-        } else if (st.is_cancelled()) {
-            return false;
-        } else {
-            return st;
-        }
-
-        return true;
-    }
-
-    SegmentIterator* parent;
-    BitmapContext& ctx;
-};
-
-struct BitmapIndexEvaluator {
-    StatusOr<std::optional<Roaring>> operator()(const PredicateColumnNode& node) const { return std::nullopt; }
-
-    template <CompoundNodeType Type>
-    StatusOr<std::optional<Roaring>> operator()(const PredicateCompoundNode<Type>& node) const {
-        std::optional<Roaring> result_roaring;
-
-        auto it = ctx.node_to_context.find(&node);
-        if (it == ctx.node_to_context.end() || !it->second.used) {
-            return result_roaring;
-        }
-        const auto& node_ctx = it->second;
-
-        for (const auto& [cid, col_ctx] : node_ctx.col_contexts) {
-            auto* bitmap_iter = parent->_bitmap_index_iterators[cid];
-
-            Roaring roaring;
-            RETURN_IF_ERROR(bitmap_iter->read_union_bitmap(col_ctx.bitmap_ranges, &roaring));
-            if (bitmap_iter->has_null_bitmap() && !col_ctx.has_is_null_pred) {
-                Roaring null_bitmap;
-                RETURN_IF_ERROR(bitmap_iter->read_null_bitmap(&null_bitmap));
-                roaring -= null_bitmap;
-            }
-
-            if (!result_roaring.has_value()) {
-                result_roaring.emplace(std::move(roaring));
-            } else {
-                if constexpr (Type == CompoundNodeType::AND) {
-                    result_roaring.value() &= roaring;
-                } else {
-                    result_roaring.value() |= roaring;
-                }
-            }
-        }
-
-        for (const auto& child : node.children()) {
-            ASSIGN_OR_RETURN(auto roaring, child.visit(*this));
-            if (!roaring.has_value()) {
-                continue;
-            }
-            if (!result_roaring.has_value()) {
-                result_roaring = std::move(roaring);
-            } else {
-                if constexpr (Type == CompoundNodeType::AND) {
-                    result_roaring.value() &= roaring.value();
-                } else {
-                    result_roaring.value() |= roaring.value();
-                }
-            }
-        }
-
-        return result_roaring;
-    }
-
-    SegmentIterator* parent;
-    BitmapContext& ctx;
-};
-
-struct BitmapIndexPredicateEraser {
-    template <CompoundNodeType ParentType>
-    void operator()(const PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) const {
-        if (!ctx.nodes_to_erase.contains(&node)) {
-            parent.add_child(node);
-        }
-    }
-
-    template <CompoundNodeType Type, CompoundNodeType ParentType>
-    void operator()(const PredicateCompoundNode<Type>& node, PredicateCompoundNode<ParentType>& parent) const {
-        if (ctx.nodes_to_erase.contains(&node)) {
-            return;
-        }
-
-        PredicateCompoundNode<Type> new_node;
-        for (const auto& child : node.children()) {
-            child.visit(*this, new_node);
-        }
-
-        if (!new_node.empty()) {
-            parent.add_child(new_node);
-        }
-    }
-
-    BitmapContext& ctx;
-};
 
 // filter rows by evaluating column predicates using bitmap indexes.
 // upon return, predicates that have been evaluated by bitmap indexes will be removed.
 Status SegmentIterator::_apply_bitmap_index() {
     RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
+    DCHECK_EQ(_predicate_columns, _opts.pred_tree.num_columns());
 
-    const auto& immutable_pred_tree = _opts.pred_tree;
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
 
-    BitmapContext ctx;
+        std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+        for (auto& field : _schema.fields()) {
+            cid_2_ucid[field->id()] = field->uid();
+        }
 
-    RETURN_IF_ERROR(_init_bitmap_index_iterators(ctx, immutable_pred_tree));
+        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
+                                                      this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            const ColumnUID ucid = cid_2_ucid[cid];
+            // the column's index in this segment file
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
+            }
 
-    DCHECK_EQ(_predicate_columns, immutable_pred_tree.num_columns());
-    RETURN_IF(!_has_bitmap_index, Status::OK());
-    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
+            IndexReadOptions opts;
+            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
+            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
+            opts.lake_io_opts = _opts.lake_io_opts;
+            opts.read_file = _column_files[cid].get();
+            opts.stats = _opts.stats;
 
-    // ---------------------------------------------------------
-    // Seek bitmap index.
-    //  - Seek to the position of predicate's operand within
-    //    bitmap index dictionary.
-    // ---------------------------------------------------------
+            BitmapIndexIterator* bitmap_iter = nullptr;
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+            return bitmap_iter;
+        }));
 
-    ASSIGN_OR_RETURN(auto seek_res, immutable_pred_tree.visit(BitmapIndexSeeker{this, ctx}));
-    switch (seek_res) {
-    case BitmapIndexSeeker::ResultType::ALWAYS_FALSE:
-        _opts.stats->rows_bitmap_index_filtered += _scan_range.span_size();
-        _scan_range.clear();
-        return Status::OK();
-    case BitmapIndexSeeker::ResultType::ALWAYS_TRUE:
-        _opts.pred_tree = PredicateTree{};
-        return Status::OK();
-    case BitmapIndexSeeker::ResultType::NOT_USED:
-        return Status::OK();
-    case BitmapIndexSeeker::ResultType::OK:
-        // Do nothing.
-        break;
+        RETURN_IF(!_bitmap_index_evaluator.has_bitmap_index(), Status::OK());
     }
 
-    // ---------------------------------------------------------
-    // Retrieve the bitmap of each field.
-    // ---------------------------------------------------------
-    Roaring row_bitmap = range2roaring(_scan_range);
-    size_t input_rows = row_bitmap.cardinality();
-    DCHECK_EQ(input_rows, _scan_range.span_size());
-
-    ASSIGN_OR_RETURN(auto roaring, immutable_pred_tree.visit(BitmapIndexEvaluator{this, ctx}));
-    if (!roaring.has_value()) {
-        return Status::OK();
-    }
-    row_bitmap &= roaring.value();
-
-    DCHECK_LE(row_bitmap.cardinality(), _scan_range.span_size());
-    if (row_bitmap.cardinality() < _scan_range.span_size()) {
-        _scan_range = roaring2range(row_bitmap);
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
+        const auto input_rows = _scan_range.span_size();
+        RETURN_IF_ERROR(_bitmap_index_evaluator.evaluate(_scan_range, _opts.pred_tree));
+        _opts.stats->rows_bitmap_index_filtered += input_rows - _scan_range.span_size();
     }
 
-    // ---------------------------------------------------------
-    // Erase predicates that hit bitmap index.
-    // ---------------------------------------------------------
-    PredicateAndNode new_pred_root;
-    immutable_pred_tree.visit(BitmapIndexPredicateEraser{ctx}, new_pred_root);
-    _opts.pred_tree = PredicateTree::create(std::move(new_pred_root));
-
-    _opts.stats->rows_bitmap_index_filtered += (input_rows - _scan_range.span_size());
     return Status::OK();
 }
 
@@ -2612,9 +2154,7 @@ void SegmentIterator::close() {
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
 
-    for (auto* iter : _bitmap_index_iterators) {
-        delete iter;
-    }
+    _bitmap_index_evaluator.close();
 
     for (auto* iter : _inverted_index_iterators) {
         if (iter != nullptr) {

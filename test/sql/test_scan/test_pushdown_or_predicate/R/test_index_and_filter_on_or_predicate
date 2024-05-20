@@ -2,6 +2,9 @@
 set scan_or_to_union_limit = 1;
 -- result:
 -- !result
+set enable_show_predicate_tree_in_profile = true;
+-- result:
+-- !result
 set enable_profile = true;
 -- result:
 -- !result
@@ -123,17 +126,52 @@ insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_no
 insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_non_null1, c_str_8_seq_non_null2) select null, '<null>', '<null>', '<null>', '<null>';
 -- result:
 -- !result
-create view __profile(idx, k, v) as 
-select 1, 2, 3;
+ALTER TABLE t1 COMPACT;
 -- result:
 -- !result
+function: wait_compaction_finish("t1", 32)
+-- result:
+None
+-- !result
+create view __profile(idx, k, v) as 
+with 
+  __profile as (
+      select last_query_id() as query_id, unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+  ),
+  result as (
+    select 1 as idx, "PushdownPredicates" as k, regexp_extract(line, ".*- PushdownPredicates: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- PushdownPredicates%"
+    UNION ALL
+    select 2, "NonPushdownPredicates" as k, regexp_extract(line, ".*- NonPushdownPredicates: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- NonPushdownPredicates%"
     
+    UNION ALL
+    select 3, "PushdownPredicateTree" as k, regexp_extract(line, ".*- PushdownPredicateTree: (.*)", 1) as v from __profile where line like "%- PushdownPredicateTree%"
+    UNION ALL
+    select 4, "NonPushdownPredicateTree" as k, regexp_extract(line, ".*- NonPushdownPredicateTree: (.*)?", 1) as v from __profile where line like "%- NonPushdownPredicateTree%"
     
+    UNION ALL
+    select 5, "RawRowsRead" as k, regexp_extract(line, ".*- RawRowsRead: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- RawRowsRead%"
+    UNION ALL
+    select 6, "RowsRead" as k, regexp_extract(line, ".*- RowsRead: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- RowsRead%"
     
+    UNION ALL
+    select 7, "SegmentZoneMapFilterRows" as k, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- SegmentZoneMapFilterRows%"
+    UNION ALL
+    select 8, "ZoneMapIndexFilterRows" as k, regexp_extract(line, ".*- ZoneMapIndexFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- ZoneMapIndexFilterRows%"
+    UNION ALL
+    select 9, "BitmapIndexFilterRows" as k, regexp_extract(line, ".*- BitmapIndexFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- BitmapIndexFilterRows%"
+    UNION ALL
+    select 10, "BloomFilterFilterRows" as k, regexp_extract(line, ".*- BloomFilterFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- BloomFilterFilterRows%"
+    UNION ALL
+    select 11, "PredFilterRows" as k, regexp_extract(line, ".*- PredFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- PredFilterRows%"
+    UNION ALL
+    select 12, "DeleteFilterRows" as k, regexp_extract(line, ".*- DeleteFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- DeleteFilterRows%"
+    UNION ALL
+    select 13, "LateMaterialize" as k, 'exist' as v from __profile where line like "%- LateMaterialize%"
     
-
-
-
+  )
+select * from result order by idx, k, v;
+-- result:
+-- !result
 update information_schema.be_configs set value="true" where name= "enable_index_segment_level_zonemap_filter";
 -- result:
 -- !result
@@ -143,7 +181,15 @@ select count(1) from t1 where c_int_1_seq < 1;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1)"}]}
+5	RawRowsRead	40002
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	1240000
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	40002
 -- !result
 select count(1) from t1 where c_int_1_seq < 1 and c_int_1_seq * 10 < 100;
 -- result:
@@ -151,7 +197,15 @@ select count(1) from t1 where c_int_1_seq < 1 and c_int_1_seq * 10 < 100;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 100 Size : 1)]) )])"}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	1280002
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
   
 select count(1) from t1 where c_int_2_seq < 10;
@@ -160,7 +214,15 @@ select count(1) from t1 where c_int_2_seq < 10;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(2)<10)"}]}
+5	RawRowsRead	40002
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	1240000
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	40002
 -- !result
   
 select count(1) from t1 where c_int_2_seq < 10 and c_int_2_seq * 10 < 1000;
@@ -169,7 +231,15 @@ select count(1) from t1 where c_int_2_seq < 10 and c_int_2_seq * 10 < 1000;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(2)<10)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 1000 Size : 1)]) )])"}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	1280002
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
   
 
@@ -179,7 +249,15 @@ select count(1) from t1 where c_int_1_seq < 1 and c_int_2_seq < 1280000 * 10;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1)"},{"pred":"(columnId(2)<12800000)"}]}
+5	RawRowsRead	40002
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	1240000
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	40002
 -- !result
   
 
@@ -189,7 +267,15 @@ select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1 * 10;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(2)<10)"},{"pred":"(columnId(1)<1)"}]}]}
+5	RawRowsRead	40002
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	1240000
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	40002
 -- !result
   
 select count(1) from t1 where (c_int_1_seq < 1 and c_int_1_seq * 10 < 100) 
@@ -199,7 +285,15 @@ select count(1) from t1 where (c_int_1_seq < 1 and c_int_1_seq * 10 < 100)
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	4
+3	PushdownPredicateTree	{"and":[{"or":[{"and":[{"pred":"(columnId(1)<1)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 100 Size : 1)]) )])"}]},{"and":[{"pred":"(columnId(2)<10)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 1000 Size : 1)]) )])"}]}]}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	1280002
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
   
 select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1280000 * 10;
@@ -208,7 +302,15 @@ select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1280000 * 10;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(2)<12800000)"},{"pred":"(columnId(1)<1)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280000
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
 -- !result
   
 update information_schema.be_configs set value="false" where name= "enable_index_segment_level_zonemap_filter";
@@ -223,7 +325,15 @@ select count(1) from t1 where c_int_1_seq = 1280002;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)=1280002)"}]}
+5	RawRowsRead	49152
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	1230850
+11	PredFilterRows	49151
 -- !result
 select count(1) from t1 where c_str_3_low1 = 'a1';
 -- result:
@@ -231,7 +341,15 @@ select count(1) from t1 where c_str_3_low1 = 'a1';
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(5)=a1)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	426666
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	853336
 -- !result
   
 select count(1) from t1 where c_date_1_seq = '2023-11-01';
@@ -240,7 +358,15 @@ select count(1) from t1 where c_date_1_seq = '2023-11-01';
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(11)=2023-11-01)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	12800
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1267202
 -- !result
   
 select count(1) from t1 where c_int_1_seq * 2 = 10;
@@ -249,7 +375,15 @@ select count(1) from t1 where c_int_1_seq * 2 = 10;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=EQ node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 2 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) )])"}]}
+5	RawRowsRead	1280002
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1280002
 -- !result
 select count(1) from t1 where c_int_1_seq < 1290000;
 -- result:
@@ -257,7 +391,15 @@ select count(1) from t1 where c_int_1_seq < 1290000;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1290000)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	9999
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1270003
 -- !result
 select count(1) from t1 where c_date_1_seq > '2023-10-01';
 -- result:
@@ -265,7 +407,15 @@ select count(1) from t1 where c_date_1_seq > '2023-10-01';
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(11)>2023-10-01)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	409600
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	870402
 -- !result
 select count(1) from t1 where c_int_2_seq = 1280000*2+2;
 -- result:
@@ -273,7 +423,15 @@ select count(1) from t1 where c_int_2_seq = 1280000*2+2;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(2)=2560002)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1280001
 -- !result
 select count(1) from t1 where c_int_1_seq = 10 and c_int_1_seq * 2 = 10;
 -- result:
@@ -281,7 +439,15 @@ select count(1) from t1 where c_int_1_seq = 10 and c_int_1_seq * 2 = 10;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)=10)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=EQ node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 2 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) )])"}]}
+5	RawRowsRead	40960
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	1239042
+11	PredFilterRows	40960
 -- !result
   
 
@@ -291,7 +457,15 @@ select count(1) from t1 where c_int_1_seq = 1280002 and c_str_1_seq = 'abc1-128'
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)=1280002)"},{"pred":"(columnId(3)=abc1-128)"}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	1280002
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq = 1280002 and c_str_1_seq = 'abc1-2';
 -- result:
@@ -299,7 +473,15 @@ select count(1) from t1 where c_int_1_seq = 1280002 and c_str_1_seq = 'abc1-2';
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)=1280002)"},{"pred":"(columnId(3)=abc1-2)"}]}
+5	RawRowsRead	4601
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	1275401
+11	PredFilterRows	4600
 -- !result
 select count(1) from t1 where c_int_1_seq = 10 or c_int_1_seq * 2 = 10;
 -- result:
@@ -307,7 +489,15 @@ select count(1) from t1 where c_int_1_seq = 10 or c_int_1_seq * 2 = 10;
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(1)=10)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=EQ node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 2 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) )])"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1280002
 -- !result
   
 
@@ -317,7 +507,15 @@ select count(1) from t1 where c_int_1_seq = 1280002 or c_str_1_seq = 'abc1-128';
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(3)=abc1-128)"},{"pred":"(columnId(1)=1280002)"}]}]}
+5	RawRowsRead	98136
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	1181866
+11	PredFilterRows	98134
 -- !result
 select count(1) from t1 where c_int_1_seq = 1280002 or c_str_1_seq = 'abc1-2';
 -- result:
@@ -325,7 +523,15 @@ select count(1) from t1 where c_int_1_seq = 1280002 or c_str_1_seq = 'abc1-2';
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(3)=abc1-2)"},{"pred":"(columnId(1)=1280002)"}]}]}
+5	RawRowsRead	120241
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	1159761
+11	PredFilterRows	120240
 -- !result
   
 select count(1) from t1 
@@ -349,7 +555,15 @@ select count(1) from t1
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	7
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(1)=1280004)"},{"pred":"(columnId(3)=abc1-128)"},{"and":[{"pred":"(columnId(5)=b1)"},{"or":[{"pred":"((columnId=1)IN(1280010,2560002))"}]}]}]},{"or":[{"pred":"(columnId(1)=1280005)"},{"and":[{"pred":"(columnId(5)=b1)"},{"pred":"(columnId(3)=abc1-4)"}]}]}]}
+5	RawRowsRead	24849
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	1255153
+11	PredFilterRows	24848
 -- !result
   
 update information_schema.be_configs set value="false" where name= "enable_index_bloom_filter";
@@ -364,7 +578,15 @@ select count(1) from t1 where c_int_1_seq = 1280001;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)=1280001)"}]}
+5	RawRowsRead	1
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280001
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq in (1280001, 1280010);
 -- result:
@@ -372,7 +594,15 @@ select count(1) from t1 where c_int_1_seq in (1280001, 1280010);
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280001,1280010))"}]}
+5	RawRowsRead	2
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280000
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq is null;
 -- result:
@@ -380,7 +610,15 @@ select count(1) from t1 where c_int_1_seq is null;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(ColumnId(1) IS NULL)"}]}
+5	RawRowsRead	2
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280000
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq < 1280010;
 -- result:
@@ -388,7 +626,15 @@ select count(1) from t1 where c_int_1_seq < 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1280010)"}]}
+5	RawRowsRead	9
+6	RowsRead	9
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279993
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq <= 1280010;
 -- result:
@@ -396,7 +642,15 @@ select count(1) from t1 where c_int_1_seq <= 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<=1280010)"}]}
+5	RawRowsRead	10
+6	RowsRead	10
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279992
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq > 1280000*2-100;
 -- result:
@@ -404,7 +658,15 @@ select count(1) from t1 where c_int_1_seq > 1280000*2-100;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)>2559900)"}]}
+5	RawRowsRead	100
+6	RowsRead	100
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279902
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq >= 1280000*2-100;
 -- result:
@@ -412,7 +674,15 @@ select count(1) from t1 where c_int_1_seq >= 1280000*2-100;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)>=2559900)"}]}
+5	RawRowsRead	101
+6	RowsRead	101
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279901
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq != 1280001;
 -- result:
@@ -420,7 +690,15 @@ select count(1) from t1 where c_int_1_seq != 1280001;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)!=1280001)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	1279999
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	3
 -- !result
 select count(1) from t1 where c_int_1_seq not in (1280001, 1280010);
 -- result:
@@ -428,7 +706,15 @@ select count(1) from t1 where c_int_1_seq not in (1280001, 1280010);
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)NOT IN(1280001,1280010))"}]}
+5	RawRowsRead	1280002
+6	RowsRead	1279998
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	4
 -- !result
 select count(1) from t1 where c_int_1_seq is not null;
 -- result:
@@ -436,7 +722,15 @@ select count(1) from t1 where c_int_1_seq is not null;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(ColumnId(1) IS NOT NULL)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280000
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq = 1280001;
 -- result:
@@ -444,7 +738,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq = 1280001;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)=1280001)"},{"pred":"(columnId(5)!=a1)"}]}
+5	RawRowsRead	1
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280001
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq in (1280001, 1280010);
 -- result:
@@ -452,7 +754,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq in (1280001, 
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280001,1280010))"},{"pred":"(columnId(5)!=a1)"}]}
+5	RawRowsRead	2
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280000
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq is null;
 -- result:
@@ -460,7 +770,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq is null;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(5)!=a1)"},{"pred":"(ColumnId(1) IS NULL)"}]}
+5	RawRowsRead	2
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280000
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq < 1280010;
 -- result:
@@ -468,7 +786,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq < 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1280010)"},{"pred":"(columnId(5)!=a1)"}]}
+5	RawRowsRead	9
+6	RowsRead	6
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279993
+10	BloomFilterFilterRows	0
+11	PredFilterRows	3
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq <= 1280010;
 -- result:
@@ -476,7 +802,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq <= 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<=1280010)"},{"pred":"(columnId(5)!=a1)"}]}
+5	RawRowsRead	10
+6	RowsRead	7
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279992
+10	BloomFilterFilterRows	0
+11	PredFilterRows	3
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq > 1280000*2-100;
 -- result:
@@ -484,7 +818,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq > 1280000*2-1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)>2559900)"},{"pred":"(columnId(5)!=a1)"}]}
+5	RawRowsRead	100
+6	RowsRead	67
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279902
+10	BloomFilterFilterRows	0
+11	PredFilterRows	33
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq >= 1280000*2-100;
 -- result:
@@ -492,7 +834,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' and c_int_1_seq >= 1280000*2-
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)>=2559900)"},{"pred":"(columnId(5)!=a1)"}]}
+5	RawRowsRead	101
+6	RowsRead	68
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279901
+10	BloomFilterFilterRows	0
+11	PredFilterRows	33
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq = 1280001;
 -- result:
@@ -500,7 +850,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq = 1280001;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)=1280001)"},{"pred":"(columnId(6)=a2)"}]}
+5	RawRowsRead	1
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280001
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq in (1280001, 1280010);
 -- result:
@@ -508,7 +866,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq in (1280001, 1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280001,1280010))"},{"pred":"(columnId(6)=a2)"}]}
+5	RawRowsRead	2
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280000
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq is null;
 -- result:
@@ -516,7 +882,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq is null;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(6)=a2)"},{"pred":"(ColumnId(1) IS NULL)"}]}
+5	RawRowsRead	2
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280000
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq < 1280010;
 -- result:
@@ -524,7 +898,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq < 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1280010)"},{"pred":"(columnId(6)=a2)"}]}
+5	RawRowsRead	9
+6	RowsRead	9
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279993
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq <= 1280010;
 -- result:
@@ -532,7 +914,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq <= 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<=1280010)"},{"pred":"(columnId(6)=a2)"}]}
+5	RawRowsRead	10
+6	RowsRead	10
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279992
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq > 1280000*2-100;
 -- result:
@@ -540,7 +930,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq > 1280000*2-10
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)>2559900)"},{"pred":"(columnId(6)=a2)"}]}
+5	RawRowsRead	100
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279902
+10	BloomFilterFilterRows	0
+11	PredFilterRows	100
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq >= 1280000*2-100;
 -- result:
@@ -548,7 +946,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' and c_int_1_seq >= 1280000*2-1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)>=2559900)"},{"pred":"(columnId(6)=a2)"}]}
+5	RawRowsRead	101
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279901
+10	BloomFilterFilterRows	0
+11	PredFilterRows	101
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq = 1280001;
 -- result:
@@ -556,7 +962,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq = 1280001;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)!=a1)"},{"pred":"(columnId(1)=1280001)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	853334
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426668
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq in (1280001, 1280010);
 -- result:
@@ -564,7 +978,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq in (1280001, 1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)!=a1)"},{"pred":"((columnId=1)IN(1280001,1280010))"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	853334
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426668
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq is null;
 -- result:
@@ -572,7 +994,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq is null;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(ColumnId(1) IS NULL)"},{"pred":"(columnId(5)!=a1)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	853336
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426666
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq < 1280010;
 -- result:
@@ -580,7 +1010,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq < 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)!=a1)"},{"pred":"(columnId(1)<1280010)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	853337
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426665
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq <= 1280010;
 -- result:
@@ -588,7 +1026,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq <= 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)!=a1)"},{"pred":"(columnId(1)<=1280010)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	853337
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426665
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq > 1280000*2-100;
 -- result:
@@ -596,7 +1042,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq > 1280000*2-10
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)!=a1)"},{"pred":"(columnId(1)>2559900)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	853367
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426635
 -- !result
 select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq >= 1280000*2-100;
 -- result:
@@ -604,7 +1058,15 @@ select count(1) from t1 where c_str_3_low1 != 'a1' or c_int_1_seq >= 1280000*2-1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)!=a1)"},{"pred":"(columnId(1)>=2559900)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	853367
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426635
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq = 1280001;
 -- result:
@@ -612,7 +1074,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq = 1280001;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(6)=a2)"},{"pred":"(columnId(1)=1280001)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	319999
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	960003
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq in (1280001, 1280010);
 -- result:
@@ -620,7 +1090,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq in (1280001, 12
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(6)=a2)"},{"pred":"((columnId=1)IN(1280001,1280010))"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	319999
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	960003
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq is null;
 -- result:
@@ -628,7 +1106,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq is null;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(ColumnId(1) IS NULL)"},{"pred":"(columnId(6)=a2)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	320001
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	960001
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq < 1280010;
 -- result:
@@ -636,7 +1122,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq < 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(6)=a2)"},{"pred":"(columnId(1)<1280010)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	319999
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	960003
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq <= 1280010;
 -- result:
@@ -644,7 +1138,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq <= 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(6)=a2)"},{"pred":"(columnId(1)<=1280010)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	319999
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	960003
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq > 1280000*2-100;
 -- result:
@@ -652,7 +1154,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq > 1280000*2-100
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(6)=a2)"},{"pred":"(columnId(1)>2559900)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	320099
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	959903
 -- !result
 select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq >= 1280000*2-100;
 -- result:
@@ -660,7 +1170,15 @@ select count(1) from t1 where c_str_4_low2 = 'a2' or c_int_1_seq >= 1280000*2-10
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(6)=a2)"},{"pred":"(columnId(1)>=2559900)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	320100
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	959902
 -- !result
 select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq = 1280001;
 -- result:
@@ -668,7 +1186,15 @@ select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq = 1280001;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)=a1)"},{"pred":"(columnId(1)=1280001)"}]}]}
+5	RawRowsRead	1253361
+6	RowsRead	426667
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	26641
+10	BloomFilterFilterRows	0
+11	PredFilterRows	826694
 -- !result
 select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq in (1280001, 1280010);
 -- result:
@@ -676,7 +1202,15 @@ select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq in (1280001, 12
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)=a1)"},{"pred":"((columnId=1)IN(1280001,1280010))"}]}]}
+5	RawRowsRead	1226651
+6	RowsRead	426668
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	53351
+10	BloomFilterFilterRows	0
+11	PredFilterRows	799983
 -- !result
 select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq is null;
 -- result:
@@ -684,7 +1218,15 @@ select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq is null;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(ColumnId(1) IS NULL)"},{"pred":"(columnId(5)=a1)"}]}]}
+5	RawRowsRead	1253171
+6	RowsRead	426668
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	26831
+10	BloomFilterFilterRows	0
+11	PredFilterRows	826503
 -- !result
 select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq < 1280010;
 -- result:
@@ -692,7 +1234,15 @@ select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq < 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)=a1)"},{"pred":"(columnId(1)<1280010)"}]}]}
+5	RawRowsRead	1039775
+6	RowsRead	426672
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	240227
+10	BloomFilterFilterRows	0
+11	PredFilterRows	613103
 -- !result
 select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq <= 1280010;
 -- result:
@@ -700,7 +1250,15 @@ select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq <= 1280010;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)=a1)"},{"pred":"(columnId(1)<=1280010)"}]}]}
+5	RawRowsRead	1013065
+6	RowsRead	426673
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	266937
+10	BloomFilterFilterRows	0
+11	PredFilterRows	586392
 -- !result
 select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq > 1280000*2-100;
 -- result:
@@ -708,7 +1266,15 @@ select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq > 1280000*2-100
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)=a1)"},{"pred":"(columnId(1)>2559900)"}]}]}
+5	RawRowsRead	426733
+6	RowsRead	426733
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	853269
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq >= 1280000*2-100;
 -- result:
@@ -716,7 +1282,15 @@ select count(1) from t1 where c_str_3_low1 = 'a1' or c_int_1_seq >= 1280000*2-10
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(5)=a1)"},{"pred":"(columnId(1)>=2559900)"}]}]}
+5	RawRowsRead	426734
+6	RowsRead	426734
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	853268
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1');
 -- result:
@@ -724,7 +1298,15 @@ select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1');
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(column_id=7)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	853333
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426669
 -- !result
 select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1') and c_str_1_seq = 'abc1-12';
 -- result:
@@ -732,7 +1314,15 @@ select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1') and c_str_1_
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(3)=abc1-12)"},{"pred":"(column_id=7)"}]}
+5	RawRowsRead	1
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280001
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1') or c_str_1_seq = 'abc1-12';
 -- result:
@@ -740,7 +1330,15 @@ select count(1) from t1 where c_str_5_low_non_null1 in ('a1', 'b1') or c_str_1_s
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(column_id=7)"},{"pred":"(columnId(3)=abc1-12)"}]}]}
+5	RawRowsRead	1266688
+6	RowsRead	853333
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	13314
+10	BloomFilterFilterRows	0
+11	PredFilterRows	413355
 -- !result
 select count(1) from t1 where c_int_1_seq < 1;
 -- result:
@@ -748,7 +1346,15 @@ select count(1) from t1 where c_int_1_seq < 1;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1)"}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280002
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq < 1 and c_str_7_seq_non_null1 < 'abc1-1';
 -- result:
@@ -756,7 +1362,15 @@ select count(1) from t1 where c_int_1_seq < 1 and c_str_7_seq_non_null1 < 'abc1-
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1)"},{"pred":"(columnId(9)<abc1-1)"}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280002
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
  
 select count(1) from t1 where c_int_1_seq < 1 or c_str_7_seq_non_null1 < 'abc1-1';
@@ -765,7 +1379,15 @@ select count(1) from t1 where c_int_1_seq < 1 or c_str_7_seq_non_null1 < 'abc1-1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(9)<abc1-1)"},{"pred":"(columnId(1)<1)"}]}]}
+5	RawRowsRead	2
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280000
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where (c_int_1_seq < 1 and c_str_7_seq_non_null1 < 'abc1-1') or c_str_1_seq = 'abc1-12';
 -- result:
@@ -773,7 +1395,15 @@ select count(1) from t1 where (c_int_1_seq < 1 and c_str_7_seq_non_null1 < 'abc1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	3
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(3)=abc1-12)"},{"and":[{"pred":"(columnId(9)<abc1-1)"},{"pred":"(columnId(1)<1)"}]}]}]}
+5	RawRowsRead	1
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280001
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq < 1 or c_str_5_low_non_null1 < ';';
 -- result:
@@ -781,7 +1411,15 @@ select count(1) from t1 where c_int_1_seq < 1 or c_str_5_low_non_null1 < ';';
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(7)<;)"},{"pred":"(columnId(1)<1)"}]}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280002
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz';
 -- result:
@@ -789,7 +1427,15 @@ select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz';
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(7)<zzzz)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280002
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz' and c_int_1_seq < 1280010;
 -- result:
@@ -797,7 +1443,15 @@ select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz' and c_int_1_seq < 1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1280010)"},{"pred":"(columnId(7)<zzzz)"}]}
+5	RawRowsRead	9
+6	RowsRead	9
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279993
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz' or c_int_1_seq < 1280010;
 -- result:
@@ -805,7 +1459,15 @@ select count(1) from t1 where c_str_5_low_non_null1 < 'zzzz' or c_int_1_seq < 12
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(7)<zzzz)"},{"pred":"(columnId(1)<1280010)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280002
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where (c_str_5_low_non_null1 < 'zzzz' or c_int_1_seq < 1280010) and c_int_1_seq < 1280020;
 -- result:
@@ -813,7 +1475,15 @@ select count(1) from t1 where (c_str_5_low_non_null1 < 'zzzz' or c_int_1_seq < 1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	3
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1280020)"},{"or":[{"pred":"(columnId(7)<zzzz)"},{"pred":"(columnId(1)<1280010)"}]}]}
+5	RawRowsRead	19
+6	RowsRead	19
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279983
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_str_7_seq_non_null1 > ';' and c_str_5_low_non_null1 > ';';
 -- result:
@@ -821,7 +1491,15 @@ select count(1) from t1 where c_str_7_seq_non_null1 > ';' and c_str_5_low_non_nu
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(7)>;)"},{"pred":"(columnId(9)>;)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280002
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1
 where
@@ -852,7 +1530,15 @@ where
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	7
+3	PushdownPredicateTree	{"and":[{"or":[{"and":[{"pred":"(columnId(13)<2040-01-01 00:00:00)"},{"or":[{"pred":"(columnId(1)=1280001)"},{"pred":"(columnId(11)<1900-01-01)"}]}]},{"and":[{"pred":"(columnId(5)=a1)"},{"pred":"(columnId(3)=abc1-2)"}]}]},{"or":[{"pred":"(columnId(3)=abc1-1)"},{"pred":"(columnId(11)=2020-01-01)"}]}]}
+5	RawRowsRead	1
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280001
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1
 where
@@ -870,7 +1556,315 @@ where
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	6
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280001,1280002))"},{"pred":"(column_id=3)"},{"or":[{"and":[{"pred":"(columnId(3)=abc1-1)"},{"pred":"(columnId(1)=1280001)"}]},{"and":[{"pred":"(columnId(3)=abc1-2)"},{"pred":"(columnId(1)=1280002)"}]}]}]}
+5	RawRowsRead	2
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1280000
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+  );
+-- result:
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	5
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280001,1280005,1280002,1280003,1280006,1280004))"},{"or":[{"and":[{"pred":"(columnId(3)!=abc1-1)"},{"pred":"((columnId=1)IN(1280001,1280002,1280003))"}]},{"and":[{"pred":"(columnId(3)!=abc1-4)"},{"pred":"((columnId=1)IN(1280004,1280005,1280006))"}]}]}]}
+5	RawRowsRead	6
+6	RowsRead	4
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279996
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_1_seq like '%abc%'
+    and c_str_1_seq != 'abc1-4'
+  );
+-- result:
+1279999
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	4
+3	PushdownPredicateTree	{"and":[{"or":[{"and":[{"pred":"(columnId(3)!=abc1-1)"},{"pred":"((columnId=1)IN(1280001,1280002,1280003))"}]},{"and":[{"pred":"(columnId(3)!=abc1-4)"},{"pred":"(ColumnExprPredicate: [ type=BOOLEAN node-type=FUNCTION_CALL codegen=false children=[ColumnRef (column_id=4, type=VARCHAR(-1)) VectorizedLiteral(type=VARCHAR(-1), value=CONST: '%abc%' Size : 1)]])"}]}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	1279999
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	9
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280001,1280005,1280002,1280003,1280006,1280004))"},{"or":[{"and":[{"pred":"(columnId(3)!=abc1-1)"},{"pred":"((columnId=1)IN(1280001,1280002,1280003))"}]},{"and":[{"pred":"((columnId=1)IN(1280004,1280005,1280006))"},{"pred":"(columnId(3)!=abc1-4)"},{"or":[{"pred":"((columnId=1)IN(1280005,1280006,1280007,1280004))"},{"and":[{"pred":"(columnId(3)!=abc1-4)"},{"pred":"(column_id=3)"},{"pred":"(ColumnExprPredicate: [ type=BOOLEAN node-type=FUNCTION_CALL codegen=false children=[ColumnRef (column_id=4, type=VARCHAR(-1)) VectorizedLiteral(type=VARCHAR(-1), value=CONST: '%abc%' Size : 1)]])"}]}]}]}]}]}
+5	RawRowsRead	6
+6	RowsRead	4
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279996
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	6
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280004,1280005,1280006))"},{"pred":"(columnId(3)!=abc1-4)"},{"or":[{"pred":"((columnId=1)IN(1280005,1280006,1280007,1280004))"},{"and":[{"pred":"(columnId(3)!=abc1-4)"},{"pred":"(column_id=3)"},{"pred":"(ColumnExprPredicate: [ type=BOOLEAN node-type=FUNCTION_CALL codegen=false children=[ColumnRef (column_id=4, type=VARCHAR(-1)) VectorizedLiteral(type=VARCHAR(-1), value=CONST: '%abc%' Size : 1)]])"}]}]}]}
+5	RawRowsRead	3
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279999
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq not in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	9
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280001,1280005,1280002,1280003,1280006,1280004))"},{"or":[{"and":[{"pred":"(columnId(3)!=abc1-1)"},{"pred":"((columnId=1)IN(1280001,1280002,1280003))"}]},{"and":[{"pred":"((columnId=1)IN(1280004,1280005,1280006))"},{"pred":"(columnId(3)!=abc1-4)"},{"or":[{"pred":"((columnId=1)IN(1280005,1280006,1280007,1280004))"},{"and":[{"pred":"(columnId(3)!=abc1-4)"},{"pred":"(column_id=3)"},{"pred":"(ColumnExprPredicate: [ type=BOOLEAN node-type=FUNCTION_CALL codegen=false children=[ColumnRef (column_id=4, type=VARCHAR(-1)) VectorizedLiteral(type=VARCHAR(-1), value=CONST: '%abc%' Size : 1)]])"}]}]}]}]}]}
+5	RawRowsRead	6
+6	RowsRead	4
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279996
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq not in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	6
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280004,1280005,1280006))"},{"pred":"(columnId(3)!=abc1-4)"},{"or":[{"pred":"((columnId=1)IN(1280005,1280006,1280007,1280004))"},{"and":[{"pred":"(columnId(3)!=abc1-4)"},{"pred":"(column_id=3)"},{"pred":"(ColumnExprPredicate: [ type=BOOLEAN node-type=FUNCTION_CALL codegen=false children=[ColumnRef (column_id=4, type=VARCHAR(-1)) VectorizedLiteral(type=VARCHAR(-1), value=CONST: '%abc%' Size : 1)]])"}]}]}]}
+5	RawRowsRead	3
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	1279999
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1
+-- !result
+select count(1) from t1 where c_str_3_low1 in ('a1', 'b1', 'c1');
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(column_id=5)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280000
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
+-- !result
+select count(1) from t1 where c_str_3_low1 in ('a1', 'b1');
+-- result:
+853333
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(column_id=5)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	853333
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426669
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_3_low1 in ('a1', 'b1', 'c1')
+    and c_str_5_low_non_null1 in ('a1', 'b1', 'c1')
+  );
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	4
+3	PushdownPredicateTree	{"and":[{"or":[{"and":[{"pred":"(columnId(3)!=abc1-1)"},{"pred":"((columnId=1)IN(1280001,1280002,1280003))"}]},{"and":[{"pred":"(column_id=7)"},{"pred":"(column_id=5)"}]}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280000
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_3_low1 in ('a1', 'b1')
+    and c_int_1_seq != 1280004
+  );
+-- result:
+853333
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	4
+3	PushdownPredicateTree	{"and":[{"or":[{"and":[{"pred":"(columnId(3)!=abc1-1)"},{"pred":"((columnId=1)IN(1280001,1280002,1280003))"}]},{"and":[{"pred":"(column_id=5)"},{"pred":"(columnId(1)!=1280004)"}]}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	853333
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	426669
+-- !result
+select count(1) from t1
+where
+  c_str_3_low1 in ('a1')
+  or c_str_5_low_non_null1 in ('a1');
+-- result:
+426666
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(7)=a1)"},{"pred":"(columnId(5)=a1)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	426666
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	853336
+-- !result
+select count(1) from t1
+where
+  c_str_3_low1 in ('a1')
+  and c_str_5_low_non_null1 in ('a1');
+-- result:
+426666
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(5)=a1)"},{"pred":"(columnId(7)=a1)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	426666
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	853336
 -- !result
 update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
 -- result:
@@ -881,7 +1875,16 @@ select count(k1) from t1 where c_int_1_seq < 1280000 + 128000/3 or c_int_2_seq >
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=DOUBLE, rhs=DOUBLE, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedCastExpr (from=BIGINT, to expr= type=DOUBLE opcode=CAST node-type=CAST_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT)]) VectorizedLiteral(type=DOUBLE, value=CONST: 1.32267e+06 Size : 1)]) )])"},{"pred":"(columnId(2)>3839000)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	43666
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1236336
+13	LateMaterialize	exist
 -- !result
   
 
@@ -896,7 +1899,16 @@ select count(k1) from t1 where
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	8
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=DOUBLE, rhs=DOUBLE, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedCastExpr (from=BIGINT, to expr= type=DOUBLE opcode=CAST node-type=CAST_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT)]) VectorizedLiteral(type=DOUBLE, value=CONST: 2.60267e+06 Size : 1)]) )])"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=DOUBLE, rhs=DOUBLE, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedCastExpr (from=BIGINT, to expr= type=DOUBLE opcode=CAST node-type=CAST_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT)]) VectorizedLiteral(type=DOUBLE, value=CONST: 1.32267e+06 Size : 1)]) )])"},{"and":[{"pred":"(columnId(2)>3839000)"},{"pred":"(columnId(5)=a1)"},{"pred":"(columnId(6)=a2)"}]},{"and":[{"pred":"(columnId(1)>2559000)"},{"pred":"(columnId(5)=b1)"},{"pred":"(columnId(6)=b2)"}]}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	42666
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1237336
+13	LateMaterialize	exist
 -- !result
   
 
@@ -945,7 +1957,15 @@ select count(1) from t1 where c_int_1_seq < 1;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1)"}]}
+5	RawRowsRead	8192
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1271810
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	8192
 -- !result
 select count(1) from t1 where c_int_1_seq < 1 and c_int_1_seq * 10 < 100;
 -- result:
@@ -953,7 +1973,15 @@ select count(1) from t1 where c_int_1_seq < 1 and c_int_1_seq * 10 < 100;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 100 Size : 1)]) )])"}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1280002
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_2_seq < 10;
 -- result:
@@ -961,7 +1989,15 @@ select count(1) from t1 where c_int_2_seq < 10;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(2)<10)"}]}
+5	RawRowsRead	8192
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1271810
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	8192
 -- !result
 select count(1) from t1 where c_int_2_seq < 10 and c_int_2_seq * 10 < 1000;
 -- result:
@@ -969,7 +2005,15 @@ select count(1) from t1 where c_int_2_seq < 10 and c_int_2_seq * 10 < 1000;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(2)<10)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 1000 Size : 1)]) )])"}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1280002
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq < 1 and c_int_2_seq < 1280000 * 10;
 -- result:
@@ -977,7 +2021,15 @@ select count(1) from t1 where c_int_1_seq < 1 and c_int_2_seq < 1280000 * 10;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)<1)"},{"pred":"(columnId(2)<12800000)"}]}
+5	RawRowsRead	8192
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1271810
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	8192
 -- !result
 select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1 * 10;
 -- result:
@@ -985,7 +2037,15 @@ select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1 * 10;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(2)<10)"},{"pred":"(columnId(1)<1)"}]}]}
+5	RawRowsRead	8192
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1271810
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	8192
 -- !result
 select count(1) from t1 where (c_int_1_seq < 1 and c_int_1_seq * 10 < 100) 
     or (c_int_2_seq < 10 and c_int_2_seq * 10 < 1000);
@@ -994,7 +2054,15 @@ select count(1) from t1 where (c_int_1_seq < 1 and c_int_1_seq * 10 < 100)
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	4
+3	PushdownPredicateTree	{"and":[{"or":[{"and":[{"pred":"(columnId(1)<1)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=2, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 100 Size : 1)]) )])"}]},{"and":[{"pred":"(columnId(2)<10)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=LT node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 10 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 1000 Size : 1)]) )])"}]}]}]}
+5	RawRowsRead	0
+6	RowsRead	0
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1280002
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	0
 -- !result
 select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1280000 * 10;
 -- result:
@@ -1002,7 +2070,15 @@ select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1280000 * 10;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(2)<12800000)"},{"pred":"(columnId(1)<1)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280000
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
 -- !result
 select count(1) from t1 where c_int_1_seq > 1280010 and c_int_1_seq < 1281000;
 -- result:
@@ -1010,7 +2086,15 @@ select count(1) from t1 where c_int_1_seq > 1280010 and c_int_1_seq < 1281000;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)>1280010)"},{"pred":"(columnId(1)<1281000)"}]}
+5	RawRowsRead	262144
+6	RowsRead	989
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1017858
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	261155
 -- !result
 select count(1) from t1 where c_str_1_seq > 'abc1-1280010' and c_str_1_seq < 'abc1-1281000';
 -- result:
@@ -1018,7 +2102,15 @@ select count(1) from t1 where c_str_1_seq > 'abc1-1280010' and c_str_1_seq < 'ab
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(3)>abc1-1280010)"},{"pred":"(columnId(3)<abc1-1281000)"}]}
+5	RawRowsRead	1280002
+6	RowsRead	110
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	1279892
 -- !result
 select count(1) from t1 where c_str_1_seq > 'abc1-1280010'  and c_int_1_seq > 1280010 and c_int_1_seq < 1281000;
 -- result:
@@ -1026,7 +2118,15 @@ select count(1) from t1 where c_str_1_seq > 'abc1-1280010'  and c_int_1_seq > 12
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	3
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(1)>1280010)"},{"pred":"(columnId(1)<1281000)"},{"pred":"(columnId(3)>abc1-1280010)"}]}
+5	RawRowsRead	262144
+6	RowsRead	958
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1017858
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	261186
 -- !result
 select count(1) from t1 where c_int_1_seq > 1280010 or c_int_1_seq < 1281000;
 -- result:
@@ -1034,7 +2134,15 @@ select count(1) from t1 where c_int_1_seq > 1280010 or c_int_1_seq < 1281000;
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(ColumnId(1) IS NOT NULL)"}]}]}
+5	RawRowsRead	1280002
+6	RowsRead	1280000
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	0
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	2
 -- !result
 select count(1) from t1 where c_int_1_seq = 1280010 or c_int_1_seq = 1280000 * 2 - 1000;
 -- result:
@@ -1042,7 +2150,15 @@ select count(1) from t1 where c_int_1_seq = 1280010 or c_int_1_seq = 1280000 * 2
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	1
+3	PushdownPredicateTree	{"and":[{"pred":"((columnId=1)IN(1280010,2559000))"}]}
+5	RawRowsRead	313346
+6	RowsRead	2
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	966656
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	313344
 -- !result
 select count(1) from t1 where c_int_1_seq < 1280010 or c_int_1_seq > 1280000 * 2 - 1000;
 -- result:
@@ -1050,7 +2166,15 @@ select count(1) from t1 where c_int_1_seq < 1280010 or c_int_1_seq > 1280000 * 2
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(1)<1280010)"},{"pred":"(columnId(1)>2559000)"}]}]}
+5	RawRowsRead	305154
+6	RowsRead	1009
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	974848
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	304145
 -- !result
 select count(1) from t1 where c_int_2_seq = 1280000*2+20 or c_int_2_seq = 1280000*2+1000 or c_int_2_seq > 1280000*3-2000;
 -- result:
@@ -1058,7 +2182,15 @@ select count(1) from t1 where c_int_2_seq = 1280000*2+20 or c_int_2_seq = 128000
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	3
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(2)>=2560020)"},{"or":[{"pred":"(columnId(2)>3838000)"},{"pred":"((columnId=2)IN(2560020,2561000))"}]}]}
+5	RawRowsRead	493570
+6	RowsRead	2002
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	786432
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	491568
 -- !result
 select count(1) from t1 where c_int_2_seq*2 = (1280000*2+20)*2 or c_int_2_seq*2 = (1280000*2+1000)*2 or c_int_2_seq > 1280000*3-2000;
 -- result:
@@ -1066,7 +2198,15 @@ select count(1) from t1 where c_int_2_seq*2 = (1280000*2+20)*2 or c_int_2_seq*2 
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	3
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(2)>3838000)"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=EQ node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 2 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 5120040 Size : 1)]) )])"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=EQ node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 2 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 5122000 Size : 1)]) )])"}]}]}
+5	RawRowsRead	493570
+6	RowsRead	2002
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	786432
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	491568
 -- !result
 select count(1) from t1 
 where 
@@ -1085,7 +2225,15 @@ where
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	7
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=EQ node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 2 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 5120040 Size : 1)]) )])"},{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=EQ node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 2 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 5122000 Size : 1)]) )])"},{"and":[{"pred":"(columnId(2)>3838000)"},{"pred":"(columnId(1)>2557000)"}]}]},{"or":[{"pred":"(ColumnExprPredicate: [VectorizedBinaryPredicate (lhs=BIGINT, rhs=BIGINT, result=BOOLEAN, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BOOLEAN opcode=EQ node-type=BINARY_PRED codegen=false children=[VectorizedArithmeticExpr [mul](lhs=BIGINT, rhs=BIGINT, result=BIGINT, lhs_is_constant=0, rhs_is_constant=1, expr ( type=BIGINT opcode=MULTIPLY node-type=ARITHMETIC_EXPR codegen=false children=[ColumnRef (column_id=3, type=BIGINT) VectorizedLiteral(type=BIGINT, value=CONST: 3 Size : 1)]) ) VectorizedLiteral(type=BIGINT, value=CONST: 7680060 Size : 1)]) )])"},{"and":[{"pred":"(columnId(1)>1280010)"},{"pred":"(columnId(1)<1281000)"}]}]}]}
+5	RawRowsRead	262144
+6	RowsRead	1
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	1017858
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	262143
 -- !result
 delete from t1 where c_int_2_seq<2561000;
 -- result:
@@ -1096,7 +2244,17 @@ select count(1) from t1 where c_int_1_seq < 1280010 or c_int_1_seq > 1280000 * 2
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	2
+3	PushdownPredicateTree	{"and":[{"or":[{"pred":"(columnId(1)<1280010)"},{"pred":"(columnId(1)>2559000)"}]}]}
+5	RawRowsRead	305154
+6	RowsRead	1000
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	974848
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	304145
+12	DeleteFilterRows	9
+13	LateMaterialize	exist
 -- !result
 select count(1) from t1 where c_int_2_seq = 1280000*2+20 or c_int_2_seq = 1280000*2+1000 or c_int_2_seq > 1280000*3-2000;
 -- result:
@@ -1104,7 +2262,16 @@ select count(1) from t1 where c_int_2_seq = 1280000*2+20 or c_int_2_seq = 128000
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
-1	2	3
+1	PushdownPredicates	3
+3	PushdownPredicateTree	{"and":[{"pred":"(columnId(2)>=2560020)"},{"or":[{"pred":"(columnId(2)>3838000)"},{"pred":"((columnId=2)IN(2560020,2561000))"}]}]}
+5	RawRowsRead	493570
+6	RowsRead	2001
+7	SegmentZoneMapFilterRows	0
+8	ZoneMapIndexFilterRows	786432
+9	BitmapIndexFilterRows	0
+10	BloomFilterFilterRows	0
+11	PredFilterRows	491568
+12	DeleteFilterRows	1
 -- !result
 select count(1) from t1 where c_int_2_seq*2 = (1280000*2+20)*2 or c_int_2_seq*2 = (1280000*2+1000)*2 or c_int_2_seq > 1280000*3-2000;
 -- result:

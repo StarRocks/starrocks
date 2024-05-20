@@ -182,7 +182,7 @@ public:
             }
             ss << this->type_info()->to_string(&item);
         }
-        ss << ")";
+        ss << "))";
         return ss.str();
     }
 
