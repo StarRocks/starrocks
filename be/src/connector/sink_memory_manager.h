@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/config.h"
 #include "runtime/mem_tracker.h"
 #include "formats/file_writer.h"
 #include "connector/connector_chunk_sink.h"
@@ -73,6 +74,9 @@ class SinkMemoryManager {
 public:
     SinkMemoryManager(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {
         if (_mem_tracker != nullptr && _mem_tracker->has_limit()) {
+            _high_watermark_percent = config::connector_sink_mem_high_watermark_percent;
+            _low_watermark_percent = config::connector_sink_mem_low_watermark_percent;
+            _min_watermark_percent = config::connector_sink_mem_min_watermark_percent;
             _high_watermark_bytes = _mem_tracker->limit() * _high_watermark_percent / 100;
             _low_watermark_bytes = _mem_tracker->limit() * _low_watermark_percent / 100;
             _min_watermark_bytes = _mem_tracker->limit() * _min_watermark_percent / 100;

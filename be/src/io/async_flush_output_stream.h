@@ -98,12 +98,12 @@ public:
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                     CurrentThread::current().set_query_id(_runtime_state->query_id());
                     CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-                    auto scoped_chunk = std::move(chunk);
-                    auto buffer = scoped_chunk->get_buffer();
+                    auto buffer = chunk->get_buffer();
                     DeferOp op([this, capacity = buffer->capacity()] {
                         _releasable_bytes.fetch_sub(capacity);
                     });
                     auto status = _file->append(Slice(buffer->data(), buffer->size()));
+                    chunk = nullptr;
                     {
                         std::scoped_lock lock(_mutex);
                         _io_status.update(status);
@@ -152,12 +152,12 @@ public:
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                 CurrentThread::current().set_query_id(_runtime_state->query_id());
                 CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-                auto scoped_chunk = std::move(chunk);
-                auto buffer = scoped_chunk->get_buffer();
+                auto buffer = chunk->get_buffer();
                 DeferOp op([this, capacity = buffer->capacity()] {
                     _releasable_bytes.fetch_sub(capacity);
                 });
                 auto status = _file->append(Slice(buffer->data(), buffer->size()));
+                chunk = nullptr;
                 {
                     std::scoped_lock lock(_mutex);
                     _io_status.update(status);
