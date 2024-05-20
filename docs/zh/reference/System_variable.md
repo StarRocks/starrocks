@@ -251,6 +251,12 @@ SELECT /*+ SET_VAR
 * 默认值：true
 * 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
 
+### enable_materialized_view_plan_cache
+
+* 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是`true`，即开启物化视图查询计划缓存。
+* 默认值：true
+* 引入版本：v3.2.0
+
 ### follower_query_forward_mode
 
 * 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。
@@ -972,8 +978,3 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
 * 引入版本：v3.1.10
-
-### enable_materialized_view_plan_cache
-
-* 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是`true`，即打开物化视图查询计划缓存。
-* 引入版本：v3.2.0
