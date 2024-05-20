@@ -32,6 +32,7 @@
 #include "formats/file_writer.h"
 #include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/file_writer.h"
+#include "formats/parquet/utils.h"
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
