@@ -43,7 +43,6 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "kudu",
-    "kudu.master" = "<kudu_master_addresses>",
     CatalogParams
 )
 ```
@@ -74,6 +73,7 @@ The following table describes the parameter you need to configure in `CatalogPar
 | Parameter           | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                             |
 |---------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | kudu.catalog.type   | Yes      | The type of metastore that you use for your Kudu cluster. Set this parameter to `kudu` or `hive`.                                                                                                                                                                                                                                                                                                                       |
+| kudu.master                   | No       | Specifies the Kudu Master address, which defaults to `localhost:7051`.                                                                                                                                                                                                                                                                                                                                         |
 | kudu.metastore.uris | No       | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`. If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 | kudu.schema-emulation.enabled | No       | option to enable or disable the `schema` emulation. By default, it is turned off (false), which means that all tables belong to the `default` `schema`.                                                                                                                                                                                                                                                                 |
 | kudu.schema-emulation.prefix | No       | The prefix for `schema` emulation should only be set when `kudu.schema-emulation.enabled` = `true`. The default prefix used is empty string: ` `.                                                                                                                                                                                                                                                                       |
@@ -106,7 +106,7 @@ The following table describes the parameter you need to configure in `CatalogPar
   (
       "type" = "kudu",
       "kudu.master" = "localhost:7051",
-      "kudu.metastore.type" = "kudu",
+      "kudu.metastore.type" = "hive",
       "kudu.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
   );
   ```

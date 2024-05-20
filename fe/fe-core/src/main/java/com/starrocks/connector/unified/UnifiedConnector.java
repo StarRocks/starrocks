@@ -25,6 +25,7 @@ import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
+import com.starrocks.connector.kudu.KuduConnector;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.HashMap;
@@ -35,8 +36,10 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Table.TableType.KUDU;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.kudu.KuduConnector.KUDU_CATALOG_TYPE;
 
 public class UnifiedConnector implements Connector {
     public static final String UNIFIED_METASTORE_TYPE = "unified.metastore.type";
@@ -53,6 +56,7 @@ public class UnifiedConnector implements Connector {
         derivedProperties.putAll(context.getProperties());
         derivedProperties.put(HIVE_METASTORE_TYPE, metastoreType);
         derivedProperties.put(ICEBERG_CATALOG_TYPE, metastoreType);
+        derivedProperties.put(KUDU_CATALOG_TYPE, metastoreType);
 
         ConnectorContext derivedContext = new ConnectorContext(context.getCatalogName(), context.getType(),
                 derivedProperties.build());
@@ -61,7 +65,8 @@ public class UnifiedConnector implements Connector {
                 HIVE, new HiveConnector(derivedContext),
                 ICEBERG, new IcebergConnector(derivedContext),
                 HUDI, new HudiConnector(derivedContext),
-                DELTALAKE, new DeltaLakeConnector(derivedContext)
+                DELTALAKE, new DeltaLakeConnector(derivedContext),
+                KUDU, new KuduConnector(derivedContext)
         );
     }
 
