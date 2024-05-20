@@ -151,9 +151,13 @@ protected:
     }
     virtual Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
                                std::vector<uint64_t>* rssid_rowids) {
-        return Status::NotSupported(
-                "Chunk* chunk, std::vector<RowSourceMask>* source_masks, vector<uint64_t>* rssid_rowids) not "
-                "supported");
+        if (source_masks == nullptr) {
+            return do_get_next(chunk, rssid_rowids);
+        } else {
+            return Status::NotSupported(
+                    "Chunk* chunk, std::vector<RowSourceMask>* source_masks, vector<uint64_t>* rssid_rowids) not "
+                    "supported");
+        }
     }
 
     Schema _schema;
