@@ -2317,7 +2317,7 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyFilter) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2373,7 +2373,7 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2446,7 +2446,7 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputAll) {
 
     // create param
     auto param = create_table_param_int(TJoinOp::INNER_JOIN, 3);
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
 
     // create hash table
     JoinHashTable ht;
@@ -2518,7 +2518,7 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPart) {
 
     // create param
     auto param = create_table_param_int(TJoinOp::INNER_JOIN, 3);
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
 
     // create hash table
     JoinHashTable ht;
@@ -2590,7 +2590,7 @@ TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
 
     // create param
     auto param = create_table_param_int(TJoinOp::RIGHT_OUTER_JOIN, 3);
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
 
     // create hash table
     JoinHashTable ht;
@@ -2718,7 +2718,7 @@ TEST_F(JoinHashMapTest, TestOutputSlotsEmpty) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = false;
+    param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
 
@@ -2746,7 +2746,7 @@ TEST_F(JoinHashMapTest, TestOutputSlotsNormal) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = false;
+    param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2777,7 +2777,7 @@ TEST_F(JoinHashMapTest, TestLazyOutputSlotsEmpty) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
 
@@ -2805,7 +2805,7 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsEmpty) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2836,7 +2836,7 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2867,7 +2867,7 @@ TEST_F(JoinHashMapTest, TestMorRead) {
 
     HashTableParam param;
     param.mor_reader_mode = true;
-    param.enable_lazy_materialize = false;
+    param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};

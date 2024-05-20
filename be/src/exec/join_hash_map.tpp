@@ -486,7 +486,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         }
     }
 
-    if (_table_items->enable_lazy_materialize) {
+    if (_table_items->enable_late_materialization) {
         _probe_index_output(chunk);
         _build_index_output(chunk);
     }
@@ -513,7 +513,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe_remain(RuntimeState* state, Ch
         _build_output<false>(chunk);
     }
 
-    if (_table_items->enable_lazy_materialize) {
+    if (_table_items->enable_late_materialization) {
         _build_index_output(chunk);
     }
 }
@@ -733,7 +733,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const Co
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, ChunkPtr* probe_chunk) {
-    if (_table_items->enable_lazy_materialize) {
+    if (_table_items->enable_late_materialization) {
         _probe_state->probe_index.resize(state->chunk_size() + 8);
         _probe_state->build_index.resize(state->chunk_size() + 8);
     }
@@ -768,7 +768,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
         _probe_state->cur_build_index = 0;
     }
 
-    if (_table_items->enable_lazy_materialize) {
+    if (_table_items->enable_late_materialization) {
         _probe_state->build_index.resize(state->chunk_size() + 8);
     }
 
