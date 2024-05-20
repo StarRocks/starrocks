@@ -849,7 +849,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
-REFRESH EXTERNAL TABLE <table_name>
+REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 ```
 
 ### Automatic incremental update
