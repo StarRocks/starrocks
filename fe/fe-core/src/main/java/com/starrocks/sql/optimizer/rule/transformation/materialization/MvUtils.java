@@ -1371,16 +1371,6 @@ public class MvUtils {
         // Cache predicate split for predicates because it's time costing if there are too many materialized views.
         return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
     }
-<<<<<<< HEAD
-=======
-
-    public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
-    }
-
-    public static Table getTableChecked(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
-    }
 
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
         List<Expr> matches = Lists.newArrayList();
@@ -1395,5 +1385,4 @@ public class MvUtils {
         return expr instanceof FunctionCallExpr
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
->>>>>>> ec7dd64d49 ([BugFix] Fix partition mv with self joins refresh bug (#45876))
 }
