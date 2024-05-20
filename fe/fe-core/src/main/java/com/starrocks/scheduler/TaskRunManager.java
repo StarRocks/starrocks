@@ -69,12 +69,8 @@ public class TaskRunManager implements MemoryTrackable {
         status.setPriority(option.getPriority());
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
-<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
-        if (!arrangeTaskRun(taskRun)) {
-=======
         if (!arrangeTaskRun(taskRun, false)) {
->>>>>>> 91fb5781eb ([BugFix] arrangeTaskRun should not update task run state in follower FE (#45931))
             LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
