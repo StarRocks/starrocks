@@ -8,7 +8,11 @@ displayed_sidebar: "English"
 
 Creates a storage volume for a remote storage system. This feature is supported from v3.1.
 
+<<<<<<< HEAD
 A storage volume consists of the properties and credential information of the remote data storage. You can reference a storage volume when you create databases and cloud-native tables in a [shared-data StarRocks cluster](../../../deployment/shared_data/s3.md).
+=======
+A storage volume consists of the properties and credential information of the remote data storage. You can reference a storage volume when you create databases and cloud-native tables in a shared-data StarRocks cluster.
+>>>>>>> a2b51e07ea ([Doc] remove excessive links (#45852))
 
 > **CAUTION**
 >
