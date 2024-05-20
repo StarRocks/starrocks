@@ -612,7 +612,27 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### time_zone
 
+<<<<<<< HEAD
   Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
+=======
+Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
+
+### trace_log_mode
+
+* **Description**: Used to control where to output the logs of query trace profiles. Valid values:
+  * `command`: Return query trace profile logs as the **Explain String** after executing TRACE LOGS.
+  * `file`: Return query trace profile logs in the FE log file **fe.log** with the class name being `FileLogTracer`.
+
+* **Default**: `command`
+* **Data type**: String
+* **Introduced in**: v3.2.0
+
+### transaction_read_only
+
+* **Description**: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
+* **Default**: OFF
+* **Introduced in**: v2.5.18, v3.0.9, v3.1.7
+>>>>>>> a2b51e07ea ([Doc] remove excessive links (#45852))
 
 ### tx_isolation
 

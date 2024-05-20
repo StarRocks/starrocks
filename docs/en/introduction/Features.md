@@ -26,6 +26,23 @@ The vectorized execution engine also makes full use of SIMD instructions. This e
 
 In addition to operator vectorization, StarRocks has implemented other optimizations for the query engine. For example, StarRocks uses the Operation on Encoded Data technology to directly execute operators on encoded strings, without the need for decoding. This noticeably reduces SQL complexity and increases the query speed by more than 2 times.
 
+<<<<<<< HEAD
+=======
+## Separation of storage and compute
+
+The [storage-compute separation architecture](./Architecture.md) was introduced from 3.0. In this architecture, computing and storage are decoupled to achieve resource isolation, elastic scaling of compute nodes, and high-performance queries. Storage-compute separation equips StarRocks with better flexibility, higher performance and data availability, and lower cost.
+
+![shared-data](../assets/share_data_arch.png)
+
+In storage-compute separation mode, computing and storage are decoupled and can be scaled independently, which eliminates the cost that long exists in the storage-compute coupled mode where storage has to be scaled anytime users want to add computing nodes. In addition, computing can dynamically scale within seconds, improving resource utilization, especially when there are noticeable traffic peaks and valleys.
+
+The storage layer leverages the nearly unlimited capacity and high reliability of object storage to achieve massive data storage and data persistence. StarRocks can work with various object storage systems such as AWS S3, Google Cloud Storage, Azure Blob Storage, HDFS, and other S3-compatible storage like MinIO.
+
+Users can choose to deploy StarRocks in public clouds, private clouds, or on-premises data centers. StarRocks supports Kubernetes-based deployments and provides an Operator for automated deployment of storage-compute decoupled clusters.
+
+StarRocks in storage-compute separation mode provides the same functionalities as the storage-compute coupled mode. The data write and hot data query performance are also the same. Users can perform data updates, data lake analytics, and materialized view acceleration as they do in storage-compute coupled mode.
+
+>>>>>>> a2b51e07ea ([Doc] remove excessive links (#45852))
 ## Cost-based optimizer
 
 ![CBO](../assets/1.1-5-cbo.png)
