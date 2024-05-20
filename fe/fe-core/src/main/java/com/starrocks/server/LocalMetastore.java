@@ -138,6 +138,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.persist.AddPartitionsInfoV2;
@@ -155,6 +156,8 @@ import com.starrocks.persist.DisablePartitionRecoveryInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
+import com.starrocks.persist.DropPartitionsInfo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
@@ -186,7 +189,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -194,6 +196,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -244,6 +247,8 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -254,6 +259,7 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -507,7 +513,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // 4. drop mv task
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            List<Long> dropTaskIdList = taskManager.showTasks(dbName)
+            TGetTasksParams tasksParams = new TGetTasksParams();
+            tasksParams.setDb(dbName);
+            List<Long> dropTaskIdList = taskManager.filterTasks(tasksParams)
                     .stream().map(Task::getId).collect(Collectors.toList());
             taskManager.dropTasks(dropTaskIdList, false);
 
@@ -866,7 +874,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
+            throws DdlException {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         Map<String, String> tableProperties;
@@ -909,34 +917,12 @@ public class LocalMetastore implements ConnectorMetadata {
             if (partitionColumns.size() != 1) {
                 throw new DdlException("Alter batch build partition only support single range column.");
             }
-
-            Column firstPartitionColumn = partitionColumns.get(0);
-            MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
-            boolean isAutoPartitionTable = false;
-            if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
-                isAutoPartitionTable = true;
-                ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-                Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
-                if (expr instanceof FunctionCallExpr) {
-                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                    checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
-                }
-            }
             Map<String, String> properties = addPartitionClause.getProperties();
-            if (properties == null) {
-                properties = Maps.newHashMap();
-            }
-            if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
-                properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
-                        tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
-            }
-            PartitionConvertContext context = new PartitionConvertContext();
-            context.setAutoPartitionTable(isAutoPartitionTable);
-            context.setFirstPartitionColumnType(firstPartitionColumn.getType());
-            context.setProperties(properties);
-            context.setTempPartition(addPartitionClause.isTempPartition());
-
-            List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
+            boolean isTempPartition = addPartitionClause.isTempPartition();
+            List<SingleRangePartitionDesc> singleRangePartitionDescs =
+                    convertMultiRangePartitionDescToSingleRangePartitionDescs(partitionInfo, tableProperties, isTempPartition,
+                            (MultiRangePartitionDesc) partitionDesc,
+                            partitionColumns, properties);
             List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream()
                     .map(item -> (PartitionDesc) item).collect(Collectors.toList());
             addPartitions(db, tableName, partitionDescs, addPartitionClause);
@@ -1004,6 +990,18 @@ public class LocalMetastore implements ConnectorMetadata {
         CatalogUtils.checkTableState(olapTable, tableName);
         return olapTable;
     }
+
+    private OlapTable checkTable(Database db, Long tableId) throws DdlException {
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableId);
+        }
+        CatalogUtils.checkNativeTable(db, table);
+        OlapTable olapTable = (OlapTable) table;
+        CatalogUtils.checkTableState(olapTable, table.getName());
+        return olapTable;
+    }
+
 
     private void checkPartitionType(PartitionInfo partitionInfo) throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
@@ -1128,7 +1126,8 @@ public class LocalMetastore implements ConnectorMetadata {
                                                                     List<PartitionDesc> partitionDescs,
                                                                     HashMap<String, Set<Long>> partitionNameToTabletSet,
                                                                     Set<Long> tabletIdSetForAll,
-                                                                    Set<String> existPartitionNameSet)
+                                                                    Set<String> existPartitionNameSet,
+                                                                    long warehouseId)
             throws DdlException {
         List<Pair<Partition, PartitionDesc>> partitionList = Lists.newArrayList();
         for (PartitionDesc partitionDesc : partitionDescs) {
@@ -1148,7 +1147,7 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable.getPartitionInfo().setDataCacheInfo(partitionId, partitionDesc.getDataCacheInfo());
 
             Partition partition =
-                    createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
+                    createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet, warehouseId);
 
             partitionList.add(Pair.create(partition, partitionDesc));
             tabletIdSetForAll.addAll(tabletIdSet);
@@ -1411,18 +1410,18 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSetForAll = Sets.newHashSet();
         HashMap<String, Set<Long>> partitionNameToTabletSet = Maps.newHashMap();
         try {
-            // create partition list
-            List<Pair<Partition, PartitionDesc>> newPartitions =
-                    createPartitionMap(db, copiedTable, partitionDescs, partitionNameToTabletSet, tabletIdSetForAll,
-                            checkExistPartitionName);
-
-            // build partitions
-            List<Partition> partitionList = newPartitions.stream().map(x -> x.first).collect(Collectors.toList());
             long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
             if (ConnectContext.get() != null) {
                 warehouseId = ConnectContext.get().getCurrentWarehouseId();
             }
 
+            // create partition list
+            List<Pair<Partition, PartitionDesc>> newPartitions =
+                    createPartitionMap(db, copiedTable, partitionDescs, partitionNameToTabletSet, tabletIdSetForAll,
+                            checkExistPartitionName, warehouseId);
+
+            // build partitions
+            List<Partition> partitionList = newPartitions.stream().map(x -> x.first).collect(Collectors.toList());
             buildPartitions(db, copiedTable, partitionList.stream().map(Partition::getSubPartitions)
                     .flatMap(p -> p.stream()).collect(Collectors.toList()), warehouseId);
 
@@ -1580,57 +1579,95 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
         CatalogUtils.checkTableExist(db, table.getName());
-        OlapTable olapTable = (OlapTable) table;
         Locker locker = new Locker();
+        OlapTable olapTable = (OlapTable) table;
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-
-        String partitionName = clause.getPartitionName();
-        boolean isTempPartition = clause.isTempPartition();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        Map<String, String> tableProperties = olapTable.getTableProperty().getProperties();
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
-
-        if (!olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
-            if (clause.isSetIfExists()) {
-                LOG.info("drop partition[{}] which does not exist", partitionName);
-                return;
-            } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DROP_PARTITION_NON_EXISTENT, partitionName);
-            }
-        }
-
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (!partitionInfo.isRangePartition() && partitionInfo.getType() != PartitionType.LIST) {
             throw new DdlException("Alter table [" + olapTable.getName() + "] failed. Not a partitioned table");
         }
+        List<String> partitionNames = Lists.newArrayList();
+        boolean isTempPartition = clause.isTempPartition();
 
-        // drop
-        if (isTempPartition) {
-            olapTable.dropTempPartition(partitionName, true);
-        } else {
-            Partition partition = olapTable.getPartition(partitionName);
-            if (!clause.isForceDrop()) {
-                if (partition != null) {
-                    if (stateMgr.getGlobalTransactionMgr()
-                            .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
-                        throw new DdlException(
-                                "There are still some transactions in the COMMITTED state waiting to be completed." +
-                                        " The partition [" + partitionName +
-                                        "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                        " please use \"DROP PARTITION <partition> FORCE\".");
+        if (clause.hasMultiPartitions()) {
+            PartitionDesc partitionDesc = clause.getPartitionDesc();
+            if (partitionDesc instanceof MultiRangePartitionDesc) {
+                if (!(partitionInfo instanceof RangePartitionInfo)) {
+                    ErrorReportException.report(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO);
+                }
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                if (partitionColumns.size() != 1) {
+                    ErrorReportException.report(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS,
+                            partitionColumns.size());
+                }
+                Map<String, String> properties = clause.getProperties();
+                List<SingleRangePartitionDesc> singleRangePartitionDescs =
+                        convertMultiRangePartitionDescToSingleRangePartitionDescs(partitionInfo, tableProperties, isTempPartition,
+                                (MultiRangePartitionDesc) partitionDesc,
+                                partitionColumns, properties);
+                partitionNames.addAll(singleRangePartitionDescs.stream()
+                        .map(SingleRangePartitionDesc::getPartitionName).collect(Collectors.toList()));
+            }
+        } else if (clause.getPartitionName() != null) {
+            partitionNames.add(clause.getPartitionName());
+        } else if (clause.getPartitionNames() != null) {
+            partitionNames.addAll(clause.getPartitionNames());
+        }
+        List<String> existPartitions = Lists.newArrayList();
+        List<String> notExistPartitions = Lists.newArrayList();
+        for (String partitionName : partitionNames) {
+            if (olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
+                existPartitions.add(partitionName);
+            } else {
+                notExistPartitions.add(partitionName);
+            }
+        }
+        if (CollectionUtils.isNotEmpty(notExistPartitions)) {
+            if (clause.isSetIfExists()) {
+                LOG.info("drop partition[{}] which does not exist", notExistPartitions);
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DROP_PARTITION_NON_EXISTENT, notExistPartitions);
+            }
+        }
+        if (CollectionUtils.isEmpty(existPartitions)) {
+            return;
+        }
+        for (String partitionName : existPartitions) {
+            // drop
+            if (isTempPartition) {
+                olapTable.dropTempPartition(partitionName, true);
+            } else {
+                Partition partition = olapTable.getPartition(partitionName);
+                if (!clause.isForceDrop()) {
+                    if (partition != null) {
+                        if (stateMgr.getGlobalTransactionMgr()
+                                .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
+                            throw new DdlException(
+                                    "There are still some transactions in the COMMITTED state waiting to be completed." +
+                                            " The partition [" + partitionName +
+                                            "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                                            " please use \"DROP PARTITION <partition> FORCE\".");
+                        }
                     }
                 }
+                Range<PartitionKey> partitionRange = null;
+                if (partitionInfo instanceof RangePartitionInfo && partition != null) {
+                    partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                }
+                olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+                if (olapTable instanceof MaterializedView) {
+                    MaterializedView mv = (MaterializedView) olapTable;
+                    SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
+                }
             }
-            Range<PartitionKey> partitionRange = null;
-            if (partitionInfo instanceof RangePartitionInfo && partition != null) {
-                partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
-            }
-            olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
-            if (olapTable instanceof MaterializedView) {
-                MaterializedView mv = (MaterializedView) olapTable;
-                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
-            }
+        }
+        if (!isTempPartition) {
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
@@ -1644,14 +1681,64 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("fail to refresh materialized views when dropping partition", e);
             }
         }
+        long dbId = db.getId();
+        long tableId = olapTable.getId();
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
 
-        // log
-        DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(), partitionName, isTempPartition,
-                clause.isForceDrop());
-        GlobalStateMgr.getCurrentState().getEditLog().logDropPartition(info);
+        if (clause.getPartitionName() != null) {
+            String partitionName = clause.getPartitionName();
+            DropPartitionInfo info = new DropPartitionInfo(dbId, tableId, partitionName, isTempPartition, clause.isForceDrop());
+            editLog.logDropPartition(info);
+            LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
+                    clause.isForceDrop());
+        } else {
+            DropPartitionsInfo info =
+                    new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), existPartitions);
+            editLog.logDropPartitions(info);
+            LOG.info("succeed in dropping partitions[{}], is temp : {}, is force : {}", existPartitions, isTempPartition,
+                    clause.isForceDrop());
+        }
 
-        LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
-                clause.isForceDrop());
+    }
+
+    private List<SingleRangePartitionDesc> convertMultiRangePartitionDescToSingleRangePartitionDescs(PartitionInfo partitionInfo,
+                                                                        Map<String, String> tableProperties,
+                                                                        boolean isTempPartition,
+                                                                        MultiRangePartitionDesc partitionDesc,
+                                                                        List<Column> partitionColumns,
+                                                                        Map<String, String> properties) throws DdlException {
+        Column firstPartitionColumn = partitionColumns.get(0);
+        MultiRangePartitionDesc multiRangePartitionDesc = partitionDesc;
+        boolean isAutoPartitionTable = false;
+        if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+            isAutoPartitionTable = true;
+            ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
+            if (expr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
+            }
+        }
+
+        if (properties == null) {
+            properties = Maps.newHashMap();
+        }
+        if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
+            properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
+                    tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
+        }
+        PartitionConvertContext context = new PartitionConvertContext();
+        context.setAutoPartitionTable(isAutoPartitionTable);
+        context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+        context.setProperties(properties);
+        context.setTempPartition(isTempPartition);
+        List<SingleRangePartitionDesc> singleRangePartitionDescs;
+        try {
+            singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
+        return singleRangePartitionDescs;
     }
 
     public void replayDropPartition(DropPartitionInfo info) {
@@ -1665,6 +1752,31 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
             }
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
+    }
+
+    public void replayDropPartitions(DropPartitionsInfo info) {
+        Database db = this.getDb(info.getDbId());
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+        try {
+            LOG.info("Begin to unprotect drop partitions. db = " + info.getDbId()
+                    + " table = " + info.getTableId()
+                    + " partitionNames = " + info.getPartitionNames());
+            List<String> partitionNames = info.getPartitionNames();
+            OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
+            boolean isTempPartition = info.isTempPartition();
+            long dbId = info.getDbId();
+            boolean isForceDrop = info.isForceDrop();
+            partitionNames.stream().forEach(partitionName -> {
+                if (isTempPartition) {
+                    olapTable.dropTempPartition(partitionName, true);
+                } else {
+                    olapTable.dropPartition(dbId, partitionName, isForceDrop);
+                }
+            });
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
@@ -1687,7 +1799,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable, Partition partition) throws DdlException {
+    private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable,
+            Partition partition, long warehouseId) throws DdlException {
         long partitionId = partition.getId();
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
         olapTable.inferDistribution(distributionInfo);
@@ -1724,7 +1837,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
                 createLakeTablets(olapTable, id, shardGroupId, index, distributionInfo,
-                        tabletMeta, tabletIdSet);
+                        tabletMeta, tabletIdSet, warehouseId);
             } else {
                 createOlapTablets(olapTable, index, Replica.ReplicaState.NORMAL, distributionInfo,
                         physicalParition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
@@ -1738,8 +1851,8 @@ public class LocalMetastore implements ConnectorMetadata {
         return physicalParition;
     }
 
-    public void addSubPartitions(Database db, String tableName,
-                                 Partition partition, int numSubPartition) throws DdlException {
+    public void addSubPartitions(Database db, OlapTable table,
+                                 Partition partition, int numSubPartition, long warehouseId) throws DdlException {
         OlapTable olapTable;
         OlapTable copiedTable;
 
@@ -1747,7 +1860,7 @@ public class LocalMetastore implements ConnectorMetadata {
         locker.lockDatabase(db, LockType.READ);
         Set<String> checkExistPartitionName = Sets.newConcurrentHashSet();
         try {
-            olapTable = checkTable(db, tableName);
+            olapTable = checkTable(db, table.getId());
 
             if (partition.getDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
                 throw new DdlException("Only support adding physical partition to random distributed table");
@@ -1764,15 +1877,11 @@ public class LocalMetastore implements ConnectorMetadata {
         List<PhysicalPartition> subPartitions = new ArrayList<>();
         // create physical partition
         for (int i = 0; i < numSubPartition; i++) {
-            PhysicalPartition subPartition = createPhysicalPartition(db, copiedTable, partition);
+            PhysicalPartition subPartition = createPhysicalPartition(db, copiedTable, partition, warehouseId);
             subPartitions.add(subPartition);
         }
 
         // build partitions
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        if (ConnectContext.get() != null) {
-            warehouseId = ConnectContext.get().getCurrentWarehouseId();
-        }
         buildPartitions(db, copiedTable, subPartitions, warehouseId);
 
         // check again
@@ -1782,7 +1891,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         try {
             // check if meta changed
-            checkIfMetaChange(olapTable, copiedTable, tableName);
+            checkIfMetaChange(olapTable, copiedTable, table.getName());
 
             for (PhysicalPartition subPartition : subPartitions) {
                 // add sub partition
@@ -1833,15 +1942,16 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
-                              Long version, Set<Long> tabletIdSet) throws DdlException {
+                              Long version, Set<Long> tabletIdSet, long warehouseId) throws DdlException {
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
         table.inferDistribution(distributionInfo);
 
-        return createPartition(db, table, partitionId, partitionName, version, tabletIdSet, distributionInfo);
+        return createPartition(db, table, partitionId, partitionName, version, tabletIdSet, distributionInfo, warehouseId);
     }
 
     Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
-                              Long version, Set<Long> tabletIdSet, DistributionInfo distributionInfo) throws DdlException {
+                              Long version, Set<Long> tabletIdSet, DistributionInfo distributionInfo,
+                              long warehouseId) throws DdlException {
         PartitionInfo partitionInfo = table.getPartitionInfo();
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         for (long indexId : table.getIndexIdToMeta().keySet()) {
@@ -1878,7 +1988,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (table.isCloudNativeTableOrMaterializedView()) {
                 createLakeTablets(table, partitionId, shardGroupId, index, distributionInfo,
-                        tabletMeta, tabletIdSet);
+                        tabletMeta, tabletIdSet, warehouseId);
             } else {
                 createOlapTablets(table, index, Replica.ReplicaState.NORMAL, distributionInfo,
                         partition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
@@ -2371,7 +2481,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void createLakeTablets(OlapTable table, long partitionId, long shardGroupId, MaterializedIndex index,
                                    DistributionInfo distributionInfo, TabletMeta tabletMeta,
-                                   Set<Long> tabletIdSet)
+                                   Set<Long> tabletIdSet, long warehouseId)
             throws DdlException {
         Preconditions.checkArgument(table.isCloudNativeTableOrMaterializedView());
 
@@ -2386,9 +2496,12 @@ public class LocalMetastore implements ConnectorMetadata {
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
         int bucketNum = distributionInfo.getBucketNum();
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), shardGroupId,
-                properties);
+                null, properties,
+                com.starrocks.lake.Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouseId)
+                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);
@@ -3324,7 +3437,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setDataCacheInfo(partitionId,
                         storageInfo == null ? null : storageInfo.getDataCacheInfo());
                 Long version = Partition.PARTITION_INIT_VERSION;
-                Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
+                Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet,
+                        ConnectContext.get().getCurrentWarehouseId());
                 buildPartitions(db, materializedView, partition.getSubPartitions().stream().collect(Collectors.toList()),
                         ConnectContext.get().getCurrentWarehouseId());
                 materializedView.addPartition(partition);
@@ -3338,8 +3452,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 materializedView.setPartitionExprMaps(partitionExprMaps);
                 // check partition schema from children
-                PartitionBasedMvRefreshProcessor.computePartitionRangeDiff(db, materializedView,
-                        Pair.create(null, null));
+                PartitionDiffer.computePartitionRangeDiff(db, materializedView, Pair.create(null, null));
             }
 
             MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
@@ -3567,6 +3680,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
             }
 
+            // ORDER BY() -> sortKeys
+            if (CollectionUtils.isNotEmpty(materializedView.getTableProperty().getMvSortKeys())) {
+                materializedView.getTableProperty().putMvSortKeys();
+            }
+
             // lake storage info
             if (materializedView.isCloudNativeMaterializedView()) {
                 String volume = "";
@@ -3681,6 +3799,13 @@ public class LocalMetastore implements ConnectorMetadata {
             if (optHints != null) {
                 Map<String, String> taskProperties = task.getProperties();
                 taskProperties.putAll(optHints);
+                if (materializedView.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                    taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
+                            String.valueOf(materializedView.getWarehouseId()));
+
+                    LOG.debug("set warehouse {} in createTaskForMaterializedView",
+                            materializedView.getWarehouseId());
+                }
             }
 
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -4074,11 +4199,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private static void renameColumnInternal(OlapTable olapTable, String colName, String newColName) {
-        Column column = olapTable.getColumn(colName);
-        Map<String, Column> nameToColumn = olapTable.getNameToColumn();
-        nameToColumn.remove(colName);
-        column.renameColumn(newColName);
-        nameToColumn.put(newColName, column);
+        olapTable.renameColumn(colName, newColName);
 
         Set<String> bfColumns = olapTable.getBfColumns();
         if (bfColumns != null) {
@@ -4099,7 +4220,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
             for (Column distributionColumn : distributionColumns) {
                 if (distributionColumn.getName().equalsIgnoreCase(colName)) {
-                    distributionColumn.renameColumn(newColName);
+                    distributionColumn.setName(newColName);
                 }
             }
         }
@@ -4110,7 +4231,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             for (Column partitionColumn : partitionColumns) {
                 if (partitionColumn.getName().equalsIgnoreCase(colName)) {
-                    partitionColumn.renameColumn(newColName);
+                    partitionColumn.setName(newColName);
                 }
             }
             // for expression range partition will also modify the inner slotRef
@@ -4130,7 +4251,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             for (Column partitionColumn : partitionColumns) {
                 if (partitionColumn.getName().equalsIgnoreCase(colName)) {
-                    partitionColumn.renameColumn(newColName);
+                    partitionColumn.setName(newColName);
                 }
             }
         }
@@ -4763,7 +4884,7 @@ public class LocalMetastore implements ConnectorMetadata {
      *
      */
     @Override
-    public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
         TableRef tblRef = truncateTableStmt.getTblRef();
         TableName dbTbl = tblRef.getName();
         // check, and save some info which need to be checked again later
@@ -4778,7 +4899,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table table = db.getTable(dbTbl.getTbl());
+            Table table = MetaUtils.getSessionAwareTable(context, db, dbTbl);
             if (table == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTbl.getTbl());
             }
@@ -4836,7 +4957,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 copiedTbl.setDefaultDistributionInfo(entry.getValue().getDistributionInfo());
 
                 Partition newPartition =
-                        createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+                        createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet,
+                        ConnectContext.get().getCurrentWarehouseId());
                 newPartitions.add(newPartition);
             }
             buildPartitions(db, copiedTbl, newPartitions.stream().map(Partition::getSubPartitions)
@@ -5372,7 +5494,8 @@ public class LocalMetastore implements ConnectorMetadata {
                                                           List<Long> sourcePartitionIds,
                                                           Map<Long, String> origPartitions, OlapTable copiedTbl,
                                                           String namePostfix, Set<Long> tabletIdSet,
-                                                          List<Long> tmpPartitionIds, DistributionDesc distributionDesc)
+                                                          List<Long> tmpPartitionIds, DistributionDesc distributionDesc,
+                                                          long warehouseId)
             throws DdlException {
         List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
         for (int i = 0; i < sourcePartitionIds.size(); ++i) {
@@ -5403,9 +5526,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     olapTable.optimizeDistribution(distributionInfo, sourcePartition);
                 }
                 newPartition = createPartition(
-                        db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet, distributionInfo);
+                        db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet, distributionInfo, warehouseId);
             } else {
-                newPartition = createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+                newPartition = createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet, warehouseId);
             }
 
             newPartitions.add(newPartition);
@@ -5431,7 +5554,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
             newPartitions = getNewPartitionsFromPartitions(db, olapTable, sourcePartitionIds, origPartitions,
-                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds, distributionDesc);
+                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds, distributionDesc, warehouseId);
             buildPartitions(db, copiedTbl, newPartitions.stream().map(Partition::getSubPartitions)
                     .flatMap(p -> p.stream()).collect(Collectors.toList()), warehouseId);
         } catch (Exception e) {
@@ -5581,4 +5704,5 @@ public class LocalMetastore implements ConnectorMetadata {
         recreateTabletInvertIndex();
         GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
     }
+
 }

@@ -32,13 +32,14 @@ import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.IcebergMetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.KuduScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.MetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.NestLoopJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OdpsScanImplementationRule;
@@ -146,6 +147,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
@@ -178,7 +180,8 @@ public class RuleSet {
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
             new OdpsScanImplementationRule(),
-            new MetadataScanImplementationRule(),
+            new IcebergMetadataScanImplementationRule(),
+            new KuduScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
@@ -237,6 +240,7 @@ public class RuleSet {
                 MergeLimitDirectRule.FILE_SCAN,
                 MergeLimitDirectRule.PAIMON_SCAN,
                 MergeLimitDirectRule.ODPS_SCAN,
+                MergeLimitDirectRule.KUDU_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
@@ -261,6 +265,7 @@ public class RuleSet {
                 ExternalScanPartitionPruneRule.ES_SCAN,
                 ExternalScanPartitionPruneRule.PAIMON_SCAN,
                 ExternalScanPartitionPruneRule.ODPS_SCAN,
+                ExternalScanPartitionPruneRule.KUDU_SCAN,
                 new LimitPruneTabletsRule()
         ));
 
@@ -277,7 +282,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
                 PruneHDFSScanColumnRule.PAIMON_SCAN,
                 PruneHDFSScanColumnRule.ODPS_SCAN,
-                PruneHDFSScanColumnRule.METADATA_SCAN,
+                PruneScanColumnRule.KUDU_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
@@ -307,7 +312,8 @@ public class RuleSet {
                 PushDownPredicateScanRule.DELTALAKE_SCAN,
                 PushDownPredicateScanRule.FILE_SCAN,
                 PushDownPredicateScanRule.PAIMON_SCAN,
-                PushDownPredicateScanRule.METADATA_SCAN,
+                PushDownPredicateScanRule.ICEBERG_METADATA_SCAN,
+                PushDownPredicateScanRule.KUDU_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
@@ -408,9 +414,9 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.ALL_MV_REWRITE, Stream.concat(
-                REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
-                REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
-                        .collect(Collectors.toList()));
+                        REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
+                        REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
+                .collect(Collectors.toList()));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_EMPTY_OPERATOR, ImmutableList.of(
                 PruneEmptyScanRule.OLAP_SCAN,
@@ -419,6 +425,7 @@ public class RuleSet {
                 PruneEmptyScanRule.ICEBERG_SCAN,
                 PruneEmptyScanRule.PAIMON_SCAN,
                 PruneEmptyScanRule.ODPS_SCAN,
+                PruneEmptyScanRule.KUDU_SCAN,
                 PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
                 PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
                 new PruneEmptyDirectRule(),
@@ -453,6 +460,9 @@ public class RuleSet {
                 new PushDownAggToMetaScanRule(),
                 new PushDownFlatJsonMetaToMetaScanRule(),
                 new RewriteSimpleAggToMetaScanRule(),
+                RewriteSimpleAggToHDFSScanRule.FILE_SCAN,
+                RewriteSimpleAggToHDFSScanRule.HIVE_SCAN,
+                RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN,
                 new MinMaxCountOptOnScanRule()
         ));
     }

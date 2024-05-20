@@ -17,13 +17,21 @@ package org.apache.iceberg;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.AsyncIterable;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.StarRocksIcebergTableScanContext;
+import com.starrocks.connector.metadata.MetadataCollectJob;
+import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.InclusiveMetricsEvaluator;
-import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
@@ -31,6 +39,7 @@ import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.metrics.MetricsReporter;
 import org.apache.iceberg.metrics.ScanMetricsUtil;
 import org.apache.iceberg.util.ParallelIterable;
+import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.TableScanUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,10 +53,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.PartitionUtil.executeInNewThread;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.mayHaveEqualityDeletes;
+
 public class StarRocksIcebergTableScan
         extends DataScan<TableScan, FileScanTask, CombinedScanTask> implements TableScan {
     private static final Logger LOG = LogManager.getLogger(StarRocksIcebergTableScan.class);
 
+    private final String catalogName;
+    private final String dbName;
+    private final String tableName;
+    private final PlanMode planMode;
     private final Cache<String, Set<DataFile>> dataFileCache;
     private final Cache<String, Set<DeleteFile>> deleteFileCache;
     private final Map<Integer, String> specStringCache;
@@ -56,9 +72,14 @@ public class StarRocksIcebergTableScan
     private final Map<Integer, InclusiveMetricsEvaluator> inclusiveMetricsEvaluatorCache;
     private final String schemaString;
     private DeleteFileIndex deleteFileIndex;
-    private final boolean dataFileCacheWithMetrics;
+    private boolean dataFileCacheWithMetrics;
+    private boolean enableCacheDataFileIdentifierColumnMetrics;
     private final StarRocksIcebergTableScanContext scanContext;
-    private boolean onlyReadCache;
+    private final boolean onlyReadCache;
+    private final int localParallelism;
+    private final long localPlanningMaxSlotSize;
+    private boolean isRemotePlanFiles;
+    private ConnectContext connectContext;
 
     public static TableScanContext newTableScanContext(Table table) {
         if (table instanceof BaseTable) {
@@ -74,6 +95,11 @@ public class StarRocksIcebergTableScan
                                      TableScanContext context,
                                      StarRocksIcebergTableScanContext scanContext) {
         super(table, schema, context);
+        this.catalogName = scanContext.getCatalogName();
+        this.dbName = scanContext.getDbName();
+        this.tableName = scanContext.getTableName();
+        this.planMode = scanContext.getPlanMode();
+        this.connectContext = scanContext.getConnectContext();
         this.scanContext = scanContext;
         this.specStringCache = specCache(PartitionSpecParser::toJson);
         this.residualCache = specCache(this::newResidualEvaluator);
@@ -83,7 +109,10 @@ public class StarRocksIcebergTableScan
         this.dataFileCache = scanContext.getDataFileCache();
         this.deleteFileCache = scanContext.getDeleteFileCache();
         this.dataFileCacheWithMetrics = scanContext.isDataFileCacheWithMetrics();
+        this.enableCacheDataFileIdentifierColumnMetrics = scanContext.isEnableCacheDataFileIdentifierColumnMetrics();
         this.onlyReadCache = scanContext.isOnlyReadCache();
+        this.localParallelism = scanContext.getLocalParallelism();
+        this.localPlanningMaxSlotSize = scanContext.getLocalPlanningMaxSlotSize();
     }
 
     @Override
@@ -91,28 +120,48 @@ public class StarRocksIcebergTableScan
         return new StarRocksIcebergTableScan(newTable, newSchema, newContext, scanContext);
     }
 
-    public StarRocksIcebergTableScan dataFileCache(Cache<String, Set<DataFile>> dataFileCache) {
-        scanContext.setDataFileCache(dataFileCache);
-        return this;
-    }
-
-    public StarRocksIcebergTableScan deleteFileCache(Cache<String, Set<DeleteFile>> deleteFileCache) {
-        scanContext.setDeleteFileCache(deleteFileCache);
-        return this;
-    }
-
-    public StarRocksIcebergTableScan dataFileCacheWithMetrics(boolean dataFileCacheWithMetrics) {
-        scanContext.setDataFileCacheWithMetrics(dataFileCacheWithMetrics);
-        return this;
-    }
-
     @Override
     protected CloseableIterable<FileScanTask> doPlanFiles() {
         List<ManifestFile> dataManifests = findMatchingDataManifests(snapshot());
         List<ManifestFile> deleteManifests = findMatchingDeleteManifests(snapshot());
 
-        // TODO(stephen): add distributed plan
-        return planFileTasksLocally(dataManifests, deleteManifests);
+        boolean mayHaveEqualityDeletes = !deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot());
+        boolean loadColumnStats = mayHaveEqualityDeletes || shouldReturnColumnStats();
+
+        if (shouldPlanLocally(dataManifests, loadColumnStats)) {
+            return planFileTasksLocally(dataManifests, deleteManifests);
+        } else {
+            return planFileTasksRemotely(dataManifests, deleteManifests);
+        }
+    }
+
+    private CloseableIterable<FileScanTask> planFileTasksRemotely(
+            List<ManifestFile> dataManifests, List<ManifestFile> deleteManifests) {
+        LOG.info("Planning file tasks remotely for table {}.{}", dbName, tableName);
+        this.isRemotePlanFiles = true;
+
+        long liveFilesCount = liveFilesCount(dataManifests);
+        scanMetrics().scannedDataManifests().increment(dataManifests.size());
+
+        String icebergSerializedPredicate = filter() == Expressions.alwaysTrue() ? "" :
+                SerializationUtil.serializeToBase64(filter());
+        this.deleteFileIndex = planDeletesLocally(deleteManifests, Sets.newHashSet());
+
+        MetadataCollectJob metadataCollectJob = new IcebergMetadataCollectJob(
+                catalogName, dbName, tableName, TResultSinkType.METADATA_ICEBERG, snapshotId(), icebergSerializedPredicate);
+
+        metadataCollectJob.init(connectContext.getSessionVariable());
+
+        long currentTimestamp = System.currentTimeMillis();
+        String threadNamePrefix = String.format("%s-%s-%s-%d", catalogName, dbName, tableName, currentTimestamp);
+        executeInNewThread(threadNamePrefix + "-fetch_result", metadataCollectJob::asyncCollectMetadata);
+
+        MetadataParser parser = new MetadataParser(
+                table(), specStringCache, residualCache, planExecutor(), scanMetrics(),
+                deleteFileIndex, metadataCollectJob, liveFilesCount);
+        executeInNewThread(threadNamePrefix + "-parallel_parser", parser::parse);
+
+        return new AsyncIterable<>(parser.getFileScanTaskQueue(), parser);
     }
 
     private DeleteFileIndex planDeletesLocally(List<ManifestFile> deleteManifests, Set<DeleteFile> cachedDeleteFiles) {
@@ -138,7 +187,7 @@ public class StarRocksIcebergTableScan
         List<ManifestFile> dataManifests = snapshot.dataManifests(io());
         scanMetrics().totalDataManifests().increment(dataManifests.size());
 
-        List<ManifestFile> matchingDataManifests = filterManifests(dataManifests);
+        List<ManifestFile> matchingDataManifests = IcebergApiConverter.filterManifests(dataManifests, table(), filter());
         int skippedDataManifestsCount = dataManifests.size() - matchingDataManifests.size();
         scanMetrics().skippedDataManifests().increment(skippedDataManifestsCount);
 
@@ -149,20 +198,11 @@ public class StarRocksIcebergTableScan
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
         scanMetrics().totalDeleteManifests().increment(deleteManifests.size());
 
-        List<ManifestFile> matchingDeleteManifests = filterManifests(deleteManifests);
+        List<ManifestFile> matchingDeleteManifests = IcebergApiConverter.filterManifests(deleteManifests, table(), filter());
         int skippedDeleteManifestsCount = deleteManifests.size() - matchingDeleteManifests.size();
         scanMetrics().skippedDeleteManifests().increment(skippedDeleteManifestsCount);
 
         return matchingDeleteManifests;
-    }
-
-    private List<ManifestFile> filterManifests(List<ManifestFile> manifests) {
-        Map<Integer, ManifestEvaluator> evalCache = specCache(this::newManifestEvaluator);
-
-        return manifests.stream()
-                .filter(manifest -> manifest.hasAddedFiles() || manifest.hasExistingFiles())
-                .filter(manifest -> evalCache.get(manifest.partitionSpecId()).eval(manifest))
-                .collect(Collectors.toList());
     }
 
     private CloseableIterable<FileScanTask> planFileTasksLocally(
@@ -253,7 +293,8 @@ public class StarRocksIcebergTableScan
                     file -> partitionEvaluatorCache.get(file.specId()).eval(file.partition()));
         }
 
-        if (dataFileCacheWithMetrics) {
+        if (dataFileCacheWithMetrics ||
+                (!tableSchema().identifierFieldIds().isEmpty() && enableCacheDataFileIdentifierColumnMetrics)) {
             matchedDataFiles =  CloseableIterable.filter(
                     scanMetrics().skippedDataFiles(),
                     matchedDataFiles,
@@ -277,6 +318,7 @@ public class StarRocksIcebergTableScan
                         .ignoreDeleted()
                         .withDataFileCache(dataFileCache)
                         .preparedDeleteFileIndex(deleteFileIndex)
+                        .identifierFieldIds(getIdentifierFieldIds())
                         .cacheWithMetrics(dataFileCacheWithMetrics);
 
         if (shouldIgnoreResiduals()) {
@@ -288,6 +330,19 @@ public class StarRocksIcebergTableScan
         }
 
         return manifestGroup.planFiles();
+    }
+
+    private Set<Integer> getIdentifierFieldIds() {
+        if (dataFileCache == null || deleteFileIndex == null || dataFileCacheWithMetrics) {
+            return null;
+        }
+
+        if (!deleteFileIndex.isEmpty() && enableCacheDataFileIdentifierColumnMetrics) {
+            this.dataFileCacheWithMetrics = true;
+            return tableSchema().identifierFieldIds();
+        }
+
+        return null;
     }
 
     public void refreshDataFileCache(List<ManifestFile> manifestFiles) {
@@ -321,9 +376,38 @@ public class StarRocksIcebergTableScan
                 residuals);
     }
 
-    private ManifestEvaluator newManifestEvaluator(PartitionSpec spec) {
-        Expression projection = Projections.inclusive(spec, isCaseSensitive()).project(filter());
-        return ManifestEvaluator.forPartitionFilter(projection, spec, isCaseSensitive());
+    private boolean shouldPlanLocally(List<ManifestFile> manifests, boolean loadColumnStats) {
+        return (planMode == PlanMode.AUTO && loadColumnStats) || shouldPlanLocally(manifests);
+    }
+
+    // TODO(stephen): add more strategies
+    private boolean shouldPlanLocally(List<ManifestFile> manifests) {
+        switch (planMode) {
+            case LOCAL:
+                return true;
+
+            case DISTRIBUTED:
+                return manifests.isEmpty();
+
+            case AUTO:
+                long localPlanningSizeThreshold = localParallelism * localPlanningMaxSlotSize;
+                return remoteParallelism() <= localParallelism
+                        || manifests.size() <= 2 * localParallelism
+                        || totalSize(manifests) <= localPlanningSizeThreshold;
+
+            default:
+                throw new IllegalArgumentException("Unknown plan mode: " + planMode);
+        }
+    }
+
+    private int remoteParallelism() {
+        List<ComputeNode> workers = GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getClusterInfo().getAvailableComputeNodes();
+        return workers.stream().mapToInt(ComputeNode::getCpuCores).sum();
+    }
+
+    private long totalSize(List<ManifestFile> manifests) {
+        return manifests.stream().mapToLong(ManifestFile::length).sum();
     }
 
     private ResidualEvaluator newResidualEvaluator(PartitionSpec spec) {
@@ -353,5 +437,17 @@ public class StarRocksIcebergTableScan
     public CloseableIterable<CombinedScanTask> planTasks() {
         return TableScanUtil.planTasks(
                 planFiles(), targetSplitSize(), splitLookback(), splitOpenFileCost());
+    }
+
+    private int liveFilesCount(List<ManifestFile> manifests) {
+        return manifests.stream().mapToInt(this::liveFilesCount).sum();
+    }
+
+    private int liveFilesCount(ManifestFile manifest) {
+        return manifest.existingFilesCount() + manifest.addedFilesCount();
+    }
+
+    public boolean isRemotePlanFiles() {
+        return isRemotePlanFiles;
     }
 }

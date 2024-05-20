@@ -40,6 +40,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_index.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
 
@@ -210,6 +211,9 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_olap_scan_node.enable_prune_column_after_index_filter;
     }
+    if (thrift_olap_scan_node.__isset.enable_gin_filter) {
+        _params.enable_gin_filter = thrift_olap_scan_node.enable_gin_filter;
+    }
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }
@@ -226,17 +230,9 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
-    for (const auto& [_, col_nodes] : _non_pushdown_pred_tree.root().col_children_map()) {
-        for (const auto& col_node : col_nodes) {
-            _not_push_down_predicates.add(col_node.col_pred());
-        }
-    }
-    // TODO(liuzihe): support OR predicate.
-    DCHECK(_non_pushdown_pred_tree.root().compound_children().empty());
-
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _not_push_down_predicates));
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
 
     // Range
@@ -419,7 +415,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         _tablet_schema =
                 TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
     } else {
-        _tablet_schema = _tablet->tablet_schema();
+        // struct column prune will modify fields, so deep copy a new schema
+        _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema());
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
@@ -427,8 +424,10 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
 
+    // schema is new object, but fields not
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
+    // will modify schema field, need to copy schema
     RETURN_IF_ERROR(_prune_schema_by_access_paths(&child_schema));
 
     std::vector<RowsetSharedPtr> rowsets;
@@ -438,6 +437,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), std::move(rowsets), &_tablet_schema);
+    _reader->set_use_gtid(_morsel->get_olap_scan_range()->__isset.gtid);
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -445,8 +445,18 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_not_push_down_predicates.empty()) {
+    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_non_pushdown_pred_tree.empty()) {
         _expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", IO_TASK_EXEC_TIMER_NAME);
+
+        _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
+                                                                  TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+        COUNTER_SET(_non_pushdown_predicates_counter,
+                    static_cast<int64_t>(_scan_ctx->not_push_down_conjuncts().size() + _non_pushdown_pred_tree.size()));
+        if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+            _runtime_profile->add_info_string(
+                    "NonPushdownPredicateTree",
+                    _non_pushdown_pred_tree.visit([](const auto& node) { return node.debug_string(); }));
+        }
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
@@ -512,11 +522,11 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
-        if (!_not_push_down_predicates.empty()) {
+        if (!_non_pushdown_pred_tree.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            RETURN_IF_ERROR(_not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows));
+            RETURN_IF_ERROR(_non_pushdown_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
@@ -615,6 +625,11 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
+
+    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        _runtime_profile->add_info_string(
+                "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
+    }
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);

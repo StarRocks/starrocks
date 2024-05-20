@@ -455,12 +455,15 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=1998-01-02"));
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "lineitem_par",
-                "PARTITION PREDICATES: (((22: l_shipdate != '1998-01-01') AND ((22: l_shipdate < '1998-01-03') " +
-                        "OR (22: l_shipdate >= '1998-01-06'))) AND (22: l_shipdate >= '0000-01-02')) OR " +
-                        "(22: l_shipdate IS NULL)",
-                "NON-PARTITION PREDICATES: 20: l_orderkey > 100");
-
+        PlanTestBase.assertContains(plan, "     TABLE: hive_parttbl_mv_2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=5/6\n" +
+                "     rollup: hive_parttbl_mv_2");
+        PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+                "     PARTITION PREDICATES: 25: l_shipdate IN ('1998-01-02')\n" +
+                "     NON-PARTITION PREDICATES: 23: l_orderkey > 100\n" +
+                "     MIN/MAX PREDICATES: 23: l_orderkey > 100\n" +
+                "     partitions=1/6");
         dropMv("test", "hive_parttbl_mv_2");
     }
 
@@ -498,7 +501,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testHivePartialPartition5() throws Exception {
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
                         "PARTITION BY date_trunc('month', o_orderdate)\n" +
                         "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
@@ -541,7 +544,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "partitions=1/36");
 
         dropMv("test", "hive_parttbl_mv_5");
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
     }
 
     @Test
@@ -772,7 +775,18 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00'" +
                     " group by ds";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 8: ds >= '2020-01-01 00:00:00'\n" +
+                    "     partitions=2/3\n" +
+                    "     rollup: test_mv1\n" +
+                    "     tabletRatio=20/20");
+            PlanTestBase.assertContains(plan, "     TABLE: base_tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: date_trunc('minute', 10: k1) >= '2020-01-01 00:00:00'\n" +
+                    "     partitions=1/3\n" +
+                    "     rollup: base_tbl1\n" +
+                    "     tabletRatio=2/");
         }
 
         {
@@ -782,7 +796,16 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     "   date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
                     " group by ds";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertContains(plan, "     TABLE: base_tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: date_trunc('minute', 10: k1) >= '2020-01-01 00:00:00', " +
+                    "date_trunc('minute', 10: k1) <= '2020-03-01 00:00:00'\n" +
+                    "     partitions=1/3");
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 8: ds >= '2020-01-01 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
+                    "     partitions=2/3\n" +
+                    "     rollup: test_mv1");
         }
 
         dropMv("test", "test_mv1");
@@ -924,7 +947,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " where time_slice(k1, interval 1 hour) >= '2020-02-11 00:00:00' " +
                     " group by ds";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertContains(plan, "test_mv1");
         }
 
         {
@@ -934,7 +957,16 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                     " and time_slice(k1, interval 1 hour) <= '2020-03-01 00:00:00' " +
                     " group by ds";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertContains(plan, "test_mv1");
+            PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 8: ds >= '2020-02-11 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
+                    "     partitions=2/3");
+            PlanTestBase.assertContains(plan, "    TABLE: base_tbl1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: time_slice(10: k1, 1, 'hour', 'floor') >= '2020-02-11 00:00:00', " +
+                    "time_slice(10: k1, 1, 'hour', 'floor') <= '2020-03-01 00:00:00'\n" +
+                    "     partitions=1/3");
         }
 
         dropMv("test", "test_mv1");
@@ -1071,7 +1103,12 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String plan5 = getFragmentPlan(query5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
-                    "PREDICATES: (15: id_datetime < '1991-03-31 00:00:00') OR (15: id_datetime >= '1991-04-03 00:00:00')");
+                    "     TABLE: table_with_datetime_partition\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=1/4");
+            PlanTestBase.assertContains(plan5, "     TABLE: mv_on_view_1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=3/4");
             dropMv("test", "mv_on_view_1");
             starRocksAssert.dropView("view_with_expr");
         }
@@ -1094,7 +1131,12 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String plan5 = getFragmentPlan(query5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
-                    "PREDICATES: (12: id_date < '1991-03-31') OR (12: id_date >= '1991-04-03')");
+                    "     TABLE: mv_on_view_1\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=3/4");
+            PlanTestBase.assertContains(plan5, "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/4");
             dropMv("test", "mv_on_view_1");
             starRocksAssert.dropView("view_with_expr");
         }

@@ -1082,6 +1082,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
 - 引入版本：v3.3.0
 
+#### lock_manager_enabled
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启锁管理。lock manager 可以对锁实现集中管理，例如控制是否将元数据锁的粒度从库级别细化为表级别。
+- 引入版本：v3.3.0
+
+##### lock_manager_enable_using_fine_granularity_lock
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否将元数据锁的粒度从库级别细化为表级别。元数据锁细化为表级别后，可以减小锁冲突和竞争，提高导入和查询的并发性能。该参数只在 `lock_manager_enabled` 开启的前提下生效。
+- 引入版本：v3.3.0
+
+##### black_host_history_sec
+
+- 默认值：2 * 60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：黑名单中 BE 节点连接失败记录的保留时长。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- 默认值：5
+- 类型：Int
+- Unit:
+- 是否动态：是
+- 描述：黑名单中的 BE 节点允许连接失败的上限。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
+##### enable_legacy_compatibility_for_replication
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为跨集群数据迁移开启旧版本兼容。新旧版本的集群间可能存在行为差异，从而导致跨集群数据迁移时出现问题。因此在数据迁移前，您需要为目标集群开启旧版本兼容，并在数据迁移完成后关闭。`true` 表示开启兼容。
+- 引入版本：v3.1.10, v3.2.6
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
@@ -1228,6 +1273,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
 - 引入版本：v3.2.3
+
+##### enable_materialized_view_metrics_collect
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否默认收集异步物化视图的监控指标。
+- 引入版本：v3.1.11，v3.2.5
+
+##### enable_materialized_view_text_based_rewrite
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否默认启用基于文本的查询改写。如果此项设置为 `true`，则系统在创建异步物化视图时构建抽象语法树。
+- 引入版本：v3.2.5
 
 ##### enable_mv_automatic_active_check
 
@@ -2507,16 +2570,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<!--
 ##### tablet_sched_be_down_tolerate_time_s
 
 - 默认值：900
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：调度器容忍 BE 节点保持不存活状态的最长时间。超时之后该节点上的 Tablet 会被迁移到其他存活的 BE 节点上。
+- 引入版本：2.5.7
 
 <!--
 ##### tablet_sched_colocate_be_down_tolerate_time_s
@@ -3058,6 +3119,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到 Compaction Score 降到该值以下或者任务超时。
 - 引入版本：v3.2.0
 
+##### lake_compaction_disable_tables
+
+- 默认值：""
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：禁止存算分离内表 compaction 的 table id 名单。格式为 `tableId1;tableId2`，table id 之间用分号隔开，例如 `12345;98765`。
+- 引入版本：v3.1.11
+
 ### 其他
 
 ##### tmp_dir
@@ -3152,7 +3222,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### lake_enable_batch_publish_version 
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -4689,17 +4759,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### lock_manager_enable_loading_using_fine_granularity_lock
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### lock_manager_dead_lock_detection_delay_time_ms
 
 - 默认值：3000
@@ -4771,28 +4830,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
 - 引入版本：-
-
-<!--
-##### black_host_history_sec
-
-- 默认值：2 * 60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### black_host_connect_failures_within_time
-
-- 默认值：5
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### jdbc_connection_pool_size
 

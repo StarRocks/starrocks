@@ -55,10 +55,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
+import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -74,6 +75,7 @@ import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
@@ -92,6 +94,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -227,6 +230,7 @@ public class QueryAnalyzer {
             }.visit(resolvedRelation);
             analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
+            selectRelation.accept(new RewriteAliasVisitor(sourceScope, session), null);
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
             selectAnalyzer.analyze(
                     analyzeState,
@@ -314,6 +318,21 @@ public class QueryAnalyzer {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+
+                    // If tableRelation is an object that needs to be rewritten by policy,
+                    // then when it is changed to ViewRelation, both the view and the table
+                    // after the view is parsed also need to inherit this rewriting logic.
+                    if (tableRelation.isNeedRewrittenByPolicy()) {
+                        viewRelation.setNeedRewrittenByPolicy(true);
+
+                        new AstTraverser<Void, Void>() {
+                            @Override
+                            public Void visitRelation(Relation relation, Void context) {
+                                relation.setNeedRewrittenByPolicy(true);
+                                return null;
+                            }
+                        }.visit(queryStatement);
+                    }
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
@@ -344,7 +363,7 @@ public class QueryAnalyzer {
                     }
                 }
 
-                if (r.isPolicyRewritten()) {
+                if (!r.isNeedRewrittenByPolicy()) {
                     return r;
                 }
                 assert tableName != null;
@@ -352,9 +371,13 @@ public class QueryAnalyzer {
                 if (policyRewriteQuery == null) {
                     return r;
                 } else {
-                    r.setPolicyRewritten(true);
+                    r.setNeedRewrittenByPolicy(false);
                     SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
-                    subqueryRelation.setAlias(tableName);
+
+                    // If an alias exists, rewrite the alias into subquery to ensure
+                    // that the original expression can be resolved correctly.
+                    // `select v1 from tbl t` is rewritten as `select t.v1 from (select tbl.v1 from tbl) t`
+                    subqueryRelation.setAlias(resolveTableName);
                     return subqueryRelation;
                 }
             } else {
@@ -1113,7 +1136,7 @@ public class QueryAnalyzer {
 
     }
 
-    private Table resolveTable(TableRelation tableRelation) {
+    public Table resolveTable(TableRelation tableRelation) {
         TableName tableName = tableRelation.getName();
         try {
             MetaUtils.normalizationTableName(session, tableName);
@@ -1218,6 +1241,124 @@ public class QueryAnalyzer {
             for (Expr child : expr.getChildren()) {
                 checkJoinEqual(child);
             }
+        }
+    }
+
+    // Support alias referring to select item
+    // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1
+    // Note: alias in where clause is not handled now
+    // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1 where a != 'x'
+    private static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
+        private final Map<String, Expr> aliases = new HashMap<>();
+        private final Set<String> aliasesMaybeAmbiguous = new HashSet<>();
+        private final Map<String, Expr> resolvedAliases = new HashMap<>();
+        private final LinkedList<String> resolvingAlias = new LinkedList<>();
+        private final Scope sourceScope;
+        private final ConnectContext session;
+
+        public RewriteAliasVisitor(Scope sourceScope, ConnectContext session) {
+            this.sourceScope = sourceScope;
+            this.session = session;
+        }
+
+        @Override
+        public Expr visitExpression(Expr expr, Void context) {
+            for (int i = 0; i < expr.getChildren().size(); ++i) {
+                expr.setChild(i, visit(expr.getChild(i)));
+            }
+            return expr;
+        }
+
+        @Override
+        public Expr visitSlot(SlotRef slotRef, Void context) {
+            // We treat it as column name rather than alias when table name is specified
+            if (slotRef.getTblNameWithoutAnalyzed() != null) {
+                return slotRef;
+            }
+            // Alias is case-insensitive
+            String ref = slotRef.getColumnName().toLowerCase();
+            Expr e = aliases.get(ref);
+            // Ignore slot rewrite if the `slotRef` is not in alias map
+            if (e == null) {
+                return slotRef;
+            }
+            // If alias is same with table column name where this alias is defined, we directly use table column name.
+            // eg: DATE(pt) as pt
+            if (ref.equals(resolvingAlias.peekLast())) {
+                return slotRef;
+            }
+            // If alias is same with table column name, we directly use table column name.
+            // Otherwise, we treat it as alias.
+            // It behaves the same as that in `SelectAnalyzer.RewriteAliasVisitor`
+            // eg: select trim(t1a) as t1c, concat(t1c,','),t1c from test_all_type
+            if (sourceScope.tryResolveField(slotRef).isPresent() &&
+                    !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
+                return slotRef;
+            }
+            // Referring to a duplicated alias is ambiguous
+            if (aliasesMaybeAmbiguous.contains(ref)) {
+                throw new SemanticException("Column " + ref + " is ambiguous", slotRef.getPos());
+            }
+            // Use short circuit to avoid duplicated resolving of same alias
+            if (resolvedAliases.containsKey(ref)) {
+                return resolvedAliases.get(ref);
+            }
+            if (resolvingAlias.contains(ref)) {
+                throw new SemanticException("Cyclic aliases: " + ref, slotRef.getPos());
+            }
+
+            // Use resolvingAliases to detect cyclic aliases
+            resolvingAlias.add(ref);
+            e = visit(e);
+            resolvedAliases.put(ref, e);
+            resolvingAlias.removeLast();
+            return e;
+        }
+
+        @Override
+        public Expr visitSelect(SelectRelation selectRelation, Void context) {
+            // Collect alias in select relation
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                String alias = item.getAlias();
+                if (item.getAlias() == null) {
+                    continue;
+                }
+                // Ignore c1 as c1
+                if (item.getExpr() instanceof SlotRef &&
+                        alias.equalsIgnoreCase(((SlotRef) item.getExpr()).getColumnName())) {
+                    continue;
+                }
+                // Alias is case-insensitive
+                Expr lastAssociatedExpr = aliases.putIfAbsent(alias.toLowerCase(), item.getExpr());
+                if (lastAssociatedExpr != null) {
+                    // Duplicate alias is allowed, eg: select a.v1 as v, a.v2 as v from t0 a,
+                    // But it should not be ambiguous, eg: select a.v1 as v, a.v2 as v from t0 a order by v
+                    aliasesMaybeAmbiguous.add(alias.toLowerCase());
+                }
+            }
+            if (aliases.isEmpty()) {
+                return null;
+            }
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                if (item.getExpr() == null) {
+                    continue;
+                }
+                if (item.getAlias() == null) {
+                    item.setExpr(visit(item.getExpr()));
+                    continue;
+                }
+                // Alias is case-insensitive
+                String alias = item.getAlias().toLowerCase();
+                resolvingAlias.add(alias);
+                // Can't use computeIfAbsent here due to resolvedAliases is also modified in `visitSlot`,
+                // otherwise `ConcurrentModificationException` will be thrown
+                Expr rewrittenExpr = resolvedAliases.containsKey(alias) && !aliasesMaybeAmbiguous.contains(alias)
+                        ? resolvedAliases.get(alias) : visit(item.getExpr());
+                resolvedAliases.putIfAbsent(alias, rewrittenExpr);
+                item.setExpr(rewrittenExpr);
+                resolvingAlias.removeLast();
+            }
+            return null;
         }
     }
 }

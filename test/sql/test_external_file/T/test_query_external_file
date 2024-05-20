@@ -48,5 +48,15 @@ select count(distinct seq) from dict_two_page;
 
 select count(*), min(f00), max(f00) from dict_two_page group by seq having seq = 99;
 
+------- test rewrite -----
+
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+
+select count(*) from dict_two_page;
+
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+
+select count(*) from dict_two_page;
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_query_external_file/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 

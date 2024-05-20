@@ -18,7 +18,6 @@ package com.starrocks.catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -50,8 +49,7 @@ public class TemporaryTableTest {
         String sql = "show create table " + table;
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
-        ShowResultSet resultSet = executor.execute(showCreateTableStmt, ctx);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showCreateTableStmt, ctx);
         return resultSet.getResultRows().get(0).get(1);
     }
 
@@ -173,6 +171,63 @@ public class TemporaryTableTest {
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "temporary table only support olap engine", () -> {
             starRocksAssert.withTemporaryTableLike("t0", "t");
         });
+    }
+
+    @Test
+    public void testCreateView() throws Exception {
+        starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int) " +
+                "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
+                "properties('replication_num'='1', 'colocate_with'='xx')");
+
+        // 1. cannot create view based on temporary table
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "View can't base on temporary table.", () -> {
+            starRocksAssert.withView("create view v1 as select * from t1");
+        });
+        // 2. cannot create sync mv based on temporary table
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized view can't base on temporary table.", () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1 as select * from t1");
+        });
+
+        // 3. cannot create refresh mv based on temporary table
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized view can't base on temporary table.", () -> {
+            starRocksAssert.withRefreshedMaterializedView("create materialized view mv1 " +
+                    "properties(\"replication_num\"=\"1\") " +
+                    "refresh IMMEDIATE MANUAL as select * from t1");
+        });
+
+    }
+
+    @Test
+    public void testAlterTable() throws Exception {
+        starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int) " +
+                "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
+                "properties('replication_num'='1', 'colocate_with'='xx')");
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "temporary table doesn't support alter table statement.", () -> {
+                    starRocksAssert.alterTableProperties("alter table t1 add column c3 int");
+            });
+    }
+
+    @Test
+    public void testSubmitTask() throws Exception {
+        starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int) " +
+                "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
+                "properties('replication_num'='1', 'colocate_with'='xx')");
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Cannot submit task based on temporary table.", () -> {
+            // submit task
+            String sql = "submit task task1 as insert into t1 select * from t1";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        });
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Cannot submit task based on temporary table.", () -> {
+            // submit task
+            String sql = "submit task task1 as create table t2 as select * from t1";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        });
+
+
     }
 
     @Test

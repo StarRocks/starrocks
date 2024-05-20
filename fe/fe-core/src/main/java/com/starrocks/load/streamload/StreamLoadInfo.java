@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
@@ -83,8 +84,10 @@ public class StreamLoadInfo {
     private boolean enableReplicatedStorage = false;
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
-    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -237,6 +240,10 @@ public class StreamLoadInfo {
         return compressionType;
     }
 
+    public TCompressionType getPayloadCompressionType() {
+        return payloadCompressionType;
+    }
+
     public boolean getEnableReplicatedStorage() {
         return enableReplicatedStorage;
     }
@@ -348,15 +355,18 @@ public class StreamLoadInfo {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
                 request.getFileType(), request.getFormatType());
         streamLoadInfo.setOptionalFromTSLPutRequest(request, db);
-        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        if (request.getWarehouse() != null) {
-            warehouseName = request.getWarehouse();
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.isSetBackend_id()) {
+            SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            warehouseId = com.starrocks.lake.Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        } else if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            // For backward, we keep this else branch. We should prioritize using the method to get the warehouse by backend.
+            String warehouseName = request.getWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            warehouseId = warehouse.getId();
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-        if (warehouse == null) {
-            throw new UserException("Warehouse " + warehouseName + " not exist");
-        }
-        streamLoadInfo.setWarehouseId(warehouse.getId());
+        streamLoadInfo.setWarehouseId(warehouseId);
         return streamLoadInfo;
     }
 
@@ -449,6 +459,13 @@ public class StreamLoadInfo {
 
         if (request.isSetPartial_update_mode()) {
             partialUpdateMode = request.getPartial_update_mode();
+        }
+
+        if (request.isSetPayload_compression_type()) {
+            payloadCompressionType = CompressionUtils.findTCompressionByName(request.getPayload_compression_type());
+            if (payloadCompressionType == null) {
+                throw new UserException("unsupported compression type: " + request.getPayload_compression_type());
+            }
         }
     }
 

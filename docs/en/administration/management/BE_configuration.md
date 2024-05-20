@@ -1863,6 +1863,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Number of threads that are used for flushing MemTable in each store.
 - Introduced in: -
 
+##### lake_flush_thread_num_per_store
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Number of threads that are used for flushing MemTable in each store in shared-data mode. 
+When this value is set to `0`, the system uses twice of the CPU core count as the value.
+When this value is set to less than `0`, the system uses the product of its absolute value and the CPU core count as the value.
+- Introduced in: 3.1.12, 3.2.7
+
 ##### max_runnings_transactions_per_txn_map
 
 - Default: 100
@@ -3193,6 +3204,51 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The size of the query cache in the BE. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE.
 - Introduced in: -
 
+##### enable_json_flat
+
+- Default: false
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.
+- Introduced in: v3.3.0
+
+##### json_flat_null_factor
+
+- Default: 0.3
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_sparsity_factor
+
+- Default: 0.9
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_internal_column_min_limit
+
+- Default: 5
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description: The minimum number of JSON fields for performing Flat JSON. Flat JSON is not performed if the number of JSON fields is less than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
+##### json_flat_column_max
+
+- Default: 20
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description: The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `enable_json_flat` is set to `true`.
+- Introduced in: v3.3.0
+
 ### Shared-data
 
 ##### starlet_port
@@ -3314,7 +3370,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
+- Description: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
 - Introduced in: v3.1
 
 <!--

@@ -17,8 +17,6 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BloomFilterIndexUtil;
-import com.starrocks.analysis.IndexDef.IndexType;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -59,6 +57,8 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
@@ -636,7 +636,8 @@ public class OlapTableFactory implements AbstractTableFactory {
 
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
-                    Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet);
+                    Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet,
+                            warehouseId);
                     metastore.buildPartitions(db, table, partition.getSubPartitions().stream().collect(Collectors.toList()),
                             warehouseId);
                     table.addPartition(partition);
@@ -674,7 +675,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
                         Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
-                                tabletIdSet);
+                                tabletIdSet, warehouseId);
                         partitions.add(partition);
                     }
                     // It's ok if partitions is empty.

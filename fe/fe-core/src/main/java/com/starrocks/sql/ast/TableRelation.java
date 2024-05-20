@@ -53,6 +53,8 @@ public class TableRelation extends Relation {
 
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
+    private long gtid = 0;
+
     public TableRelation(TableName name) {
         super(name.getPos());
         this.name = name;
@@ -201,5 +203,13 @@ public class TableRelation extends Relation {
 
     public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
         return generatedExprToColumnRef;
+    }
+
+    public void setGtid(long gtid) {
+        this.gtid = gtid;
+    }
+
+    public long getGtid() {
+        return gtid;
     }
 }

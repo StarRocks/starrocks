@@ -15,6 +15,7 @@
 #include "connector/lake_connector.h"
 
 #include "exec/connector_scan_node.h"
+#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
@@ -62,14 +63,6 @@ Status LakeDataSource::open(RuntimeState* state) {
                                            &(tuple_desc->decoded_slots()));
 
     // Init _conjuncts_manager.
-    OlapScanConjunctsManager& cm = _conjuncts_manager;
-    cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
-    cm.tuple_desc = tuple_desc;
-    cm.obj_pool = &_obj_pool;
-    cm.key_column_names = &thrift_lake_scan_node.sort_key_column_names;
-    cm.runtime_filters = _runtime_filters;
-    cm.runtime_state = state;
-
     const TQueryOptions& query_options = state->query_options();
     int32_t max_scan_key_num;
     if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
@@ -82,8 +75,24 @@ Status LakeDataSource::open(RuntimeState* state) {
         enable_column_expr_predicate = thrift_lake_scan_node.enable_column_expr_predicate;
     }
 
+    OlapScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
+    opts.tuple_desc = tuple_desc;
+    opts.obj_pool = &_obj_pool;
+    opts.key_column_names = &thrift_lake_scan_node.sort_key_column_names;
+    opts.runtime_filters = _runtime_filters;
+    opts.runtime_state = state;
+    opts.scan_keys_unlimited = true;
+    opts.max_scan_key_num = max_scan_key_num;
+    opts.enable_column_expr_predicate = enable_column_expr_predicate;
+    opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
+    opts.driver_sequence = runtime_bloom_filter_eval_context.driver_sequence;
+
+    _conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
+    OlapScanConjunctsManager& cm = *_conjuncts_manager;
+
     // Parse conjuncts via _conjuncts_manager.
-    RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, enable_column_expr_predicate));
+    RETURN_IF_ERROR(cm.parse_conjuncts());
 
     RETURN_IF_ERROR(build_scan_range(_runtime_state));
 
@@ -122,11 +131,11 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
             chunk_ptr->set_slot_id_to_index(slot->id(), column_index);
         }
 
-        if (!_not_push_down_predicates.empty()) {
+        if (!_non_pushdown_pred_tree.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk_ptr->num_rows();
             _selection.resize(nrows);
-            RETURN_IF_ERROR(_not_push_down_predicates.evaluate(chunk_ptr, _selection.data(), 0, nrows));
+            RETURN_IF_ERROR(_non_pushdown_pred_tree.evaluate(chunk_ptr, _selection.data(), 0, nrows));
             chunk_ptr->filter(_selection);
             DCHECK_CHUNK(chunk_ptr);
         }
@@ -233,13 +242,14 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache && _scan_range.fill_data_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
-    _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager.unarrived_runtime_filters());
+    _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
-    ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager.get_predicate_tree(parser, _predicate_free_pool));
+    ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
     decide_chunk_size(!pred_tree.empty());
     _has_any_predicate = !pred_tree.empty();
+
     PredicateAndNode pushdown_pred_root;
     PredicateAndNode non_pushdown_pred_root;
     pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
@@ -247,17 +257,9 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
-    for (const auto& [_, col_nodes] : _non_pushdown_pred_tree.root().col_children_map()) {
-        for (const auto& col_node : col_nodes) {
-            _not_push_down_predicates.add(col_node.col_pred());
-        }
-    }
-    // TODO(liuzihe): support OR predicate.
-    DCHECK(_non_pushdown_pred_tree.root().compound_children().empty());
-
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _not_push_down_predicates));
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
 
     // Range
@@ -335,13 +337,24 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_not_push_down_conjuncts.empty() || !_not_push_down_predicates.empty()) {
+    if (!_not_push_down_conjuncts.empty() || !_non_pushdown_pred_tree.empty()) {
         _expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
+
+        _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
+                                                                  TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+        COUNTER_SET(_non_pushdown_predicates_counter,
+                    static_cast<int64_t>(_not_push_down_conjuncts.size() + _non_pushdown_pred_tree.size()));
+        if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+            _runtime_profile->add_info_string(
+                    "NonPushdownPredicateTree",
+                    _non_pushdown_pred_tree.visit([](const auto& node) { return node.debug_string(); }));
+        }
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
     RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
+    _reader->set_is_asc_hint(_provider->is_asc_hint());
 
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
@@ -350,8 +363,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
 Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
-    RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
-    _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
+    RETURN_IF_ERROR(_conjuncts_manager->get_key_ranges(&_key_ranges));
+    _conjuncts_manager->get_not_push_down_conjuncts(&_not_push_down_conjuncts);
     RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
 
     int scanners_per_tablet = 64;
@@ -529,6 +542,11 @@ void LakeDataSource::update_counter() {
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
+    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        _runtime_profile->add_info_string(
+                "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
+    }
+
     StarRocksMetrics::instance()->query_scan_bytes.increment(_bytes_read);
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
 
@@ -565,13 +583,23 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_io_count_total_counter, _reader->stats().io_count);
     COUNTER_UPDATE(_io_count_request_counter, _reader->stats().io_count_request);
 
-    COUNTER_UPDATE(_io_ns_local_disk_timer, _reader->stats().io_ns_local_disk);
+    COUNTER_UPDATE(_io_ns_local_disk_timer, _reader->stats().io_ns_read_local_disk);
     COUNTER_UPDATE(_io_ns_remote_timer, _reader->stats().io_ns_remote);
     COUNTER_UPDATE(_io_ns_total_timer, _reader->stats().io_ns);
 
     COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, _reader->stats().prefetch_pending_ns);
+
+    // update cache related info for CACHE SELECT
+    if (_runtime_state->query_options().__isset.query_type &&
+        _runtime_state->query_options().query_type == TQueryType::LOAD) {
+        _runtime_state->update_num_datacache_read_bytes(_reader->stats().compressed_bytes_read_local_disk);
+        _runtime_state->update_num_datacache_read_time_ns(_reader->stats().io_ns_read_local_disk);
+        _runtime_state->update_num_datacache_write_bytes(_reader->stats().compressed_bytes_write_local_disk);
+        _runtime_state->update_num_datacache_write_time_ns(_reader->stats().io_ns_write_local_disk);
+        _runtime_state->update_num_datacache_count(1);
+    }
 }
 
 // ================================

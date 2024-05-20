@@ -628,13 +628,10 @@ public class SelectStmtTest {
             String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
                     "str_to_map('age=18&sex=1&gender=1','&','=')['sex'] AS sex;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assert.assertTrue(plan, plan.contains("2 <-> 4: str_to_map['age']\n" +
-                    "  |  3 <-> 4: str_to_map['sex']\n" +
-                    "  |  common expressions:\n" +
-                    "  |  4 <-> str_to_map[('age=18&sex=1&gender=1', '&', '='); " +
-                    "args: VARCHAR,VARCHAR,VARCHAR; " +
-                    "result: MAP<VARCHAR,VARCHAR>; args " +
-                    "nullable: false; result nullable: true]"));
+            Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  2 <-> str_to_map('age=18&sex=1&gender=1', '&', '=')['age']\n" +
+                    "  |  3 <-> str_to_map('age=18&sex=1&gender=1', '&', '=')['sex']"));
         } catch (Exception e) {
             Assert.fail("Should not throw an exception");
         }

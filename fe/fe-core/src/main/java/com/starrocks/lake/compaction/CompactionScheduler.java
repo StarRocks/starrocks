@@ -37,7 +37,9 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -53,10 +55,12 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -79,9 +83,11 @@ public class CompactionScheduler extends Daemon {
     private boolean finishedWaiting = false;
     private long waitTxnId = -1;
     private long lastPartitionCleanTime;
+    private Set<Long> disabledTables; // copy-on-write
 
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
-                        @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr) {
+                        @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
+                        @NotNull String disableTablesStr) {
         super("COMPACTION_DISPATCH", LOOP_INTERVAL_MS);
         this.compactionManager = compactionManager;
         this.systemInfoService = systemInfoService;
@@ -91,6 +97,9 @@ public class CompactionScheduler extends Daemon {
         this.lastPartitionCleanTime = System.currentTimeMillis();
         this.history = new SynchronizedCircularQueue<>(Config.lake_compaction_history_size);
         this.failHistory = new SynchronizedCircularQueue<>(Config.lake_compaction_fail_history_size);
+        this.disabledTables = Collections.unmodifiableSet(new HashSet<>());
+
+        disableTables(disableTablesStr);
     }
 
     @Override
@@ -190,7 +199,8 @@ public class CompactionScheduler extends Daemon {
             return;
         }
 
-        List<PartitionIdentifier> partitions = compactionManager.choosePartitionsToCompact(runningCompactions.keySet());
+        List<PartitionIdentifier> partitions = compactionManager.choosePartitionsToCompact(runningCompactions.keySet(),
+                disabledTables);
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
             PartitionIdentifier partition = partitions.get(index++);
             CompactionJob job = startCompaction(partition);
@@ -228,26 +238,10 @@ public class CompactionScheduler extends Daemon {
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
             compactionManager.getAllPartitions()
                     .stream()
-                    .filter(p -> !isPartitionExist(p))
+                    .filter(p -> !MetaUtils.isPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
                     .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
                     .forEach(compactionManager::removePartition);
             lastPartitionCleanTime = now;
-        }
-    }
-
-    private boolean isPartitionExist(PartitionIdentifier partition) {
-        Database db = stateMgr.getDb(partition.getDbId());
-        if (db == null) {
-            return false;
-        }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            // lake table or lake materialized view
-            OlapTable table = (OlapTable) db.getTable(partition.getTableId());
-            return table != null && table.getPhysicalPartition(partition.getPartitionId()) != null;
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -358,8 +352,9 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeAssignedToTablet(
-                        Config.lake_compaction_warehouse, (LakeTablet) tablet);
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getCompactionWarehouse();
+                ComputeNode computeNode = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
                 if (computeNode == null) {
                     beToTablets.clear();
                     return beToTablets;
@@ -383,8 +378,8 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
 
-        String warehouseName = Config.lake_compaction_warehouse;
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getCompactionWarehouse();
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
                 loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
     }
@@ -497,5 +492,27 @@ public class CompactionScheduler extends Daemon {
         synchronized void forEach(Consumer<? super E> consumer) {
             q.forEach(consumer);
         }
+    }
+
+    public boolean isTableDisabled(Long tableId) {
+        return disabledTables.contains(tableId);
+    }
+
+    public void disableTables(String disableTablesStr) {
+        Set<Long> newDisabledTables = new HashSet<>();
+        if (!disableTablesStr.isEmpty()) {
+            String[] arr = disableTablesStr.split(";");
+            for (String a : arr) {
+                try {
+                    long l = Long.parseLong(a);
+                    newDisabledTables.add(l);
+                } catch (NumberFormatException e) {
+                    LOG.warn("Bad format of disable tables string: {}, now is {}, should be like \"tableId1;tableId2\"",
+                              e, disableTablesStr);
+                    return;
+                }
+            }
+        }
+        disabledTables = Collections.unmodifiableSet(newDisabledTables);
     }
 }

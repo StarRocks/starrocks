@@ -10,13 +10,13 @@ limit: 20
 cardinality: 20
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 5738045.738045738] ESTIMATE
-* c_name-->[-Infinity, Infinity, 0.0, 25.0, 7651210.947193347] ESTIMATE
-* c_address-->[-Infinity, Infinity, 0.0, 40.0, 7651210.947193347] ESTIMATE
-* c_phone-->[-Infinity, Infinity, 0.0, 15.0, 7651210.947193347] ESTIMATE
+* c_name-->[-Infinity, Infinity, 0.0, 25.0, 5738045.738045739] ESTIMATE
+* c_address-->[-Infinity, Infinity, 0.0, 40.0, 5738045.738045739] ESTIMATE
+* c_phone-->[-Infinity, Infinity, 0.0, 15.0, 5738045.738045739] ESTIMATE
 * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
-* c_comment-->[-Infinity, Infinity, 0.0, 117.0, 7651210.947193347] ESTIMATE
+* c_comment-->[-Infinity, Infinity, 0.0, 117.0, 5738045.738045739] ESTIMATE
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-* sum-->[810.9, 214903.376217033, 0.0, 16.0, 3736520.0] ESTIMATE
+* sum-->[810.9, 214903.37621703307, 0.0, 16.0, 3736520.0] ESTIMATE
 
 PLAN FRAGMENT 1(F09)
 
@@ -66,7 +66,7 @@ OutPut Exchange Id: 17
 
 16:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([38: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([38: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [1: c_custkey, INT, true], [2: c_name, VARCHAR, true], [6: c_acctbal, DECIMAL64(15,2), true], [5: c_phone, VARCHAR, true], [35: n_name, VARCHAR, true], [3: c_address, VARCHAR, true], [8: c_comment, VARCHAR, true]
 |  cardinality: 7651211
 |  column statistics:
@@ -88,7 +88,7 @@ OutPut Exchange Id: 17
 |  6 <-> [6: c_acctbal, DECIMAL64(15,2), true]
 |  8 <-> [8: c_comment, VARCHAR, true]
 |  35 <-> [35: n_name, VARCHAR, true]
-|  38 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  38 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 7651211
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 5738045.738045738] ESTIMATE
@@ -307,4 +307,3 @@ column statistics:
 * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 * c_comment-->[-Infinity, Infinity, 0.0, 117.0, 1.4788744E7] ESTIMATE
 [end]
-

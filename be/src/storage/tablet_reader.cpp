@@ -95,7 +95,8 @@ Status TabletReader::prepare() {
     SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
     Status st = Status::OK();
     // Non-empty rowsets indicate that it is captured before creating this TabletReader.
-    if (_rowsets.empty()) {
+    // _use_gtid is used to indicate that the rowsets are captured by gtid.
+    if (_rowsets.empty() && !_use_gtid) {
         std::shared_lock l(_tablet->get_header_lock());
         st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
         if (!st.ok()) {
@@ -273,9 +274,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
-    auto cid_to_preds = rs_opts.pred_tree.get_immediate_column_predicate_map();
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, cid_to_preds,
-                                                                     &rs_opts.predicates_for_zone_map));
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
@@ -296,8 +297,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
-    rs_opts.asc_hint = _is_asc_hint;
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
+    }
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.enable_gin_filter = params.enable_gin_filter;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {

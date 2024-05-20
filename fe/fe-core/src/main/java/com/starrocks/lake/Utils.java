@@ -32,6 +32,9 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -40,6 +43,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
@@ -51,7 +55,7 @@ public class Utils {
     }
 
     public static Long chooseNodeId(ShardInfo shardInfo) {
-        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllBackendIdsByShard(shardInfo, true);
+        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
         if (!ids.isEmpty()) {
             return ids.iterator().next();
         }
@@ -204,5 +208,31 @@ public class Utils {
                 throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
             }
         }
+    }
+
+    public static Optional<Long> selectWorkerGroupByWarehouseId(WarehouseManager manager, long warehouseId) {
+        Warehouse warehouse = manager.getWarehouse(warehouseId);
+        if (warehouse == null)  {
+            LOG.warn("failed to get warehouse by id {}", warehouseId);
+            return Optional.empty();
+        }
+
+        List<Long> ids = warehouse.getWorkerGroupIds();
+        if (CollectionUtils.isEmpty(ids)) {
+            LOG.warn("failed to get worker group id from warehouse {}", warehouse);
+            return Optional.empty();
+        }
+
+        return Optional.of(ids.get(0));
+    }
+
+    public static Optional<Long> getWarehouseIdByNodeId(SystemInfoService systemInfo, long nodeId) {
+        ComputeNode node = systemInfo.getBackendOrComputeNode(nodeId);
+        if (node == null) {
+            LOG.warn("failed to get warehouse id by node id: {}", nodeId);
+            return Optional.empty();
+        }
+
+        return Optional.of(node.getWarehouseId());
     }
 }

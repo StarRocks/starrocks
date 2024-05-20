@@ -27,12 +27,14 @@ import com.starrocks.connector.iceberg.CachingIcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -152,12 +154,13 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                     registeredTableInfo.getCatalogName(), registeredTableInfo.getDbName(),
                     registeredTableInfo.getTableName());
             try {
-                Table registeredTable = registeredTableInfo.getTable();
-                if (registeredTable == null) {
+                Optional<Table> registeredTableOpt = MvUtils.getTableWithIdentifier(registeredTableInfo);
+                if (registeredTableOpt.isEmpty()) {
                     LOG.warn("Table {}.{}.{} not exist",  registeredTableInfo.getCatalogName(),
                             registeredTableInfo.getDbName(), registeredTableInfo.getTableName());
                     continue;
                 }
+                Table registeredTable = registeredTableOpt.get();
                 if (!registeredTable.isHiveTable()) {
                     continue;
                 }

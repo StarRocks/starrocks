@@ -68,7 +68,7 @@ Status EngineAlterTabletTask::execute() {
     } else {
         SchemaChangeHandler handler;
         handler.set_alter_msg_header(alter_msg_header);
-        res = handler.process_alter_tablet_v2(_alter_tablet_req);
+        res = handler.process_alter_tablet(_alter_tablet_req);
     }
     if (!res.ok()) {
         LOG(WARNING) << alter_msg_header << "failed to do alter task. status=" << res.to_string()

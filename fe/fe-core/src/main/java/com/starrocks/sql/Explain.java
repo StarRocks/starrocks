@@ -180,6 +180,11 @@ public class Explain {
         }
 
         @Override
+        public OperatorStr visitPhysicalProject(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            return visit(optExpression.getInputs().get(0), context);
+        }
+
+        @Override
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
@@ -211,6 +216,9 @@ public class Explain {
                     "/" +
                     totalTabletsNum;
             buildOperatorProperty(sb, partitionAndBucketInfo, context.step);
+            if (scan.getGtid() > 0) {
+                buildOperatorProperty(sb, "gtid: " + scan.getGtid(), context.step);
+            }
             buildCommonProperty(sb, scan, context.step);
             return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
         }

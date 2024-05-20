@@ -221,9 +221,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
-    auto cid_to_preds = rs_opts.pred_tree.get_immediate_column_predicate_map();
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, cid_to_preds,
-                                                                     &rs_opts.predicates_for_zone_map));
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
                      is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
@@ -242,6 +242,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _tablet_metadata->version();
+    }
+
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
     }
 
     rs_opts.rowid_range_option = params.rowid_range_option;
@@ -403,7 +407,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
         } else {
-            _collect_iter = new_heap_merge_iterator(seg_iters, (keys_type == PRIMARY_KEYS));
+            _collect_iter = new_heap_merge_iterator(
+                    seg_iters,
+                    (keys_type == PRIMARY_KEYS) && StorageEngine::instance()->enable_light_pk_compaction_publish());
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {
@@ -422,6 +428,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
+        if (!_is_asc_hint) {
+            std::reverse(seg_iters.begin(), seg_iters.end());
+        }
         //             UnionIterator
         //                   |
         //       +-----------+-----------+

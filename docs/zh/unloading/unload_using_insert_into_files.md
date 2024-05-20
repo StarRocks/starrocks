@@ -12,8 +12,7 @@ displayed_sidebar: "Chinese"
 
 > **说明**
 >
-> - 使用 INSERT INTO FILES 导出数据不支持将数据导出至本地文件系统。
-> - 当前，INSERT INTO FILES 仅支持以 Parquet 文件格式导出数据。
+> 使用 INSERT INTO FILES 导出数据不支持将数据导出至本地文件系统。
 
 ## 准备工作
 

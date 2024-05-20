@@ -137,6 +137,7 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
+    DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
     return Status::OK();
@@ -718,7 +719,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
     if (scan_op->enable_adaptive_io_tasks()) {
-        [[maybe_unused]] auto build_debug_string = [&](const std::string action) {
+        [[maybe_unused]] auto build_debug_string = [&](const std::string& action) {
             std::stringstream ss;
             ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
                << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence() << ", "

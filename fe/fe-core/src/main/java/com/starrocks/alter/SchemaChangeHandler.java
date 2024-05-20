@@ -46,8 +46,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
@@ -102,6 +100,8 @@ import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
@@ -532,6 +532,15 @@ public class SchemaChangeHandler extends AlterHandler {
 
         Column oriColumn = schemaForFinding.get(modColIndex);
 
+        for (Index index : olapTable.getIndexes()) {
+            if (index.getIndexType() == IndexDef.IndexType.GIN) {
+                if (index.getColumns().contains(oriColumn.getName()) &&
+                        !modColumn.getType().isStringType()) {
+                    throw new DdlException("Cannot modify a column with GIN into non-string type");
+                }
+            }
+        }
+
         if (oriColumn.isAutoIncrement()) {
             throw new DdlException("Can't not modify a AUTO_INCREMENT column");
         }
@@ -880,14 +889,14 @@ public class SchemaChangeHandler extends AlterHandler {
                     "Can not add column which already exists in base table: " + newColName);
         }
 
-        // check if the new column already exist in physical column.
-        // do not support adding new column which already exist in physical column.
-        Optional<Column> foundPhysicalColumn = olapTable.getBaseSchema().stream()
-                .filter(c -> c.getDirectPhysicalName().equalsIgnoreCase(newColName)).findFirst();
-        if (foundPhysicalColumn.isPresent()) {
+        // check if the new column already exist in column id.
+        // do not support adding new column which already exist in column id.
+        foundColumn = olapTable.getBaseSchema().stream()
+                .filter(c -> c.getColumnId().getId().equalsIgnoreCase(newColName)).findFirst();
+        if (foundColumn.isPresent()) {
             throw new DdlException(
-                    "Can not add column which already exists in physical column: " + newColName
-                            + ", you can remove " + foundPhysicalColumn.get() + " and try again.");
+                    "Can not add column which already exists in column id: " + newColName
+                            + ", you can remove " + foundColumn.get() + " and try again.");
         }
 
         /*
@@ -1296,7 +1305,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (Integer colIdx : originSortKeyIdxes) {
                     String columnName = index.getSchema().get(colIdx).getName();
                     Optional<Column> oneCol =
-                            alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
+                            alterSchema.stream().filter(c -> c.nameEquals(columnName, true)).findFirst();
                     if (oneCol.isEmpty()) {
                         LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
                         throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
