@@ -216,14 +216,11 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
         mv $STARROCKS_HOME/conf/fe.conf $STARROCKS_HOME/conf/fe.conf.readonly
         cp $STARROCKS_HOME/conf/fe.conf.readonly $STARROCKS_HOME/conf/fe.conf
     fi
-    # force sys_log_to_console = true
-    if ! grep sys_log_to_console $STARROCKS_HOME/conf/fe.conf | tr -d ' ' | grep -v "#sys_log_to_console"  &>/dev/null; then
-        echo -e "\nsys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
-    fi
 else
     # redirect all subsequent commands' stdout/stderr into $LOG_FILE
     exec >> $LOG_FILE 2>&1
 fi
+export SYS_LOG_TO_CONSOLE=${RUN_LOG_CONSOLE}
 
 echo "using java version $JAVA_VERSION"
 echo $final_java_opt
