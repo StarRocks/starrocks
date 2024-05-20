@@ -235,8 +235,8 @@ public class TaskManagerTest {
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun1);
-        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun2, false);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -272,8 +272,8 @@ public class TaskManagerTest {
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2);
-        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1, false);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -310,8 +310,8 @@ public class TaskManagerTest {
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun1);
-        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun2, false);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -348,8 +348,8 @@ public class TaskManagerTest {
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun2);
-        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1, false);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -395,9 +395,9 @@ public class TaskManagerTest {
         taskRun3.getStatus().setDefinition("select 1");
         taskRun3.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2);
-        taskRunManager.arrangeTaskRun(taskRun1);
-        taskRunManager.arrangeTaskRun(taskRun3);
+        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun3, false);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));

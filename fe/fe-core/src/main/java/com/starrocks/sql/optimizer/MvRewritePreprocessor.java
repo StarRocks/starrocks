@@ -203,12 +203,23 @@ public class MvRewritePreprocessor {
         }
     }
 
+<<<<<<< HEAD
     public void prepare(OptExpression queryOptExpression) {
+=======
+    public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+>>>>>>> 91fb5781eb ([BugFix] arrangeTaskRun should not update task run state in follower FE (#45931))
         // MV Rewrite will be used when cbo is enabled.
-        if (context.getOptimizerConfig().isRuleBased()) {
+        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
+                !sessionVariable.isEnableMaterializedViewRewrite()) {
             return;
         }
+<<<<<<< HEAD
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
+=======
+
+        try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
+>>>>>>> 91fb5781eb ([BugFix] arrangeTaskRun should not update task run state in follower FE (#45931))
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
