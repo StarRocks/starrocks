@@ -1051,9 +1051,9 @@ CONF_String(directory_of_inject,
             "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
 
 // Used by to_base64
-CONF_Int64(max_length_for_to_base64, "200000");
+CONF_mInt64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
-CONF_Int64(max_length_for_bitmap_function, "1000000");
+CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "false");
