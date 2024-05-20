@@ -293,7 +293,7 @@ public:
 
     template <bool is_remain>
     Status lazy_output_chunk(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* chunk, JoinHashTable& hash_table) {
-        if (_enable_lazy_materialize && (*chunk) && !(*chunk)->is_empty()) {
+        if (_enable_late_materialization && (*chunk) && !(*chunk)->is_empty()) {
             return hash_table.lazy_output<is_remain>(state, probe_chunk, chunk);
         } else {
             return Status::OK();

@@ -115,7 +115,7 @@ public class HashJoinNode extends JoinNode {
             msg.hash_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
         }
-        msg.hash_join_node.setEnable_lazy_materialize(ConnectContext.get().getSessionVariable().isEnableLazyMaterializeJoin());
+        msg.hash_join_node.setEnable_late_materialization(ConnectContext.get().getSessionVariable().isEnableLateMaterializationJoin());
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
         if (partitionExprs != null) {
@@ -143,7 +143,7 @@ public class HashJoinNode extends JoinNode {
         hashJoinNode.setIs_rewritten_from_not_in(innerRef != null && innerRef.isJoinRewrittenFromNotIn());
         hashJoinNode.setPartition_exprs(normalizer.normalizeOrderedExprs(partitionExprs));
         hashJoinNode.setOutput_columns(normalizer.remapIntegerSlotIds(outputSlots));
-        hashJoinNode.setEnable_lazy_materialize(enableLazyMaterialize);
+        hashJoinNode.setEnable_late_materialization(enableLateMaterialization);
         planNode.setHash_join_node(hashJoinNode);
         planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);

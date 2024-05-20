@@ -657,7 +657,7 @@ struct THashJoinNode {
 
   // used in pipeline engine
   55: optional bool interpolate_passthrough = false
-  56: optional bool enable_lazy_materialize = false
+  56: optional bool enable_late_materialization = false
 }
 
 struct TMergeJoinNode {
