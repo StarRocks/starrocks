@@ -252,6 +252,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v2.5.20, v3.1.9, v3.2.7, v3.3.0
 
+### enable_materialized_view_plan_cache
+
+* **Description**: Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. Setting it to `true` indicates enabling it.
+* **Default**: true
+* **Introduced in**: v3.2.0
+
 ### follower_query_forward_mode
 
 * **Description**: Specifies to which FE nodes the query statements are routed.
@@ -960,9 +966,3 @@ The StarRocks version. Cannot be changed.
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
 * **Default**: false
 * **Introduced in**: v3.1.10
-
-### enable_materialized_view_plan_cache
-
-* **Description**: Used to specify whether to enable materialized view plan cache, which can optimize materialized view automatic rewrite performance.
-* **Default**: true
-* **Introduced in**: v3.2.0
