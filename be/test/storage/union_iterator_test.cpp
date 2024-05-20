@@ -104,7 +104,7 @@ TEST_F(UnionIteratorTest, union_two) {
 
     chunk->reset();
     std::vector<uint64_t> rssid_rowids;
-    st = iter->get_next(chunk.get(), &rssid_rowids);
+    st = iter->get_next(chunk.get(), nullptr, &rssid_rowids);
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(5U, chunk->num_rows());
     ASSERT_EQ(5U, rssid_rowids.size());
@@ -122,6 +122,10 @@ TEST_F(UnionIteratorTest, union_two) {
     chunk->reset();
     st = iter->get_next(chunk.get());
     ASSERT_TRUE(st.is_end_of_file());
+
+    std::vector<RowSourceMask> source_masks;
+    st = iter->get_next(chunk.get(), &source_masks, &rssid_rowids);
+    ASSERT_TRUE(st.is_not_supported());
 }
 
 // NOLINTNEXTLINE
