@@ -1056,12 +1056,12 @@ public class AlterTest {
         Assert.assertTrue(partition.isPresent());
         Assert.assertEquals(table.getPhysicalPartitions().size(), 1);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 1,
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 1,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(partition.get().getSubPartitions().size(), 2);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 2);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 2,
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 2,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(partition.get().getSubPartitions().size(), 4);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 4);
@@ -1113,7 +1113,7 @@ public class AlterTest {
         Partition partition = table.getPartition("p20140101");
         Assert.assertNotNull(partition);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition, 1,
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition, 1,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 4);
         Assert.assertEquals(partition.getSubPartitions().size(), 2);
@@ -1121,7 +1121,7 @@ public class AlterTest {
         partition = table.getPartition("p20140103");
         Assert.assertNotNull(partition);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition, 2,
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition, 2,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 6);
         Assert.assertEquals(partition.getSubPartitions().size(), 3);
@@ -1159,7 +1159,7 @@ public class AlterTest {
         Assert.assertTrue(partition.isPresent());
         Assert.assertEquals(table.getPhysicalPartitions().size(), 1);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 1,
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 1,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 

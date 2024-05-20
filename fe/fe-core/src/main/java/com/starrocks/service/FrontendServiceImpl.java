@@ -2060,7 +2060,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             if (mutablePartitions.size() <= 1) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addSubPartitions(db, olapTable.getName(), partition, 1, warehouseId);
+                        .addSubPartitions(db, olapTable, partition, 1, warehouseId);
             }
             p.setImmutable(true);
         }
