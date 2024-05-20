@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -87,10 +88,12 @@ public class DefaultWorkerProvider implements WorkerProvider {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
-                                                             int numUsedComputeNodes) {
+                                                             int numUsedComputeNodes,
+                                                             ComputationFragmentSchedulingPolicy policy) {
+
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes);
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, policy);
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
             if (LOG.isDebugEnabled()) {
@@ -296,13 +299,24 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
-                                                                        int numUsedComputeNodes) {
+                                      int numUsedComputeNodes,
+                                      ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
+        //define Node Pool
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
+
+        //get CN and BE from systemInfoService
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
-        if (numUsedComputeNodes <= 0 || numUsedComputeNodes >= idToComputeNode.size()) {
-            return idToComputeNode;
+        ImmutableMap<Long, ComputeNode> idToBackend
+                = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
+
+        //add CN and BE to Node Pool
+        if (numUsedComputeNodes <= 0) {
+            computeNodes.putAll(idToComputeNode);
+            if (computationFragmentSchedulingPolicy == ComputationFragmentSchedulingPolicy.ALL_NODES) {
+                computeNodes.putAll(idToBackend);
+            }
         } else {
-            Map<Long, ComputeNode> computeNodes = new HashMap<>(numUsedComputeNodes);
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
                         getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
@@ -312,8 +326,22 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 }
                 computeNodes.put(computeNode.getId(), computeNode);
             }
-            return ImmutableMap.copyOf(computeNodes);
+            if (computationFragmentSchedulingPolicy == ComputationFragmentSchedulingPolicy.ALL_NODES) {
+                for (int i = 0; i < idToBackend.size() && computeNodes.size() < numUsedComputeNodes; i++) {
+                    ComputeNode backend =
+                            getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex);
+                    Preconditions.checkNotNull(backend);
+                    if (!isWorkerAvailable(backend)) {
+                        continue;
+                    }
+                    computeNodes.put(backend.getId(), backend);
+                }
+
+            }
         }
+
+        //return Node Pool
+        return ImmutableMap.copyOf(computeNodes);
     }
 
     private static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,

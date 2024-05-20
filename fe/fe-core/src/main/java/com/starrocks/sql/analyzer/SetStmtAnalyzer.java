@@ -212,6 +212,18 @@ public class SetStmtAnalyzer {
             }
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.COMPUTATION_FRAGMENT_SCHEDULING_POLICY)) {
+            String policy = resolvedExpression.getStringValue();
+            SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy =
+                    Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                            StringUtils.upperCase(policy)).orNull();
+            if (computationFragmentSchedulingPolicy == null) {
+                String supportedList = Joiner.on(",").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+                throw new SemanticException(String.format("Unsupported computation_fragment_scheduling_policy: %s, " +
+                        "supported list is %s", policy, supportedList));
+            }
+        }
+
         // materialized_view_rewrite_mode
         if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
             String rewriteModeName = resolvedExpression.getStringValue();
