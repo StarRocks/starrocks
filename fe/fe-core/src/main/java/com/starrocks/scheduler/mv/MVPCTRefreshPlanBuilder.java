@@ -21,7 +21,6 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
@@ -29,9 +28,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.PartitionUtil;
@@ -42,7 +39,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -57,8 +53,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getStr2DateExpr;
 
 public class MVPCTRefreshPlanBuilder {
     private static final Logger LOG = LogManager.getLogger(MVPCTRefreshPlanBuilder.class);
@@ -108,14 +102,14 @@ public class MVPCTRefreshPlanBuilder {
                 continue;
             }
             // external table doesn't support query with partitionNames
-            if (isPushDownBelowTable && !table.isExternalTableWithFileSystem()) {
+            if (isPushDownBelowTable) {
                 LOG.info("Optimize materialized view {} refresh task, generate table relation {} target partition names:{} ",
                         mv.getName(), tableRelation.getName(), Joiner.on(",").join(tablePartitionNames));
                 tableRelation.setPartitionNames(
                         new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
             }
 
-            Pair<Table, Column> refBaseTableAndCol = mv.getDirectTableAndPartitionColumn();
+            Pair<Table, Column> refBaseTableAndCol = mv.getBaseTableAndPartitionColumn();
             if (refBaseTableAndCol == null || !refBaseTableAndCol.first.equals(table)) {
                 continue;
             }
@@ -219,24 +213,20 @@ public class MVPCTRefreshPlanBuilder {
 
         if (mvPartitionInfo.isRangePartition()) {
             List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
+            Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap =
+                    mvContext.getRefBaseTableRangePartitionMap();
             for (String partitionName : tablePartitionNames) {
-                sourceTablePartitionRange.add(mvContext.getRefBaseTableRangePartitionMap()
-                        .get(table).get(partitionName));
+                sourceTablePartitionRange.add(refBaseTableRangePartitionMap.get(partitionName));
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
             // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
             // here we should convert date into '%Y%m%d' format
             Expr partitionExpr = mv.getFirstPartitionRefTableExpr();
-            Pair<Table, Column> partitionTableAndColumn = mv.getDirectTableAndPartitionColumn();
+            Pair<Table, Column> partitionTableAndColumn = mv.getBaseTableAndPartitionColumn();
             boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
             if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
                     && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
-                Optional<FunctionCallExpr> functionCallExprOpt = getStr2DateExpr(partitionExpr);
-                if (!functionCallExprOpt.isPresent()) {
-                    LOG.warn("invalid partition expr:{}", partitionExpr);
-                    return null;
-                }
-                FunctionCallExpr functionCallExpr = functionCallExprOpt.get();
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
                 Preconditions.checkState(
                         functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
                 String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
@@ -257,19 +247,6 @@ public class MVPCTRefreshPlanBuilder {
                 partitionPredicates.add(isNullPredicate);
             }
 
-            return Expr.compoundOr(partitionPredicates);
-        } else if (mvPartitionInfo.getType() == PartitionType.LIST) {
-            Map<String, List<List<String>>> baseListPartitionMap = mvContext.getRefBaseTableListPartitionMap();
-            Type partitionType = mvContext.getRefBaseTablePartitionColumn().getType();
-            List<LiteralExpr> sourceTablePartitionList = Lists.newArrayList();
-            for (String tablePartitionName : tablePartitionNames) {
-                List<List<String>> values = baseListPartitionMap.get(tablePartitionName);
-                for (List<String> value : values) {
-                    LiteralExpr partitionValue = new PartitionValue(value.get(0)).getValue(partitionType);
-                    sourceTablePartitionList.add(partitionValue);
-                }
-            }
-            List<Expr> partitionPredicates = MvUtils.convertList(outputPartitionSlot, sourceTablePartitionList);
             return Expr.compoundOr(partitionPredicates);
         } else {
             LOG.warn("Generate partition predicate failed: " +
