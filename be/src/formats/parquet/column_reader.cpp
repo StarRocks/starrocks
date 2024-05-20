@@ -16,6 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+<<<<<<< HEAD
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -34,6 +35,22 @@
 #include "util/runtime_profile.h"
 #include "util/thrift_util.h"
 #include "utils.h"
+=======
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "common/compiler_util.h"
+#include "exec/exec_node.h"
+#include "exec/hdfs_scanner.h"
+#include "exprs/expr_context.h"
+#include "formats/parquet/complex_column_reader.h"
+#include "formats/parquet/scalar_column_reader.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/parquet_types.h"
+#include "simd/batch_run_counter.h"
+#include "storage/column_or_predicate.h"
+#include "storage/column_predicate.h"
+>>>>>>> 9ed56be0aa ([Refactor]split column reader make it more readable (#45776))
 
 namespace starrocks {
 class RandomAccessFile;
@@ -41,6 +58,7 @@ class RandomAccessFile;
 
 namespace starrocks::parquet {
 
+<<<<<<< HEAD
 template <typename TOffset, typename TIsNull>
 static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_levels, const level_t* rep_levels,
                               size_t num_levels, TOffset* offsets, TIsNull* is_nulls, size_t* num_offsets,
@@ -389,6 +407,8 @@ void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range,
     _reader = std::make_unique<StoredColumnReaderWithIndex>(std::move(_reader), _offset_index_ctx.get(), has_dict_page);
 }
 
+=======
+>>>>>>> 9ed56be0aa ([Refactor]split column reader make it more readable (#45776))
 Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,
                                                                    bool* is_group_filtered) {
     // create dict value chunk for evaluation.
@@ -486,6 +506,7 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     return Status::OK();
 }
 
+<<<<<<< HEAD
 class ListColumnReader : public ColumnReader {
 public:
     explicit ListColumnReader(const ColumnReaderOptions& opts) {}
@@ -970,6 +991,8 @@ private:
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };
 
+=======
+>>>>>>> 9ed56be0aa ([Refactor]split column reader make it more readable (#45776))
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                      bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type == ColumnType::STRUCT);
