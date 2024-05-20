@@ -1,6 +1,6 @@
 -- name: test_lazy_materialize
 set pipeline_dop = 1;
-set enable_late_materialization_join=true;
+set join_late_materialization=true;
 
 CREATE TABLE t1 (
     t1_c1 INT NOT NULL,
