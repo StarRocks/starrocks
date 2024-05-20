@@ -5,10 +5,10 @@ toc_max_heading_level: 5
 
 # Unified catalog
 
-Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi 和 Delta Lake 数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
+Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi、 Delta Lake 和 Apache Kudu 数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
 
-- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据进行加工建模，并导入至 StarRocks。
+- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi、Delta Lake 和 Kudu 数据源里的数据。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi、Delta Lake 和 Kudu 数据源里的数据进行加工建模，并导入至 StarRocks。
 - 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
 为保证正常访问融合数据源内的数据，StarRocks 集群必须能够访问融合数据源的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
@@ -27,7 +27,7 @@ Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Un
 
 ## 使用说明
 
-- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](../catalog/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md) 和 [Delta Lake catalog](../catalog/deltalake_catalog.md) 文档中“使用说明”部分。
+- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](../catalog/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md)、[Delta Lake catalog](../catalog/deltalake_catalog.md) 和 [Kudu catalog](../catalog/kudu_catalog.md) 文档中“使用说明”部分。
 
 - 部分操作只能用于特定的表格式。例如，[CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 和 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 当前只支持 Hive 和 Iceberg 表，[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 只支持 Hive 和 Hudi 表。
 
@@ -73,7 +73,8 @@ PROPERTIES
     "type" = "unified",
     MetastoreParams,
     StorageCredentialParams,
-    MetadataUpdateParams
+    MetadataUpdateParams,
+    KuduCatalogParams
 )
 ```
 
@@ -449,6 +450,16 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 | remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
+
+#### KuduCatalogParams
+
+指定 Kudu Catalog 连接的一组参数。此组参数为可选。
+
+| 参数                                   | 是否必须 | 说明                                                                                     |
+| -------------------------------------- | -------- |----------------------------------------------------------------------------------------|
+| kudu.master                 | 否       | 指定 `Kudu Master` 连接地址，默认为：`localhost:7051`。                                            |
+| kudu.schema-emulation.enabled               | 否       | 是否启用模拟 `schema` 功能，默认处于关闭状态（`false`），即所有表都属于 `default` `schema`。                       |
+| kudu.schema-emulation.prefix   | 否       | 仅在 `kudu.schema-emulation.enabled` = `true` 即启用模拟 `schema` 功能时，需设置匹配前缀，默认采用前缀空字符串：` `。 |
 
 ### 示例
 
@@ -842,9 +853,9 @@ DROP CATALOG unified_catalog_glue;
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## 从 Hive、Iceberg、Hudi 或 Delta Lake 导入数据
+## 从 Hive、Iceberg、Hudi、Delta Lake 或 Kudu 导入数据
 
-您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
+您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi、Delta Lake 或 Kudu 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
 
 例如，通过如下命令将 Hive 表 `hive_table` 的数据导入到 StarRocks 中 Unified Catalog `unified_catalog` 下数据库`test_database` 里的表 `test_table`：
 
