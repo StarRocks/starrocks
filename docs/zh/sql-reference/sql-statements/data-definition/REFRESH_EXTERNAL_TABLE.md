@@ -6,10 +6,10 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-该语句用于更新缓存在 StarRocks 中的 Apache Hive™ 和 Apache Hudi 元数据，其主要有以下两个使用场景：
+该语句用于更新缓存在 StarRocks 中的数据湖上的元数据，主要有以下两个使用场景：
 
 - **外部表**：使用 Hive 外部表和 Hudi 外部表查询 Hive 和 Hudi 数据时， 可使用该语句更新缓存的 Hive 和 Hudi 元数据。
-- **External catalog**：使用 [Hive catalog](../../../data_source/catalog/hive_catalog.md) 和 [Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 查询 Hive 和 Hudi 数据时，可使用该语句更新缓存的 Hive 和 Hudi 元数据。
+- **External catalog**：使用 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md)、[MaxCompute Catalog](../../../data_source/catalog/maxcompute_catalog.md)（自 3.3 起）查询对应数据源数据时，可使用该语句更新缓存的元数据。
 
 > **注意**
 >
@@ -47,14 +47,10 @@ displayed_sidebar: "Chinese"
 
     | **参数**         | **必选** | **说明**                                                     |
     | ---------------- | -------- | ------------------------------------------------------------ |
-    | external_catalog | 否       | Hive catalog 或 Hudi catalog 名称。                          |
-    | db_name          | 否       | Hive 表或 Hudi 表所在的数据库名。                            |
-    | table_name       | 是       | Hive 表或 Hudi 表名。                                        |
-    | partition_name   | 否       | Hive 表或 Hudi 表中的分区名。如指定，则更新缓存的 Hive 表或 Hudi 表指定分区的元数据。 |
-
-## 注意事项
-
-只有拥有外表 ALTER 权限的用户才可以执行该语句更新缓存的元数据。
+    | external_catalog | 否       | 外部数据目录名称，支持 Hive、Hudi、Delta Lake、MaxCompute catalog （自 3.3 起）。                          |
+    | db_name          | 否       | 表所在的数据库名。                            |
+    | table_name       | 是       | 表名名。                                        |
+    | partition_name   | 否       | 表中的分区名。如指定，则更新缓存的表中指定分区的元数据。 |
 
 ## 示例
 
@@ -77,7 +73,7 @@ PARTITION ('p1', 'p2');
 
 ### External catalog
 
-示例一：更新缓存的 Hive 表 `hive_table` 的元数据。
+示例一：更新缓存的 `hive_table` 表的元数据。
 
 ```SQL
 REFRESH EXTERNAL TABLE hive_catalog.hive_db.hive_table;
@@ -90,7 +86,14 @@ USE hive_catalog.hive_db;
 REFRESH EXTERNAL TABLE hive_table;
 ```
 
-示例二：更新缓存的 Hudi 表 `hudi_table` 分区 `p1` 和 `p2` 的元数据。
+示例二：更新缓存的 `hive_table` 表的二级分区 `p2` 的元数据。
+
+```SQL
+USE hive_catalog.hive_db;
+REFRESH EXTERNAL TABLE hive_table PARTITION ('p1=${date}/p2=${hour}');
+```
+
+示例三：更新缓存的 `hudi_table` 表的分区 `p1` 和 `p2` 的元数据。
 
 ```SQL
 REFRESH EXTERNAL TABLE hudi_catalog.hudi_db.hudi_table
