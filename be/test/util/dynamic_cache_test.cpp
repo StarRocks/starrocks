@@ -86,4 +86,16 @@ TEST(DynamicCacheTest, cache2) {
     }
 }
 
+TEST(DynamicCacheTest, test_get_keys) {
+    DynamicCache<int32_t, int64_t> cache(10);
+    for (int i = 0; i < 20; i++) {
+        cache.get_or_create(i);
+    }
+    const auto keys = cache.get_keys();
+    int i = 0;
+    for (auto& key : keys) {
+        ASSERT_EQ(key, i++);
+    }
+}
+
 } // namespace starrocks
