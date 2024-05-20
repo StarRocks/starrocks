@@ -2375,6 +2375,9 @@ public class Config extends ConfigBase {
     public static boolean enable_experimental_rowstore = false;
 
     @ConfField(mutable = true)
+    public static boolean enable_experimental_gin = false;
+
+    @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
     /**
