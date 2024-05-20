@@ -2702,6 +2702,7 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.setProbePartitionByExprs(probePartitionByExprs);
+            joinNode.setEnableLateMaterialization(ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
             // enable group execution for colocate join
             currentExecGroup = leftExecGroup;
             if (ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
