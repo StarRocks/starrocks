@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.ResourceGroupOpEntry;
@@ -1373,5 +1372,11 @@ public class ResourceGroupStmtTest {
                 "Getting analyzing error. Detail message: At least one of ('user', 'role', 'query_type', 'db', " +
                         "'source_ip', 'plan_cpu_cost_range', 'plan_mem_cost_range') should be given",
                 SemanticException.class, () -> ResourceGroupAnalyzer.convertPredicateToClassifier(Collections.emptyList()));
+    }
+
+    @Test
+    public void testDropResourceGroupIfExists() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP IF EXISTS rg2");
+        assertResourceGroupNotExist("rg2");
     }
 }
