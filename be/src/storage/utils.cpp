@@ -392,8 +392,13 @@ std::string file_name(const std::string& fullpath) {
 }
 
 std::string _mask_token(const std::string& str) {
-    std::regex pattern("token=[\\w|-]+");
-    return regex_replace(str, pattern, "token=******");
+    const std::regex token_pattern("token=[^\\s&\\n]*");
+    const std::string token_replace("token=******");
+
+    const std::regex pass_pattern("passwd[^\\n]*");
+    const std::string pass_replace("passwd=******");
+
+    return regex_replace(regex_replace(str, token_pattern, token_replace), pass_pattern, pass_replace);
 }
 
 } // namespace starrocks
