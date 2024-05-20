@@ -1279,53 +1279,6 @@ public class MvUtils {
         }
         return null;
     }
-<<<<<<< HEAD
-}
-=======
-
-    /**
-     * Return the query predicate split with/without compensate :
-     * - with compensate    : deducing from the selected partition ids.
-     * - without compensate : only get the partition predicate from pruned partitions of scan operator
-     * eg: for sync mv without partition columns, we always no need compensate partition predicates because
-     * mv and the base table are always synced.
-     */
-    public static PredicateSplit getQuerySplitPredicate(OptimizerContext optimizerContext,
-                                                        MaterializationContext mvContext,
-                                                        OptExpression queryExpression,
-                                                        ColumnRefFactory queryColumnRefFactory,
-                                                        ReplaceColumnRefRewriter queryColumnRefRewriter,
-                                                        Rule rule) {
-        // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
-        // query expressions are too complex.
-        final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
-                mvContext, queryColumnRefFactory, queryExpression);
-        if (queryPartitionPredicate == null) {
-            logMVRewrite(mvContext.getOptimizerContext(), rule, "Compensate query expression's partition " +
-                    "predicates from pruned partitions failed.");
-            return null;
-        }
-
-        Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
-        // only add valid predicates into query split predicate
-        if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));
-        }
-
-        QueryMaterializationContext queryMaterializationContext = optimizerContext.getQueryMaterializationContext();
-        Cache<Object, Object> predicateSplitCache = queryMaterializationContext.getMvQueryContextCache();
-        Preconditions.checkArgument(predicateSplitCache != null);
-        // Cache predicate split for predicates because it's time costing if there are too many materialized views.
-        return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
-    }
-
-    public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
-    }
-
-    public static Table getTableChecked(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
-    }
 
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
         List<Expr> matches = Lists.newArrayList();
@@ -1341,4 +1294,3 @@ public class MvUtils {
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
 }
->>>>>>> ec7dd64d49 ([BugFix] Fix partition mv with self joins refresh bug (#45876))
