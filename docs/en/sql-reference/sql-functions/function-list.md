@@ -353,7 +353,6 @@ You can find a function based on the following categories:
 - [like](./like-predicate-functions/like.md)
 - [regexp](./like-predicate-functions/regexp.md)
 - [regexp_extract](./like-predicate-functions/regexp_extract.md)
-- [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md)
 - [regexp_replace](./like-predicate-functions/regexp_replace.md)
 
 ## Percentile functions
