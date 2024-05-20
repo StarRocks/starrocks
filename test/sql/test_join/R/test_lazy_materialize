@@ -2,7 +2,7 @@
 set pipeline_dop = 1;
 -- result:
 -- !result
-set enable_join_late_materialization=true;
+set join_late_materialization=true;
 -- result:
 -- !result
 CREATE TABLE t1 (
