@@ -146,6 +146,7 @@ public class TaskRunManager implements MemoryTrackable {
             for (TaskRun oldTaskRun : mergedTaskRuns) {
                 // TODO: support batch update to reduce the number of edit logs.
                 oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
+                oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
                         oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
