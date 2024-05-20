@@ -2188,7 +2188,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Double
 - 单位：-
 - 是否动态：否
-- 描述：如果开启自动落盘功能, 当所有查询使用的内存超过 `query_pool memory limit * query_pool_spill_mem_limit_threshold` 时触发中间结果落盘
+- 描述：如果开启自动落盘功能, 当所有查询使用的内存超过 `query_pool memory limit * query_pool_spill_mem_limit_threshold` 时，系统触发中间结果落盘。
 - 引入版本：3.2.7
 
 ##### result_buffer_cancelled_interval_time
