@@ -320,7 +320,9 @@ public abstract class ConnectorPartitionTraits {
 
         @Override
         public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
-            // TODO: check partition type
+            if (!((OlapTable) table).getPartitionInfo().isRangePartition()) {
+                throw new IllegalArgumentException("Must be range partitioned table");
+            }
             return ((OlapTable) table).getRangePartitionMap();
         }
 
