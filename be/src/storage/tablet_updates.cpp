@@ -2075,8 +2075,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     auto manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
     auto& version = version_info.version;
-    VLOG(1) << "apply_compaction_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
-            << " rowset:" << rowset_id;
+    LOG(INFO) << "apply_compaction_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
+              << " rowset:" << rowset_id;
     // 1. load index
     std::lock_guard lg(_index_lock);
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
