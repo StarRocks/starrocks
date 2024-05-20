@@ -64,6 +64,7 @@
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -1458,8 +1459,21 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
 
+    scoped_refptr<Trace> trace(config::enable_load_rpc_trace ? new Trace : nullptr);
+    auto start_time = MonotonicMillis();
+    DeferOp defer([&trace, &tablet_id, &start_time] {
+        auto elapsed = MonotonicMillis() - start_time;
+        if (trace.get() && elapsed > config::slow_load_rpc_threshold_ms) {
+            LOG(INFO) << "Trace TabletUpdates::_apply_normal_rowset_commit, tablet_id: " << tablet_id
+                      << ", elapsed: " << elapsed << " ms\n"
+                      << trace.get()->DumpToString();
+        }
+    });
+    ADOPT_TRACE(trace.get());
+    TRACE("Enter first block");
     {
         std::lock_guard wl(_lock);
+        TRACE("Get lock");
         if (_edit_version_infos.empty()) {
             manager->index_cache().remove(index_entry);
             LOG(WARNING) << "tablet deleted when apply rowset commmit tablet:" << tablet_id;
@@ -1470,15 +1484,19 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         // TODO reset tablet schema in rowset
         if (rowset_meta_pb.has_txn_meta()) {
             full_rowset_size = rowset->total_segment_data_size();
+            TRACE("Finish get full rowset size, num_segments: $0", rowset->num_segments());
             rowset->rowset_meta()->clear_txn_meta();
             rowset->rowset_meta()->set_total_row_size(full_row_size);
             rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
             rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
             rowset->set_schema(apply_tschema);
             rowset->rowset_meta()->set_tablet_schema(apply_tschema);
+            TRACE("Finish set rowset meta");
             (void)rowset->reload();
+            TRACE("Rowset reload");
             RowsetMetaPB full_rowset_meta_pb;
             rowset->rowset_meta()->get_full_meta_pb(&full_rowset_meta_pb);
+            TRACE("Finish get_full_meta_pb");
             st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
                                                         new_del_vecs, index_meta, enable_persistent_index,
                                                         &full_rowset_meta_pb);
@@ -1487,6 +1505,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                                                         new_del_vecs, index_meta, enable_persistent_index, nullptr);
         }
 
+        TRACE("Finish apply_rowset_commit");
         if (!st.ok()) {
             std::string msg = strings::Substitute("_apply_rowset_commit error: write meta failed: $0 $1",
                                                   st.to_string(), _debug_string(false));
@@ -1502,14 +1521,17 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
             // try to set empty dcg cache, for improving latency when reading
             manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
         }
+        TRACE("Set set_cached_del_vec, new_del_vecs: $0", new_del_vecs.size());
         // 5. apply memory
         _next_log_id++;
         _apply_version_idx++;
         _apply_version_changed.notify_all();
     }
 
+    TRACE("Enter Second block");
     {
         std::lock_guard lg(_rowset_stats_lock);
+        TRACE("Get lock");
         auto iter = _rowset_stats.find(rowset_id);
         if (iter == _rowset_stats.end()) {
             string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rowsetid=$1",
@@ -1521,7 +1543,9 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         }
     }
 
+    TRACE("Enter Third block");
     st = index.on_commited();
+    TRACE("Finish index commit");
     if (!st.ok()) {
         std::string msg = strings::Substitute("primary index on_commit failed: $0", st.to_string());
         failure_handler(msg, false);
@@ -1537,6 +1561,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     } else {
         manager->index_cache().release(index_entry);
     }
+    TRACE("Finish index cache");
     _update_total_stats(version_info.rowsets, nullptr, nullptr);
     int64_t t_write = MonotonicMillis();
 
