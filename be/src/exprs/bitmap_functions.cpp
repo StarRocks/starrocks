@@ -185,9 +185,10 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_and(FunctionContext* context, const 
 
 // bitmap_to_string
 DEFINE_STRING_UNARY_FN_WITH_IMPL(bitmapToStingImpl, bitmap_ptr) {
-    if (bitmap_ptr->cardinality() > config::max_length_for_bitmap_function) {
+    auto max_cardinality = config::max_length_for_bitmap_function;
+    if (bitmap_ptr->cardinality() > max_cardinality) {
         std::stringstream ss;
-        ss << "bitmap_to_string not supported size > " << config::max_length_for_bitmap_function;
+        ss << "bitmap_to_string not supported size > " << max_cardinality;
         throw std::runtime_error(ss.str());
     }
     return bitmap_ptr->to_string();
