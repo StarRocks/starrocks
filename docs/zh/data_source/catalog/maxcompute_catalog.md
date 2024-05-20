@@ -235,8 +235,8 @@ ANALYZE TABLE mc_table;
 
 ## 手动更新元数据缓存
 
-默认情况下，StarRocks 会缓存 Maxcompute 的元数据，从而提高查询性能。因此，当对 Maxcompute 表做了表结构变更或其他表更新后，您可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间获取到新的元数据信息：
+默认情况下，StarRocks 会缓存 MaxCompute 的元数据，从而提高查询性能。因此，当对 MaxCompute 表做了表结构变更或其他表更新后，您可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间获取到新的元数据信息：
 
 ```SQL
-REFRESH EXTERNAL TABLE <table_name>
+REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 ```
