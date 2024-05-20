@@ -256,7 +256,7 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Description**: Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. Setting it to `true` indicates enabling it.
 * **Default**: true
-* **Introduced in**: v3.2.0
+* **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
 
 ### follower_query_forward_mode
 
