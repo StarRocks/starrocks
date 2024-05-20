@@ -664,27 +664,92 @@ public class SetTest extends PlanTestBase {
 
     @Test
     public void testEliminateAgg() throws Exception {
-        String sql = "select avg(t1), sum(t2) from unique_key_demo group by t0;";
+        String sql = "SELECT \n" +
+                "    id, \n" +
+                "    SUM(big_value) AS sum_big_value\n" +
+                "FROM \n" +
+                "    test_agg_group_single_unique_key\n" +
+                "GROUP BY \n" +
+                "    id\n" +
+                "ORDER BY \n" +
+                "    id;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  6 <-> cast([2: t1, VARCHAR, true] as DOUBLE)\n" +
-                "  |  7 <-> cast([3: t2, VARCHAR, true] as DOUBLE)\n" +
+                "  |  1 <-> [1: id, INT, false]\n" +
+                "  |  6 <-> [2: big_value, BIGINT, true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: unique_key_demo, rollup: unique_key_demo");
+                "     table: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
+                "     preAggregation: off. Reason: None aggregate function\n");
 
-        sql = "select count(t0), max(t1) from unique_key_demo group by t0;";
+        sql = "SELECT\n" +
+                "    id,\n" +
+                "    big_value,\n" +
+                "    COUNT(varchar_value) AS count_varchar_value\n" +
+                "FROM\n" +
+                "    test_agg_group_multi_unique_key\n" +
+                "GROUP BY\n" +
+                "    id, big_value\n" +
+                "ORDER BY\n" +
+                "    id;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  6 <-> if[(1: t0 IS NULL, 0, 1); args: BOOLEAN,INT,INT; result:" +
-                " TINYINT; args nullable: false; result nullable: true]\n" +
-                "  |  7 <-> [2: t1, VARCHAR, true]\n" +
+                "  |  1 <-> [1: id, INT, false]\n" +
+                "  |  2 <-> [2: big_value, BIGINT, true]\n" +
+                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); args: BOOLEAN,INT,INT; " +
+                "result: TINYINT; args nullable: false; result nullable: true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: unique_key_demo, rollup: unique_key_demo");
+                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
+                "     preAggregation: off. Reason: None aggregate function\n");
+
+        sql = "SELECT\n" +
+                "    id,\n" +
+                "    big_value,\n" +
+                "    AVG(decimal_value) AS avg_decimal_value\n" +
+                "FROM\n" +
+                "    test_agg_group_multi_unique_key\n" +
+                "GROUP BY\n" +
+                "    id, big_value\n" +
+                "ORDER BY\n" +
+                "    id;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: id, INT, false]\n" +
+                "  |  2 <-> [2: big_value, BIGINT, true]\n" +
+                "  |  6 <-> cast([4: decimal_value, DECIMAL64(10,5), true] as DECIMAL128(38,11))\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
+                "     preAggregation: off. Reason: None aggregate function\n");
+
+        sql = "SELECT\n" +
+                "    id,\n" +
+                "    big_value,\n" +
+                "    COUNT(varchar_value) AS count_varchar_value\n" +
+                "FROM\n" +
+                "    test_agg_group_multi_unique_key\n" +
+                "GROUP BY\n" +
+                "    id, big_value\n" +
+                "ORDER BY\n" +
+                "    id;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: id, INT, false]\n" +
+                "  |  2 <-> [2: big_value, BIGINT, true]\n" +
+                "  |  6 <-> if[(5: varchar_value IS NULL, 0, 1); args: BOOLEAN,INT,INT;" +
+                " result: TINYINT; args nullable: false; result nullable: true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
+                "     preAggregation: off. Reason: None aggregate function\n");
     }
 }

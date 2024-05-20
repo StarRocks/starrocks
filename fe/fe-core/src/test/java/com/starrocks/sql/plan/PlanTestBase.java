@@ -907,18 +907,33 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS unique_key_demo (\n" +
-                "  `t0` bigint(20) NOT NULL COMMENT \"\",\n" +
-                "  `t1` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `t2` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `t3` varchar(65533) NULL COMMENT \"\",\n" +
-                "  `t4` varchar(100) NULL COMMENT \"\"\n" +
+        starRocksAssert.withTable("CREATE TABLE `test_agg_group_single_unique_key` (\n" +
+                "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `big_value` bigint(20) NULL COMMENT \"\",\n" +
+                "  `double_value` double NULL COMMENT \"\",\n" +
+                "  `decimal_value` decimal(10, 5) NULL COMMENT \"\",\n" +
+                "  `varchar_value` varchar(255) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
-                "UNIQUE KEY(`t0`)\n" +
-                "DISTRIBUTED BY HASH(`t0`)\n" +
+                "UNIQUE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"compression\" = \"LZ4\",\n" +
-                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_agg_group_multi_unique_key` (\n" +
+                "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `big_value` bigint(20) NULL COMMENT \"\",\n" +
+                "  `double_value` double NULL COMMENT \"\",\n" +
+                "  `decimal_value` decimal(10, 5) NULL COMMENT \"\",\n" +
+                "  `varchar_value` varchar(255) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`, `big_value`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
                 "\"fast_schema_evolution\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"replication_num\" = \"1\"\n" +
