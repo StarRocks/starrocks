@@ -48,11 +48,10 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
 ColumnChunkReader::~ColumnChunkReader() = default;
 
 Status ColumnChunkReader::init(int chunk_size) {
-    int64_t start_offset = 0;
-    if (metadata().__isset.dictionary_page_offset) {
+    int64_t start_offset = metadata().data_page_offset;
+    if (metadata().__isset.dictionary_page_offset && metadata().dictionary_page_offset > 0 &&
+        start_offset > metadata().dictionary_page_offset) {
         start_offset = metadata().dictionary_page_offset;
-    } else {
-        start_offset = metadata().data_page_offset;
     }
     int64_t size = metadata().total_compressed_size;
     int64_t num_values = metadata().num_values;
