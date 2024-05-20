@@ -47,9 +47,9 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
-import io.delta.kernel.client.TableClient;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
@@ -152,13 +152,13 @@ public class DeltaLakeScanNode extends ScanNode {
         // PartitionKey -> partition id
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
-        TableClient tableClient = deltaLakeTable.getTableClient();
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(tableClient);
+        Engine deltaEngine = deltaLakeTable.getDeltaEngine();
+        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
         Scan scan = deltaLakePredicates.isPresent() ?
-                scanBuilder.withFilter(tableClient, deltaLakePredicates.get()).build() :
+                scanBuilder.withFilter(deltaEngine, deltaLakePredicates.get()).build() :
                 scanBuilder.build();
 
-        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(tableClient)) {
+        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
             while (scanFilesAsBatches.hasNext()) {
                 FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
 
