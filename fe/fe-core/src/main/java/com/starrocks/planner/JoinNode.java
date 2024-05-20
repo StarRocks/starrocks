@@ -172,6 +172,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
     }
 
+    public void setEnableLateMaterialization(boolean enableLateMaterialization) {
+        this.enableLateMaterialization = enableLateMaterialization;
+    }
+
     public void setProbePartitionByExprs(List<Expr> probePartitionByExprs) {
         this.probePartitionByExprs = probePartitionByExprs;
     }
