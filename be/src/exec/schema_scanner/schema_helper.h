@@ -137,7 +137,8 @@ public:
 
 private:
     static Status _call_rpc(const SchemaScannerState& state,
-                            std::function<void(ClientConnection<FrontendServiceClient>&)> callback);
+                            std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
+                            bool forward_to_leader = false);
 };
 
 template <LogicalType SlotType>

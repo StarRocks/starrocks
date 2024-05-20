@@ -17,6 +17,7 @@
 #include <sstream>
 #include <utility>
 
+#include "agent/master_info.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -27,10 +28,18 @@
 namespace starrocks {
 
 Status SchemaHelper::_call_rpc(const SchemaScannerState& state,
-                               std::function<void(ClientConnection<FrontendServiceClient>&)> callback) {
+                               std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
+                               bool forward_to_leader) {
     DCHECK(state.param);
     SCOPED_TIMER((state.param)->_rpc_timer);
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, std::move(callback), state.timeout_ms);
+    auto ip = state.ip;
+    auto port = state.port;
+    if (forward_to_leader) {
+        auto network_address = get_master_address();
+        ip = network_address.hostname;
+        port = network_address.port;
+    }
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port, std::move(callback), state.timeout_ms);
 }
 
 Status SchemaHelper::get_db_names(const SchemaScannerState& state, const TGetDbsParams& request,
@@ -159,30 +168,42 @@ Status SchemaHelper::get_task_runs(const SchemaScannerState& state, const TGetTa
 
 Status SchemaHelper::get_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                                TGetLoadsResult* var_result) {
-    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
-        client->getLoads(*var_result, var_params);
-    });
+    return _call_rpc(
+            state,
+            [&var_params, &var_result](FrontendServiceConnection& client) {
+                client->getLoads(*var_result, var_params);
+            },
+            true);
 }
 
 Status SchemaHelper::get_tracking_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                                         TGetTrackingLoadsResult* var_result) {
-    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
-        client->getTrackingLoads(*var_result, var_params);
-    });
+    return _call_rpc(
+            state,
+            [&var_params, &var_result](FrontendServiceConnection& client) {
+                client->getTrackingLoads(*var_result, var_params);
+            },
+            true);
 }
 
 Status SchemaHelper::get_routine_load_jobs(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                                            TGetRoutineLoadJobsResult* var_result) {
-    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
-        client->getRoutineLoadJobs(*var_result, var_params);
-    });
+    return _call_rpc(
+            state,
+            [&var_params, &var_result](FrontendServiceConnection& client) {
+                client->getRoutineLoadJobs(*var_result, var_params);
+            },
+            true);
 }
 
 Status SchemaHelper::get_stream_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                                       TGetStreamLoadsResult* var_result) {
-    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
-        client->getStreamLoads(*var_result, var_params);
-    });
+    return _call_rpc(
+            state,
+            [&var_params, &var_result](FrontendServiceConnection& client) {
+                client->getStreamLoads(*var_result, var_params);
+            },
+            true);
 }
 
 Status SchemaHelper::get_tablet_schedules(const SchemaScannerState& state, const TGetTabletScheduleRequest& request,
