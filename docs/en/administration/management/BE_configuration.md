@@ -2248,8 +2248,8 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Double
 - Unit: -
 - Is mutable: No
-- Description: If automatic spilling is enabled, when the memory usage of all queries exceeds `query_pool memory limit * query_pool_spill_mem_limit_threshold`, spilling will be triggered
-- Introduced in: 3.2.7
+- Description: If automatic spilling is enabled, when the memory usage of all queries exceeds `query_pool memory limit * query_pool_spill_mem_limit_threshold`, intermediate result spilling will be triggered.
+- Introduced in: v3.2.7
 
 ##### result_buffer_cancelled_interval_time
 
