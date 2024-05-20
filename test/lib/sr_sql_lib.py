@@ -1618,7 +1618,7 @@ class StarrocksSQLApiLib(object):
 
     def wait_compaction_finish(self, table_name: str, expected_num_segments: int):
         timeout = 300
-        scan_table_sql = f"SELECT /*+SET_VAR(enable_profile=true)*/ COUNT(1) FROM {table_name}"
+        scan_table_sql = f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false)*/ COUNT(1) FROM {table_name}"
         fetch_segments_sql = r"""
             with profile as (
                 select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
