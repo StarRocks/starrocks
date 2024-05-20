@@ -31,6 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "formats/parquet/utils.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
