@@ -94,7 +94,8 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment,
+                                                          const TabletColumn* column);
 
     ColumnReader(const private_type&, Segment* segment);
     ~ColumnReader();
@@ -105,7 +106,8 @@ public:
     void operator=(ColumnReader&&) = delete;
 
     // create a new column iterator.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr,
+                                                           const TabletColumn* column = nullptr);
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
@@ -199,7 +201,7 @@ private:
     constexpr static uint8_t kHasAllDictEncodedMask = 2;
     constexpr static uint8_t kAllDictEncodedMask = 4;
 
-    Status _init(ColumnMetaPB* meta);
+    Status _init(ColumnMetaPB* meta, const TabletColumn* column);
 
     Status _load_zonemap_index(const IndexReadOptions& opts);
     Status _load_bitmap_index(const IndexReadOptions& opts);
@@ -218,6 +220,9 @@ private:
     NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
 
     bool _inverted_index_loaded() const { return invoked(_inverted_index_load_once); }
+
+    StatusOr<std::unique_ptr<ColumnIterator>> _create_merge_struct_iter(ColumnAccessPath* path,
+                                                                        const TabletColumn* column);
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
@@ -247,6 +252,7 @@ private:
 
     using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
     std::unique_ptr<SubReaderList> _sub_readers;
+    std::vector<std::string> _sub_reader_column_names;
 
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,

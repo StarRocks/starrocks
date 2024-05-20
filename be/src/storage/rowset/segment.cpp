@@ -397,7 +397,7 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
             continue;
         }
 
-        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this);
+        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this, &column);
         if (!res.ok()) {
             return res.status();
         }
@@ -410,7 +410,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
-        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path));
+        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
         if (_column_readers[id]->column_type() == column.type()) {
             return source_iter;
         } else {
@@ -437,7 +437,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
-        return iter->second->new_iterator(path);
+        return iter->second->new_iterator(path, nullptr);
     } else {
         return Status::NotFound(fmt::format("{} does not contain column of id {}", _segment_file_info.path, id));
     }
