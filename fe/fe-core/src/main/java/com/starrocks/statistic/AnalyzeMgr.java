@@ -492,8 +492,8 @@ public class AnalyzeMgr implements Writable {
         List<Long> tableIds = Lists.newArrayList();
         int exprLimit = 50000;
         for (int i = 0; i < tables.size(); i++) {
+            tableIds.add(tables.get(i).getId());
             if (i == tables.size() - 1 || tableIds.size() + 1 == exprLimit) {
-                tableIds.add(tables.get(i).getId());
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setStatisticsConnection(true);
                 statsConnectCtx.getSessionVariable().setExprChildrenLimit(exprLimit * 2);
@@ -504,8 +504,6 @@ public class AnalyzeMgr implements Writable {
                 if (!res) {
                     LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
                 }
-            } else {
-                tableIds.add(tables.get(i).getId());
             }
         }
     }
