@@ -31,44 +31,39 @@ namespace starrocks::io {
 // NOT thread-safe
 class AsyncFlushOutputStream {
 public:
-    inline static const int64_t SLICE_CHUNK_CAPACITY = 16L * 1024 * 1024; // 16MB
+    inline static const int64_t BUFFER_MAX_SIZE = 16L * 1024 * 1024; // 16MB
 
     class SliceChunk {
     public:
         using Buffer = raw::RawVector<uint8_t>; // for RAII and eliminating initialization overhead
 
-        SliceChunk(int64_t capacity) : capacity_(capacity) {
-            buffer_.reserve(capacity);
-        }
+        SliceChunk(int64_t max_size) : max_size_(max_size) {}
 
         // return the number of bytes appended
         int64_t append(const uint8_t* data, int64_t size) {
-            int64_t to_write_bytes = std::min(capacity_ - size_, size);
-            std::memcpy(buffer_.data() + size_, data, to_write_bytes);
-            size_ += to_write_bytes;
+            int64_t old_size = static_cast<int64_t>(buffer_.size());
+            int64_t to_write_bytes = std::min(max_size_ - old_size, size);
+            buffer_.resize(buffer_.size() + to_write_bytes);
+            std::memcpy(buffer_.data() + old_size, data, to_write_bytes);
+            DCHECK(buffer_.size() <= max_size_);
             return to_write_bytes;
         }
 
         bool is_full() {
-            return size_ == capacity_;
+            return buffer_.size() == max_size_;
         }
 
         bool is_empty() {
-            return size_ == 0;
+            return buffer_.empty();
         }
 
-        uint8_t* data() {
-            return buffer_.data();
-        };
-
-        int64_t size() {
-            return size_;
+        Buffer* get_buffer() {
+            return &buffer_;
         }
 
     private:
         Buffer buffer_;
-        int64_t size_{0};
-        int64_t capacity_;
+        int64_t max_size_{0};
     };
 
     using SliceChunkPtr = std::shared_ptr<SliceChunk>;
@@ -83,7 +78,7 @@ public:
         while (size > 0) {
             // append a new buffer if queue is empty or the last buffer is full
             if (_slice_chunk_queue.empty() || _slice_chunk_queue.back()->is_full()) {
-                _slice_chunk_queue.push_back(std::make_shared<SliceChunk>(SLICE_CHUNK_CAPACITY));
+                _slice_chunk_queue.push_back(std::make_shared<SliceChunk>(BUFFER_MAX_SIZE));
             }
             SliceChunkPtr& last_chunk = _slice_chunk_queue.back();
             int64_t appended_bytes = last_chunk->append(data, size);
@@ -97,15 +92,18 @@ public:
             while (!_slice_chunk_queue.empty() && _slice_chunk_queue.front()->is_full()) {
                 auto chunk = _slice_chunk_queue.front();
                 _slice_chunk_queue.pop_front();
-                auto task = [&, chunk = std::move(chunk)]() mutable {
+                _releasable_bytes.fetch_add(chunk->get_buffer()->capacity());
+
+                auto task = [this, chunk = std::move(chunk)]() mutable {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                     CurrentThread::current().set_query_id(_runtime_state->query_id());
                     CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-                    auto status = _file->append(Slice(chunk->data(), chunk->size()));
-                    chunk = nullptr;
-                    DeferOp op([&]() {
-                        _releasable_chunk_counter.fetch_sub(1);
+                    auto scoped_chunk = std::move(chunk);
+                    auto buffer = scoped_chunk->get_buffer();
+                    DeferOp op([this, capacity = buffer->capacity()] {
+                        _releasable_bytes.fetch_sub(capacity);
                     });
+                    auto status = _file->append(Slice(buffer->data(), buffer->size()));
                     {
                         std::scoped_lock lock(_mutex);
                         _io_status.update(status);
@@ -122,9 +120,7 @@ public:
             }
         }
 
-        auto n_tasks = to_enqueue_tasks.size();
-        if (n_tasks != 0) {
-            _releasable_chunk_counter.fetch_add(n_tasks);
+        if (!to_enqueue_tasks.empty()) {
             enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));
         }
         return Status::OK();
@@ -139,7 +135,7 @@ public:
     }
 
     int64_t releasable_memory() const {
-        return _releasable_chunk_counter * SLICE_CHUNK_CAPACITY;
+        return _releasable_bytes.load();
     }
 
     // called exactly once
@@ -151,15 +147,17 @@ public:
         if (!_slice_chunk_queue.empty() || !_slice_chunk_queue.front()->is_empty()) {
             auto chunk = _slice_chunk_queue.front();
             _slice_chunk_queue.pop_front();
+            _releasable_bytes.fetch_add(chunk->get_buffer()->capacity());
             auto task = [&, chunk = std::move(chunk)]() mutable{
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                 CurrentThread::current().set_query_id(_runtime_state->query_id());
                 CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-                auto status = _file->append(Slice(chunk->data(), chunk->size()));
-                chunk = nullptr;
-                DeferOp op([&]() {
-                    _releasable_chunk_counter.fetch_sub(1);
+                auto scoped_chunk = std::move(chunk);
+                auto buffer = scoped_chunk->get_buffer();
+                DeferOp op([this, capacity = buffer->capacity()] {
+                    _releasable_bytes.fetch_sub(capacity);
                 });
+                auto status = _file->append(Slice(buffer->data(), buffer->size()));
                 {
                     std::scoped_lock lock(_mutex);
                     _io_status.update(status);
@@ -172,10 +170,8 @@ public:
                     CHECK(_io_executor->offer(task)); // TODO: handle
                 }
             };
-            _releasable_chunk_counter.fetch_add(1);
             to_enqueue_tasks.push_back(task);
         }
-        _slice_chunk_queue.clear();
 
         auto close_task = [&]() {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
@@ -222,7 +218,7 @@ private:
     PriorityThreadPool* _io_executor = nullptr;
     RuntimeState* _runtime_state = nullptr;
     std::deque<SliceChunkPtr> _slice_chunk_queue;
-    std::atomic_int64_t _releasable_chunk_counter{0};
+    std::atomic_int64_t _releasable_bytes{0};
     std::mutex _mutex; // guards following
     bool _has_in_flight_io{false};
     std::queue<std::function<void()>> _task_queue;

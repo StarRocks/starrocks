@@ -19,6 +19,10 @@ public:
         _async_io_poller = io_poller;
     }
 
+    bool has_victim() {
+        return !_candidates->empty();
+    }
+
     bool kill_victim() {
         if (_candidates->empty()) {
             return false;
@@ -69,7 +73,9 @@ class SinkMemoryManager {
 public:
     SinkMemoryManager(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {
         if (_mem_tracker != nullptr && _mem_tracker->has_limit()) {
-            _mem_soft_bound = _mem_tracker->limit() * _high_watermark / 100;
+            _high_watermark_bytes = _mem_tracker->limit() * _high_watermark_percent / 100;
+            _low_watermark_bytes = _mem_tracker->limit() * _low_watermark_percent / 100;
+            _min_watermark_bytes = _mem_tracker->limit() * _min_watermark_percent / 100;
         }
     }
 
@@ -81,26 +87,36 @@ public:
     }
 
     // thread-safe
+    // may lower frequency if overhead is significant
     bool can_accept_more_input(SinkOperatorMemoryManager* child_manager) {
-        LOG_EVERY_SECOND(INFO) << "query pool consumption: " << _mem_tracker->consumption() << " releasable_memory: " << _total_releasable_memory() << " bound: " << _mem_soft_bound;
-        // may lower frequency if overhead is significant
         child_manager->update_releasable_memory();
-
-        if (_mem_soft_bound < 0 || _mem_tracker->consumption() <= _mem_soft_bound) {
+        if (_mem_tracker == nullptr || !_mem_tracker->has_limit()) {
             return true;
         }
+        LOG_EVERY_SECOND(INFO) << "query pool consumption: " << _mem_tracker->consumption() << " releasable_memory: " << _total_releasable_memory();
 
-        while (_mem_tracker->consumption() - _total_releasable_memory() > _mem_soft_bound) {
-            // should we set a lower bound to avoid kill writer of small size?
-            bool found = child_manager->kill_victim();
-            if (!found) {
-                break;
+        auto available_memory = [this]() {
+            return _mem_tracker->limit() - _mem_tracker->consumption();
+        };
+
+        if (available_memory() <= _low_watermark_bytes) {
+            // trigger early close
+            while (child_manager->has_victim() && available_memory() + _total_releasable_memory() < _high_watermark_bytes) {
+                bool found = child_manager->kill_victim();
+                DCHECK(found);
+                child_manager->update_releasable_memory();
             }
-            child_manager->update_releasable_memory();
         }
 
-        LOG_EVERY_SECOND(INFO) << "stop accept chunk";
-        return false;
+        if (available_memory() <= _min_watermark_bytes) {
+            // block
+            if (_total_releasable_memory() > 0) {
+                LOG_EVERY_SECOND(INFO) << "stop accept chunk";
+                return false;
+            }
+        }
+
+        return true;
     }
 
 private:
@@ -112,10 +128,15 @@ private:
         return total;
     }
 
-    MemTracker* _mem_tracker = nullptr;
-    int64_t _high_watermark{80};
-    int64_t _mem_soft_bound{-1};
+    int64_t _high_watermark_percent = 40;
+    int64_t _low_watermark_percent = 20;
+    int64_t _min_watermark_percent = 10;
 
+    int64_t _high_watermark_bytes = -1;
+    int64_t _low_watermark_bytes = -1;
+    int64_t _min_watermark_bytes = -1;
+
+    MemTracker* _mem_tracker = nullptr;
     std::vector<std::unique_ptr<SinkOperatorMemoryManager>> _children; // size of dop
 };
 
