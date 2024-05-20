@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.util.UUIDUtil;
@@ -31,8 +32,6 @@ import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
 
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
@@ -61,16 +60,16 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
     @Test
     public void testMVRefreshWithTheSameTables1() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withTables(ImmutableList.of(
                         new MTable("tt1", "k1",
-                                List.of(
+                                ImmutableList.of(
                                         "k1 int",
                                         "k2 int",
                                         "k3 string",
                                         "dt date"
                                 ),
                                 "dt",
-                                List.of(
+                                ImmutableList.of(
                                         "PARTITION p0 values [('2021-12-01'),('2021-12-02'))",
                                         "PARTITION p1 values [('2021-12-02'),('2021-12-03'))",
                                         "PARTITION p2 values [('2021-12-03'),('2021-12-04'))"
@@ -108,10 +107,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
     private void assertPlanWithoutPushdownBelowScan(String mvName) throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
-        Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-        Map<String, String> testProperties = task.getProperties();
-        testProperties.put(TaskRun.IS_TEST, "true");
 
         String insertSql = "insert into tt1 partition(p0) values(1, 1, 1, '2021-12-01');";
         executeInsertSql(connectContext, insertSql);
@@ -141,16 +137,16 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
     @Test
     public void testMVRefreshWithTheSameTables22() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withTables(ImmutableList.of(
                         new MTable("tt1", "k1",
-                                List.of(
+                                ImmutableList.of(
                                         "k1 int",
                                         "k2 int",
                                         "k3 string",
                                         "dt date"
                                 ),
                                 "dt",
-                                List.of(
+                                ImmutableList.of(
                                         "PARTITION p0 values [('2021-12-01'),('2021-12-02'))",
                                         "PARTITION p1 values [('2021-12-02'),('2021-12-03'))",
                                         "PARTITION p2 values [('2021-12-03'),('2021-12-04'))"
@@ -188,10 +184,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
     private void assertPlanWithPushdownBelowScan(String mvName) throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
-        Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-        Map<String, String> testProperties = task.getProperties();
-        testProperties.put(TaskRun.IS_TEST, "true");
 
         String insertSql = "insert into tt1 partition(p0) values(1, 1, 1, '2021-12-01');";
         executeInsertSql(connectContext, insertSql);

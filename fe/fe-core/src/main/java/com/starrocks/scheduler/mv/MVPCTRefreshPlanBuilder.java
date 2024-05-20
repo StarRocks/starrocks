@@ -58,8 +58,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getStr2DateExpr;
-
 public class MVPCTRefreshPlanBuilder {
     private static final Logger LOG = LogManager.getLogger(MVPCTRefreshPlanBuilder.class);
     private final MaterializedView mv;
@@ -115,7 +113,7 @@ public class MVPCTRefreshPlanBuilder {
                         new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
             }
 
-            Pair<Table, Column> refBaseTableAndCol = mv.getDirectTableAndPartitionColumn();
+            Pair<Table, Column> refBaseTableAndCol = mv.getBaseTableAndPartitionColumn();
             if (refBaseTableAndCol == null || !refBaseTableAndCol.first.equals(table)) {
                 continue;
             }
@@ -219,26 +217,21 @@ public class MVPCTRefreshPlanBuilder {
 
         if (mvPartitionInfo.isRangePartition()) {
             List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
+            Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap =
+                    mvContext.getRefBaseTableRangePartitionMap();
             for (String partitionName : tablePartitionNames) {
-                sourceTablePartitionRange.add(mvContext.getRefBaseTableRangePartitionMap()
-                        .get(table).get(partitionName));
+                sourceTablePartitionRange.add(refBaseTableRangePartitionMap.get(partitionName));
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
             // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
             // here we should convert date into '%Y%m%d' format
             Expr partitionExpr = mv.getFirstPartitionRefTableExpr();
-            Pair<Table, Column> partitionTableAndColumn = mv.getDirectTableAndPartitionColumn();
+            Pair<Table, Column> partitionTableAndColumn = mv.getBaseTableAndPartitionColumn();
             boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
             if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
                     && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
-                Optional<FunctionCallExpr> functionCallExprOpt = getStr2DateExpr(partitionExpr);
-                if (!functionCallExprOpt.isPresent()) {
-                    LOG.warn("invalid partition expr:{}", partitionExpr);
-                    return null;
-                }
-                FunctionCallExpr functionCallExpr = functionCallExprOpt.get();
-                Preconditions.checkState(
-                        functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+                Preconditions.checkState(functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
                 String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
                 List<Range<PartitionKey>> converted = Lists.newArrayList();
                 for (Range<PartitionKey> range : sourceTablePartitionRange) {
