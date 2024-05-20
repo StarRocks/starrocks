@@ -1757,7 +1757,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return physicalParition;
     }
 
-    public void addSubPartitions(Database db, String tableName,
+    public void addSubPartitions(Database db, OlapTable table,
                                  Partition partition, int numSubPartition, long warehouseId) throws DdlException {
         OlapTable olapTable;
         OlapTable copiedTable;
