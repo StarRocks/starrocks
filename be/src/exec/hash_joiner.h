@@ -72,7 +72,7 @@ struct HashJoinerParam {
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
-                    bool enable_lazy_materialize)
+                    bool enable_late_materialization)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -90,7 +90,7 @@ struct HashJoinerParam {
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
               _mor_reader_mode(mor_reader_mode),
-              _enable_lazy_materialize(enable_lazy_materialize) {}
+              _enable_late_materialization(enable_late_materialization) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -114,7 +114,7 @@ struct HashJoinerParam {
 
     const TJoinDistributionMode::type _distribution_mode;
     const bool _mor_reader_mode;
-    const bool _enable_lazy_materialize;
+    const bool _enable_late_materialization;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
