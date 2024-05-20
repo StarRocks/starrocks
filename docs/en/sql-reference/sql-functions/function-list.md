@@ -25,6 +25,7 @@ You can find a function based on the following categories:
   - [Pattern matching functions](#pattern-matching-functions)
   - [Percentile functions](#percentile-functions)
   - [Scalar functions](#scalar-functions)
+  - [Table functions](#table-functions)
   - [Utility functions](#utility-functions)
 
 ## Aggregate functions
