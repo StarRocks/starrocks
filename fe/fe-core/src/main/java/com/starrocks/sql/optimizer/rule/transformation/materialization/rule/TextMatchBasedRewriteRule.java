@@ -30,7 +30,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
-import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -219,6 +218,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 return null;
             }
             int mvRelatedCount = 0;
+            Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
             for (MaterializedView mv : candidateMvs) {
                 boolean isValid = isMVValidToRewriteQuery(connectContext, mv, queryTables);
                 if (!isValid) {
@@ -270,22 +270,6 @@ public class TextMatchBasedRewriteRule extends Rule {
             return null;
         }
         return null;
-    }
-
-    public Pair<Boolean, String> isValidForTextBasedRewrite(OptimizerContext context,
-                                                            MaterializedView mv) {
-        if (!mv.isActive()) {
-            logMVRewrite(context, this, "MV is not active: {}", mv.getName());
-            return Pair.create(false, "MV is not active");
-        }
-
-        if (!mv.isEnableRewrite()) {
-            String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
-                    mv.getTableProperty().getMvQueryRewriteSwitch();
-            logMVRewrite(context, this, message);
-            return Pair.create(false, message);
-        }
-        return Pair.create(true, "");
     }
 
     private OptExpression doTextMatchBasedRewrite(OptimizerContext context,
