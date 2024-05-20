@@ -83,13 +83,6 @@ public class OlapTableFactory implements AbstractTableFactory {
     private OlapTableFactory() {
     }
 
-    private void analyzeLocationOnCreateTable(OlapTable table, Map<String, String> properties) {
-        String location = PropertyAnalyzer.analyzeLocation(properties, true);
-        if (location != null) {
-            table.setLocation(location);
-        }
-    }
-
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database db, CreateTableStmt stmt) throws DdlException {
@@ -305,7 +298,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             // analyze location property
-            analyzeLocationOnCreateTable(table, properties);
+            PropertyAnalyzer.analyzeLocation(table, properties);
 
             // set in memory
             boolean isInMemory =

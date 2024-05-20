@@ -519,7 +519,7 @@ public class EditLog {
                 case OperationType.OP_BACKEND_STATE_CHANGE:
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
                     Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
