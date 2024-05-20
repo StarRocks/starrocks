@@ -190,11 +190,6 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
-<<<<<<< HEAD
-import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-=======
-import com.starrocks.sql.analyzer.SemanticException;
->>>>>>> 4c5f9616a2 ([Feature] Support location awareness for materialized view (#45738))
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
