@@ -63,6 +63,7 @@
 #include "storage/utils.h"
 #include "util/path_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -486,6 +487,13 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
 TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, bool include_deleted, std::string* err) {
     std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
     return _get_tablet_unlocked(tablet_id, include_deleted, err);
+}
+
+TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, Trace* trace) {
+    TRACE_TO(trace, "Enter get_tablet");
+    std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
+    TRACE_TO(trace, "Get lock");
+    return _get_tablet_unlocked(tablet_id, false, nullptr);
 }
 
 StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(TTabletId tablet_id, int64_t from_version,

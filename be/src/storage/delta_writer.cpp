@@ -111,8 +111,8 @@ Status DeltaWriter::_init(Trace* trace) {
     _replica_state = _opt.replica_state;
 
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
-    TRACE_TO(trace, "Get tablet firstly");
+    _tablet = tablet_mgr->get_tablet(_opt.tablet_id, trace);
+    TRACE_TO(trace, "Finish get tablet");
     if (_tablet == nullptr) {
         std::stringstream ss;
         ss << "Fail to get tablet, perhaps this table is doing schema change, or it has already been deleted. Please "
@@ -178,8 +178,8 @@ Status DeltaWriter::_init(Trace* trace) {
         TabletSharedPtr new_tablet;
         if (!_tablet->is_migrating()) {
             // maybe migration just finish, get the tablet again
-            new_tablet = tablet_mgr->get_tablet(_opt.tablet_id);
-            TRACE_TO(trace, "Get tablet again");
+            new_tablet = tablet_mgr->get_tablet(_opt.tablet_id, trace);
+            TRACE_TO(trace, "Finish get tablet");
             if (new_tablet == nullptr) {
                 Status st = Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
                 _set_state(kAborted, st);
