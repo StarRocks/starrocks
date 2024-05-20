@@ -76,6 +76,10 @@ Status SchemaTablesScanner::start(RuntimeState* state) {
     TGetTablesInfoRequest get_tables_info_request;
     get_tables_info_request.__set_auth_info(auth_info);
 
+    if (nullptr != _param->table) {
+        get_tables_info_request.__set_table_name(*(_param->table));
+    }
+
     // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     RETURN_IF_ERROR(SchemaHelper::get_tables_info(_ss_state, get_tables_info_request, &_tabls_info_response));
