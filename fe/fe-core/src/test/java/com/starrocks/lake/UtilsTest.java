@@ -15,7 +15,6 @@
 
 package com.starrocks.lake;
 
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -29,18 +28,10 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Optional;
-
 public class UtilsTest {
 
     @Mocked
-    GlobalStateMgr globalStateMgr;
-
-    @Mocked
     NodeMgr nodeMgr;
-
-    @Mocked
-    NodeSelector nodeSelector;
 
     @Test
     public void testChooseBackend() {
@@ -73,25 +64,6 @@ public class UtilsTest {
                 throw new UserException("No backend or compute node alive.");
             }
         };
-    }
-
-    @Test
-    public void testGetWarehouse() {
-        WarehouseManager manager = new WarehouseManager();
-        manager.initDefaultWarehouse();
-
-        Optional<Long> workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertFalse(workerGroupId.isEmpty());
-        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
-
-        try {
-            workerGroupId = Optional.ofNullable(null);
-            workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, 1111L);
-            Assert.assertEquals(1, 2);   // can not be here
-        } catch (ErrorReportException e) {
-            Assert.assertTrue(workerGroupId.isEmpty());
-            Assert.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
-        }
     }
 
     @Test
