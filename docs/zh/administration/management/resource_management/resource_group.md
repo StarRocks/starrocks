@@ -14,12 +14,12 @@ displayed_sidebar: "Chinese"
 
 资源隔离功能支持计划
 
-|  | 内部表 | 外部表 | 大查询熔断 | Short query 资源组 | INSERT INTO、Broker Load 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 |
-|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × |
-| 2.3 | √ | √ | √ |√ | × | × |
-| 2.4 | √ | √ | √ |√ | × | × |
-| 2.5 及以后 | √ | √ | √ |√ | √ | × |
+|  | 内部表 | 外部表 | 大查询熔断 | Short query 资源组 | INSERT 计算资源隔离 | BROKER LOAD 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 |
+|---|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × | × |
+| 2.3 | √ | √ | √ |√ | × | × | × |
+| 2.5 | √ | √ | √ |√ | √ | × | × |
+| 3.1 及以后 | √ | √ | √ |√ | √ | √ | × |
 
 ## 基本概念
 
