@@ -759,6 +759,11 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         SlotDescriptor* slot_d = pool->add(new SlotDescriptor(tdesc));
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
 
+         if (!slot_d->col_name().empty()) {
+            (*tbl)->_slot_with_column_name_map[tdesc.id] = slot_d;
+         }
+
+
         // link to parent
         auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
 
@@ -770,6 +775,17 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
     }
 
     return Status::OK();
+}
+
+SlotDescriptor* DescriptorTbl::get_slot_descriptor_with_column(SlotId id) const {
+    // TODO: is there some boost function to do exactly this?
+    auto i = _slot_with_column_name_map.find(id);
+
+    if (i == _slot_with_column_name_map.end()) {
+        return nullptr;
+    } else {
+        return i->second;
+    }
 }
 
 TableDescriptor* DescriptorTbl::get_table_descriptor(TableId id) const {
