@@ -115,7 +115,7 @@ public class HashJoinNode extends JoinNode {
             msg.hash_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
         }
-        msg.hash_join_node.setLate_materialization(ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
+        msg.hash_join_node.setLate_materialization(enableLateMaterialization);
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
         if (partitionExprs != null) {
