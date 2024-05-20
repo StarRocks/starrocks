@@ -67,6 +67,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             .add("DiskSpillSize")
             .add("CPUTime")
             .add("ExecTime")
+            .add("Warehouse")
             .build();
 
     @Override
@@ -119,6 +120,7 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             values.add(QueryStatisticsFormatter.getBytes(statistics.getSpillBytes()));
             values.add(QueryStatisticsFormatter.getSecondsFromNano(statistics.getCpuCostNs()));
             values.add(QueryStatisticsFormatter.getSecondsFromMilli(item.getQueryExecTime()));
+            values.add(item.getWarehouseName());
             sortedRowData.add(values);
         }
 

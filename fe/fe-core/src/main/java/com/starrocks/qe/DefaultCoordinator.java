@@ -1144,6 +1144,14 @@ public class DefaultCoordinator extends Coordinator {
         return this.queryProfile.isProfileAlreadyReported();
     }
 
+    @Override
+    public String getWarehouseName() {
+        if (connectContext == null) {
+            return "";
+        }
+        return connectContext.getSessionVariable().getWarehouseName();
+    }
+
     private void execShortCircuit() {
         shortCircuitExecutor.exec();
         Optional<RuntimeProfile> runtimeProfile = shortCircuitExecutor.getRuntimeProfile();
