@@ -73,7 +73,7 @@ select sleep(60);
 -- result:
 1
 -- !result
-select count(*) <= 3from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl';
+select count(*) <= 3 from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl';
 -- result:
 1
 -- !result
