@@ -335,7 +335,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->mor_reader_mode = param.mor_reader_mode;
-    _table_items->enable_lazy_materialize = param.enable_lazy_materialize;
+    _table_items->enable_late_materialization = param.enable_late_materialization;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
         _table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN) {
@@ -368,7 +368,7 @@ void JoinHashTable::_init_probe_column(const HashTableParam& param) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
 
-            if (param.enable_lazy_materialize) {
+            if (param.enable_late_materialization) {
                 if (param.probe_output_slots.empty()) {
                     // Empty means need output all
                     hash_table_slot.need_output = true;
@@ -426,7 +426,7 @@ void JoinHashTable::_init_build_column(const HashTableParam& param) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
 
-            if (!param.mor_reader_mode && param.enable_lazy_materialize) {
+            if (!param.mor_reader_mode && param.enable_late_materialization) {
                 if (param.build_output_slots.empty()) {
                     hash_table_slot.need_output = true;
                     hash_table_slot.need_lazy_materialize = false;

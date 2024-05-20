@@ -2460,6 +2460,7 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.setProbePartitionByExprs(probePartitionByExprs);
+            joinNode.setEnableLateMaterialization(ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
 
             if (shouldBuildGlobalRuntimeFilter()) {
                 joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl());

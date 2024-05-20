@@ -72,7 +72,7 @@ struct HashJoinerParam {
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
                     std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
                     const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
-                    bool enable_lazy_materialize)
+                    bool enable_late_materialization)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -90,7 +90,7 @@ struct HashJoinerParam {
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
               _mor_reader_mode(mor_reader_mode),
-              _enable_lazy_materialize(enable_lazy_materialize) {}
+              _enable_late_materialization(enable_late_materialization) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -114,7 +114,7 @@ struct HashJoinerParam {
 
     const TJoinDistributionMode::type _distribution_mode;
     const bool _mor_reader_mode;
-    const bool _enable_lazy_materialize;
+    const bool _enable_late_materialization;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -292,6 +292,15 @@ public:
         return Status::OK();
     }
 
+    template <bool is_remain>
+    Status lazy_output_chunk(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* chunk, JoinHashTable& hash_table) {
+        if (_enable_late_materialization && (*chunk) && !(*chunk)->is_empty()) {
+            return hash_table.lazy_output<is_remain>(state, probe_chunk, chunk);
+        } else {
+            return Status::OK();
+        }
+    }
+
     Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
         // Post probe needn't process _other_join_conjunct_ctxs, because they
         // are `ON` predicates, which need to be processed only on probe phase.
@@ -442,6 +451,7 @@ private:
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
+    bool _enable_late_materialization = false;
 };
 
 } // namespace starrocks
