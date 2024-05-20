@@ -196,7 +196,6 @@ private:
 };
 
 // ================================
-// ================================
 
 class LakeDataSourceProvider final : public DataSourceProvider {
 public:

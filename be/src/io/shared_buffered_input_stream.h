@@ -85,6 +85,7 @@ public:
             status_or.value()->append(kDirectIoBytes, _direct_io_bytes);
             status_or.value()->append(kDirectIoTimer, _direct_io_timer);
         }
+        return status_or;
     }
 
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);

@@ -619,7 +619,7 @@ void LakeDataSource::update_counter() {
 
     auto stats = _reader->stats();
     COUNTER_UPDATE(_shared_buffered_shared_io_count, stats.shared_buffered_shared_io_count);
-    COUNTER_UPDATE(_shared_buffered_shared_io_bytes, stats.shared_buffered_direct_io_bytes);
+    COUNTER_UPDATE(_shared_buffered_shared_io_bytes, stats.shared_buffered_shared_io_bytes);
     COUNTER_UPDATE(_shared_buffered_shared_align_io_bytes, stats.shared_buffered_shared_align_io_bytes);
     COUNTER_UPDATE(_shared_buffered_shared_io_timer, stats.shared_buffered_shared_io_time_ns);
     COUNTER_UPDATE(_shared_buffered_direct_io_count, stats.shared_buffered_direct_io_count);

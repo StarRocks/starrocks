@@ -331,7 +331,6 @@ const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
 
-
 const char* const kSharedIoCount = "shared_io_count";
 const char* const kSharedIoBytes = "shared_io_bytes";
 const char* const kSharedAlignIoBytes = "shared_align_io_bytes";

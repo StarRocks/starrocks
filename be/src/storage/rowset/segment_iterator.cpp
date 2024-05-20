@@ -2214,11 +2214,11 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
         } else if (name == kSharedIoCount) {
             _opts.stats->shared_buffered_shared_io_count += value;
         } else if (name == kSharedIoBytes) {
-            _opts.stats->shared_buffered_direct_io_bytes += value;
+            _opts.stats->shared_buffered_shared_io_bytes += value;
         } else if (name == kSharedAlignIoBytes) {
             _opts.stats->shared_buffered_shared_align_io_bytes += value;
         } else if (name == kSharedIoTimer) {
-            _opts.stats->shared_buffered_direct_io_time_ns += value;
+            _opts.stats->shared_buffered_shared_io_time_ns += value;
         } else if (name == kDirectIoCount) {
             _opts.stats->shared_buffered_direct_io_count += value;
         } else if (name == kDirectIoBytes) {
