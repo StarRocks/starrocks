@@ -36,7 +36,7 @@ public:
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
 
-    double get_write_amp_score() { return _write_amp_score.load(); }
+    double get_write_amp_score() const { return _write_amp_score.load(); }
 
     void set_write_amp_score(double score) { _write_amp_score.store(score); }
 

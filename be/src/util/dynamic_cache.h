@@ -330,19 +330,6 @@ public:
         return _evict(target_capacity, entry_list);
     }
 
-    std::vector<Key> get_keys() const {
-        std::lock_guard<std::mutex> lg(_lock);
-        std::vector<Key> ret;
-        ret.reserve(_map.size());
-        auto itr = _list.begin();
-        while (itr != _list.end()) {
-            Entry* entry = (*itr);
-            ret.emplace_back(entry->key());
-            itr++;
-        }
-        return ret;
-    }
-
 private:
     bool _evict(size_t target_capacity, std::vector<Entry*>* entry_list) {
         auto itr = _list.begin();

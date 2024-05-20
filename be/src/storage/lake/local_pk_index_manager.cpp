@@ -239,14 +239,30 @@ void LocalPkIndexManager::schedule(const std::function<std::vector<TabletAndScor
 
 std::vector<TabletAndScore> LocalPkIndexManager::pick_tablets_to_do_pk_index_major_compaction(
         UpdateManager* update_manager) {
-    auto tablet_ids = update_manager->index_cache().get_keys();
+    std::set<std::string> tablet_ids;
+    for (DataDir* data_dir : StorageEngine::instance()->get_stores()) {
+        auto pk_path = data_dir->get_persistent_index_path();
+        Status ret = fs::list_dirs_files(pk_path, &tablet_ids, nullptr);
+        if (!ret.ok()) {
+            LOG(WARNING) << "fail to walk dir. path=[" + pk_path << "] error[" << ret.to_string() << "]";
+            continue;
+        }
+        // judge whether tablet should be in the data_dir or not,
+    }
     std::vector<TabletAndScore> pick_tablets;
     if (tablet_ids.empty()) {
         return pick_tablets;
     }
     // 1. pick valid tablet, which score is larger than 0
     for (auto& tablet_id : tablet_ids) {
-        auto index_entry = update_manager->index_cache().get(tablet_id);
+        int64_t id = 0;
+        try {
+            id = std::stoll(tablet_id);
+        } catch (std::invalid_argument const& ex) {
+            LOG(ERROR) << "Invalid tablet: " << tablet_id;
+            continue;
+        }
+        auto index_entry = update_manager->index_cache().get(id);
         if (index_entry == nullptr) {
             continue;
         }
@@ -258,7 +274,7 @@ std::vector<TabletAndScore> LocalPkIndexManager::pick_tablets_to_do_pk_index_maj
             // score == 0 means this tablet's pk index doesn't need major compaction
             continue;
         }
-        pick_tablets.emplace_back(tablet_id, score);
+        pick_tablets.emplace_back(id, score);
     }
     // 2. sort tablet by score, by ascending order.
     std::sort(pick_tablets.begin(), pick_tablets.end(), [](TabletAndScore& a, TabletAndScore& b) {
