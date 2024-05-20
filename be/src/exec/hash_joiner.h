@@ -452,7 +452,7 @@ private:
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
-    bool _enable_lazy_materialize = false;
+    bool _enable_late_materialization = false;
 };
 
 } // namespace starrocks
