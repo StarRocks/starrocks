@@ -28,6 +28,7 @@ import java.util.Map;
 public class UKFKConstraints {
     // ColumnRefOperator::id -> UniqueConstraint
     private final Map<Integer, UniqueConstraintWrapper> uniqueKeys = Maps.newHashMap();
+    private final Map<Integer, UniqueConstraintWrapper> allUniqueKeys = Maps.newHashMap();
     // ColumnRefOperator::id -> ForeignKeyConstraint
     private final Map<Integer, ForeignKeyConstraintWrapper> foreignKeys = Maps.newHashMap();
     private JoinProperty joinProperty;
@@ -36,8 +37,13 @@ public class UKFKConstraints {
         return uniqueKeys;
     }
 
+    public Map<Integer, UniqueConstraintWrapper> getAllUniqueKeys() {
+        return allUniqueKeys;
+    }
+
     public void addUniqueKey(int id, UniqueConstraintWrapper uniqueKey) {
         uniqueKeys.put(id, uniqueKey);
+        allUniqueKeys.put(id, uniqueKey);
     }
 
     public void addForeignKey(int id, ForeignKeyConstraintWrapper foreignKey) {
@@ -62,15 +68,9 @@ public class UKFKConstraints {
     }
 
     public static UKFKConstraints inheritFrom(UKFKConstraints from, ColumnRefSet toOutputColumns) {
-        boolean allUniqueKeysContained = from.uniqueKeys.keySet().stream()
-                .allMatch(toOutputColumns::contains);
-        boolean allForeignKeysContained = from.foreignKeys.keySet().stream()
-                .allMatch(toOutputColumns::contains);
-        if (!allUniqueKeysContained || !allForeignKeysContained) {
-            return new UKFKConstraints();
-        }
-
         UKFKConstraints clone = new UKFKConstraints();
+        from.allUniqueKeys.entrySet().stream()
+                .forEach(entry -> clone.allUniqueKeys.put(entry.getKey(), entry.getValue()));
         from.uniqueKeys.entrySet().stream()
                 .filter(entry -> toOutputColumns.contains(entry.getKey()))
                 .forEach(entry -> clone.uniqueKeys.put(entry.getKey(), entry.getValue()));

@@ -103,7 +103,7 @@ public class EliminateAggRule extends TransformationRule {
 
         OptExpression childOptExpression = input.inputAt(0);
         Map<Integer, UKFKConstraints.UniqueConstraintWrapper> uniqueKeys =
-                childOptExpression.getConstraints().getUniqueKeys();
+                childOptExpression.getConstraints().getAllUniqueKeys();
         Set<Integer> uniqueColumnRefIds =
                 uniqueKeys.keySet().stream().collect(Collectors.toSet());
 
