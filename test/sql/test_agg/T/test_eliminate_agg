@@ -25,7 +25,7 @@ PROPERTIES (
  "replication_num" = "1"
 );
 
--- 插入单唯一键数据
+
 INSERT INTO `test_agg_group_single_unique_key` (id, big_value, double_value, decimal_value, varchar_value) VALUES
 (1, 100000, 1.23, 123.45678, 'Test1'),
 (2, 200000, 2.34, 234.56789, 'Test2'),
@@ -48,7 +48,7 @@ INSERT INTO `test_agg_group_single_unique_key` (id, big_value, double_value, dec
 (19, 1900000, 19.01, 1901.23456, NULL),
 (20, 2000000, 20.12, 2012.34567, 'Test20');
 
--- 插入多唯一键数据
+
 INSERT INTO `test_agg_group_multi_unique_key` (id, big_value, double_value, decimal_value, varchar_value) VALUES
 (1, 100000, 1.23, 123.45678, 'Test1'),
 (2, 200000, 2.34, 234.56789, 'Test2'),
@@ -71,7 +71,6 @@ INSERT INTO `test_agg_group_multi_unique_key` (id, big_value, double_value, deci
 (19, 1900000, 19.01, 1901.23456, NULL),
 (20, 2000000, 20.12, 2012.34567, 'Test20');
 
--- SUM 聚合函数测试
 SELECT 
     id, 
     SUM(big_value) AS sum_big_value
@@ -82,7 +81,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- SUM 聚合函数测试 (double_value 列)
 SELECT 
     id, 
     SUM(double_value) AS sum_double_value
@@ -93,7 +91,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- AVG 聚合函数测试
 SELECT 
     id, 
     AVG(big_value) AS avg_big_value
@@ -104,7 +101,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- AVG 聚合函数测试 (double_value 列)
 SELECT 
     id, 
     AVG(double_value) AS avg_double_value
@@ -115,7 +111,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- COUNT 聚合函数测试
 SELECT 
     id, 
     COUNT(big_value) AS count_big_value
@@ -126,7 +121,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- COUNT 聚合函数测试 (varchar_value 列)
 SELECT 
     id, 
     COUNT(varchar_value) AS count_varchar_value
@@ -137,7 +131,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- MAX 聚合函数测试
 SELECT 
     id, 
     MAX(decimal_value) AS max_decimal_value
@@ -148,7 +141,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- MAX 聚合函数测试 (double_value 列)
 SELECT 
     id, 
     MAX(double_value) AS max_double_value
@@ -159,7 +151,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- MIN 聚合函数测试
 SELECT 
     id, 
     MIN(double_value) AS min_double_value
@@ -170,7 +161,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- MIN 聚合函数测试 (big_value 列)
 SELECT 
     id, 
     MIN(big_value) AS min_big_value
@@ -181,7 +171,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- GROUP_CONCAT 聚合函数测试
 SELECT 
     id, 
     GROUP_CONCAT(varchar_value ORDER BY varchar_value) AS group_concat_varchar_value
@@ -192,7 +181,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- GROUP_CONCAT 聚合函数测试 (double_value 列)
 SELECT 
     id, 
     GROUP_CONCAT(double_value ORDER BY double_value) AS group_concat_double_value
@@ -203,7 +191,6 @@ GROUP BY
 ORDER BY 
     id;
 
--- SUM 聚合函数测试 (double_value 列)
 SELECT
     id,
     big_value,
@@ -215,7 +202,6 @@ GROUP BY
 ORDER BY
     id;
 
--- AVG 聚合函数测试 (decimal_value 列)
 SELECT
     id,
     big_value,
@@ -227,7 +213,6 @@ GROUP BY
 ORDER BY
     id;
 
--- COUNT 聚合函数测试 (varchar_value 列)
 SELECT
     id,
     big_value,
@@ -239,7 +224,6 @@ GROUP BY
 ORDER BY
     id;
 
--- MAX 聚合函数测试 (double_value 列)
 SELECT
     id,
     big_value,
@@ -251,7 +235,6 @@ GROUP BY
 ORDER BY
     id;
 
--- MIN 聚合函数测试 (big_value 列)
 SELECT
     id,
     big_value,
@@ -263,7 +246,6 @@ GROUP BY
 ORDER BY
     id;
 
--- GROUP_CONCAT 聚合函数测试 (varchar_value 列)
 SELECT
     id,
     big_value,
