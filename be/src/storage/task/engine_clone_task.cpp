@@ -624,8 +624,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
             // Check file length
             uint64_t local_file_size = std::filesystem::file_size(local_file_path);
             if (local_file_size != file_size) {
-                LOG(WARNING) << "Fail to download " << _mask_token(remote_file_url) << ". file_size=" << local_file_size << "/"
-                             << file_size;
+                LOG(WARNING) << "Fail to download " << _mask_token(remote_file_url) << ". file_size=" << local_file_size
+                             << "/" << file_size;
                 return Status::InternalError("mismatched file size");
             }
             chmod(local_file_path.c_str(), S_IRUSR | S_IWUSR);
