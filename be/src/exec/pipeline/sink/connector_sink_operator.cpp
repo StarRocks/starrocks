@@ -110,9 +110,7 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
           _data_sink_provider(std::move(data_sink_provider)),
           _sink_context(sink_context),
           _fragment_context(fragment_context) {
-    // TODO: use query pool mem tracker and fix query pool memory usage
-    MemTracker* mem_tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
-    // MemTracker* mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    MemTracker* mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
     _sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(mem_tracker);
 }
 
