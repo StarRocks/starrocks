@@ -151,6 +151,11 @@ public enum JoinOperator {
         return this == RIGHT_OUTER_JOIN || this == RIGHT_ANTI_JOIN || this == RIGHT_SEMI_JOIN;
     }
 
+    public boolean isLeftJoin() {
+        return this == LEFT_OUTER_JOIN || this == LEFT_ANTI_JOIN || this == LEFT_SEMI_JOIN ||
+                this == NULL_AWARE_LEFT_ANTI_JOIN;
+    }
+
     // Left transform means that the Join operation can be considered as a transformation operation
     // on left hand side in collective computation. for examples:
     // 1. INNER_JOIN:  lhs.flatMap(l->rhs.flatMap(r->if( l match r){listOf(concat(l,r))} else {emptyList()}))
@@ -170,8 +175,8 @@ public enum JoinOperator {
         return Sets.newHashSet(INNER_JOIN, CROSS_JOIN);
     }
 
-    public boolean canGenerateRuntimeFilter() {
-        return !(isLeftOuterJoin() || isFullOuterJoin() || isLeftAntiJoin());
+    public String toSql() {
+        return this.description;
     }
 }
 

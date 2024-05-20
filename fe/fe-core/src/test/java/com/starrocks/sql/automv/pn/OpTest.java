@@ -1,0 +1,534 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.automv.pn;
+
+import com.google.common.collect.ImmutableList;
+import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.UnionFind;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.automv.column.ColumnAlias;
+import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
+import com.starrocks.sql.automv.column.GenericColumn;
+import com.starrocks.sql.automv.column.OriginalColumn;
+import com.starrocks.sql.automv.util.TieredList;
+import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
+import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+
+public class OpTest {
+    private final TableName tableName = new TableName("default_catalog", "test_db", "t");
+    private final List<ColumnRefOperator> columnRefs = IntStream.range(0, 10)
+            .mapToObj(i -> new ColumnRefOperator(i, Type.VARCHAR, "c" + i, false))
+            .collect(Collectors.toList());
+
+    private final List<Var> vars = columnRefs.stream()
+            .map(colRef -> Op.var(Type.VARCHAR, colRef.getId()))
+            .collect(Collectors.toList());
+    private final TieredMap<Integer, GenericColumn> inputColumns = IntStream.range(0, 10)
+            .mapToObj(i -> Pair.create(i + 1, GenericColumn.original(tableName, new Column("c" + i, Type.VARCHAR))))
+            .collect(TieredMap.toMap(p -> p.first, p -> p.second));
+
+    private final TieredMap<Integer, ColumnAlias> columnAliases = inputColumns.entrySet().stream()
+            .map(e -> Pair.create(e.getKey(), e.getValue().mustCast(OriginalColumn.class)))
+            .collect(TieredMap.toMap(
+                    p -> p.first,
+                    p -> ColumnAlias.of(p.second.getFqTableName().toSql(), p.second.getColumnName())));
+    private final Function<Op, String> opToSql = OpUtil.toOpToSqlConverter(columnAliases);
+    private final Function<ScalarOperator, Op> opConverter;
+    private final ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
+
+    {
+        columnRefs.forEach(idConverter::getId);
+        opConverter = OpUtil.toOpConverter(idConverter, inputColumns);
+    }
+
+    private void testHelper(ScalarOperator operator,
+                            String s) {
+        Op op = opConverter.apply(operator);
+        String actual = opToSql.apply(op);
+        Assert.assertEquals(String.format("op=%s\nexpect=%s\nactual=%s", op, s, actual), s, actual);
+    }
+
+    @Test
+    public void testCaseWhenNoCaseNoElse() {
+        List<ScalarOperator> whenThens = Arrays.asList(
+                new InPredicateOperator(columnRefs.get(0), ConstantOperator.createVarchar("A")),
+                ConstantOperator.createVarchar("a"),
+                new InPredicateOperator(columnRefs.get(0), ConstantOperator.createVarchar("B"),
+                        ConstantOperator.createVarchar("C")),
+                ConstantOperator.createVarchar("b"),
+                new LikePredicateOperator(columnRefs.get(0), ConstantOperator.createVarchar("%E%")),
+                columnRefs.get(1)
+        );
+        CaseWhenOperator caseWhen =
+                new CaseWhenOperator(Type.VARCHAR, null, null, whenThens);
+        testHelper(caseWhen, "(CASE WHEN `test_db`.`t`.c0 in (\"A\") THEN \"a\" " +
+                "WHEN `test_db`.`t`.c0 in (\"B\", \"C\") THEN \"b\" " +
+                "WHEN (`test_db`.`t`.c0 like \"%E%\") THEN `test_db`.`t`.c1 " +
+                "ELSE NULL END)");
+    }
+
+    @Test
+    public void testCaseWhenNoCaseHasElse() {
+        List<ScalarOperator> whenThens = Arrays.asList(
+                new InPredicateOperator(columnRefs.get(0), ConstantOperator.createVarchar("A")),
+                ConstantOperator.createVarchar("a"),
+                new InPredicateOperator(columnRefs.get(0), ConstantOperator.createVarchar("B"),
+                        ConstantOperator.createVarchar("C")),
+                ConstantOperator.createVarchar("b"),
+                new LikePredicateOperator(columnRefs.get(0), ConstantOperator.createVarchar("%E%")),
+                columnRefs.get(1)
+        );
+        ScalarOperator elseClause = new CallOperator("IF", Type.VARCHAR,
+                Arrays.asList(
+                        CompoundPredicateOperator.or(
+                                new IsNullPredicateOperator(false, columnRefs.get(2)),
+                                new IsNullPredicateOperator(true, columnRefs.get(3))
+                        ),
+                        new CastOperator(Type.VARCHAR,
+                                new CallOperator("add", Type.INT,
+                                        Arrays.asList(
+                                                new CastOperator(Type.INT, columnRefs.get(4)),
+                                                new CastOperator(Type.INT, columnRefs.get(5))), null)),
+                        new CastOperator(Type.VARCHAR,
+                                new CallOperator("mod", Type.INT,
+                                        Arrays.asList(
+                                                new CastOperator(Type.INT, columnRefs.get(6)),
+                                                new CastOperator(Type.INT, columnRefs.get(7))), null))
+
+                ));
+        CaseWhenOperator caseWhen =
+                new CaseWhenOperator(Type.VARCHAR, null, elseClause, whenThens);
+        testHelper(caseWhen, "(CASE WHEN `test_db`.`t`.c0 in (\"A\") THEN \"a\" " +
+                "WHEN `test_db`.`t`.c0 in (\"B\", \"C\") THEN \"b\" " +
+                "WHEN (`test_db`.`t`.c0 like \"%E%\") THEN `test_db`.`t`.c1 " +
+                "ELSE IF(((`test_db`.`t`.c3 IS NOT NULL) OR (`test_db`.`t`.c2 IS NULL)), " +
+                "CAST((CAST(`test_db`.`t`.c4 AS int(11)) + CAST(`test_db`.`t`.c5 AS int(11))) AS varchar), " +
+                "CAST((CAST(`test_db`.`t`.c6 AS int(11)) % CAST(`test_db`.`t`.c7 AS int(11))) AS varchar)) " +
+                "END)");
+
+    }
+
+    @Test
+    public void testCaseWhenHasCaseNoElse() {
+        List<ScalarOperator> whenThens = Arrays.asList(
+                ConstantOperator.createVarchar("A"),
+                ConstantOperator.createVarchar("a"),
+                new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
+                        Arrays.asList(
+                                ConstantOperator.createVarchar("B"),
+                                ConstantOperator.createVarchar("C"))),
+                ConstantOperator.createVarchar("b"),
+                new CallOperator(FunctionSet.COALESCE, Type.VARCHAR,
+                        Arrays.asList(
+                                columnRefs.get(1),
+                                columnRefs.get(2),
+                                columnRefs.get(3),
+                                columnRefs.get(4),
+                                columnRefs.get(5),
+                                ConstantOperator.createVarchar("GOOD"))),
+                columnRefs.get(1)
+        );
+        ScalarOperator caseClause = new CallOperator("IF", Type.VARCHAR,
+                Arrays.asList(
+                        CompoundPredicateOperator.or(
+                                new IsNullPredicateOperator(false, columnRefs.get(2)),
+                                new IsNullPredicateOperator(true, columnRefs.get(3))
+                        ),
+                        new CastOperator(Type.VARCHAR,
+                                new CallOperator("add", Type.INT,
+                                        Arrays.asList(
+                                                new CastOperator(Type.INT, columnRefs.get(4)),
+                                                new CastOperator(Type.INT, columnRefs.get(5))), null)),
+                        new CastOperator(Type.VARCHAR,
+                                new CallOperator("mod", Type.INT,
+                                        Arrays.asList(
+                                                new CastOperator(Type.INT, columnRefs.get(6)),
+                                                new CastOperator(Type.INT, columnRefs.get(7))), null))
+
+                ));
+        CaseWhenOperator caseWhen =
+                new CaseWhenOperator(Type.VARCHAR, caseClause, null, whenThens);
+        testHelper(caseWhen, "(CASE IF(((`test_db`.`t`.c3 IS NOT NULL) OR (`test_db`.`t`.c2 IS NULL)), " +
+                "CAST((CAST(`test_db`.`t`.c4 AS int(11)) + CAST(`test_db`.`t`.c5 AS int(11))) AS varchar), " +
+                "CAST((CAST(`test_db`.`t`.c6 AS int(11)) % CAST(`test_db`.`t`.c7 AS int(11))) AS varchar)) " +
+                "WHEN \"A\" THEN \"a\" " +
+                "WHEN concat(\"B\", \"C\") THEN \"b\" " +
+                "WHEN coalesce(`test_db`.`t`.c1, `test_db`.`t`.c2, " +
+                "`test_db`.`t`.c3, `test_db`.`t`.c4, `test_db`.`t`.c5, \"GOOD\") THEN `test_db`.`t`.c1 " +
+                "ELSE NULL " +
+                "END)");
+    }
+
+    @Test
+    public void testCaseWhenHasCaseHasElse() {
+        List<ScalarOperator> whenThens = Arrays.asList(
+                ConstantOperator.createVarchar("A"),
+                ConstantOperator.createVarchar("a"),
+                new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
+                        Arrays.asList(
+                                ConstantOperator.createVarchar("B"),
+                                ConstantOperator.createVarchar("C"))),
+                ConstantOperator.createVarchar("b"),
+                new CallOperator(FunctionSet.SUBSTR, Type.VARCHAR,
+                        Arrays.asList(
+                                columnRefs.get(8),
+                                ConstantOperator.createInt(2),
+                                ConstantOperator.createInt(4))),
+                columnRefs.get(1)
+        );
+        ScalarOperator caseClause = columnRefs.get(9);
+        ScalarOperator elseClause = new CallOperator("IF", Type.VARCHAR,
+                Arrays.asList(
+                        CompoundPredicateOperator.or(
+                                new IsNullPredicateOperator(false, columnRefs.get(2)),
+                                new IsNullPredicateOperator(true, columnRefs.get(3))
+                        ),
+                        new CastOperator(Type.VARCHAR,
+                                new CallOperator("add", Type.INT,
+                                        Arrays.asList(
+                                                new CastOperator(Type.INT, columnRefs.get(4)),
+                                                new CastOperator(Type.INT, columnRefs.get(5))), null)),
+                        new CastOperator(Type.VARCHAR,
+                                new CallOperator("mod", Type.INT,
+                                        Arrays.asList(
+                                                new CastOperator(Type.INT, columnRefs.get(6)),
+                                                new CastOperator(Type.INT, columnRefs.get(7))), null))
+
+                ));
+        CaseWhenOperator caseWhen =
+                new CaseWhenOperator(Type.VARCHAR, caseClause, elseClause, whenThens);
+        testHelper(caseWhen, "(CASE `test_db`.`t`.c9 WHEN \"A\" THEN \"a\" " +
+                "WHEN concat(\"B\", \"C\") THEN \"b\" " +
+                "WHEN substr(`test_db`.`t`.c8, 2, 4) THEN `test_db`.`t`.c1 " +
+                "ELSE IF(((`test_db`.`t`.c3 IS NOT NULL) OR (`test_db`.`t`.c2 IS NULL)), " +
+                "CAST((CAST(`test_db`.`t`.c4 AS int(11)) + CAST(`test_db`.`t`.c5 AS int(11))) AS varchar), " +
+                "CAST((CAST(`test_db`.`t`.c6 AS int(11)) % CAST(`test_db`.`t`.c7 AS int(11))) AS varchar)) " +
+                "END)");
+
+    }
+
+    @Test
+    public void testOp() {
+        List<ScalarOperator> lst = Arrays.asList(
+                ConstantOperator.createVarchar("abcd"),
+                columnRefs.get(0),
+                ConstantOperator.createVarchar("defg"),
+                columnRefs.get(1));
+        ArrayOperator arrayOp = new ArrayOperator(Type.ARRAY_VARCHAR, true, lst);
+
+        ArraySliceOperator arraySliceOp =
+                new ArraySliceOperator(Type.VARCHAR,
+                        Arrays.asList(arrayOp, ConstantOperator.createInt(1), ConstantOperator.createInt(3)));
+
+        MapOperator mapOp = new MapOperator(Type.MAP_VARCHAR_VARCHAR, lst);
+
+        CollectionElementOperator arrayElem =
+                new CollectionElementOperator(Type.VARCHAR, arrayOp, ConstantOperator.createInt(3), true);
+        SubfieldOperator subFieldOp =
+                new SubfieldOperator(columnRefs.get(0), Type.VARCHAR, Arrays.asList("a", "b", "c"));
+
+        ColumnRefOperator argx = new ColumnRefOperator(101, Type.VARCHAR, "x", true);
+        ColumnRefOperator argy = new ColumnRefOperator(102, Type.VARCHAR, "y", true);
+        List<ColumnRefOperator> lambdaArgs = Arrays.asList(argx, argy);
+        ScalarOperator lambdaBody = new CallOperator(ArithmeticExpr.Operator.ADD.getName(), Type.INT,
+                Arrays.asList(
+                        new CastOperator(Type.INT, argx),
+                        new CastOperator(Type.INT, argy))
+        );
+        LambdaFunctionOperator simpleLambda = new LambdaFunctionOperator(lambdaArgs, lambdaBody, Type.INT);
+        CallOperator arrayMapSimpleLambda = new CallOperator(FunctionSet.ARRAY_MAP, Type.ARRAY_INT,
+                Arrays.asList(
+                        simpleLambda,
+                        new ArrayOperator(Type.ARRAY_VARCHAR, true, ImmutableList.of(columnRefs.get(0))),
+                        new ArrayOperator(Type.ARRAY_VARCHAR, true, ImmutableList.of(columnRefs.get(1)))
+                ));
+        ColumnRefOperator argz = new ColumnRefOperator(103, Type.VARCHAR, "x", true);
+        ScalarOperator outerLambdaBody = new CallOperator(FunctionSet.LEFT, Type.VARCHAR,
+                Arrays.asList(
+                        new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
+                                Arrays.asList(argz, ConstantOperator.createVarchar("0000000"))),
+                        ConstantOperator.createInt(10)));
+
+        LambdaFunctionOperator outerLambda =
+                new LambdaFunctionOperator(Arrays.asList(argz), outerLambdaBody, Type.VARCHAR);
+        CallOperator arrayMapOuterLambda = new CallOperator(FunctionSet.ARRAY_MAP, Type.ARRAY_VARCHAR,
+                Arrays.asList(outerLambda, arrayMapSimpleLambda));
+        CallOperator ndvOp = new CallOperator(FunctionSet.NDV, Type.BIGINT, Arrays.asList(
+                new CollectionElementOperator(Type.VARCHAR, arrayMapOuterLambda, ConstantOperator.createInt(1), true)));
+        IsNullPredicateOperator isNullOp = new IsNullPredicateOperator(false, columnRefs.get(0));
+        IsNullPredicateOperator isNotNullOp = new IsNullPredicateOperator(true, columnRefs.get(0));
+        LikePredicateOperator likeOp = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE,
+                Arrays.asList(columnRefs.get(0), ConstantOperator.createVarchar("%abc%")));
+        LikePredicateOperator regexOp = new LikePredicateOperator(LikePredicateOperator.LikeType.REGEXP,
+                Arrays.asList(columnRefs.get(0), ConstantOperator.createVarchar("\\d+(\\.\\d+)?")));
+        com.starrocks.catalog.Function searchDesc =
+                new com.starrocks.catalog.Function(new FunctionName(FunctionSet.COUNT),
+                        new Type[] {Type.VARCHAR}, Type.BIGINT, false);
+        com.starrocks.catalog.Function fn =
+                GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+
+        CallOperator countOp = new CallOperator(FunctionSet.COUNT, Type.BIGINT, Arrays.asList(columnRefs.get(1)), fn);
+        CallOperator countDistinctOp =
+                new CallOperator(FunctionSet.COUNT, Type.BIGINT, Arrays.asList(columnRefs.get(1)), fn, true);
+        CallOperator countMultiDistinctOp =
+                new CallOperator(FunctionSet.COUNT, Type.BIGINT, Arrays.asList(columnRefs.get(1), columnRefs.get(2)),
+                        fn, true);
+        Object[][] cases = new Object[][] {
+                {ConstantOperator.createNull(Type.INT), "NULL"},
+                {ConstantOperator.createBoolean(true), "true"},
+                {ConstantOperator.createBoolean(false), "false"},
+                {ConstantOperator.createDouble(2.125), "2.125"},
+                {ConstantOperator.createDate(LocalDate.parse("2024-01-01").atTime(0, 0, 0)), "\"2024-01-01\""},
+                {ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 23, 59, 59)), "\"2024-01-01 23:59:59\""},
+                {ConstantOperator.createInt(10), "10"},
+                {ConstantOperator.createVarchar("abcd"), "\"abcd\""},
+                {ConstantOperator.createDecimal(new BigDecimal("3.14"),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 2)), "3.14"},
+                {columnRefs.get(0), "`test_db`.`t`.c0"},
+                {arrayOp, "[\"abcd\", `test_db`.`t`.c0, \"defg\", `test_db`.`t`.c1]"},
+                {arraySliceOp, "[\"abcd\", `test_db`.`t`.c0, \"defg\", `test_db`.`t`.c1][1:3]"},
+                {mapOp, "map{\"abcd\": `test_db`.`t`.c0, \"defg\": `test_db`.`t`.c1}"},
+                {arrayElem, "[\"abcd\", `test_db`.`t`.c0, \"defg\", `test_db`.`t`.c1][3]"},
+                {subFieldOp, "`test_db`.`t`.c0.a.b.c"},
+                {simpleLambda, "(x_0, x_1)->(CAST(x_0 AS int(11)) + CAST(x_1 AS int(11)))"},
+                {arrayMapSimpleLambda,
+                        "array_map(" +
+                                "(x_0, x_1)->(CAST(x_0 AS int(11)) + CAST(x_1 AS int(11))), " +
+                                "[`test_db`.`t`.c0], [`test_db`.`t`.c1])"},
+                {ndvOp, "ndv(array_map((x_0)->left(concat(x_0, \"0000000\"), 10), " +
+                        "array_map(" +
+                        "(x_0, x_1)->(CAST(x_0 AS int(11)) + CAST(x_1 AS int(11))), " +
+                        "[`test_db`.`t`.c0], [`test_db`.`t`.c1]))[1])"},
+                {isNotNullOp, "(`test_db`.`t`.c0 IS NOT NULL)"},
+                {isNullOp, "(`test_db`.`t`.c0 IS NULL)"},
+                {CompoundPredicateOperator.not(isNotNullOp), "(`test_db`.`t`.c0 IS NULL)"},
+                {CompoundPredicateOperator.not(isNullOp), "(`test_db`.`t`.c0 IS NOT NULL)"},
+                {CompoundPredicateOperator.and(isNotNullOp, isNullOp), "false"},
+                {CompoundPredicateOperator.or(isNotNullOp, isNullOp), "true"},
+                {likeOp, "(`test_db`.`t`.c0 like \"%abc%\")"},
+                {regexOp, "(`test_db`.`t`.c0 regexp \"\\\\d+(\\\\.\\\\d+)?\")"},
+                {countOp, "count(`test_db`.`t`.c1)"},
+                {countDistinctOp, "count(DISTINCT `test_db`.`t`.c1)"},
+                {countMultiDistinctOp, "count(DISTINCT if((`test_db`.`t`.c1 IS NULL), NULL, `test_db`.`t`.c2))"}
+        };
+        for (Object[] tc : cases) {
+            ScalarOperator op = (ScalarOperator) tc[0];
+            String actual = opToSql.apply(opConverter.apply(op));
+            String expect = (String) tc[1];
+            Assert.assertEquals(expect, actual);
+        }
+    }
+
+    @Test
+    public void testOpEquality() {
+        {
+            Op op1 = Apply.val(ConstantOperator.createBigint(1));
+            Op op2 = Apply.val(ConstantOperator.createBigint(1));
+            Op op3 = Apply.val(ConstantOperator.createBigint(2));
+            Assert.assertEquals(op1, op2);
+            Assert.assertNotEquals(op1, op3);
+        }
+
+        {
+            Op op1 = vars.get(1);
+            Op op2 = vars.get(2);
+            Op op3 = Apply.eq(op1, Apply.val(ConstantOperator.createVarchar("abc")));
+            Op op4 = Apply.eq(op2, Apply.val(ConstantOperator.createVarchar("abc")));
+
+            String addFunc = ArithmeticExpr.Operator.ADD.getName();
+
+            Op add13 = Apply.apply(Type.INT, addFunc, false, vars.get(1), vars.get(3));
+            Op add24 = Apply.apply(Type.INT, addFunc, false, vars.get(2), vars.get(4));
+            Op op5 = Apply.apply(Type.VARCHAR, FunctionSet.CONCAT, true, vars.get(1), vars.get(6), add13, vars.get(5),
+                    vars.get(3));
+            Op op6 = Apply.apply(Type.VARCHAR, FunctionSet.CONCAT, true, vars.get(2), vars.get(6), add24, vars.get(5),
+                    vars.get(4));
+
+            Op[][] testCases = {
+                    {op1, op2},
+                    {op3, op4},
+                    {op5, op6},
+            };
+            UnionFind<Integer> eqColumns1 = new UnionFind<>();
+            eqColumns1.union(1, 2);
+            eqColumns1.union(3, 4);
+            eqColumns1 = eqColumns1.sealed();
+
+            UnionFind<Integer> eqColumns2 = new UnionFind<>();
+            eqColumns2.union(1, 3);
+            eqColumns2 = eqColumns2.sealed();
+
+            for (Op[] tc : testCases) {
+                Op lhs = tc[0];
+                Op rhs = tc[1];
+                Assert.assertFalse(lhs.strict().equals(rhs.strict()));
+
+                Assert.assertFalse(lhs.equals(rhs));
+                Assert.assertTrue(lhs.isomorphic(rhs));
+                Assert.assertTrue(lhs.strict(eqColumns1).equals(rhs.strict(eqColumns1)));
+                Assert.assertFalse(lhs.strict(eqColumns2).equals(rhs.strict(eqColumns2)));
+                Assert.assertFalse(lhs.strict(eqColumns1).equals(rhs.strict(eqColumns2)));
+                Assert.assertFalse(lhs.strict(eqColumns1).equals(lhs.strict(eqColumns2)));
+            }
+        }
+
+    }
+
+    private Val dt(String s) {
+        return Op.val(ConstantOperator.createDate(LocalDate.parse(s, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay()));
+    }
+
+    @Test
+    public void testGetRangePredicate() {
+        {
+            Var a = Op.var(Type.DATE, 1);
+            TieredList<Op> conjuncts = Stream.of(
+                    Op.le(a, dt("2022-12-02")),
+                    Op.le(a, dt("2022-12-03")),
+                    Op.le(a, dt("2022-12-04")),
+                    Op.le(dt("2022-12-12"), a),
+                    Op.le(dt("2022-12-24"), a),
+                    Op.in(a, dt("2022-11-28"), dt("2022-12-11"), dt("2022-12-13"))
+            ).collect(TieredList.toList());
+            Optional<List<TieredList<Op>>> rangeOp =
+                    OpUtil.getRangeConjuncts(Arrays.asList(a), Arrays.asList(conjuncts));
+            Assert.assertFalse(rangeOp.isPresent());
+        }
+        {
+            Var a = Op.var(Type.DATE, 1);
+            List<Op> conjuncts = Arrays.asList(
+                    //Op.le(a, dt("2022-12-01")),
+                    Op.le(dt("2022-12-02"), a),
+                    Op.le(dt("2022-12-03"), a),
+                    Op.le(dt("2022-12-04"), a),
+                    Op.le(a, dt("2022-12-12")),
+                    Op.le(a, dt("2022-12-24")),
+                    Op.in(a, dt("2022-11-28"), dt("2022-12-11"), dt("2022-12-13"))
+            );
+            Optional<List<TieredList<Op>>> rangeOp = OpUtil.getRangeConjuncts(Arrays.asList(a),
+                    Arrays.asList(TieredList.<Op>genesis().concat(conjuncts)));
+            Assert.assertFalse(rangeOp.isPresent());
+        }
+
+        TieredMap<Integer, ColumnAlias> aliases = TieredMap.<Integer, ColumnAlias>newGenesisTier()
+                .put(1, ColumnAlias.of("t1", "a"))
+                .put(2, ColumnAlias.of("t1", "a2"))
+                .put(3, ColumnAlias.of("t1", "a3")).build();
+
+        Function<Op, String> opToSql = OpUtil.toOpToSqlConverter(aliases);
+        {
+            Var a = Op.var(Type.DATE, 1);
+            List<Op> conjuncts = Arrays.asList(
+                    Op.le(dt("2022-12-02"), a),
+                    Op.le(dt("2022-12-03"), a),
+                    Op.le(dt("2022-12-04"), a),
+                    Op.in(a, dt("2022-12-28"), dt("2022-12-11"), dt("2022-12-13"))
+            );
+            Var a2 = Op.var(Type.DATE, 2);
+            List<Op> conjuncts2 = Arrays.asList(
+                    Op.le(dt("2022-11-02"), a),
+                    Op.le(dt("2022-11-03"), a),
+                    Op.le(dt("2022-11-04"), a),
+                    Op.in(a, dt("2022-11-28"), dt("2022-11-11"), dt("2022-11-13"))
+            );
+            Optional<List<TieredList<Op>>> rangeOp =
+                    OpUtil.getRangeConjuncts(Arrays.asList(a, a2), Arrays.asList(
+                            TieredList.<Op>genesis().concat(conjuncts),
+                            TieredList.<Op>genesis().concat(conjuncts2)));
+            Assert.assertTrue(rangeOp.isPresent());
+            Assert.assertEquals(2, rangeOp.get().size());
+
+            String conjunct0 = opToSql.apply(rangeOp.get().get(0).get(0));
+            String conjunct1 = opToSql.apply(rangeOp.get().get(1).get(0));
+            Assert.assertEquals(conjunct0, conjunct0, "(\"2022-11-02\" <= t1.a)");
+            Assert.assertEquals(conjunct1, conjunct1, "(\"2022-11-02\" <= t1.a2)");
+        }
+
+        {
+            Var a = Op.var(Type.DATE, 1);
+            List<Op> conjuncts = Arrays.asList(
+                    Op.le(dt("2022-06-04"), a)
+            );
+            Var a2 = Op.var(Type.DATE, 2);
+            List<Op> conjuncts2 = Arrays.asList(
+                    Op.le(dt("2022-06-06"), a2)
+            );
+
+            Var a3 = Op.var(Type.DATE, 3);
+            List<Op> conjuncts3 = Arrays.asList(
+                    Op.in(a3, dt("2022-06-02"), dt("2022-06-09"))
+            );
+            Optional<List<TieredList<Op>>> rangeOp =
+                    OpUtil.getRangeConjuncts(Arrays.asList(
+                                    a,
+                                    a2,
+                                    a3),
+                            Arrays.asList(
+                                    TieredList.<Op>genesis().concat(conjuncts),
+                                    TieredList.<Op>genesis().concat(conjuncts2),
+                                    TieredList.<Op>genesis().concat(conjuncts3)
+                            ));
+
+            Assert.assertTrue(rangeOp.isPresent());
+            Assert.assertEquals(3, rangeOp.get().size());
+            String conjunct0 = opToSql.apply(rangeOp.get().get(0).get(0));
+            String conjunct1 = opToSql.apply(rangeOp.get().get(1).get(0));
+            String conjunct2 = opToSql.apply(rangeOp.get().get(2).get(0));
+
+            Assert.assertEquals(conjunct0, conjunct0, "(\"2022-06-02\" <= t1.a)");
+            Assert.assertEquals(conjunct1, conjunct1, "(\"2022-06-02\" <= t1.a2)");
+            Assert.assertEquals(conjunct2, conjunct2, "(\"2022-06-02\" <= t1.a3)");
+        }
+    }
+}

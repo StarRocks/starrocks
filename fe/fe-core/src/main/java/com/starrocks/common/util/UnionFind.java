@@ -27,8 +27,8 @@ import java.util.Set;
 // TODO(by satanson): There are many UnionFind utilities, in future, all of them will be
 //  unified into one
 public class UnionFind<T> {
-    private final Map<T, Integer> element2Group = Maps.newHashMap();
-    private final Map<Integer, Set<T>> eqGroupMap = Maps.newHashMap();
+    private final Map<T, Integer> element2Group;
+    private final Map<Integer, Set<T>> eqGroupMap;
 
     public Map<T, Set<T>> getEquivGroups(Set<T> elements) {
         Map<T, Set<T>> elm2group = Maps.newHashMap();
@@ -42,6 +42,20 @@ public class UnionFind<T> {
             }
         }
         return elm2group;
+    }
+
+    private UnionFind(Map<T, Integer> element2Group, Map<Integer, Set<T>> eqGroupMap) {
+        this.element2Group = Collections.unmodifiableMap(element2Group);
+        this.eqGroupMap = Collections.unmodifiableMap(eqGroupMap);
+    }
+
+    public UnionFind() {
+        this.element2Group = Maps.newHashMap();
+        this.eqGroupMap = Maps.newHashMap();
+    }
+
+    public UnionFind<T> sealed() {
+        return new UnionFind<>(this.element2Group, this.eqGroupMap);
     }
 
     public Set<T> getEquivGroup(T element) {

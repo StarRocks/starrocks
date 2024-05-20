@@ -57,7 +57,7 @@ import java.util.Objects;
 import java.util.Set;
 
 public class ArithmeticExpr extends Expr {
-    private static final Map<String, Operator> SUPPORT_FUNCTIONS = ImmutableMap.<String, Operator>builder()
+    public static final Map<String, Operator> SUPPORT_FUNCTIONS = ImmutableMap.<String, Operator>builder()
             .put(Operator.MULTIPLY.getName(), Operator.MULTIPLY)
             .put(Operator.DIVIDE.getName(), Operator.DIVIDE)
             .put(Operator.MOD.getName(), Operator.MOD)
@@ -571,6 +571,10 @@ public class ArithmeticExpr extends Expr {
 
         public boolean isMonotonic() {
             return monotonic;
+        }
+
+        public String getDescription() {
+            return description;
         }
     }
 
