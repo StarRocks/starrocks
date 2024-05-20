@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -1149,7 +1150,6 @@ public class MvUtils {
      * modified columns have done because the modified process may be failed and in this situation
      * should not inactive mvs then.
      */
-<<<<<<< HEAD
     public static void inactiveRelatedMaterializedViews(Database db,
                                                         OlapTable olapTable,
                                                         Set<String> modifiedColumns) {
@@ -1210,9 +1210,8 @@ public class MvUtils {
                         break;
                     }
                 }
-=======
-    public static boolean isAppliedMVUnionRewrite(OptExpression optExpression) {
-        return isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
+            }
+        }
     }
 
     public static boolean isOpAppliedRule(Operator op, int ruleMask) {
@@ -1221,22 +1220,6 @@ public class MvUtils {
         return (opRuleMask & ruleMask) != 0;
     }
 
-    public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
-        if (optExpression == null) {
-            return false;
-        }
-        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
-            return true;
-        }
-        for (OptExpression child : optExpression.getInputs()) {
-            if (isOptHasAppliedRule(child, ruleMask)) {
-                return true;
->>>>>>> 56588baced ([Enhancement] Add enable_materialized_view_text_based_rewrite to enable text based rewrite or not (#43629))
-            }
-        }
-    }
-
-<<<<<<< HEAD
     public static void setAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
         op.setOpRuleMask(opRuleMask);
@@ -1245,7 +1228,8 @@ public class MvUtils {
     public static boolean isAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask();
         return (opRuleMask & OP_UNION_ALL_BIT) != 0;
-=======
+    }
+
     /**
      * Return mv's plan context. If mv's plan context is not in cache, optimize it.
      * @param connectContext: connect context
@@ -1279,7 +1263,6 @@ public class MvUtils {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         return scanMvOutputColumns;
->>>>>>> 56588baced ([Enhancement] Add enable_materialized_view_text_based_rewrite to enable text based rewrite or not (#43629))
     }
 
     public static ParseNode getQueryAst(String query) {

@@ -28,12 +28,9 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DebugUtil;
-<<<<<<< HEAD
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
-=======
 import com.starrocks.common.util.PropertyAnalyzer;
->>>>>>> 56588baced ([Enhancement] Add enable_materialized_view_text_based_rewrite to enable text based rewrite or not (#43629))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -64,6 +61,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.MvRewritePreprocessor.isMVValidToRewriteQuery;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.REWRITE_SUCCESS;
 
@@ -222,15 +220,9 @@ public class TextMatchBasedRewriteRule extends Rule {
             }
             int mvRelatedCount = 0;
             for (MaterializedView mv : candidateMvs) {
-<<<<<<< HEAD
                 boolean isValid = isMVValidToRewriteQuery(connectContext, mv, queryTables);
                 if (!isValid) {
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite", mv.getName());
-=======
-                Pair<Boolean, String> status = isValidForTextBasedRewrite(context, mv);
-                if (!status.first) {
-                    logMVRewrite(context, this, "MV {} cannot be used for rewrite, {}", mv.getName(), status.second);
->>>>>>> 56588baced ([Enhancement] Add enable_materialized_view_text_based_rewrite to enable text based rewrite or not (#43629))
                     continue;
                 }
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {

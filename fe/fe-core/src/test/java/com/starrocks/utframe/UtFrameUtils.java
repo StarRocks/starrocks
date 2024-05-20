@@ -1230,13 +1230,9 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setEnableQueryCache(false);
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
-<<<<<<< HEAD
-=======
-            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
 
             // Disable text based rewrite by default.
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
->>>>>>> 56588baced ([Enhancement] Add enable_materialized_view_text_based_rewrite to enable text based rewrite or not (#43629))
         }
 
         new MockUp<PlanTestBase>() {
