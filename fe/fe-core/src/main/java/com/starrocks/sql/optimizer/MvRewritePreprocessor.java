@@ -224,10 +224,13 @@ public class MvRewritePreprocessor {
     }
 
     public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
         // MV Rewrite will be used when cbo is enabled.
-        if (context.getOptimizerConfig().isRuleBased()) {
+        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
+                !sessionVariable.isEnableMaterializedViewRewrite()) {
             return;
         }
+
         try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
