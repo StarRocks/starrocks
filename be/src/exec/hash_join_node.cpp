@@ -142,8 +142,8 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.output_columns) {
         _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
     }
-    if (tnode.hash_join_node.__isset.enable_late_materialization) {
-        _enable_late_materialization = tnode.hash_join_node.enable_late_materialization;
+    if (tnode.hash_join_node.__isset.late_materialization) {
+        _enable_late_materialization = tnode.hash_join_node.late_materialization;
     }
     return Status::OK();
 }
