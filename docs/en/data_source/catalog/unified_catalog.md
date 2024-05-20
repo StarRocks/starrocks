@@ -834,7 +834,7 @@ INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
 
 ## Create a database in a unified catalog
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/user_privs/privilege_overview.md#catalog) privilege on a unified catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create a database in that catalog.
+Similar to the internal catalog of StarRocks, if you have the CREATE DATABASE privilege on a unified catalog, you can use the CREATE DATABASE statement to create a database in that catalog.
 
 > **NOTE**
 >
