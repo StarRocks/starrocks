@@ -16,12 +16,12 @@ The roadmap of Resource Group:
 - In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability.
 - StarRocks v2.5 supports limiting computation resource consumption for data loading (INSERT).
 
-|  | Internal Table | External Table | Big Query Restriction | Short Query | INSERT INTO, Broker Load  | Routine Load, Stream Load, Schema Change |
-|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × |
-| 2.3 | √ | √ | √ | √ | × | × |
-| 2.4 | √ | √ | √ | √ | × | × |
-| 2.5 and later | √ | √ | √ | √ | √ | × |
+|  | Internal Table | External Table | Big Query Restriction | Short Query | INSERT INTO | Broker Load  | Routine Load, Stream Load, Schema Change |
+|---|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × | × |
+| 2.3 | √ | √ | √ | √ | × | × | × |
+| 2.5 | √ | √ | √ | √ | √ | × | × |
+| 3.1 and later | √ | √ | √ | √ | √ | √ | × |
 
 ## Terms
 
