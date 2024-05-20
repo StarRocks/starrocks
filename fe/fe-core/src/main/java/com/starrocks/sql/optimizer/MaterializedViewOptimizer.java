@@ -34,13 +34,6 @@ public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
                                   ConnectContext connectContext,
                                   boolean inlineView) {
-        return optimize(mv, connectContext, inlineView, true);
-    }
-
-    public MvPlanContext optimize(MaterializedView mv,
-                                  ConnectContext connectContext,
-                                  boolean inlineView,
-                                  boolean isOnlyValidPlan) {
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         // Disable partition prune for mv's plan so no needs  to compensate pruned predicates anymore.
@@ -67,10 +60,12 @@ public class MaterializedViewOptimizer {
             return new MvPlanContext(false, "No query plan for it");
         }
         OptExpression mvPlan = plans.first;
+        boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
         // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
-        if (isOnlyValidPlan && !MvUtils.isValidMVPlan(mvPlan)) {
-            return new MvPlanContext(false, MvUtils.getInvalidReason(mvPlan, inlineView));
+        String invalidPlanReason = "";
+        if (!isValidPlan) {
+            invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
         }
-        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
     }
 }

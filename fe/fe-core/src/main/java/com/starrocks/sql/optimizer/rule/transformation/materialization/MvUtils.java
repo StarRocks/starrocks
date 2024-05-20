@@ -49,9 +49,12 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -1211,6 +1214,12 @@ public class MvUtils {
         }
     }
 
+    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
+        // TODO: support cte inline
+        int opRuleMask = op.getOpRuleMask();
+        return (opRuleMask & ruleMask) != 0;
+    }
+
     public static void setAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
         op.setOpRuleMask(opRuleMask);
@@ -1219,6 +1228,41 @@ public class MvUtils {
     public static boolean isAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask();
         return (opRuleMask & OP_UNION_ALL_BIT) != 0;
+    }
+
+    /**
+     * Return mv's plan context. If mv's plan context is not in cache, optimize it.
+     * @param connectContext: connect context
+     * @param mv: input mv
+     * @param isInlineView: whether to inline mv's difined query.
+     */
+    public static MvPlanContext getMVPlanContext(ConnectContext connectContext,
+                                                 MaterializedView mv,
+                                                 boolean isInlineView) {
+        // step1: get from mv plan cache
+        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                .getPlanContext(mv, connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+        if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
+            // TODO: distinguish normal mv plan and view rewrite plan
+            return mvPlanContexts.get(0);
+        }
+        // step2: get from optimize
+        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView);
+    }
+
+    /**
+     * Get column refs of scanMvOperator by MV's defined output columns order.
+     * @param mv: mv to be referenced for output's order
+     * @param scanMvOp: scan mv operator which contains mv
+     * @return: column refs of scanMvOperator in the defined order
+     */
+    public static List<ColumnRefOperator> getMvScanOutputColumnRefs(MaterializedView mv,
+                                                                    LogicalOlapScanOperator scanMvOp) {
+        List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
+        for (Column column : MvRewritePreprocessor.getMvOutputColumns(mv)) {
+            scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
+        }
+        return scanMvOutputColumns;
     }
 
     public static ParseNode getQueryAst(String query) {

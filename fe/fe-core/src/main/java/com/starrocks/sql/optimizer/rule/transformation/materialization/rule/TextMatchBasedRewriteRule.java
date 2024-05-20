@@ -35,7 +35,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -119,18 +118,23 @@ public class TextMatchBasedRewriteRule extends Rule {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         if (!sessionVariable.isEnableMaterializedViewRewrite() ||
                 !sessionVariable.isEnableMaterializedViewTextMatchRewrite()) {
+            logMVRewrite(context, this, "Materialized view text based rewrite is disabled");
             return null;
         }
         if (stmt == null || stmt.getOrigStmt() == null || stmt.getOrigStmt().originStmt == null) {
+            logMVRewrite(context, this, "Materialized view text based rewrite is disabled: stmt is null");
             return null;
         }
 
         OptExpression rewritten = rewriteByTextMatch(input, context, parseNode);
         if (rewritten != null) {
+            logMVRewrite(context, this, "Materialized view text based rewrite failed, " +
+                    "try to rewrite sub-query again");
             return rewritten;
         }
         // try to rewrite sub-query again if exact-match failed.
         if (optToAstMap == null || optToAstMap.isEmpty()) {
+            logMVRewrite(context, this, "OptToAstMap is empty, no try to rewrite sub-query again");
             return null;
         }
         return input.getOp().accept(new TextBasedRewriteVisitor(context, optToAstMap), input, connectContext);
@@ -201,13 +205,14 @@ public class TextMatchBasedRewriteRule extends Rule {
                                              OptimizerContext context,
                                              ParseNode queryAst) {
         if (!isSupportForTextBasedRewrite(input)) {
+            logMVRewrite(context, this, "TEXT_BASED_REWRITE is not supported for this input");
             return null;
         }
 
         try {
             ParseNode normalizedAst = normalizeAst(queryAst);
             Set<MaterializedView> candidateMvs = getMaterializedViewsByAst(input, normalizedAst);
-            logMVRewrite(context, this, "matched mvs: {}",
+            logMVRewrite(context, this, "TEXT_BASED_REWRITE matched mvs: {}",
                     candidateMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList()));
             if (candidateMvs.isEmpty()) {
                 return null;
@@ -238,7 +243,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: text matched with {}",
                         mv.getName());
 
-                MvPlanContext mvPlanContext = getMvPlanContext(mv);
+                MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);
                 if (mvPlanContext == null) {
                     logMVRewrite(context, this, "MV {} plan context is invalid", mv.getName());
                     continue;
@@ -265,18 +270,6 @@ public class TextMatchBasedRewriteRule extends Rule {
             return null;
         }
         return null;
-    }
-
-    private MvPlanContext getMvPlanContext(MaterializedView mv) {
-        // step1: get from mv plan cache
-        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContextFromCacheIfPresent(mv);
-        if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
-            // TODO: distinguish normal mv plan and view rewrite plan
-            return mvPlanContexts.get(0);
-        }
-        // step2: get from optimize
-        return new MaterializedViewOptimizer().optimize(mv, connectContext, true, false);
     }
 
     private OptExpression doTextMatchBasedRewrite(OptimizerContext context,
