@@ -2682,14 +2682,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableLazyMaterializeJoin;
     }
 
-    public void enableLazyMaterializeJoin() {
-        this.enableLazyMaterializeJoin = true;
-    }
-
-    public void disableLazyMaterializeJoin() {
-        this.enableLazyMaterializeJoin = false;
-    }
-
     public void disableTrimOnlyFilteredColumnsInScanStage() {
         this.enableFilterUnusedColumnsInScanStage = false;
     }
