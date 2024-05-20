@@ -32,13 +32,16 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "util/starrocks_metrics.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
+StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
+                                                         Trace* trace) {
+    TRACE_TO(trace, "Enter open, tablet_id: $0", opt.tablet_id);
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
     SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, false);
-    RETURN_IF_ERROR(writer->_init());
+    RETURN_IF_ERROR(writer->_init(trace));
     return std::move(writer);
 }
 
@@ -101,13 +104,15 @@ void DeltaWriter::_garbage_collection() {
     }
 }
 
-Status DeltaWriter::_init() {
+Status DeltaWriter::_init(Trace* trace) {
+    TRACE_TO(trace, "Enter init, tablet_id: $0, $1", _opt.tablet_id, _opt.replica_state);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     _replica_state = _opt.replica_state;
 
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
+    _tablet = tablet_mgr->get_tablet(_opt.tablet_id, trace);
+    TRACE_TO(trace, "Finish get tablet");
     if (_tablet == nullptr) {
         std::stringstream ss;
         ss << "Fail to get tablet, perhaps this table is doing schema change, or it has already been deleted. Please "
@@ -160,17 +165,21 @@ Status DeltaWriter::_init() {
         _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
         _is_immutable.store(true, std::memory_order_relaxed);
     }
+    TRACE_TO(trace, "Before get migration lock");
 
     // The tablet may have been migrated during delta writer init,
     // and the latest tablet needs to be obtained when loading.
     // Here, the while loop checks whether the obtained tablet has changed
     // to get the latest tablet.
+    int migration_probe_num = 0;
     while (true) {
         std::shared_lock base_migration_rlock(_tablet->get_migration_lock());
+        TRACE_TO(trace, "Get migration lock");
         TabletSharedPtr new_tablet;
         if (!_tablet->is_migrating()) {
             // maybe migration just finish, get the tablet again
-            new_tablet = tablet_mgr->get_tablet(_opt.tablet_id);
+            new_tablet = tablet_mgr->get_tablet(_opt.tablet_id, trace);
+            TRACE_TO(trace, "Finish get tablet");
             if (new_tablet == nullptr) {
                 Status st = Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
                 _set_state(kAborted, st);
@@ -178,12 +187,15 @@ Status DeltaWriter::_init() {
             }
             if (_tablet != new_tablet) {
                 _tablet = new_tablet;
+                migration_probe_num += 1;
                 continue;
             }
         }
 
+        TRACE_TO(trace, "Finish get tablet, migration_probe_num: $0", migration_probe_num);
         std::lock_guard push_lock(_tablet->get_push_lock());
         auto st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
+        TRACE_TO(trace, "Prepare txn");
         if (!st.ok()) {
             _set_state(kAborted, st);
             return st;
@@ -322,6 +334,7 @@ Status DeltaWriter::_init() {
     VLOG(2) << "DeltaWriter [tablet_id=" << _opt.tablet_id << ", load_id=" << print_id(_opt.load_id)
             << ", replica_state=" << _replica_state_name(_replica_state) << "] open success.";
 
+    TRACE_TO(trace, "Finish init");
     return Status::OK();
 }
 
@@ -409,7 +422,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return st;
 }
 
-Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
+Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& data, Trace* trace) {
     auto state = get_state();
     if (state != kWriting) {
         auto err_st = get_err_status();
@@ -441,6 +454,8 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
     VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
             << ", duration: " << duration_ns / 1000 << "us, io_time: " << io_time_us << "us";
+    TRACE_TO(trace, "Flush segment, txn_id: $0, tablet_id: $1, total_time: $2 us, io_time: $3 us, segment_size: $4",
+             _opt.txn_id, _opt.tablet_id, (duration_ns / 1000), io_time_us, segment_pb.data_size());
     return Status::OK();
 }
 
@@ -638,6 +653,7 @@ Status DeltaWriter::commit() {
         break;
     }
 
+    TRACE("Enter commit");
     MonotonicStopWatch watch;
     watch.start();
     if (auto st = _flush_token->wait(); UNLIKELY(!st.ok())) {
@@ -647,6 +663,7 @@ Status DeltaWriter::commit() {
     }
     auto flush_ts = watch.elapsed_time();
 
+    TRACE("Finish flush token wait");
     if (auto res = _rowset_writer->build(); res.ok()) {
         _cur_rowset = std::move(res).value();
     } else {
@@ -655,12 +672,14 @@ Status DeltaWriter::commit() {
         return res.status();
     }
 
+    TRACE("Finish rowset writer build");
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
             _set_state(kAborted, st);
             return st;
         }
+        TRACE("Finish primary key");
     }
     auto pk_finish_ts = watch.elapsed_time();
 
@@ -673,9 +692,11 @@ Status DeltaWriter::commit() {
     }
     auto replica_ts = watch.elapsed_time();
 
+    TRACE("Finish replicate token");
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
 
+    TRACE("Finish commit txn");
     if (!res.ok()) {
         _storage_engine->update_manager()->on_rowset_cancel(_tablet.get(), _cur_rowset.get());
     }
@@ -696,6 +717,7 @@ Status DeltaWriter::commit() {
     VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
     StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_finish_ts) / 1000);
+    TRACE("Finish commit");
     return Status::OK();
 }
 

@@ -43,6 +43,7 @@
 #include "common/status.h"
 #include "gutil/strings/split.h"
 #include "storage/kv_store.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -63,7 +64,10 @@ Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const
         LOG(WARNING) << error_msg;
         return Status::InternalError("fail to serialize rowset meta");
     }
-    return meta->put(META_COLUMN_FAMILY_INDEX, key, value);
+
+    Status st = meta->put(META_COLUMN_FAMILY_INDEX, key, value);
+    TRACE("Put meta, key size: $0, value size: $1", key.length(), value.length());
+    return st;
 }
 
 Status RowsetMetaManager::flush(KVStore* meta) {

@@ -32,6 +32,7 @@ class Controller;
 namespace starrocks {
 
 class MemTracker;
+class Trace;
 
 class LocalTabletsChannel : public TabletsChannel {
 public:
@@ -46,22 +47,22 @@ public:
     const TabletsChannelKey& key() const { return _key; }
 
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
+                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental, Trace* trace = nullptr) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                            std::shared_ptr<OlapTableSchemaParam> schema) override;
+                            std::shared_ptr<OlapTableSchemaParam> schema, Trace* trace = nullptr) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done, Trace* trace = nullptr);
 
-    void cancel() override;
+    void cancel(Trace* trace = nullptr) override;
 
-    void abort() override;
+    void abort(Trace* trace = nullptr) override;
 
-    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override;
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason, Trace* trace = nullptr) override;
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -162,7 +163,7 @@ private:
         std::shared_ptr<WriteContext> _context;
     };
 
-    Status _open_all_writers(const PTabletWriterOpenRequest& params);
+    Status _open_all_writers(const PTabletWriterOpenRequest& params, Trace* trace = nullptr);
 
     StatusOr<std::shared_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,

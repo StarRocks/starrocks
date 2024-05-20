@@ -44,6 +44,7 @@
 #include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
 #include "util/stack_trace_mutex.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -65,19 +66,21 @@ public:
     const TabletsChannelKey& key() const { return _key; }
 
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
+                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental, Trace* trace = nullptr) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                            std::shared_ptr<OlapTableSchemaParam> schema) override;
+                            std::shared_ptr<OlapTableSchemaParam> schema, Trace* trace = nullptr) override;
 
-    void cancel() override;
+    void cancel(Trace* trace = nullptr) override;
 
-    void abort() override;
+    void abort(Trace* trace = nullptr) override;
 
-    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason, Trace* trace = nullptr) override {
+        return abort(trace);
+    }
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -193,7 +196,7 @@ LakeTabletsChannel::~LakeTabletsChannel() {
 }
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
+                                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental, Trace* trace) {
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();
@@ -551,14 +554,14 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     return Status::OK();
 }
 
-void LakeTabletsChannel::abort() {
+void LakeTabletsChannel::abort(Trace* trace) {
     std::shared_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     for (auto& it : _delta_writers) {
         it.second->close();
     }
 }
 
-void LakeTabletsChannel::cancel() {
+void LakeTabletsChannel::cancel(Trace* trace) {
     //TODO: Current LakeDeltaWriter don't support fast cancel
 }
 
@@ -612,7 +615,7 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
 }
 
 Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
-                                            std::shared_ptr<OlapTableSchemaParam> schema) {
+                                            std::shared_ptr<OlapTableSchemaParam> schema, Trace* trace) {
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     RETURN_IF_ERROR(_create_delta_writers(params, true));
     // properly set incremental flags and counters

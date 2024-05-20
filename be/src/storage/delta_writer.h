@@ -34,6 +34,7 @@ class Schema;
 class StorageEngine;
 class TupleDescriptor;
 class SlotDescriptor;
+class Trace;
 
 class MemTable;
 class MemTableSink;
@@ -82,7 +83,8 @@ class DeltaWriter {
 public:
     // Create a new DeltaWriter and call `TxnManager::prepare_txn` to register a new trasaction associated with
     // this DeltaWriter.
-    static StatusOr<std::unique_ptr<DeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
+    static StatusOr<std::unique_ptr<DeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
+                                                       Trace* trace = nullptr);
     ~DeltaWriter();
 
     DISALLOW_COPY(DeltaWriter);
@@ -91,7 +93,7 @@ public:
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     // [thread-safe]
-    [[nodiscard]] Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
+    [[nodiscard]] Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data, Trace* trace = nullptr);
 
     // Flush all in-memory data to disk, without waiting.
     // Subsequent `write()`s to this DeltaWriter will fail after this method returned.
@@ -165,7 +167,7 @@ public:
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
-    Status _init();
+    Status _init(Trace* trace = nullptr);
     Status _flush_memtable();
     Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& table_schema_param,
                                         const TabletSchemaCSPtr& ori_tablet_schema);

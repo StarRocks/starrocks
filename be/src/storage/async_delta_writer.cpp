@@ -20,6 +20,7 @@
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/starrocks_metrics.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -96,9 +97,11 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
 }
 
 StatusOr<std::unique_ptr<AsyncDeltaWriter>> AsyncDeltaWriter::open(const DeltaWriterOptions& opt,
-                                                                   MemTracker* mem_tracker) {
-    auto res = DeltaWriter::open(opt, mem_tracker);
+                                                                   MemTracker* mem_tracker, Trace* trace) {
+    TRACE_TO(trace, "Enter open, tablet_id: $0", opt.tablet_id);
+    auto res = DeltaWriter::open(opt, mem_tracker, trace);
     if (!res.ok()) {
+        TRACE_TO(trace, "DeltaWriter open fail");
         return res.status();
     }
     auto w = std::make_unique<AsyncDeltaWriter>(private_type(0), std::move(res).value());
@@ -149,8 +152,9 @@ void AsyncDeltaWriter::flush() {
     }
 }
 
-void AsyncDeltaWriter::write_segment(const AsyncDeltaWriterSegmentRequest& req) {
-    auto st = _writer->segment_flush_token()->submit(_writer.get(), req.cntl, req.request, req.response, req.done);
+void AsyncDeltaWriter::write_segment(const AsyncDeltaWriterSegmentRequest& req, Trace* trace) {
+    auto st =
+            _writer->segment_flush_token()->submit(_writer.get(), req.cntl, req.request, req.response, req.done, trace);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to submit write segment, err=" << st;
     }

@@ -61,6 +61,7 @@ namespace starrocks {
 class Tablet;
 class DataDir;
 struct TabletBasicInfo;
+class Trace;
 
 // RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
 class RowsetsAcqRel;
@@ -115,6 +116,9 @@ public:
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
+
+    // For debug
+    TabletSharedPtr get_tablet(TTabletId tablet_id, Trace* trace);
 
     StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(TTabletId tablet_id, int64_t from_version,
                                                           int64_t to_version);

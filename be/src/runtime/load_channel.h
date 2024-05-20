@@ -64,6 +64,7 @@ class TabletsChannel;
 class LoadChannel;
 class LoadChannelMgr;
 class OlapTableSchemaParam;
+class Trace;
 
 namespace lake {
 class TabletManager;
@@ -94,11 +95,12 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
-    void cancel();
+    void cancel(Trace* trace = nullptr);
 
-    void abort();
+    void abort(Trace* trace = nullptr);
 
-    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason);
+    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason,
+               Trace* trace = nullptr);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 

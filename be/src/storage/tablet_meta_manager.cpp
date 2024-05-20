@@ -62,6 +62,7 @@
 #include "util/coding.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
+#include "util/trace.h"
 #include "util/url_coding.h"
 
 namespace starrocks {
@@ -863,6 +864,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
                                               vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
                                               const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
                                               const RowsetMetaPB* rowset_meta) {
+    TRACE("Enter apply_rowset_commit");
     auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
     span->SetAttribute("version", version.to_string());
     WriteBatch batch;
@@ -876,6 +878,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     version_pb->set_minor_number(version.minor_number());
     auto logval = log.SerializeAsString();
     rocksdb::Status st = batch.Put(handle, logkey, logval);
+    TRACE("Build log, key size: $0, value size: $1", logkey.size(), logval.size());
     if (!st.ok()) {
         LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
         return to_status(st);
@@ -890,6 +893,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         auto dv_value = rssid_delvec.second->save();
         total_bytes += dv_value.size();
         st = batch.Put(handle, dv_key, dv_value);
+        TRACE("Build delvec, key size: $0, value size: $1", dv_key.size(), dv_value.size());
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
             return to_status(st);
@@ -902,6 +906,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         auto meta_key = encode_persistent_index_key(tsid.tablet_id);
         auto meta_value = index_meta.SerializeAsString();
         st = batch.Put(handle, meta_key, meta_value);
+        TRACE("Build persistent index meta, key size: $0, value size: $1", meta_key.size(), meta_value.size());
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
             return to_status(st);
@@ -912,13 +917,16 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         string rowset_key = encode_meta_rowset_key(tablet_id, rowset_meta->rowset_seg_id());
         auto rowset_value = rowset_meta->SerializeAsString();
         st = batch.Put(handle, rowset_key, rowset_value);
+        TRACE("Build rowset meta, key size: $0, value size: $1", rowset_key.size(), rowset_value.size());
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
             return to_status(st);
         }
     }
 
-    return store->get_meta()->write_batch(&batch);
+    Status write_st = store->get_meta()->write_batch(&batch);
+    TRACE("Finish Write batch");
+    return write_st;
 }
 
 // used in column mode partial update

@@ -42,6 +42,7 @@
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
 #include "util/stopwatch.hpp"
+#include "util/trace.h"
 #include "util/xxh3.h"
 
 namespace starrocks {
@@ -3941,13 +3942,18 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
     std::string l1_prefix("index.l1");
     std::string l2_prefix("index.l2");
     std::string dir = _path;
+    int32_t num_total_files = 0;
+    int32_t num_expired_files = 0;
+    TRACE("Enter _delete_expired_index_file");
     auto cb = [&](std::string_view name) -> bool {
+        num_total_files += 1;
         std::string full(name);
         if ((full.compare(0, l0_prefix.length(), l0_prefix) == 0 && full.compare(l0_file_name) != 0) ||
             (full.compare(0, l1_prefix.length(), l1_prefix) == 0 && full.compare(l1_file_name) != 0)) {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete expired index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
+            num_expired_files += 1;
             if (!st.ok()) {
                 LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
                 return false;
@@ -3964,6 +3970,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
                     std::string path = dir + "/" + full;
                     VLOG(1) << "delete expired index file " << path;
                     Status st = FileSystem::Default()->delete_file(path);
+                    num_expired_files += 1;
                     if (!st.ok()) {
                         LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is "
                                      << st.to_string();
@@ -3974,7 +3981,9 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
         }
         return true;
     };
-    return FileSystem::Default()->iterate_dir(_path, cb);
+    Status st = FileSystem::Default()->iterate_dir(_path, cb);
+    TRACE("Finish _delete_expired_index_file, total_files: $0, expired_files: $1", num_total_files, num_expired_files);
+    return st;
 }
 
 static bool major_compaction_tmp_index_file(const std::string& full) {
@@ -4007,7 +4016,11 @@ Status PersistentIndex::_delete_major_compaction_tmp_index_file() {
 
 Status PersistentIndex::_delete_tmp_index_file() {
     std::string dir = _path;
+    int32_t num_total_files = 0;
+    int32_t num_tmp_files = 0;
+    TRACE("Enter _delete_tmp_index_file");
     auto cb = [&](std::string_view name) -> bool {
+        num_total_files += 1;
         std::string suffix = ".tmp";
         std::string full(name);
         if (full.length() >= suffix.length() &&
@@ -4016,6 +4029,7 @@ Status PersistentIndex::_delete_tmp_index_file() {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
+            num_tmp_files += 1;
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
                 return false;
@@ -4023,7 +4037,9 @@ Status PersistentIndex::_delete_tmp_index_file() {
         }
         return true;
     };
-    return FileSystem::Default()->iterate_dir(_path, cb);
+    Status st = FileSystem::Default()->iterate_dir(_path, cb);
+    TRACE("Finish _delete_tmp_index_file, num_total_files: $0, num_tmp_files: $1", num_total_files, num_tmp_files);
+    return st;
 }
 
 template <size_t KeySize>
