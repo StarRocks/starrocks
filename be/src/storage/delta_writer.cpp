@@ -112,6 +112,7 @@ Status DeltaWriter::_init(Trace* trace) {
 
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
+    TRACE_TO(trace, "Get tablet firstly");
     if (_tablet == nullptr) {
         std::stringstream ss;
         ss << "Fail to get tablet, perhaps this table is doing schema change, or it has already been deleted. Please "
@@ -164,6 +165,7 @@ Status DeltaWriter::_init(Trace* trace) {
         _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
         _is_immutable.store(true, std::memory_order_relaxed);
     }
+    TRACE_TO(trace, "Before get migration lock");
 
     // The tablet may have been migrated during delta writer init,
     // and the latest tablet needs to be obtained when loading.
@@ -172,10 +174,12 @@ Status DeltaWriter::_init(Trace* trace) {
     int migration_probe_num = 0;
     while (true) {
         std::shared_lock base_migration_rlock(_tablet->get_migration_lock());
+        TRACE_TO(trace, "Get migration lock");
         TabletSharedPtr new_tablet;
         if (!_tablet->is_migrating()) {
             // maybe migration just finish, get the tablet again
             new_tablet = tablet_mgr->get_tablet(_opt.tablet_id);
+            TRACE_TO(trace, "Get tablet again");
             if (new_tablet == nullptr) {
                 Status st = Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
                 _set_state(kAborted, st);
@@ -188,7 +192,7 @@ Status DeltaWriter::_init(Trace* trace) {
             }
         }
 
-        TRACE_TO(trace, "Get tablet, migration_probe_num: $0", migration_probe_num);
+        TRACE_TO(trace, "Finish get tablet, migration_probe_num: $0", migration_probe_num);
         std::lock_guard push_lock(_tablet->get_push_lock());
         auto st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
         TRACE_TO(trace, "Prepare txn");

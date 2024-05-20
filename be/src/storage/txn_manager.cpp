@@ -52,6 +52,7 @@
 #include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 #include "util/time.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -217,6 +218,7 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
 Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                               TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
+    TRACE("Enter commit_txn, txn_id: $0, tablet_id: $1", transaction_id, tablet_id);
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
         LOG(FATAL) << "Invalid commit req "
                    << " partition_id=" << partition_id << " txn_id: " << transaction_id << " tablet_id=" << tablet_id;
@@ -262,6 +264,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
             }
         }
     }
+    TRACE("Finish check txn");
 
     // if not in recovery mode, then should persist the meta to meta env
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
@@ -269,7 +272,9 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     if (!is_recovery) {
         RowsetMetaPB rowset_meta_pb;
         rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+        TRACE("Finish get_full_meta_pb, pb");
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
+        TRACE("Finish save meta");
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
@@ -300,6 +305,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
                   << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files()
                   << " #uptfiles:" << rowset_ptr->num_update_files();
     }
+    TRACE("Finish commit txn");
     return Status::OK();
 }
 
