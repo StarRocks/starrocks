@@ -616,7 +616,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
         VLOG(1) << "Downloading " << _mask_token(remote_file_url) << " to " << local_path << ". bytes=" << file_size
                 << " timeout=" << estimate_timeout;
 
-        auto download_cb = [this, &remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
+        auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
             RETURN_IF_ERROR(client->init(remote_file_url));
             client->set_timeout_ms(estimate_timeout * 1000);
             RETURN_IF_ERROR(client->download(local_file_path));
