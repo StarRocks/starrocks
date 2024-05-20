@@ -25,6 +25,7 @@ You can find a function based on the following categories:
   - [Pattern matching functions](#pattern-matching-functions)
   - [Percentile functions](#percentile-functions)
   - [Scalar functions](#scalar-functions)
+  - [Table functions](#table-functions)
   - [Utility functions](#utility-functions)
 
 ## Aggregate functions
@@ -353,7 +354,6 @@ You can find a function based on the following categories:
 - [like](./like-predicate-functions/like.md)
 - [regexp](./like-predicate-functions/regexp.md)
 - [regexp_extract](./like-predicate-functions/regexp_extract.md)
-- [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md)
 - [regexp_replace](./like-predicate-functions/regexp_replace.md)
 
 ## Percentile functions
