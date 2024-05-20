@@ -9,7 +9,7 @@ displayed_sidebar: "English"
 Updates metadata cached in StarRocks. The metadata is from tables in data lakes. This statement is used in the following scenarios:
 
 - **External table**: When using a Hive external table or Hudi external table to query data in Apache Hive™ or Apache Hudi, you can execute this statement to update the metadata of a Hive table or Hudi table cached in StarRocks.
-- **External catalog**: When using a [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md), or [MaxCompute Catalog](../../../data_source/catalog/maxcompute_catalog.md) (since v3.3) to query data in the corresponding data source, you can execute this statement to update the metadata cached in StarRocks.
+- **External catalog**: When using a [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), or [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md) to query data in the corresponding data source, you can execute this statement to update the metadata cached in StarRocks.
 
 ## Basic concepts
 
@@ -43,7 +43,7 @@ The following describes the syntaxes and parameters based on different cases:
 
     | **Parameter**    | **Required** | **Description**                                              |
     | ---------------- | ------------ | ------------------------------------------------------------ |
-    | external_catalog | No           | The name of the external catalog, which supports Hive, Hudi, Delta Lake, and MaxCompute (since v3.3) catalogs.                  |
+    | external_catalog | No           | The name of the external catalog, which supports Hive, Hudi, Delta Lake catalogs. |
     | db_name          | No           | The name of the database where the destination table resides. |
     | table_name       | Yes          | The name of the table.                    |
     | partition_name   | No           | The names of the partitions. Specifying this parameter updates the metadata of the partitions of the destination table cached in StarRocks. |
