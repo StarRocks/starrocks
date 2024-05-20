@@ -19,23 +19,18 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -44,13 +39,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+<<<<<<< HEAD
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+=======
+>>>>>>> ec7dd64d49 ([BugFix] Fix partition mv with self joins refresh bug (#45876))
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -76,13 +73,17 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.mv.MVPCTRefreshPlanBuilder;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.Scope;
+=======
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
+>>>>>>> ec7dd64d49 ([BugFix] Fix partition mv with self joins refresh bug (#45876))
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -93,14 +94,10 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
 import com.starrocks.sql.common.PartitionDiffer;
@@ -413,10 +410,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new LockTimeoutException("Failed to lock databases: " + Joiner.on(",").join(dbs.values().stream()
                     .map(Database::getFullName).collect(Collectors.toList())));
         }
+<<<<<<< HEAD
+=======
+
+        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(materializedView, mvContext);
+>>>>>>> ec7dd64d49 ([BugFix] Fix partition mv with self joins refresh bug (#45876))
         try {
             // considering to-refresh partitions of ref tables/ mv
-            insertStmt = analyzeInsertStmt(insertStmt, refTablePartitionNames, materializedView, ctx);
-
+            insertStmt = planBuilder.analyzeAndBuildInsertPlan(insertStmt, refTablePartitionNames, ctx);
             // Must set execution id before StatementPlanner.plan
             ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
 
@@ -1225,6 +1226,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return insertStmt;
     }
 
+<<<<<<< HEAD
     @VisibleForTesting
     public InsertStmt analyzeInsertStmt(InsertStmt insertStmt,
                                         Map<String, Set<String>> refTableRefreshPartitions,
@@ -1428,6 +1430,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private boolean checkBaseTableSnapshotInfoChanged(BaseTableInfo baseTableInfo,
                                                       Table snapshotTable) {
+=======
+    private boolean checkBaseTableSnapshotInfoChanged(TableSnapshotInfo snapshotInfo) {
+>>>>>>> ec7dd64d49 ([BugFix] Fix partition mv with self joins refresh bug (#45876))
         try {
             Table table = baseTableInfo.getTable();
             if (table == null) {
