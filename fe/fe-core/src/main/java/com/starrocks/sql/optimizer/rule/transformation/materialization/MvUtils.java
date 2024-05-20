@@ -26,10 +26,12 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
@@ -1110,4 +1112,150 @@ public class MvUtils {
         int opRuleMask = op.getOpRuleMask();
         return (opRuleMask & OP_UNION_ALL_BIT) != 0;
     }
+<<<<<<< HEAD
 }
+=======
+
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        if (optExpression == null) {
+            return false;
+        }
+        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
+            return true;
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            if (isOptHasAppliedRule(child, ruleMask)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Return mv's plan context. If mv's plan context is not in cache, optimize it.
+     * @param connectContext: connect context
+     * @param mv: input mv
+     * @param isInlineView: whether to inline mv's difined query.
+     */
+    public static MvPlanContext getMVPlanContext(ConnectContext connectContext,
+                                                 MaterializedView mv,
+                                                 boolean isInlineView) {
+        // step1: get from mv plan cache
+        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
+                .getPlanContext(mv, connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+        if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
+            // TODO: distinguish normal mv plan and view rewrite plan
+            return mvPlanContexts.get(0);
+        }
+        // step2: get from optimize
+        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView);
+    }
+
+    /**
+     * Get column refs of scanMvOperator by MV's defined output columns order.
+     * @param mv: mv to be referenced for output's order
+     * @param scanMvOp: scan mv operator which contains mv
+     * @return: column refs of scanMvOperator in the defined order
+     */
+    public static List<ColumnRefOperator> getMvScanOutputColumnRefs(MaterializedView mv,
+                                                                    LogicalOlapScanOperator scanMvOp) {
+        List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
+        for (Column column : MvRewritePreprocessor.getMvOutputColumns(mv)) {
+            scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
+        }
+        return scanMvOutputColumns;
+    }
+
+    public static OptExpression addExtraPredicate(OptExpression result,
+                                                  ScalarOperator extraPredicate) {
+        Operator op = result.getOp();
+        if (op instanceof LogicalSetOperator) {
+            LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
+            // use PUSH_DOWN_PREDICATE rule to push down filter after union all set after mv rewrite rule.
+            return OptExpression.create(filter, result);
+        } else {
+            // If op is aggregate operator, use setPredicate directly.
+            ScalarOperator origPredicate = op.getPredicate();
+            if (op.getProjection() != null) {
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(op.getProjection().getColumnRefMap());
+                ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
+                op.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
+            } else {
+                op.setPredicate(Utils.compoundAnd(origPredicate, extraPredicate));
+            }
+            return result;
+        }
+    }
+
+    public static ParseNode getQueryAst(String query) {
+        try {
+            List<StatementBase> statementBases =
+                    com.starrocks.sql.parser.SqlParser.parse(query, new com.starrocks.qe.SessionVariable());
+            Preconditions.checkState(statementBases.size() == 1);
+            StatementBase stmt = statementBases.get(0);
+            return stmt;
+        } catch (ParsingException parsingException) {
+            LOG.warn("Parse query {} failed:{}", query, parsingException);
+        }
+        return null;
+    }
+
+    /**
+     * Return the query predicate split with/without compensate :
+     * - with compensate    : deducing from the selected partition ids.
+     * - without compensate : only get the partition predicate from pruned partitions of scan operator
+     * eg: for sync mv without partition columns, we always no need compensate partition predicates because
+     * mv and the base table are always synced.
+     */
+    public static PredicateSplit getQuerySplitPredicate(OptimizerContext optimizerContext,
+                                                        MaterializationContext mvContext,
+                                                        OptExpression queryExpression,
+                                                        ColumnRefFactory queryColumnRefFactory,
+                                                        ReplaceColumnRefRewriter queryColumnRefRewriter,
+                                                        Rule rule) {
+        // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
+        // query expressions are too complex.
+        final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
+                mvContext, queryColumnRefFactory, queryExpression);
+        if (queryPartitionPredicate == null) {
+            logMVRewrite(mvContext.getOptimizerContext(), rule, "Compensate query expression's partition " +
+                    "predicates from pruned partitions failed.");
+            return null;
+        }
+
+        Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
+        // only add valid predicates into query split predicate
+        if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
+            queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));
+        }
+
+        QueryMaterializationContext queryMaterializationContext = optimizerContext.getQueryMaterializationContext();
+        Cache<Object, Object> predicateSplitCache = queryMaterializationContext.getMvQueryContextCache();
+        Preconditions.checkArgument(predicateSplitCache != null);
+        // Cache predicate split for predicates because it's time costing if there are too many materialized views.
+        return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
+    }
+
+    public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
+    }
+
+    public static Table getTableChecked(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
+    }
+
+    public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
+        List<Expr> matches = Lists.newArrayList();
+        partitionExpr.collect(expr -> isStr2Date(expr), matches);
+        if (matches.size() != 1) {
+            return Optional.empty();
+        }
+        return Optional.of(matches.get(0).cast());
+    }
+
+    public static boolean isStr2Date(Expr expr) {
+        return expr instanceof FunctionCallExpr
+                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+    }
+}
+>>>>>>> ec7dd64d49 ([BugFix] Fix partition mv with self joins refresh bug (#45876))
