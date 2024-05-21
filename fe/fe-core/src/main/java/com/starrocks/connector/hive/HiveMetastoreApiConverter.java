@@ -123,11 +123,22 @@ public class HiveMetastoreApiConverter {
         return sd.getLocation();
     }
 
+<<<<<<< HEAD
     public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
+=======
+    public static String toComment(Map<String, String> tableParams) {
+        if (tableParams != null && tableParams.containsKey("comment")) {
+            return tableParams.getOrDefault("comment", "");
+        }
+        return "";
+    }
+
+    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database, String dbName) {
+>>>>>>> bf99ddef04 ([Enhancement] use db name from user query instead of HMS (#45992))
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), database.getName(),
+        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName.toLowerCase(),
                 database.getLocationUri());
     }
 
