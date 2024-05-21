@@ -32,3 +32,5 @@ list-all-pkgs: false
 # Same as '--exit-code'
 # Zero as we are only reporting for now, not enforcing
 exit-code: 0
+
+timeout: 30m
