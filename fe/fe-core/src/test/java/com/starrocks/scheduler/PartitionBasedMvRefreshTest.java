@@ -133,14 +133,13 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
     private static void initAndExecuteTaskRun(TaskRun taskRun,
                                               String startPartition,
                                               String endPartition) throws Exception {
-        Task task = taskRun.getTask();
-        Map<String, String> testProperties = task.getProperties();
+        Map<String, String> testProperties = taskRun.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
         if (startPartition != null) {
-            task.getProperties().put(TaskRun.PARTITION_START, startPartition);
+            testProperties.put(TaskRun.PARTITION_START, startPartition);
         }
         if (endPartition != null) {
-            task.getProperties().put(TaskRun.PARTITION_END, endPartition);
+            testProperties.put(TaskRun.PARTITION_END, endPartition);
         }
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
