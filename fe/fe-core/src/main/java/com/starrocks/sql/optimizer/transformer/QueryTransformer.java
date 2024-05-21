@@ -164,16 +164,8 @@ public class QueryTransformer {
 
     private OptExprBuilder planFrom(Relation node, CTETransformerContext cteContext) {
         TransformerContext transformerContext = new TransformerContext(
-<<<<<<< HEAD
                 columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                newCteContext, inlineView, optToAstMap);
-=======
-                columnRefFactory,
-                session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                cteContext,
-                inlineView);
->>>>>>> 504b4bf1da ([BugFix] record cte expressionMapping all the time (#42080))
+                cteContext, inlineView, optToAstMap);
         return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
