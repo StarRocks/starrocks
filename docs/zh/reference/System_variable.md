@@ -153,6 +153,22 @@ SELECT /*+ SET_VAR
 
 用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
 
+### enable_materialized_view_union_rewrite（2.5.20 及以后）
+
+是否启用物化视图 UNION 改写。默认值为 `true`，即系统在物化视图的谓词不能满足查询的谓词时，会尝试使用 UNION ALL 来补偿谓词。
+
+### enable_materialized_view_plan_cache（2.5.13 及以后）
+
+是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是 `true`，即开启物化视图查询计划缓存。
+
+### follower_query_forward_mode（2.5.20 及以后）
+
+用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。有效值:
+
+  * `default`: 将查询语句路由到 Leader FE 或 Follower FE 节点，取决于 Follower FE 节点的回放进度。如果 Follower FE 节点未完成回放，查询将会被路由至 Leader FE 节点。反之，查询会被优先路由至 Follower FE 节点。
+  * `leader`: 将查询语句路由到 Leader FE 节点。
+  * `follower`: 将查询语句路由到 Follower FE 节点。
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
