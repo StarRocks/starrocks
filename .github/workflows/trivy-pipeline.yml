@@ -29,3 +29,4 @@ jobs:
           image-ref: "registry.cn-zhangjiakou.aliyuncs.com/starrocks/dev-env-centos7:3.1-latest"
           scan-type: "image"
           trivy-config: ".trivy.yaml"
+          timeout: "30m"
