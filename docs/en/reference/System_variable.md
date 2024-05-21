@@ -153,6 +153,7 @@ The variables are described **in alphabetical order**. Variables with the `globa
   Whether to enable low cardinality optimization. After this feature is enabled, the performance of querying STRING columns improves by about three times. Default value: true.
 
 ### cbo_eq_base_type (2.5.14 and later)
+
   Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
 
 ### enable_materialized_view_union_rewrite (2.5.20 and later)
