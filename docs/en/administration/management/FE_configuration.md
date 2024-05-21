@@ -2396,6 +2396,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md).
 - Introduced in: v3.2.3
 
+#### enable_experimental_gin
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the [full-text inverted index](../../table_design/indexes/inverted_index.md).
+- Introduced in: v3.3.0
+
 ##### storage_usage_soft_limit_percent
 
 - Default: 90

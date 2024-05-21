@@ -348,6 +348,12 @@ Default value: `true`.
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v2.5
 
+### enable_gin_filter
+
+* **Description**:  Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
+* **Default**: true
+* **Introduced in**: v3.3.0
+
 ### enable_group_level_query_queue (global)
 
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).

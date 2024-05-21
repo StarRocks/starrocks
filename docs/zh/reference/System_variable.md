@@ -344,6 +344,12 @@ SELECT /*+ SET_VAR
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+### enable_gin_filter
+
+* 描述：是否查询时候是否利用[全文倒排索引](../table_design/indexes/inverted_index.md)。
+* 默认值：true
+* 引入版本：v3.3.0
+
 ### enable_group_level_query_queue (global)
 
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
