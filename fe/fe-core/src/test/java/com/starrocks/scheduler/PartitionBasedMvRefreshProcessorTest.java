@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
@@ -399,7 +400,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertFalse(plan.contains("partitions=5/5"));
+            PlanTestBase.assertContains(plan, "partitions=5/5");
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail(e.getMessage());
