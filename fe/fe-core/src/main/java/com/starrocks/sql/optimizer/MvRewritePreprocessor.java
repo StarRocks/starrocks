@@ -496,7 +496,7 @@ public class MvRewritePreprocessor {
         if (mv.hasForeignKeyConstraints()) {
             return true;
         }
-        Set<Table> baseTables = mv.getBaseTableInfos().stream().map(x -> x.getTableChecked())
+        Set<Table> baseTables = mv.getBaseTableInfos().stream().map(x -> MvUtils.getTableChecked(x))
                 .filter(x -> !x.isView() && !x.isMaterializedView())
                 .collect(Collectors.toSet());
         Set<Table> extraTables =  baseTables.stream().filter(t -> !queryTables.contains(t)).collect(Collectors.toSet());
@@ -795,7 +795,7 @@ public class MvRewritePreprocessor {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    Optional<Table> baseTable = base.mayGetTable();
+                    Optional<Table> baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(base);
                     if (!baseTable.isPresent() || baseTable.get().isView()) {
                         continue;
                     }
@@ -812,10 +812,11 @@ public class MvRewritePreprocessor {
             StringBuilder sb = new StringBuilder();
             try {
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    if (!base.mayGetTable().isPresent()) {
+                    Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(base);
+                    if (!tableOptional.isPresent()) {
                         continue;
                     }
-                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(tableOptional.get()));
                     sb.append(String.format("base table %s version: %s; ", base, versionInfo));
                 }
             } catch (Exception e) {

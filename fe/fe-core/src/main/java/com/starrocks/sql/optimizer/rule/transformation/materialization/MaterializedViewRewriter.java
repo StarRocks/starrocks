@@ -903,7 +903,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 if (foreignKeyConstraint.getChildTableInfo() == null) {
                     return false;
                 }
-                Table table = foreignKeyConstraint.getChildTableInfo().getTableChecked();
+                Table table = MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo());
                 return table.equals(mvChildTable);
             }).forEach(foreignKeyConstraints::add);
         }
@@ -960,7 +960,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)
                         .map(String::toLowerCase).collect(Collectors.toList());
 
-                Table foreignKeyParentTable = foreignKeyConstraint.getParentTableInfo().getTableChecked();
+                Table foreignKeyParentTable = MvUtils.getTableChecked(foreignKeyConstraint.getParentTableInfo());
                 for (TableScanDesc mvParentTableScanDesc : mvParentTableScanDescs) {
                     Table parentTable = mvParentTableScanDesc.getTable();
                     // check the parent table is the same table in the foreign key constraint
@@ -1031,7 +1031,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
         for (ForeignKeyConstraint foreignKeyConstraint : materializedView.getForeignKeyConstraints()) {
             if (foreignKeyConstraint.getChildTableInfo() != null &&
-                    foreignKeyConstraint.getChildTableInfo().getTableChecked().equals(childTable)) {
+                    MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo()).equals(childTable)) {
                 List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
                 Set<String> mvChildKeySet = columnPairs.stream().map(pair -> pair.first)
                         .map(String::toLowerCase).collect(Collectors.toSet());
