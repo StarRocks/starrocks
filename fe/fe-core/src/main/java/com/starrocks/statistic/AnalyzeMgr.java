@@ -470,11 +470,10 @@ public class AnalyzeMgr implements Writable {
         for (Map.Entry<Long, AnalyzeStatus> entry : analyzeStatusMap.entrySet()) {
             AnalyzeStatus analyzeStatus = entry.getValue();
             LocalDateTime endTime = analyzeStatus.getEndTime();
-            // After the last cleanup, if a table has successfully undergone a scheduled full statistics collection,
+            // After the last cleanup, if a table has successfully undergone a statistics collection,
             // and the collection completion time is after the last cleanup time,
             // then during the next cleanup process, the stale column statistics would be cleared.
             if (analyzeStatus instanceof NativeAnalyzeStatus
-                    && analyzeStatus.getScheduleType() ==  StatsConstants.ScheduleType.SCHEDULE
                     && analyzeStatus.getStatus() == StatsConstants.ScheduleStatus.FINISH
                     && endTime.isAfter(lastCleanTime)) {
                 NativeAnalyzeStatus nativeAnalyzeStatus = (NativeAnalyzeStatus) analyzeStatus;
@@ -490,22 +489,33 @@ public class AnalyzeMgr implements Writable {
         }
 
         List<Long> tableIds = Lists.newArrayList();
-        int exprLimit = 50000;
-        for (int i = 0; i < tables.size(); i++) {
-            tableIds.add(tables.get(i).getId());
-            if (i == tables.size() - 1 || tableIds.size() + 1 == exprLimit) {
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                statsConnectCtx.setStatisticsConnection(true);
-                statsConnectCtx.getSessionVariable().setExprChildrenLimit(exprLimit * 2);
-                StatisticExecutor executor = new StatisticExecutor();
-                boolean res = executor.clearStaleColumnStatistics(statsConnectCtx, tableIds, lastCleanTime);
+        List<Long> partitionIds = Lists.newArrayList();
+        int exprLimit = Config.expr_children_limit / 2;
+        for (Table table : tables) {
+            List<Long> pids = table.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+            if (pids.size() > exprLimit) {
                 tableIds.clear();
-                lastCleanTime = LocalDateTime.now();
-                if (!res) {
-                    LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
-                }
+                partitionIds.clear();
+                tableIds.add(table.getId());
+                partitionIds.addAll(pids);
+                break;
+            } else if ((tableIds.size() + partitionIds.size() + pids.size()) > exprLimit) {
+                break;
             }
+            tableIds.add(table.getId());
+            partitionIds.addAll(pids);
         }
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setStatisticsConnection(true);
+        statsConnectCtx.setThreadLocalInfo();
+        StatisticExecutor executor = new StatisticExecutor();
+        statsConnectCtx.getSessionVariable().setExprChildrenLimit(partitionIds.size() * 3);
+        boolean res = executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tableIds, partitionIds);
+        if (!res) {
+            LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
+        }
+        lastCleanTime = LocalDateTime.now();
     }
 
     private void clearStaleStatsWhenStarted() {

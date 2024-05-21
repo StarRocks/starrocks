@@ -39,7 +39,6 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -380,16 +379,5 @@ public class StatisticsSQLTest extends PlanTestBase {
                         ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
         assertContains(sql, "column_name in (\"col1\", \"col2\")");
         Assert.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
-    }
-
-    @Test
-    public void testClearStaleColStatsSQL() throws Exception {
-        starRocksAssert.useDatabase("_statistics_");
-        String sql = StatisticSQLBuilder.buildClearStaleColStatsSQL(Lists.newArrayList(4L, 5L, 6L),
-                LocalDateTime.of(2020, 1, 1, 1, 5));
-        String plan = getFragmentPlan(sql);
-        assertCContains(plan, "table_id IN (4, 5, 6)");
-        System.out.println(plan);
-        assertCContains(plan, "update_time <= '2020-01-01 01:00:00'");
     }
 }
