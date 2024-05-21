@@ -578,7 +578,8 @@ public class EditLog {
                 }
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
-                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
+                    if (!MetaVersion
+                            .isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
                         throw new JournalInconsistentException("Not compatible with meta version "
                                 + metaVersion.getStarRocksVersion()
                                 + ", current version is " + FeConstants.STARROCKS_META_VERSION);
@@ -1190,16 +1191,9 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
-                case OperationType.OP_RECOVER_PARTITION_VERSION:
+                case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
-                    break;
-<<<<<<< HEAD
-=======
-                }
-                case OperationType.OP_MODIFY_DICTIONARY_MGR: {
-                    DictionaryMgrInfo modifyInfo = (DictionaryMgrInfo) journal.getData();
-                    globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
                     break;
                 }
                 case OperationType.OP_DECOMMISSION_DISK: {
@@ -1222,7 +1216,6 @@ public class EditLog {
                     globalStateMgr.getClusterInfo().replayCancelDisableDisks(info);
                     break;
                 }
->>>>>>> dd511b498c ([Feature] Support disk disable/decommission (part1) (#37134))
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
