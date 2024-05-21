@@ -170,6 +170,16 @@ class TracerImpl extends Tracer {
         return sb.toString();
     }
 
+    public String printReasons() {
+        StringBuilder sb = new StringBuilder();
+        for (LogTracer.LogEvent log : reasonTracer.getLogs()) {
+            sb.append("    ");
+            sb.append(log.getLog());
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
     // ----------------- runtime profile -----------------
     private RuntimeProfile getRuntimeProfile(RuntimeProfile parent, Map<String, RuntimeProfile> cache,
                                              String prefix) {

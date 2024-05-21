@@ -65,6 +65,10 @@ public abstract class Tracer {
         return "";
     }
 
+    public String printReasons() {
+        return "";
+    }
+
     public void toRuntimeProfile(RuntimeProfile parent) {
     }
 }

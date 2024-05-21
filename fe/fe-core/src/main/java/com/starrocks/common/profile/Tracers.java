@@ -24,7 +24,7 @@ import java.util.function.Function;
 
 public class Tracers {
     public enum Mode {
-        NONE, LOGS, VARS, TIMER, TIMING, REASONING
+        NONE, LOGS, VARS, TIMER, TIMING, REASON
     }
 
     public enum Module {
@@ -100,7 +100,7 @@ public class Tracers {
 
             tracers.modeMask |= 1 << Mode.TIMER.ordinal();
             tracers.modeMask |= 1 << Mode.VARS.ordinal();
-            tracers.modeMask |= 1 << Mode.REASONING.ordinal();
+            tracers.modeMask |= 1 << Mode.REASON.ordinal();
         }
         if (checkMV) {
             tracers.moduleMask |= 1 << Module.MV.ordinal();
@@ -183,7 +183,7 @@ public class Tracers {
 
     public static void reasoning(Module module, String reason, Object... args) {
         Tracers tracers = THREAD_LOCAL.get();
-        tracers.tracer(module, Mode.REASONING).reason(reason, args);
+        tracers.tracer(module, Mode.REASON).reason(reason, args);
     }
 
     public static void record(Module module, String name, String value) {
@@ -223,6 +223,11 @@ public class Tracers {
     public static String printLogs() {
         Tracers tracers = THREAD_LOCAL.get();
         return tracers.allTracer[1].printLogs();
+    }
+
+    public static String printReasons() {
+        Tracers tracers = THREAD_LOCAL.get();
+        return tracers.allTracer[1].printReasons();
     }
 
     public static void toRuntimeProfile(RuntimeProfile profile) {

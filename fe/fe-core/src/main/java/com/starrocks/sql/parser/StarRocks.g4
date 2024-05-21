@@ -2342,7 +2342,7 @@ explainDesc
     ;
 
 optimizerTrace
-    : TRACE (ALL | LOGS | TIMES | VALUES) identifier?
+    : TRACE (ALL | LOGS | TIMES | VALUES | REASON) identifier?
     ;
 
 partitionDesc
