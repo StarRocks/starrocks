@@ -523,7 +523,7 @@ public class MvRewritePreprocessor {
                                                                 boolean force,
                                                                 Set<Table> queryTables) {
         if (!mv.isActive())  {
-            logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
             return Pair.create(false, "MV is not active");
         }
         if (!mv.isEnableRewrite()) {

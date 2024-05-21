@@ -80,10 +80,8 @@ public class OptimizerTraceUtil {
      * materialized view is not chose to rewrite the query.
      */
     public static void logMVRewriteFailReason(String mvName, String format, Object... objects) {
-        Tracers.log(Tracers.Module.MV_REASONING, input -> {
-            String str = MessageFormatter.arrayFormat(format, objects).getMessage();
-            return MessageFormatter.format("MV {} rewrite fail: {}", mvName, str).getMessage();
-        });
+        String str = MessageFormatter.arrayFormat(format, objects).getMessage();
+        Tracers.reasoning(Tracers.Module.MV, "MV rewrite fail for {}: {} ", mvName, str);
         logMVRewrite(mvName, format, objects);
     }
 

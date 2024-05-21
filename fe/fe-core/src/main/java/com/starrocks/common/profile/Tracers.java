@@ -24,11 +24,11 @@ import java.util.function.Function;
 
 public class Tracers {
     public enum Mode {
-        NONE, LOGS, VARS, TIMER, TIMING,
+        NONE, LOGS, VARS, TIMER, TIMING, REASONING
     }
 
     public enum Module {
-        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL, MV_REASONING
+        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL
     }
 
     private static final Tracer EMPTY_TRACER = new Tracer() {
@@ -58,16 +58,20 @@ public class Tracers {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.isCommandLog = StringUtils.equalsIgnoreCase("command", context.getSessionVariable().getTraceLogMode());
         LogTracer logTracer = tracers.isCommandLog ? new CommandLogTracer() : new FileLogTracer();
+        LogTracer reasonTracer = tracers.isCommandLog ? new CommandLogTracer() : new FileLogTracer();
         tracers.allTracer[0] = EMPTY_TRACER;
-        tracers.allTracer[1] = new TracerImpl(Stopwatch.createStarted(), new TimeWatcher(), new VarTracer(), logTracer);
+        tracers.allTracer[1] = new TracerImpl(Stopwatch.createStarted(), new TimeWatcher(), new VarTracer(), logTracer,
+                reasonTracer);
     }
 
     public static void register() {
         // default register FileLogTracer
         Tracers tracers = THREAD_LOCAL.get();
         LogTracer logTracer = new FileLogTracer();
+        LogTracer reasonTracer = new FileLogTracer();
         tracers.allTracer[0] = EMPTY_TRACER;
-        tracers.allTracer[1] = new TracerImpl(Stopwatch.createStarted(), new TimeWatcher(), new VarTracer(), logTracer);
+        tracers.allTracer[1] = new TracerImpl(Stopwatch.createStarted(), new TimeWatcher(), new VarTracer(), logTracer,
+                reasonTracer);
     }
 
     // for record metrics in parallel
@@ -92,9 +96,11 @@ public class Tracers {
             tracers.moduleMask |= 1 << Module.BASE.ordinal();
             tracers.moduleMask |= 1 << Module.EXTERNAL.ordinal();
             tracers.moduleMask |= 1 << Module.SCHEDULER.ordinal();
+            tracers.moduleMask |= 1 << Module.MV.ordinal();
 
             tracers.modeMask |= 1 << Mode.TIMER.ordinal();
             tracers.modeMask |= 1 << Mode.VARS.ordinal();
+            tracers.modeMask |= 1 << Mode.REASONING.ordinal();
         }
         if (checkMV) {
             tracers.moduleMask |= 1 << Module.MV.ordinal();
@@ -173,6 +179,11 @@ public class Tracers {
     public static void log(String log, Object... args) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(Module.BASE, Mode.TIMER).log(log, args);
+    }
+
+    public static void reasoning(Module module, String reason, Object... args) {
+        Tracers tracers = THREAD_LOCAL.get();
+        tracers.tracer(module, Mode.REASONING).reason(reason, args);
     }
 
     public static void record(Module module, String name, String value) {
