@@ -27,6 +27,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
@@ -60,7 +61,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.MvRewritePreprocessor.isMVValidToRewriteQuery;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.REWRITE_SUCCESS;
 
@@ -218,11 +218,10 @@ public class TextMatchBasedRewriteRule extends Rule {
                 return null;
             }
             int mvRelatedCount = 0;
-            Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
             for (MaterializedView mv : candidateMvs) {
-                boolean isValid = isMVValidToRewriteQuery(connectContext, mv, queryTables);
-                if (!isValid) {
-                    logMVRewrite(context, this, "MV {} cannot be used for rewrite", mv.getName());
+                Pair<Boolean, String> status = isValidForTextBasedRewrite(context, mv);
+                if (!status.first) {
+                    logMVRewrite(context, this, "MV {} cannot be used for rewrite, {}", mv.getName(), status.second);
                     continue;
                 }
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
@@ -270,6 +269,15 @@ public class TextMatchBasedRewriteRule extends Rule {
             return null;
         }
         return null;
+    }
+
+    public Pair<Boolean, String> isValidForTextBasedRewrite(OptimizerContext context,
+                                                            MaterializedView mv) {
+        if (!mv.isActive()) {
+            logMVRewrite(context, this, "MV is not active: {}", mv.getName());
+            return Pair.create(false, "MV is not active");
+        }
+        return Pair.create(true, "");
     }
 
     private OptExpression doTextMatchBasedRewrite(OptimizerContext context,
