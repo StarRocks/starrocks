@@ -84,7 +84,6 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             long queryTime = 0;
 
             // get each field with annotation "AuditField" in AuditEvent
-            // and add them to the log map
             Field[] fields = event.getClass().getFields();
             for (Field f : fields) {
                 AuditField af = f.getAnnotation(AuditField.class);
