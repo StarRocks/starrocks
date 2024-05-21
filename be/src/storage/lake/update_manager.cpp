@@ -99,9 +99,9 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
     }
 }
 
-StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
-                                                           int64_t base_version, int64_t new_version,
-                                                           std::unique_ptr<std::lock_guard<std::mutex>>& guard) {
+StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
+        const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -401,7 +401,7 @@ Status UpdateManager::_handle_index_op(int64_t tablet_id, int64_t base_version, 
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
-    std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard = nullptr;
     // Fetch lock guard before check `is_load()`
     if (need_lock) {
         guard = index.try_fetch_guard();
@@ -976,6 +976,22 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
         index.set_enable_persistent_index(enable_persistent_index);
         _index_cache.release(index_entry);
     }
+}
+
+Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return Status::OK();
+    }
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    auto& index = index_entry->value();
+
+    // release when function end
+    DeferOp index_defer([&]() { _index_cache.release(index_entry); });
+    _index_cache.update_object_size(index_entry, index.memory_usage());
+    RETURN_IF_ERROR(index.major_compaction(data_dir, tablet_id, index.get_index_lock()));
+    index.set_local_pk_index_write_amp_score(0.0);
+    return Status::OK();
 }
 
 } // namespace starrocks::lake
