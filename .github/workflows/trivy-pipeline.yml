@@ -31,11 +31,24 @@ jobs:
         env:
           TMPDIR: ${{ github.workspace }}/trivy_temp # Required to prevent Trivy running out of space
         with:
-          image-ref: "registry.cn-zhangjiakou.aliyuncs.com/starrocks/dev-env-centos7:3.1-latest"
-          scan-type: "image"
-          trivy-config: ".trivy.yaml"
+          image-ref: registry.cn-zhangjiakou.aliyuncs.com/starrocks/dev-env-centos7:3.1-latest
+          scan-type: image
+          severity: HIGH,CRITICAL
+          scanners: vuln
+          vuln-type: library
+          format: github
+          timeout: 30m
+          output: trivy.txt
+          exit-code: 0
 
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+      - name: Upload trivy report as a Github artifact
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: 'trivy-results.sarif'
+          name: trivy-sbom-report
+          path: '${{ github.workspace }}/trivy.txt'
+          retention-days: 20
+
+#      - name: Upload Trivy scan results to GitHub Security tab
+#        uses: github/codeql-action/upload-sarif@v2
+#        with:
+#          sarif_file: 'trivy-results.sarif'
