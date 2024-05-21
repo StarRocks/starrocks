@@ -153,104 +153,25 @@ The variables are described **in alphabetical order**. Variables with the `globa
   Whether to enable low cardinality optimization. After this feature is enabled, the performance of querying STRING columns improves by about three times. Default value: true.
 
 ### cbo_eq_base_type (2.5.14 and later)
-
-<<<<<<< HEAD
   Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
-=======
-* **Description**: Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value. **This variable takes effect only for `=` and `!=` comparison.**
-* **Data type**: String
-* **Introduced in**: v2.5.14
 
-### cbo_materialized_view_rewrite_related_mvs_limit
+### enable_materialized_view_union_rewrite (2.5.20 and later)
 
-* **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
-* **Default**: 64
-* **Introduced in**: v3.1.9, v3.2.5
+  Whether to enable materialized view union rewrite. If this item is set to `true`, the system seeks to compensate the predicates using UNION ALL when the predicates in the materialized view cannot satisfy the query's predicates. The default value is `true`.
 
-### cbo_prune_subfield
+### enable_materialized_view_plan_cache (2.5.13 and later)
 
-* **Description**: Whether to enable JSON subfield pruning. This variable must be used with the BE dynamic parameter `enable_json_flat`. Otherwise, it may degrade JSON data query performance.
-* **Default**: false
-* **Data type**: Int
-* **Introduced in**: v3.3.0
+* **Description**: Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. The default value `true` indicates enabling it.
 
-### enable_sync_materialized_view_rewrite
+### follower_query_forward_mode (2.5.20 and later)
 
-* **Description**: Whether to enable query rewrite based on synchronous materialized views.
-* **Default**: true
-* **Introduced in**: v3.1.11, v3.2.5
-
-### query_including_mv_names
-
-* **Description**: Specifies the name of the asynchronous materialized views to include in query execution. You can use this variable to limit the number of candidate materialized views and improve the query rewrite performance in the optimizer. This item takes effect prior to `query_excluding_mv_names`.
-* **Default**: empty
-* **Data type**: String
-* **Introduced in**: v3.1.11, v3.2.5
-
-### query_excluding_mv_names(
-
-* **Description**: Specifies the name of the asynchronous materialized views to exclude from query execution. You can use this variable to limit the number of candidate materialized views and reduce the time of query rewrite in the optimizer. `query_including_mv_names` takes effect prior to this item.
-* **Default**: empty
-* **Data type**: String
-* **Introduced in**: v3.1.11, v3.2.5
-
-### optimizer_materialized_view_timelimit
-
-* **Description**: Specifies the maximum time that one materialized view rewrite rule can consume. When the threshold is reached, this rule will not be used for query rewrite.
-* **Default**: 1000
-* **Unit**: ms
-* **Introduced in**: v3.1.9, v3.2.5
-
-### enable_materialized_view_text_match_rewrite
-
-* **Description**: Whether to enable text-based materialized view rewrite. When this item is set to true, the optimizer will compare the query with the existing materialized views. A query will be rewritten if the abstract syntax tree of the materialized view's definition matches that of the query or its sub-query.
-* **Default**: true
-* **Introduced in**: v3.2.5, v3.3.0
-
-### materialized_view_subuqery_text_match_max_count
-
-* **Description**: Specifies the maximum number of times that the system checks whether a query's sub-query matches the materialized views' definition.
-* **Default**: 4
-* **Introduced in**: v3.2.5, v3.3.0
-
-### enable_force_rule_based_mv_rewrite
-
-* **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
-* **Default**: true
-* **Introduced in**: v3.3.0
-
-### enable_view_based_mv_rewrite
-
-* **Description**: Whether to enable query rewrite for logical view-based materialized views. If this item is set to `true`, the logical view is used as a unified node to rewrite the queries against itself for better performance. If this item is set to `false`, the system transcribes the queries against logical views into queries against physical tables or materialized views and then rewrites them.
-* **Default**: false
-* **Introduced in**: v3.1.9, v3.2.5, v3.3.0
-
-### enable_materialized_view_union_rewrite
-
-* **Description**: Whether to enable materialized view union rewrite. If this item is set to `true`, the system seeks to compensate the predicates using UNION ALL when the predicates in the materialized view cannot satisfy the query's predicates.
-* **Default**: true
-* **Introduced in**: v2.5.20, v3.1.9, v3.2.7, v3.3.0
-
-### enable_materialized_view_plan_cache
-
-* **Description**: Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. Setting it to `true` indicates enabling it.
-* **Default**: true
-* **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
-
-### follower_query_forward_mode
-
-* **Description**: Specifies to which FE nodes the query statements are routed.
+  Specifies to which FE nodes the query statements are routed.
 
   * Valid values:
 
     * `default`: Routes the query statement to the Leader FE or Follower FEs, depending on the Follower's replay progress. If the Follower FE nodes have not completed replay progress, queries will be routed to the Leader FE node. If the replay progress is complete, queries will be preferentially routed to the Follower FE node.
     * `leader`: Routes the query statement to the Leader FE.
     * `follower`: Routes the query statement to Follower FE.
-
-* **Default**: default
-* **Data type**: String
-* **Introduced in**: v2.5.20, v3.1.9, v3.2.7, v3.3.0
->>>>>>> 3c00c40a88 ([Doc] add docs for enable_materialized_view_plan_cache (#45819))
 
 ### character_set_database (global)
 
