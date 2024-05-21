@@ -46,9 +46,22 @@ jobs:
       - name: Init
         run: |
          mkdir trivy_temp
-         trivy image --clear-cache
+#         trivy image --clear-cache
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy vulnerability scanner - console
+        uses: aquasecurity/trivy-action@0.20.0
+        env:
+          TMPDIR: ${{ github.workspace }}/trivy_temp # Required to prevent Trivy running out of space
+        with:
+          image-ref: registry.cn-zhangjiakou.aliyuncs.com/starrocks/dev-env-centos7:3.2-latest
+          scan-type: image
+          severity: HIGH,CRITICAL
+          scanners: vuln
+          vuln-type: library
+          timeout: 30m
+          exit-code: 0
+
+      - name: Run Trivy vulnerability scanner - json
         uses: aquasecurity/trivy-action@0.20.0
         env:
           TMPDIR: ${{ github.workspace }}/trivy_temp # Required to prevent Trivy running out of space
