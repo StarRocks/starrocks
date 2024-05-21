@@ -436,133 +436,123 @@ public class SystemInfoService implements GsonPostProcessable {
         MetricRepo.generateBackendsTabletMetrics();
     }
 
-    public void decommissionDisks(List<String> diskList) throws DdlException {
-        checkDisksParam(diskList);
-
-        Map<Long, String> diskMap = new HashMap<>();
-        for (String disk : diskList) {
-            String[] items = disk.split(":");
-            int port = Integer.parseInt(items[1]);
-            Backend backend = getBackendWithHeartbeatPort(items[0], port);
-            if (backend != null) {
-                backend.decommissionDisk(items[2]);
-                diskMap.put(backend.getId(), items[2]);
-            }
+    private Backend getBackendByHostPort(String hostPort) throws DdlException {
+        String[] items = hostPort.split(":");
+        if (items.length != 2) {
+            throw new DdlException("invalid BE format: " + hostPort + ", host and port should be separated by ':'");
         }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logDecommissionDisk(new DecommissionDiskInfo(diskMap));
+        int port;
+        try {
+            port = Integer.parseInt(items[1]);
+        } catch (NumberFormatException e) {
+            throw new DdlException("invalid port format: " + items[1]);
+        }
+
+        Backend backend = getBackendWithHeartbeatPort(items[0], port);
+        if (backend == null) {
+            throw new DdlException("Backend: " + hostPort + " does not exist");
+        }
+        return backend;
     }
 
-    public void cancelDecommissionDisks(List<String> diskList) throws DdlException {
-        checkDisksParam(diskList);
-
-        Map<Long, String> diskMap = new HashMap<>();
+    public void decommissionDisks(String beHostPort, List<String> diskList) throws DdlException {
+        Backend backend = getBackendByHostPort(beHostPort);
         for (String disk : diskList) {
-            String[] items = disk.split(":");
-            int port = Integer.parseInt(items[1]);
-            Backend backend = getBackendWithHeartbeatPort(items[0], port);
-            if (backend != null) {
-                backend.cancelDecommissionDisk(items[2]);
-                diskMap.put(backend.getId(), items[2]);
-            }
+            backend.decommissionDisk(disk);
         }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logCancelDecommissionDisk(new CancelDecommissionDiskInfo(diskMap));
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logDecommissionDisk(new DecommissionDiskInfo(backend.getId(), diskList));
     }
 
-    public void disableDisks(List<String> diskList) throws DdlException {
-        checkDisksParam(diskList);
-
-        Map<Long, String> diskMap = new HashMap<>();
+    public void cancelDecommissionDisks(String beHostPort, List<String> diskList) throws DdlException {
+        Backend backend = getBackendByHostPort(beHostPort);
         for (String disk : diskList) {
-            String[] items = disk.split(":");
-            int port = Integer.parseInt(items[1]);
-            Backend backend = getBackendWithHeartbeatPort(items[0], port);
-            if (backend != null) {
-                backend.disableDisk(items[2]);
-                diskMap.put(backend.getId(), items[2]);
-            }
+            backend.cancelDecommissionDisk(disk);
         }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logDisableDisk(new DisableDiskInfo(diskMap));
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logCancelDecommissionDisk(new CancelDecommissionDiskInfo(backend.getId(), diskList));
     }
 
-    public void cancelDisableDisks(List<String> diskList) throws DdlException {
-        checkDisksParam(diskList);
-
-        Map<Long, String> diskMap = new HashMap<>();
+    public void disableDisks(String beHostPort, List<String> diskList) throws DdlException {
+        Backend backend = getBackendByHostPort(beHostPort);
         for (String disk : diskList) {
-            String[] items = disk.split(":");
-            int port = Integer.parseInt(items[1]);
-            Backend backend = getBackendWithHeartbeatPort(items[0], port);
-            if (backend != null) {
-                backend.cancelDisableDisk(items[2]);
-                diskMap.put(backend.getId(), items[2]);
-            }
+            backend.disableDisk(disk);
         }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logCancelDisableDisk(new CancelDisableDiskInfo(diskMap));
+        GlobalStateMgr.getCurrentState().getEditLog().logDisableDisk(new DisableDiskInfo(backend.getId(), diskList));
+    }
+
+    public void cancelDisableDisks(String beHostPort, List<String> diskList) throws DdlException {
+        Backend backend = getBackendByHostPort(beHostPort);
+        for (String disk : diskList) {
+            backend.cancelDisableDisk(disk);
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logCancelDisableDisk(new CancelDisableDiskInfo(backend.getId(), diskList));
     }
 
     public void replayDecommissionDisks(DecommissionDiskInfo info) {
-        for (Map.Entry<Long, String> entry : info.getDiskList().entrySet()) {
-            Backend backend = getBackend(entry.getKey());
-            if (backend != null) {
-                try {
-                    backend.decommissionDisk(entry.getValue());
-                } catch (DdlException e) {
-                    LOG.warn("replay decommission disk failed", e);
-                }
+        Backend backend = getBackend(info.getBeId());
+        if (backend == null) {
+            LOG.warn("replay decommission disk failed, backend:{} does not exist", info.getBeId());
+            return;
+        }
+        for (String disk : info.getDiskList()) {
+            try {
+                backend.decommissionDisk(disk);
+            } catch (DdlException e) {
+                LOG.warn("replay decommission disk failed", e);
             }
         }
     }
 
     public void replayCancelDecommissionDisks(CancelDecommissionDiskInfo info) {
-        for (Map.Entry<Long, String> entry : info.getDiskList().entrySet()) {
-            Backend backend = getBackend(entry.getKey());
-            if (backend != null) {
-                backend.cancelDecommissionDisk(entry.getValue());
+        Backend backend = getBackend(info.getBeId());
+        if (backend == null) {
+            LOG.warn("replay cancel decommission disk failed, backend:{} does not exist", info.getBeId());
+            return;
+        }
+        for (String disk : info.getDiskList()) {
+            try {
+                backend.cancelDecommissionDisk(disk);
+            } catch (DdlException e) {
+                LOG.warn("replay cancel decommission disk failed", e);
             }
         }
     }
 
     public void replayDisableDisks(DisableDiskInfo info) {
-        for (Map.Entry<Long, String> entry : info.getDiskList().entrySet()) {
-            Backend backend = getBackend(entry.getKey());
-            if (backend != null) {
-                try {
-                    backend.disableDisk(entry.getValue());
-                } catch (DdlException e) {
-                    LOG.warn("replay disable disk failed", e);
-                }
+        Backend backend = getBackend(info.getBeId());
+        if (backend == null) {
+            LOG.warn("replay disable disk failed, backend:{} does not exist", info.getBeId());
+            return;
+        }
+
+        for (String disk : info.getDiskList()) {
+            try {
+                backend.disableDisk(disk);
+            } catch (DdlException e) {
+                LOG.warn("replay disable disk failed", e);
             }
         }
     }
 
     public void replayCancelDisableDisks(CancelDisableDiskInfo info) {
-        for (Map.Entry<Long, String> entry : info.getDiskList().entrySet()) {
-            Backend backend = getBackend(entry.getKey());
-            if (backend != null) {
-                backend.cancelDisableDisk(entry.getValue());
-            }
+        Backend backend = getBackend(info.getBeId());
+        if (backend == null) {
+            LOG.warn("replay cancel disable disk failed, backend:{} does not exist", info.getBeId());
+            return;
         }
-    }
 
-    private void checkDisksParam(List<String> diskList) throws DdlException {
-        for (String disk : diskList) {
-            String[] items = disk.split(":");
-            int port;
+        for (String disk : info.getDiskList()) {
             try {
-                port = Integer.parseInt(items[1]);
-            } catch (NumberFormatException e) {
-                throw new DdlException("invalid port format: " + items[1]);
-            }
-            Backend backend = getBackendWithHeartbeatPort(items[0], port);
-            if (backend == null) {
-                throw new DdlException("backend dose not exist: " + items[0] + ":" + items[1]);
-            }
-            if (!backend.getDisks().containsKey(items[2])) {
-                throw new DdlException("disk path dose not exits: " + items[2] + ", should be root path");
+                backend.cancelDisableDisk(disk);
+            } catch (DdlException e) {
+                LOG.warn("replay cancel disable disk failed", e);
             }
         }
     }
