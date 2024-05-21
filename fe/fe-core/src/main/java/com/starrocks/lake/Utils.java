@@ -33,8 +33,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.warehouse.Warehouse;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -208,22 +206,6 @@ public class Utils {
                 throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
             }
         }
-    }
-
-    public static Optional<Long> selectWorkerGroupByWarehouseId(WarehouseManager manager, long warehouseId) {
-        Warehouse warehouse = manager.getWarehouse(warehouseId);
-        if (warehouse == null)  {
-            LOG.warn("failed to get warehouse by id {}", warehouseId);
-            return Optional.empty();
-        }
-
-        List<Long> ids = warehouse.getWorkerGroupIds();
-        if (CollectionUtils.isEmpty(ids)) {
-            LOG.warn("failed to get worker group id from warehouse {}", warehouse);
-            return Optional.empty();
-        }
-
-        return Optional.of(ids.get(0));
     }
 
     public static Optional<Long> getWarehouseIdByNodeId(SystemInfoService systemInfo, long nodeId) {

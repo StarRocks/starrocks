@@ -17,22 +17,18 @@ package com.starrocks.lake;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
-import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.Optional;
 
 public class UtilsTest {
 
@@ -43,9 +39,6 @@ public class UtilsTest {
     StarOSAgentEpack starOSAgentEpack;
 
     NodeMgr nodeMgr;
-
-    @Mocked
-    NodeSelector nodeSelector;
 
     @Test
     public void testChooseBackend() {
@@ -76,25 +69,6 @@ public class UtilsTest {
                 throw new StarClientException(StatusCode.GRPC, "Failed to get shard info");
             }
         };
-    }
-
-    @Test
-    public void testGetWarehouse() {
-        WarehouseManager manager = new WarehouseManager();
-        manager.initDefaultWarehouse();
-
-        Optional<Long> workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertFalse(workerGroupId.isEmpty());
-        Assert.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, workerGroupId.get().longValue());
-
-        try {
-            workerGroupId = Optional.ofNullable(null);
-            workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, 1111L);
-            Assert.assertEquals(1, 2);   // can not be here
-        } catch (ErrorReportException e) {
-            Assert.assertTrue(workerGroupId.isEmpty());
-            Assert.assertEquals(workerGroupId.orElse(1000L).longValue(), 1000L);
-        }
     }
 
     @Test

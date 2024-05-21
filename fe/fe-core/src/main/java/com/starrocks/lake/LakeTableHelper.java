@@ -118,7 +118,7 @@ public class LakeTableHelper {
                     throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
                 }
                 WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                long workerGroupId = Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouseId)
+                long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
                         workerGroupId);

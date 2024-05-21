@@ -46,6 +46,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class PseudoClusterTest {
@@ -245,6 +247,12 @@ public class PseudoClusterTest {
             @Mock
             public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
                 return pathInfo;
+            }
+
+            @Mock
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+                // the worker id is a random number
+                return new ArrayList<>(Arrays.asList(10001L));
             }
         };
 
