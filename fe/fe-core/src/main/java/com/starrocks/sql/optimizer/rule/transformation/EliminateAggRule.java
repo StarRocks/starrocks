@@ -103,11 +103,8 @@ public class EliminateAggRule extends TransformationRule {
 
         OptExpression childOptExpression = input.inputAt(0);
         Map<Integer, UKFKConstraints.UniqueConstraintWrapper> uniqueKeys =
-                childOptExpression.getConstraints().getAllUniqueKeys();
-        Set<Integer> uniqueColumnRefIds =
-                uniqueKeys.keySet().stream().collect(Collectors.toSet());
-
-        if (uniqueKeys.size() == 0) {
+                childOptExpression.getConstraints().getTableUniqueKeys();
+        if (uniqueKeys.isEmpty()) {
             return false;
         }
         if (uniqueKeys.size() != groupKeys.size()) {
@@ -118,6 +115,8 @@ public class EliminateAggRule extends TransformationRule {
                 .map(ColumnRefOperator::getId)
                 .collect(Collectors.toSet());
 
+        Set<Integer> uniqueColumnRefIds =
+                uniqueKeys.keySet().stream().collect(Collectors.toSet());
         if (!groupColumnRefIds.equals(uniqueColumnRefIds)) {
             return false;
         }

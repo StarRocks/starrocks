@@ -28,22 +28,17 @@ import java.util.Map;
 public class UKFKConstraints {
     // ColumnRefOperator::id -> UniqueConstraint
     private final Map<Integer, UniqueConstraintWrapper> uniqueKeys = Maps.newHashMap();
-    private final Map<Integer, UniqueConstraintWrapper> allUniqueKeys = Maps.newHashMap();
+    private Map<Integer, UniqueConstraintWrapper> tableUniqueKeys = Maps.newHashMap();
     // ColumnRefOperator::id -> ForeignKeyConstraint
     private final Map<Integer, ForeignKeyConstraintWrapper> foreignKeys = Maps.newHashMap();
     private JoinProperty joinProperty;
 
-    public Map<Integer, UniqueConstraintWrapper> getUniqueKeys() {
-        return uniqueKeys;
-    }
-
-    public Map<Integer, UniqueConstraintWrapper> getAllUniqueKeys() {
-        return allUniqueKeys;
-    }
-
     public void addUniqueKey(int id, UniqueConstraintWrapper uniqueKey) {
         uniqueKeys.put(id, uniqueKey);
-        allUniqueKeys.put(id, uniqueKey);
+    }
+
+    public void addTableUniqueKey(int id, UniqueConstraintWrapper uniqueKey) {
+        tableUniqueKeys.put(id, uniqueKey);
     }
 
     public void addForeignKey(int id, ForeignKeyConstraintWrapper foreignKey) {
@@ -52,6 +47,14 @@ public class UKFKConstraints {
 
     public UniqueConstraintWrapper getUniqueConstraint(Integer id) {
         return uniqueKeys.get(id);
+    }
+
+    public void setTableUniqueKeys(Map<Integer, UniqueConstraintWrapper> tableUniqueKeys) {
+        this.tableUniqueKeys = tableUniqueKeys;
+    }
+
+    public Map<Integer, UniqueConstraintWrapper> getTableUniqueKeys() {
+        return tableUniqueKeys;
     }
 
     public ForeignKeyConstraintWrapper getForeignKeyConstraint(Integer id) {
@@ -69,14 +72,17 @@ public class UKFKConstraints {
 
     public static UKFKConstraints inheritFrom(UKFKConstraints from, ColumnRefSet toOutputColumns) {
         UKFKConstraints clone = new UKFKConstraints();
-        from.allUniqueKeys.entrySet().stream()
-                .forEach(entry -> clone.allUniqueKeys.put(entry.getKey(), entry.getValue()));
         from.uniqueKeys.entrySet().stream()
                 .filter(entry -> toOutputColumns.contains(entry.getKey()))
                 .forEach(entry -> clone.uniqueKeys.put(entry.getKey(), entry.getValue()));
         from.foreignKeys.entrySet().stream()
                 .filter(entry -> toOutputColumns.contains(entry.getKey()))
                 .forEach(entry -> clone.foreignKeys.put(entry.getKey(), entry.getValue()));
+        if (!(from.getTableUniqueKeys().isEmpty()) &&
+                toOutputColumns.containsAll(new ArrayList<>(from.getTableUniqueKeys().keySet()))) {
+            clone.setTableUniqueKeys(from.getTableUniqueKeys());
+        }
+
         return clone;
     }
 

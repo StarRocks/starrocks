@@ -135,8 +135,8 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
             List<UniqueConstraint> ukConstraints = table.getUniqueConstraints();
             for (UniqueConstraint ukConstraint : ukConstraints) {
                 // For now, we only handle one column primary key or foreign key
-                for (String ukColumn : ukConstraint.getUniqueColumns()) {
-                    // Get non-uk original column ids
+                if (ukConstraint.getUniqueColumns().size() == 1) {
+                    String ukColumn = ukConstraint.getUniqueColumns().get(0);
                     ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
                             .map(Column::getName)
                             .filter(columnNameToColRefMap::containsKey)
@@ -149,6 +149,34 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
                         constraint.addUniqueKey(columnRefOperator.getId(),
                                 new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
                                         nonUkColumnRefs, usedColumns.isEmpty()));
+                        constraint.addTableUniqueKey(columnRefOperator.getId(),
+                                new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
+                                        nonUkColumnRefs, usedColumns.isEmpty()));
+                    }
+                } else {
+                    List<String> ukColNames = ukConstraint.getUniqueColumns();
+                    boolean containsAllUk = true;
+                    for (String colName : ukColNames) {
+                        ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(colName);
+                        if (columnRefOperator == null || !outputColumns.contains(columnRefOperator)) {
+                            containsAllUk = false;
+                            break;
+                        }
+                    }
+
+                    if (containsAllUk) {
+                        ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
+                                .map(Column::getName)
+                                .filter(columnNameToColRefMap::containsKey)
+                                .filter(name -> !ukColNames.contains(name))
+                                .map(columnNameToColRefMap::get)
+                                .collect(Collectors.toList()));
+                        for (String colName : ukColNames) {
+                            ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(colName);
+                            constraint.addTableUniqueKey(columnRefOperator.getId(),
+                                    new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
+                                            nonUkColumnRefs, usedColumns.isEmpty()));
+                        }
                     }
                 }
             }
@@ -312,9 +340,6 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
         if (fkConstraint == null || ukConstraint == null) {
             return false;
         }
-        if (ukConstraint.constraint.getUniqueColumns().size() != 1) {
-            return false;
-        } 
         BaseTableInfo parentTableInfo = fkConstraint.constraint.getParentTableInfo();
         if (parentTableInfo == null) {
             return false;
