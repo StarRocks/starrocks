@@ -1724,7 +1724,7 @@ scrape_configs:
 #### starrocks_fe_routine_load_jobs
 
 - 单位：个
-- 描述：按 Routine Load 作业状态统计任务数量。例如：
+- 描述：按 Routine Load 作业状态统计作业数量。例如：
 
   ```plaintext
   starrocks_fe_routine_load_jobs{state="NEED_SCHEDULE"} 0
@@ -1737,22 +1737,22 @@ scrape_configs:
 #### starrocks_fe_routine_load_paused
 
 - 单位：个
-- 描述：Routine Load 作业暂停总次数。
+- 描述：所有 Routine Load 作业暂停总次数。
 
 #### starrocks_fe_routine_load_rows
 
 - 单位：个
-- 描述：所有 Routine Load 作业导入的总行数。
+- 描述：所有 Routine Load 作业导入数据的总行数。
 
 #### starrocks_fe_routine_load_receive_bytes
 
 - 单位：Byte
-- 描述：所有 Routine Load 作业导入的总数据量。
+- 描述：所有 Routine Load 作业导入数据的总量。
 
 #### starrocks_fe_routine_load_error_rows
 
-- 单位：Byte
-- 描述：所有 Routine Load 作业错误总行数。
+- 单位：个
+- 描述：所有 Routine Load 作业导入错误数据的总行数。
 
 ## Shared-data Dashboard 监控项
 
