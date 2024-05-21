@@ -25,16 +25,14 @@ from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl' li
 select sleep(2);
 select count(*) > 2 from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl';
 
-ADMIN SET FRONTEND CONFIG ("clear_stale_stats_interval_sec" = "10");
+ADMIN SET FRONTEND CONFIG ("clear_stale_stats_interval_sec" = "20");
 ADMIN SET FRONTEND CONFIG ("statistic_manager_sleep_time_sec" = "2");
-ADMIN SET FRONTEND CONFIG ("enable_collect_full_statistic" = "false");
-insert into tbl values (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9);
-CREATE ANALYZE FULL TABLE test_clear_stats.tbl;
 
+insert into tbl values (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9);
+analyze table test_clear_stats.tbl WITH SYNC MODE;
 truncate table tbl;
 insert into tbl values (1, 1), (2, 2), (3, 3), (4, 4);
-CREATE ANALYZE FULL TABLE test_clear_stats.tbl;
-ADMIN SET FRONTEND CONFIG ("enable_collect_full_statistic" = "true");
+analyze table test_clear_stats.tbl WITH SYNC MODE;
 select sleep(60);
 select count(*) <= 3 from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl';
 ADMIN SET FRONTEND CONFIG ("clear_stale_stats_interval_sec" = "43200");

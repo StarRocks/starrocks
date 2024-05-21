@@ -475,7 +475,7 @@ public class AnalyzeMgr implements Writable {
             // then during the next cleanup process, the stale column statistics would be cleared.
             if (analyzeStatus instanceof NativeAnalyzeStatus
                     && analyzeStatus.getStatus() == StatsConstants.ScheduleStatus.FINISH
-                    && endTime.isAfter(lastCleanTime)) {
+                    && Duration.between(endTime, lastCleanTime).toMinutes() < 30) {
                 NativeAnalyzeStatus nativeAnalyzeStatus = (NativeAnalyzeStatus) analyzeStatus;
                 Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeStatus.getDbId());
                 if (db != null && db.getTable(nativeAnalyzeStatus.getTableId()) != null) {
