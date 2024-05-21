@@ -82,9 +82,15 @@ public class SRMetaBlockReader {
             // normally it's because this FE has just rollbacked from a higher version that would produce more metadata
             int rest = header.getNumJson() - numJsonReaded;
             LOG.warn("Meta block for {} read {} json < total {} json, will skip the rest {} json",
+<<<<<<< HEAD
                     header.getName(), numJsonReaded, header.getNumJson(), rest);
             for (int i = 0; i != rest; ++ i) {
                 LOG.warn("skip {} json: {}", i, Text.readStringWithChecksum(checkedInputStream));
+=======
+                    header.getSrMetaBlockID(), numJsonRead, header.getNumJson(), rest);
+            for (int i = 0; i != rest; ++i) {
+                LOG.warn("skip {}th json: {}", i, Text.readStringWithChecksum(checkedInputStream));
+>>>>>>> 759125c841 ([Enhancement] Log the content of journal entity on replay failure (#46011))
             }
         }
 
