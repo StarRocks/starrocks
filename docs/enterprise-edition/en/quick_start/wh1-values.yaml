@@ -1,0 +1,16 @@
+# wh1-values.yaml
+spec:
+  # Make sure the StarRocks cluster exists in the same namespace.
+  # You can check it by running `kubectl get starrocksclusters.starrocks.com`.
+  starRocksClusterName: kube-starrocks
+  replicas: 1
+  image:
+    repository: us-west1-docker.pkg.dev/phrasal-verve-350013/celerdata/cn-ubuntu
+    tag: "3.2.6-ee"
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 1
+      memory: 2Gi

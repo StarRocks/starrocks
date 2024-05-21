@@ -1,0 +1,8 @@
+#!/usr/bin/env zsh
+read "brave?This will destroy the k8s cluster. Continue?"
+if [[ "$brave" =~ ^[Yy]$ ]]
+then
+gcloud container --project enterprise-demo-422514 \
+  clusters delete ee-docs \
+  --location=southamerica-west1-b
+fi

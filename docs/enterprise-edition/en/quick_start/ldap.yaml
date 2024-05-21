@@ -1,0 +1,128 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openldap-demo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+  namespace:  openldap-demo
+data:
+  config-ldap.ldif: |
+    # Already included in default config of Docker image osixia/openldap:1.5.0.
+    #
+    # dn: dc=example,dc=org
+    # objectClass: dcObject
+    # objectClass: organization
+    # o: Example Company
+    # dc: example
+
+    dn: ou=People,dc=example,dc=org
+    objectClass: organizationalUnit
+    ou: People
+
+    dn: cn=jane,ou=People,dc=example,dc=org
+    objectClass: person
+    objectClass: inetOrgPerson
+    sn: doe
+    cn: jane
+    uid: jane
+    mail: janedoe@example.com
+    userpassword: foo
+
+    dn: cn=john,ou=People,dc=example,dc=org
+    objectClass: person
+    objectClass: inetOrgPerson
+    sn: doe
+    cn: john
+    uid: john
+    mail: johndoe@example.com
+    userpassword: bar
+
+    dn: uid=sr_fte,ou=People,dc=example,dc=org
+    objectClass: inetOrgPerson
+    cn: sr_fte
+    uid: sr_fte
+    sn: FTE
+    givenName: SR
+    userpassword: bar
+
+    # sr_contractors, People, example.org
+    dn: uid=sr_contractors,ou=People,dc=example,dc=org
+    objectClass: inetOrgPerson
+    cn: sr_contractors
+    uid: sr_contractors
+    sn: Contractors
+    givenName: SR
+    userpassword: bar
+
+    # Group definitions.
+
+    dn: ou=Groups,dc=example,dc=org
+    objectClass: organizationalUnit
+    ou: Groups
+
+    dn: cn=developers,ou=Groups,dc=example,dc=org
+    objectClass: groupOfNames
+    cn: developers
+    member: uid=jane,ou=People,dc=example,dc=org
+    member: uid=john,ou=People,dc=example,dc=org
+
+    dn: cn=sr_admin,ou=Groups,dc=example,dc=org
+    objectClass: groupOfNames
+    cn: sr_admin
+    member: uid=sr_fte,ou=People,dc=example,dc=org
+    member: uid=sr_contractors,ou=People,dc=example,dc=org
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: ldap
+  name: ldap-service
+  namespace: openldap-demo
+spec:
+  ports:
+    - port: 389
+  type: LoadBalancer
+  selector:
+    app: ldap
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ldap
+  namespace: openldap-demo
+  labels:
+    app: ldap
+spec:
+  selector:
+    matchLabels:
+      app: ldap
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ldap
+    spec:
+      containers:
+        - name: ldap
+          image: osixia/openldap:1.5.0
+          args: ["--copy-service", "--loglevel", "debug"]
+          volumeMounts:
+            - name: config
+              mountPath: /container/service/slapd/assets/config/bootstrap/ldif/custom/config-ldap.ldif
+              subPath: config-ldap.ldif
+          ports:
+            - containerPort: 389
+              name: openldap
+          env:
+            - name: LDAP_TLS_VERIFY_CLIENT
+              value: "try"
+      volumes:
+        - name: config
+          configMap:
+            name: config

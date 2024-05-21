@@ -1,0 +1,4 @@
+gcloud container --project enterprise-demo-422514 \
+  clusters create ee-docs \
+  --location=southamerica-west1-b \
+  --machine-type e2-standard-4 --disk-size 80 --num-nodes 3

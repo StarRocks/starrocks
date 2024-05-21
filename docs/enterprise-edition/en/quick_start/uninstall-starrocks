@@ -1,0 +1,12 @@
+#!/usr/bin/env zsh
+read "brave?This will uninstall StarRocks and the operator. Continue?"
+if [[ "$brave" =~ ^[Yy]$ ]]
+then
+helm uninstall starrocks
+kubectl delete pvc \
+    fe-storage-meta-kube-starrocks-fe-0 \
+    fe-storage-log-kube-starrocks-fe-0 \
+    be-storage-log-kube-starrocks-be-0 \
+    be-storage-data-kube-starrocks-be-0
+kubectl delete -f ldap.yaml
+fi
