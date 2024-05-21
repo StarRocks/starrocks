@@ -123,6 +123,10 @@ public class PartitionFunctionChecker {
             return false;
         }
 
+        if (fnExpr.getChildren().size() != 2) {
+            return false;
+        }
+
         Expr child0 = fnExpr.getChild(0);
         if (!(child0 instanceof SlotRef)) {
             return false;
