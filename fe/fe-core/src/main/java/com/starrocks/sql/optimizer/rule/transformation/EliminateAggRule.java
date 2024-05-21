@@ -127,7 +127,6 @@ public class EliminateAggRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
@@ -135,26 +134,7 @@ public class EliminateAggRule extends TransformationRule {
             CallOperator callOperator = entry.getValue();
             String fnName = callOperator.getFnName();
             ScalarOperator newOperator;
-
-            if (callOperator.getArguments().isEmpty()) {
-                // 1. select count(*) from demo group by pk
-                newOperator = handleAggregationFunction(fnName, callOperator);
-            } else {
-                ScalarOperator scalarOperator = callOperator.getArguments().get(0);
-                if (isColumnRefType(scalarOperator)) {
-                    ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator;
-                    ScalarOperator projectColumnRef = projectOp.getColumnRefMap().get(columnRef);
-                    if (projectColumnRef instanceof CallOperator) {
-                        // 2. select pk, sum(t0 + t1) from demo group by pk
-                        newOperator = handleAggregationFunction(fnName, (CallOperator) projectColumnRef);
-                    } else {
-                        // 3. select pk, count(t1) from demo group by pk
-                        newOperator = handleAggregationFunction(fnName, callOperator);
-                    }
-                } else {
-                    newOperator = handleAggregationFunction(fnName, callOperator);
-                }
-            }
+            newOperator = handleAggregationFunction(fnName, callOperator);
             newProjectMap.put(aggColumnRef, newOperator);
         }
 
@@ -163,10 +143,6 @@ public class EliminateAggRule extends TransformationRule {
 
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
         return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
-    }
-
-    private boolean isColumnRefType(ScalarOperator scalarOperator) {
-        return scalarOperator instanceof ColumnRefOperator;
     }
 
     private ScalarOperator handleAggregationFunction(String fnName, CallOperator callOperator) {
