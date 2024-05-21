@@ -1,0 +1,2 @@
+-- name: test_fe_locks
+select count(*) > 1 from sys.fe_locks;
