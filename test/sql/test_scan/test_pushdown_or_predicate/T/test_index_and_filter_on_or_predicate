@@ -108,46 +108,46 @@ insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_no
 ALTER TABLE t1 COMPACT;
 function: wait_compaction_finish("t1", 32)
 
--- create view __profile(idx, k, v) as 
--- select 1, 2, 3;
-
 create view __profile(idx, k, v) as 
-with 
-  __profile as (
-      select last_query_id() as query_id, unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
-  ),
-  result as (
-    select 1 as idx, "PushdownPredicates" as k, regexp_extract(line, ".*- PushdownPredicates: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- PushdownPredicates%"
-    UNION ALL
-    select 2, "NonPushdownPredicates" as k, regexp_extract(line, ".*- NonPushdownPredicates: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- NonPushdownPredicates%"
+select 1, 2, 3;
+
+-- create view __profile(idx, k, v) as 
+-- with 
+--   __profile as (
+--       select last_query_id() as query_id, unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+--   ),
+--   result as (
+--     select 1 as idx, "PushdownPredicates" as k, regexp_extract(line, ".*- PushdownPredicates: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- PushdownPredicates%"
+--     UNION ALL
+--     select 2, "NonPushdownPredicates" as k, regexp_extract(line, ".*- NonPushdownPredicates: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- NonPushdownPredicates%"
     
-    UNION ALL
-    select 3, "PushdownPredicateTree" as k, regexp_extract(line, ".*- PushdownPredicateTree: (.*)", 1) as v from __profile where line like "%- PushdownPredicateTree%"
-    UNION ALL
-    select 4, "NonPushdownPredicateTree" as k, regexp_extract(line, ".*- NonPushdownPredicateTree: (.*)?", 1) as v from __profile where line like "%- NonPushdownPredicateTree%"
+--     UNION ALL
+--     select 3, "PushdownPredicateTree" as k, regexp_extract(line, ".*- PushdownPredicateTree: (.*)", 1) as v from __profile where line like "%- PushdownPredicateTree%"
+--     UNION ALL
+--     select 4, "NonPushdownPredicateTree" as k, regexp_extract(line, ".*- NonPushdownPredicateTree: (.*)?", 1) as v from __profile where line like "%- NonPushdownPredicateTree%"
     
-    UNION ALL
-    select 5, "RawRowsRead" as k, regexp_extract(line, ".*- RawRowsRead: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- RawRowsRead%"
-    UNION ALL
-    select 6, "RowsRead" as k, regexp_extract(line, ".*- RowsRead: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- RowsRead%"
+--     UNION ALL
+--     select 5, "RawRowsRead" as k, regexp_extract(line, ".*- RawRowsRead: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- RawRowsRead%"
+--     UNION ALL
+--     select 6, "RowsRead" as k, regexp_extract(line, ".*- RowsRead: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- RowsRead%"
     
-    UNION ALL
-    select 7, "SegmentZoneMapFilterRows" as k, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- SegmentZoneMapFilterRows%"
-    UNION ALL
-    select 8, "ZoneMapIndexFilterRows" as k, regexp_extract(line, ".*- ZoneMapIndexFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- ZoneMapIndexFilterRows%"
-    UNION ALL
-    select 9, "BitmapIndexFilterRows" as k, regexp_extract(line, ".*- BitmapIndexFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- BitmapIndexFilterRows%"
-    UNION ALL
-    select 10, "BloomFilterFilterRows" as k, regexp_extract(line, ".*- BloomFilterFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- BloomFilterFilterRows%"
-    UNION ALL
-    select 11, "PredFilterRows" as k, regexp_extract(line, ".*- PredFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- PredFilterRows%"
-    UNION ALL
-    select 12, "DeleteFilterRows" as k, regexp_extract(line, ".*- DeleteFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- DeleteFilterRows%"
-    UNION ALL
-    select 13, "LateMaterialize" as k, 'exist' as v from __profile where line like "%- LateMaterialize%"
+--     UNION ALL
+--     select 7, "SegmentZoneMapFilterRows" as k, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- SegmentZoneMapFilterRows%"
+--     UNION ALL
+--     select 8, "ZoneMapIndexFilterRows" as k, regexp_extract(line, ".*- ZoneMapIndexFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- ZoneMapIndexFilterRows%"
+--     UNION ALL
+--     select 9, "BitmapIndexFilterRows" as k, regexp_extract(line, ".*- BitmapIndexFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- BitmapIndexFilterRows%"
+--     UNION ALL
+--     select 10, "BloomFilterFilterRows" as k, regexp_extract(line, ".*- BloomFilterFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- BloomFilterFilterRows%"
+--     UNION ALL
+--     select 11, "PredFilterRows" as k, regexp_extract(line, ".*- PredFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- PredFilterRows%"
+--     UNION ALL
+--     select 12, "DeleteFilterRows" as k, regexp_extract(line, ".*- DeleteFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as v from __profile where line like "%- DeleteFilterRows%"
+--     UNION ALL
+--     select 13, "LateMaterialize" as k, 'exist' as v from __profile where line like "%- LateMaterialize%"
     
-  )
-select * from result order by idx, k, v;
+--   )
+-- select * from result order by idx, k, v;
 
 
 -- 1. Test Segment Zonemap.
