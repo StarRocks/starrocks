@@ -1172,21 +1172,23 @@ class StarrocksSQLApiLib(object):
         """
         wait async materialized view job finish and return status
         """
-        status = ""
-        show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
+        show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='" + mv_name + "'"
         count = 0
-        num = 0
+        is_all_ok = False
+        def is_all_finished(results):
+            for res in results:
+                if res[0] != "SUCCESS":
+                    return False
+            return True
         while count < check_count:
             res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][12]
-            if status != "SUCCESS":
-                time.sleep(1)
-            else:
+            is_all_ok = is_all_finished(res["result"])
+            if is_all_ok:
                 # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
                 break
+            time.sleep(3)
             count += 1
-        tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
+        tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
