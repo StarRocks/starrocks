@@ -948,12 +948,14 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         connectContext.getSessionVariable().setEnableShortCircuit(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
     }
 
     @AfterClass
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
     }
 
     public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
