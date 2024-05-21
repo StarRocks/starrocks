@@ -34,5 +34,3 @@ list-all-pkgs: false
 exit-code: 0
 
 timeout: 30m
-
-output: 'trivy-results.sarif'
