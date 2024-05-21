@@ -67,6 +67,8 @@ public class Group {
     // GroupExpressions in this Group which could satisfy the required property.
     private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyOutputPropertyGroupExpressions;
 
+    private final Map<PhysicalPropertySet, Double> costLowerBounds;
+
     // All expressions in one group have same logical property.
     private LogicalProperty logicalProperty;
 
@@ -81,6 +83,7 @@ public class Group {
         isExplored = false;
         mvStatistics = Maps.newHashMap();
         relatedMvs = Maps.newHashMap();
+        costLowerBounds = Maps.newHashMap();
     }
 
     public int getId() {
@@ -147,8 +150,13 @@ public class Group {
         groupExpression.setGroup(this);
     }
 
-    public double getCostLowerBound() {
-        return -1000;
+    public double getCostLowerBound(PhysicalPropertySet requiredProperty) {
+        return costLowerBounds.getOrDefault(requiredProperty, -1000D);
+    }
+
+    public void setCostLowerBound(PhysicalPropertySet requiredProperty, double cost) {
+        double x = costLowerBounds.getOrDefault(requiredProperty, Double.MAX_VALUE);
+        costLowerBounds.put(requiredProperty, Math.min(x, cost));
     }
 
     public PhysicalPropertySet updateOutputPropertySet(GroupExpression expression, double cost,
