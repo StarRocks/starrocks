@@ -19,7 +19,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
 import com.google.common.collect.Sets;
+import com.google.common.collect.TreeRangeSet;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -97,8 +99,17 @@ public class SyncPartitionUtils {
                                                                     PartitionDiffer differ) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
-        return differ != null ? differ.diff(baseRangeMap, mvRangeMap) :
-                PartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
+        RangeSet<PartitionKey> ranges = TreeRangeSet.create();
+        Map<String, Range<PartitionKey>> unique = Maps.newHashMap();
+        for (Map.Entry<String, Range<PartitionKey>> entry : baseRangeMap.entrySet()) {
+            PartitionRange range = new PartitionRange(entry.getKey(), entry.getValue());
+            if (!ranges.encloses(entry.getValue())) {
+                ranges.add(entry.getValue());
+                unique.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return differ != null ? differ.diff(unique, mvRangeMap) :
+                PartitionDiffer.simpleDiff(unique, mvRangeMap);
     }
 
     public static ListPartitionDiff getListPartitionDiff(Map<String, List<List<String>>> baseListMap,

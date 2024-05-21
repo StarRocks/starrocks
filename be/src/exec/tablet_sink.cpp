@@ -404,7 +404,7 @@ Status OlapTableSink::_automatic_create_partition() {
     request.__set_partition_values(_partition_not_exist_row_values);
 
     LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
-              << "automatic partition rpc begin request " << request;
+              << " automatic partition rpc begin request " << request;
     TNetworkAddress master_addr = get_master_address();
     auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
     int retry_times = 0;
@@ -414,7 +414,7 @@ Status OlapTableSink::_automatic_create_partition() {
         if (retry_times++ > 1) {
             SleepFor(MonoDelta::FromMilliseconds(std::min(5000, timeout_ms)));
             VLOG(1) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
-                    << "automatic partition rpc retry " << retry_times;
+                    << " automatic partition rpc retry " << retry_times;
         }
         RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
                 master_addr.hostname, master_addr.port,
@@ -424,7 +424,7 @@ Status OlapTableSink::_automatic_create_partition() {
              butil::gettimeofday_s() - start_ts < timeout_ms / 1000);
 
     LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
-              << "automatic partition rpc end response " << result;
+              << " automatic partition rpc end response " << result;
     if (result.status.status_code == TStatusCode::OK) {
         // add new created partitions
         RETURN_IF_ERROR(_vectorized_partition->add_partitions(result.partitions));
