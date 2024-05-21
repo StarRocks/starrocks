@@ -65,37 +65,6 @@ public class MaterializedViewMetricsRegistry {
         }
     }
 
-<<<<<<< HEAD
-    // collect materialized-view-level metrics
-    // collect materialized-view-level metrics
-    public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
-        MaterializedViewMetricsRegistry instance = MaterializedViewMetricsRegistry.getInstance();
-        for (Map.Entry<MvId, MaterializedViewMetricsEntity> e : instance.idToMVMetrics.entrySet()) {
-            IMaterializedViewMetricsEntity mvEntity = e.getValue();
-            if (mvEntity == null || mvEntity instanceof MaterializedViewMetricsBlackHoleEntity) {
-                continue;
-            }
-            MvId mvId = e.getKey();
-            MaterializedViewMetricsEntity entity = (MaterializedViewMetricsEntity) mvEntity;
-            if (Objects.isNull(entity.dbName) || Objects.isNull(entity.mvName)) {
-                LOG.debug("Invalid materialized view metrics entity, mvId: {}", mvId);
-                continue;
-            }
-            for (Metric m : entity.getMetrics()) {
-                // minify metrics if needed
-                if (minifyMetrics) {
-                    if (null == m.getValue()) {
-                        continue;
-                    }
-                    // ignore gauge metrics since it will try db lock and visit more metadata
-                    if (Metric.MetricType.GAUGE == m.type) {
-                        continue;
-                    }
-                    // ignore counter metrics with 0 value
-                    if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
-                        continue;
-                    }
-=======
     private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,
                                        MetricVisitor visitor, boolean minifyMetrics) {
         if (Objects.isNull(entity.dbName) || Objects.isNull(entity.mvName)) {
@@ -115,7 +84,6 @@ public class MaterializedViewMetricsRegistry {
                 // ignore counter metrics with 0 value
                 if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
                     continue;
->>>>>>> 607961596b ([BugFix] Fix mv metrics npe problem (#46014))
                 }
             }
             m.addLabel(new MetricLabel("db_name", entity.dbName))

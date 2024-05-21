@@ -15,16 +15,9 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-import com.starrocks.metric.IMaterializedViewMetricsEntity;
-=======
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.Config;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.JsonMetricVisitor;
-import com.starrocks.metric.MaterializedViewMetricsBlackHoleEntity;
->>>>>>> 607961596b ([BugFix] Fix mv metrics npe problem (#46014))
 import com.starrocks.metric.MaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.sql.plan.PlanTestBase;

@@ -239,13 +239,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private RefreshJobStatus doMvRefresh(TaskRunContext context, IMaterializedViewMetricsEntity mvEntity) {
         long startRefreshTs = System.currentTimeMillis();
 
-<<<<<<< HEAD
-        // execute the ExecPlan of insert outside lock
-        doRefreshMaterializedViewWithRetry(context, mvEntity);
-=======
         // refresh materialized view
         RefreshJobStatus result = doRefreshMaterializedViewWithRetry(context, mvEntity);
->>>>>>> 607961596b ([BugFix] Fix mv metrics npe problem (#46014))
 
         // do not generate next task run if the current task run is killed
         if (mvContext.hasNextBatchPartition() && !mvContext.getTaskRun().isKilled()) {
@@ -256,12 +251,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         LOG.info("Refresh {} success, cost time(s): {}", materializedView.getName(),
                 DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000.0));
         mvEntity.updateRefreshDuration(refreshDurationMs);
-<<<<<<< HEAD
-
-        return RefreshJobStatus.SUCCESS;
-=======
         return result;
->>>>>>> 607961596b ([BugFix] Fix mv metrics npe problem (#46014))
     }
 
     private void logMvToRefreshInfoIntoTaskRun(Set<String> finalMvToRefreshedPartitions,
