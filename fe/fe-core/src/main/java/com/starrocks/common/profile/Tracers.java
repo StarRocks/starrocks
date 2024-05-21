@@ -28,7 +28,7 @@ public class Tracers {
     }
 
     public enum Module {
-        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL,
+        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL, MV_REASONING
     }
 
     private static final Tracer EMPTY_TRACER = new Tracer() {

@@ -75,6 +75,18 @@ public class OptimizerTraceUtil {
         });
     }
 
+    /**
+     * NOTE: Carefully use it, because the log would be print into the query profile, to help understanding why a
+     * materialized view is not chose to rewrite the query.
+     */
+    public static void logMVRewriteFailReason(String mvName, String format, Object... objects) {
+        Tracers.log(Tracers.Module.MV_REASONING, input -> {
+            String str = MessageFormatter.arrayFormat(format, objects).getMessage();
+            return MessageFormatter.format("MV {} rewrite fail: {}", mvName, str).getMessage();
+        });
+        logMVRewrite(mvName, format, objects);
+    }
+
     public static void logMVRewrite(MaterializationContext mvContext, String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
