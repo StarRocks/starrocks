@@ -1,0 +1,142 @@
+-- name: test_delete_with_partition_expr
+create table t1(
+  `uid` varchar(128) NOT NULL COMMENT "",
+  `ts` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`uid`)
+COMMENT "OLAP"
+PARTITION BY RANGE(from_unixtime_ms(ts))
+(PARTITION p20210101 VALUES [("2024-05-01 00:00:00"), ("2024-05-02 00:00:00")),
+PARTITION p20210102 VALUES [("2024-05-02 00:00:00"), ("2024-05-03 00:00:00")),
+PARTITION p20210103 VALUES [("2024-05-03 00:00:00"), ("2024-05-04 00:00:00")),
+PARTITION p20210104 VALUES [("2024-05-04 00:00:00"), ("2024-05-05 00:00:00")),
+PARTITION p20210105 VALUES [("2024-05-05 00:00:00"), ("2024-05-06 00:00:00")),
+PARTITION p20210106 VALUES [("2024-05-06 00:00:00"), ("2024-05-07 00:00:00")),
+PARTITION p20210107 VALUES [("2024-05-07 00:00:00"), ("2024-05-08 00:00:00")),
+PARTITION p20210108 VALUES [("2024-05-08 00:00:00"), ("2024-05-09 00:00:00")),
+PARTITION p20210109 VALUES [("2024-05-09 00:00:00"), ("2024-05-10 00:00:00")))
+DISTRIBUTED BY HASH(`uid`) BUCKETS 20
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values("04", 1714752000000);
+-- result:
+-- !result
+insert into t1 values("05", 1714838400000);
+-- result:
+-- !result
+insert into t1 values("06", 1714924800000);
+-- result:
+-- !result
+select * from t1 order by ts;
+-- result:
+04	1714752000000
+05	1714838400000
+06	1714924800000
+-- !result
+delete from t1 where ts >= 1714838400000 and ts <= 1714924800000;
+-- result:
+-- !result
+select * from t1 order by ts;
+-- result:
+04	1714752000000
+-- !result
+create table t2(
+  `uid` varchar(128) NOT NULL COMMENT "",
+  `ts` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`uid`)
+COMMENT "OLAP"
+PARTITION BY RANGE(from_unixtime(ts))
+(PARTITION p20210101 VALUES [("2024-05-01 00:00:00"), ("2024-05-02 00:00:00")),
+PARTITION p20210102 VALUES [("2024-05-02 00:00:00"), ("2024-05-03 00:00:00")),
+PARTITION p20210103 VALUES [("2024-05-03 00:00:00"), ("2024-05-04 00:00:00")),
+PARTITION p20210104 VALUES [("2024-05-04 00:00:00"), ("2024-05-05 00:00:00")),
+PARTITION p20210105 VALUES [("2024-05-05 00:00:00"), ("2024-05-06 00:00:00")),
+PARTITION p20210106 VALUES [("2024-05-06 00:00:00"), ("2024-05-07 00:00:00")),
+PARTITION p20210107 VALUES [("2024-05-07 00:00:00"), ("2024-05-08 00:00:00")),
+PARTITION p20210108 VALUES [("2024-05-08 00:00:00"), ("2024-05-09 00:00:00")),
+PARTITION p20210109 VALUES [("2024-05-09 00:00:00"), ("2024-05-10 00:00:00")))
+DISTRIBUTED BY HASH(`uid`) BUCKETS 20
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t2 values("04", 1714752000);
+-- result:
+-- !result
+insert into t2 values("05", 1714838400);
+-- result:
+-- !result
+insert into t2 values("06", 1714924800);
+-- result:
+-- !result
+select * from t2 order by ts;
+-- result:
+04	1714752000
+05	1714838400
+06	1714924800
+-- !result
+delete from t2 where ts >= 1714838400 and ts <= 1714924800;
+-- result:
+-- !result
+select * from t2 order by ts;
+-- result:
+04	1714752000
+-- !result
+create table t3(
+  `uid` varchar(128) NOT NULL COMMENT "",
+  `ts` varchar(20) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`uid`)
+COMMENT "OLAP"
+PARTITION BY RANGE(str2date(ts, "%Y-%m-%d"))
+(PARTITION p20210101 VALUES [("2024-05-01 00:00:00"), ("2024-05-02 00:00:00")),
+PARTITION p20210102 VALUES [("2024-05-02 00:00:00"), ("2024-05-03 00:00:00")),
+PARTITION p20210103 VALUES [("2024-05-03 00:00:00"), ("2024-05-04 00:00:00")),
+PARTITION p20210104 VALUES [("2024-05-04 00:00:00"), ("2024-05-05 00:00:00")),
+PARTITION p20210105 VALUES [("2024-05-05 00:00:00"), ("2024-05-06 00:00:00")),
+PARTITION p20210106 VALUES [("2024-05-06 00:00:00"), ("2024-05-07 00:00:00")),
+PARTITION p20210107 VALUES [("2024-05-07 00:00:00"), ("2024-05-08 00:00:00")),
+PARTITION p20210108 VALUES [("2024-05-08 00:00:00"), ("2024-05-09 00:00:00")),
+PARTITION p20210109 VALUES [("2024-05-09 00:00:00"), ("2024-05-10 00:00:00")))
+DISTRIBUTED BY HASH(`uid`) BUCKETS 20
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t3 values("04", "2024-05-04");
+-- result:
+-- !result
+insert into t3 values("05", "2024-05-05");
+-- result:
+-- !result
+insert into t3 values("06", "2024-05-06");
+-- result:
+-- !result
+select * from t3 order by ts;
+-- result:
+04	2024-05-04
+05	2024-05-05
+06	2024-05-06
+-- !result
+delete from t3 where ts >= "2024-05-05" and ts <= "2024-05-06";
+-- result:
+-- !result
+select * from t3 order by ts;
+-- result:
+04	2024-05-04
+-- !result
