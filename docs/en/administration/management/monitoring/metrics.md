@@ -1725,7 +1725,7 @@ scrape_configs:
 #### starrocks_fe_routine_load_jobs
 
 - Unit: Count
-- Description: The number of Routine Load jobs in different states. For example:
+- Description: The total number of Routine Load jobs in different states. For example:
 
   ```plaintext
   starrocks_fe_routine_load_jobs{state="NEED_SCHEDULE"} 0
@@ -1738,7 +1738,7 @@ scrape_configs:
 #### starrocks_fe_routine_load_paused
 
 - Unit: Count
-- Description: The total number of times all Routine Load jobs are paused.
+- Description: The total number of times Routine Load jobs are paused.
 
 #### starrocks_fe_routine_load_rows
 
