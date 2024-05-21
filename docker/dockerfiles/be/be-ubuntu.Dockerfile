@@ -10,6 +10,8 @@
 #   image: copy the artifacts from a artifact docker image.
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
+# The user to run the container. Run as root by default
+ARG RUN_USER=root
 
 ARG ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
@@ -26,6 +28,7 @@ RUN rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo
 
 FROM ubuntu:22.04
 ARG STARROCKS_ROOT=/opt/starrocks
+ARG RUN_USER
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
         binutils-dev default-jdk mysql-client curl vim tree net-tools less tzdata locales pigz inotify-tools rclone gdb && \
@@ -56,5 +59,4 @@ COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 # Create directory for BE storage, create cn symbolic link to be
 RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
 
-# run as root by default
-USER root
+USER $RUN_USER
