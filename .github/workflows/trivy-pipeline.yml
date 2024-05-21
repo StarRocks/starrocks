@@ -14,6 +14,22 @@ concurrency:
   group: ${{ github.event.number }}-trivy
   cancel-in-progress: true
 
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
+
 jobs:
   trivy-checker:
     runs-on: [self-hosted, trivy]
@@ -40,6 +56,7 @@ jobs:
           timeout: 30m
           output: trivy.txt
           exit-code: 0
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload trivy report as a Github artifact
         uses: actions/upload-artifact@v4
