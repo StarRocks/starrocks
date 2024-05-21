@@ -37,13 +37,6 @@ package com.starrocks.clone;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
-import com.google.common.collect.Sets;
-=======
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.annotations.SerializedName;
->>>>>>> dd511b498c ([Feature] Support disk disable/decommission (part1) (#37134))
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.TabletInvertedIndex;

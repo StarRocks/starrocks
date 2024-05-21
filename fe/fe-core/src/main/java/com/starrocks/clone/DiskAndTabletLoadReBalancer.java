@@ -1363,35 +1363,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                 !bePaths.second.contains(replica.getPathHash())) {
                             continue;
                         }
-<<<<<<< HEAD
                         tablets.computeIfPresent(replica.getPathHash(), (k, v) -> {
                             v.add(tablet.getId());
                             return v;
                         });
-=======
-
-                        RootPathLoadStatistic pathLoadStatistic = loadStatistic
-                                .getRootPathLoadStatistic(replica.getBackendId(), replica.getPathHash());
-                        if (pathLoadStatistic == null || pathLoadStatistic.getDiskState() != DiskInfo.DiskState.ONLINE) {
-                            continue;
-                        }
-
-                        if (beIds != null) {
-                            tablets.computeIfPresent(replica.getBackendId(), (k, v) -> {
-                                v.add(tablet.getId());
-                                return v;
-                            });
-                        } else {
-                            if (replica.getBackendId() != bePaths.first ||
-                                    !bePaths.second.contains(replica.getPathHash())) {
-                                continue;
-                            }
-                            tablets.computeIfPresent(replica.getPathHash(), (k, v) -> {
-                                v.add(tablet.getId());
-                                return v;
-                            });
-                        }
->>>>>>> dd511b498c ([Feature] Support disk disable/decommission (part1) (#37134))
                     }
                 }
             }

@@ -89,13 +89,9 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
-<<<<<<< HEAD
 import com.starrocks.persist.DisableTableRecoveryInfo;
-=======
 import com.starrocks.persist.DecommissionDiskInfo;
-import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DisableDiskInfo;
->>>>>>> dd511b498c ([Feature] Support disk disable/decommission (part1) (#37134))
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;

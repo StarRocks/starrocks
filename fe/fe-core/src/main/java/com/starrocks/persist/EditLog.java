@@ -1098,21 +1098,9 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
-                case OperationType.OP_RECOVER_PARTITION_VERSION:
+                case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
-                    break;
-<<<<<<< HEAD
-=======
-                }
-                case OperationType.OP_DROP_DICTIONARY: {
-                    DropDictionaryInfo dropInfo = (DropDictionaryInfo) journal.getData();
-                    globalStateMgr.getDictionaryMgr().replayDropDictionary(dropInfo.getDictionaryName());
-                    break;
-                }
-                case OperationType.OP_MODIFY_DICTIONARY_MGR: {
-                    DictionaryMgrInfo modifyInfo = (DictionaryMgrInfo) journal.getData();
-                    globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
                     break;
                 }
                 case OperationType.OP_DECOMMISSION_DISK: {
@@ -1135,7 +1123,6 @@ public class EditLog {
                     globalStateMgr.getClusterInfo().replayCancelDisableDisks(info);
                     break;
                 }
->>>>>>> dd511b498c ([Feature] Support disk disable/decommission (part1) (#37134))
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);

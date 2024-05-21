@@ -6416,59 +6416,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new UserIdentity(user.getValue(), "%", false, createPos(context), false);
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public ParseNode visitPrepareStatement(StarRocksParser.PrepareStatementContext context) {
-        String stmtName = context.identifier().getText();
-        StatementBase statement = null;
-        if (context.prepareSql().statement() != null) {
-            statement = (StatementBase) visitStatement(context.prepareSql().statement());
-            return new PrepareStmt(stmtName, statement, parameters);
-        } else if (context.prepareSql().SINGLE_QUOTED_TEXT() != null) {
-            String sql = context.prepareSql().SINGLE_QUOTED_TEXT().getText();
-            statement = SqlParser.parseSingleStatement(sql.substring(1, sql.length() - 1), sqlMode);
-            if (null != statement && statement instanceof PrepareStmt) {
-                PrepareStmt prepareStmt = (PrepareStmt) statement;
-                return new PrepareStmt(stmtName, prepareStmt.getInnerStmt(), prepareStmt.getParameters());
-            } else {
-                // prepare stm1 from select * from t1, no parameters
-                return new PrepareStmt(stmtName, statement, ImmutableList.of());
-            }
-        }
-
-        throw new ParsingException("error prepare sql");
-    }
-
-    @Override
-    public ParseNode visitDeallocateStatement(StarRocksParser.DeallocateStatementContext ctx) {
-        return new DeallocateStmt(ctx.identifier().getText());
-    }
-
-    @Override
-    public ParseNode visitExecuteStatement(StarRocksParser.ExecuteStatementContext context) {
-        String stmtName = context.identifier().getText();
-        List<StarRocksParser.IdentifierOrStringContext> queryStatementContext = context.identifierOrString();
-        List<Expr> variableExprs = new ArrayList<>();
-        if (context.identifierOrString() != null) {
-            queryStatementContext.forEach(varNameContext -> {
-                Identifier identifier = (Identifier) visit(varNameContext);
-                variableExprs.add(new VariableExpr(identifier.getValue(), SetType.USER));
-            });
-        }
-        return new ExecuteStmt(stmtName, variableExprs);
-    }
-
-    @Override
-    public ParseNode visitParameter(StarRocksParser.ParameterContext ctx) {
-        if (parameters == null) {
-            parameters = new ArrayList<>();
-        }
-        Parameter parameter = new Parameter(placeHolderSlotId++);
-        parameters.add(parameter);
-        return parameter;
-    }
-
     @Override
     public ParseNode visitDecommissionDiskClause(StarRocksParser.DecommissionDiskClauseContext context) {
         throw new SemanticException("not support");
@@ -6489,7 +6436,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         throw new SemanticException("not support");
     }
 
->>>>>>> dd511b498c ([Feature] Support disk disable/decommission (part1) (#37134))
     // ------------------------------------------- Util Functions -------------------------------------------
 
     private <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {
