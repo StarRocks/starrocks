@@ -537,6 +537,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // Sender 0 is responsible for waiting for all other senders to finish and collecting txn logs
     if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
         response->status().status_code() == TStatusCode::OK) {
+        rolk.unlock();
         _txn_log_collector.wait();
         auto st = _txn_log_collector.status();
         if (st.ok()) {
