@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.UniqueConstraint;
