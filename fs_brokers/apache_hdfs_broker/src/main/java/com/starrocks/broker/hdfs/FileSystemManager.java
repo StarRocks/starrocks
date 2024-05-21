@@ -819,6 +819,28 @@ public class FileSystemManager {
                 conf.set(FS_COS_ENDPOINT, endpoint);
                 conf.set(FS_COS_IMPL, "org.apache.hadoop.fs.CosFileSystem");
                 conf.set(FS_COS_IMPL_DISABLE_CACHE, disableCache);
+
+                // Too many configuration items, so we directly pass through the properties.
+                for (Map.Entry<String, String> entry : properties.entrySet()) {
+                    conf.set(entry.getKey(), entry.getValue());
+                }
+
+                String authentication = properties.getOrDefault(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+                        AUTHENTICATION_SIMPLE);
+                if (authentication.equalsIgnoreCase(AUTHENTICATION_KERBEROS)) {
+                    conf.set("fs.AbstractFileSystem.cosn.impl", "org.apache.hadoop.fs.CosN");
+                    conf.set("fs.cosn.trsf.fs.AbstractFileSystem.ofs.impl", "com.qcloud.chdfs.fs.CHDFSDelegateFSAdapter");
+                    conf.set("fs.cosn.trsf.fs.ofs.impl", "com.qcloud.chdfs.fs.CHDFSHadoopFileSystemAdapter");
+                    conf.set("fs.cosn.credentials.provider", "org.apache.hadoop.fs.auth.RangerCredentialsProvider");
+                    String principal = properties.getOrDefault(KERBEROS_PRINCIPAL,"");
+                    String keytab = properties.getOrDefault(KERBEROS_KEYTAB,"");
+
+                    UserGroupInformation.setConfiguration(conf);
+                    if (!principal.isEmpty() && !keytab.isEmpty()) {
+                        UserGroupInformation.loginUserFromKeytab(principal, keytab);
+                    }
+                }
+
                 FileSystem cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(cosFileSystem);
             }
