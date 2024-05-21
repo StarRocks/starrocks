@@ -79,7 +79,7 @@ private:
 };
 
 using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>, RowsetsAcqRelPtr>;
-using TabletAndScore = std::pair<TabletSharedPtr, double>;
+using TabletAndScore = std::pair<int64_t, double>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
