@@ -89,4 +89,35 @@ public class MVRefreshTestBase {
         Assert.assertNotNull(table);
         return table;
     }
+<<<<<<< HEAD
+=======
+
+    protected TaskRun buildMVTaskRun(MaterializedView mv, String dbName) {
+        Task task = TaskBuilder.buildMvTask(mv, dbName);
+        Map<String, String> testProperties = task.getProperties();
+        testProperties.put(TaskRun.IS_TEST, "true");
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        return taskRun;
+    }
+
+    protected void refreshMVRange(String mvName, boolean force) throws Exception {
+        refreshMVRange(mvName, null, null, force);
+    }
+
+    protected void refreshMVRange(String mvName, String start, String end, boolean force) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("refresh materialized view " + mvName);
+        if (start != null && end != null) {
+            sb.append(String.format(" partition start('%s') end('%s')", start, end));
+        }
+        if (force) {
+            sb.append(" force");
+        }
+        sb.append(" with sync mode");
+        String sql = sb.toString();
+        starRocksAssert.getCtx().executeSql(sql);
+    }
+
+
+>>>>>>> 91cc9f11c3 ([Enhancement] adjust MV's warehouse logic (#45941))
 }

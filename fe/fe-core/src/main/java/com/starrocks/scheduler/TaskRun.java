@@ -33,6 +33,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -172,7 +173,15 @@ public class TaskRun implements Comparable<TaskRun> {
             }
             MaterializedView materializedView = (MaterializedView) table;
             Preconditions.checkState(materializedView != null);
+<<<<<<< HEAD
             newProperties = materializedView.getProperties();
+=======
+            newProperties.putAll(materializedView.getProperties());
+
+            Warehouse w = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
+                    materializedView.getWarehouseId());
+            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, w.getName());
+>>>>>>> 91cc9f11c3 ([Enhancement] adjust MV's warehouse logic (#45941))
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }
