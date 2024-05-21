@@ -141,7 +141,7 @@ public:
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
 
     // commit primary index, only take affect when it is local persistent index
     Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
@@ -167,6 +167,15 @@ public:
 
     void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
 
+<<<<<<< HEAD
+=======
+    Status execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata, TxnLogPB* txn_log);
+
+    PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
+
+    Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
+
+>>>>>>> a154a9a713 ([Feature] Support pk index major compaction in cloud native table (#41737))
 private:
     // print memory tracker state
     void _print_memory_stats();

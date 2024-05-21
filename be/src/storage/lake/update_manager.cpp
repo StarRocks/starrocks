@@ -70,9 +70,31 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
     return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
 }
 
+<<<<<<< HEAD
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                            int64_t base_version, int64_t new_version,
                                                            std::unique_ptr<std::lock_guard<std::mutex>>& guard) {
+=======
+PersistentIndexBlockCache::PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit)
+        : _cache(new_lru_cache(cache_limit)) {
+    _mem_tracker = std::make_unique<MemTracker>(cache_limit, "lake_persistent_index_block_cache", mem_tracker);
+}
+
+void PersistentIndexBlockCache::update_memory_usage() {
+    std::lock_guard<std::mutex> lg(_mutex);
+    size_t current_mem_usage = _cache->get_memory_usage();
+    if (_memory_usage > current_mem_usage) {
+        _mem_tracker->release(_memory_usage - current_mem_usage);
+    } else {
+        _mem_tracker->consume(current_mem_usage - _memory_usage);
+    }
+    _memory_usage = current_mem_usage;
+}
+
+StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
+        const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+>>>>>>> a154a9a713 ([Feature] Support pk index major compaction in cloud native table (#41737))
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -357,7 +379,7 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
-    std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard = nullptr;
     // Fetch lock guard before check `is_load()`
     if (need_lock) {
         guard = index.try_fetch_guard();
@@ -925,4 +947,36 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
     }
 }
 
+<<<<<<< HEAD
+=======
+Status UpdateManager::execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata,
+                                                     TxnLogPB* txn_log) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return Status::OK();
+    }
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    // release index entry but keep it in cache
+    DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+    auto& index = index_entry->value();
+    return index.major_compact(metadata, txn_log);
+}
+
+Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return Status::OK();
+    }
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    auto& index = index_entry->value();
+
+    // release when function end
+    DeferOp index_defer([&]() { _index_cache.release(index_entry); });
+    _index_cache.update_object_size(index_entry, index.memory_usage());
+    RETURN_IF_ERROR(index.major_compaction(data_dir, tablet_id, index.get_index_lock()));
+    index.set_local_pk_index_write_amp_score(0.0);
+    return Status::OK();
+}
+
+>>>>>>> a154a9a713 ([Feature] Support pk index major compaction in cloud native table (#41737))
 } // namespace starrocks::lake
