@@ -626,7 +626,7 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_VERSION_INFO)) {
             if (RunMode.isSharedDataMode()) {
                 throw new AnalysisException(String.format("Does not support the table property \"%s\" in share data " +
-                                "mode, please remove it from the statement", PROPERTIES_VERSION_INFO));
+                        "mode, please remove it from the statement", PROPERTIES_VERSION_INFO));
             }
             String versionInfoStr = properties.get(PROPERTIES_VERSION_INFO);
             try {
@@ -1505,6 +1505,14 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties().put(
                         PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, str);
                 properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+            }
+
+            // compression
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPRESSION)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTIES_COMPRESSION);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_COMPRESSION, str);
+                properties.remove(PropertyAnalyzer.PROPERTIES_COMPRESSION);
             }
 
             // ORDER BY() -> sortKeys
