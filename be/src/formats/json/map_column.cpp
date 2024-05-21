@@ -49,7 +49,7 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
             }
             ++field_count;
         }
-        map_column->offsets_column()->append(field_count);
+        map_column->offsets_column()->append(map_column->offsets_column()->get_data().back() + field_count);
 
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
