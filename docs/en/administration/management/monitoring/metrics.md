@@ -1720,6 +1720,41 @@ scrape_configs:
 - Type: Histogram
 - Description: Duration of the successful materialized view refresh jobs.
 
+### Metrics for Routine Load jobs
+
+#### starrocks_fe_routine_load_jobs
+
+- Unit: Count
+- Description: The total number of Routine Load jobs in different states. For example:
+
+  ```plaintext
+  starrocks_fe_routine_load_jobs{state="NEED_SCHEDULE"} 0
+  starrocks_fe_routine_load_jobs{state="RUNNING"} 1
+  starrocks_fe_routine_load_jobs{state="PAUSED"} 0
+  starrocks_fe_routine_load_jobs{state="STOPPED"} 0
+  starrocks_fe_routine_load_jobs{state="CANCELLED"} 1
+  ```
+
+#### starrocks_fe_routine_load_paused
+
+- Unit: Count
+- Description: The total number of times Routine Load jobs are paused.
+
+#### starrocks_fe_routine_load_rows
+
+- Unit: Count
+- Description: The total number of rows loaded by all Routine Load jobs.
+
+#### starrocks_fe_routine_load_receive_bytes
+
+- Unit: Byte
+- Description: The total amount of data loaded by all Routine Load jobs.
+
+#### starrocks_fe_routine_load_error_rows
+
+- Unit: Count
+- Description: The total number of error rows encountered during data loading by all Routine Load jobs.
+
 ## Metrics for Shared-data Dashboard
 
 Shared-data Dashboard includes the following categories of monitoring metrics:
