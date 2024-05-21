@@ -15,7 +15,6 @@ import com.starrocks.connector.delta.DeltaMetastoreOperations;
 import com.starrocks.connector.delta.DeltaUtils;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
-import io.delta.kernel.client.TableClient;
 import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
@@ -23,6 +22,7 @@ import io.delta.kernel.defaults.internal.data.DefaultColumnarBatch;
 import io.delta.kernel.defaults.internal.data.vector.DefaultBinaryVector;
 import io.delta.kernel.defaults.internal.data.vector.DefaultMapVector;
 import io.delta.kernel.defaults.internal.data.vector.DefaultStructVector;
+import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.DataType;
@@ -181,7 +181,7 @@ public class DeltaUnityMetadataTest {
 
         new Expectations() {
             {
-                snapshot.getScanBuilder((TableClient) any);
+                snapshot.getScanBuilder((Engine) any);
                 result = scanBuilder;
                 minTimes = 0;
 
@@ -189,7 +189,7 @@ public class DeltaUnityMetadataTest {
                 result = scan;
                 minTimes = 0;
 
-                scan.getScanFiles((TableClient) any);
+                scan.getScanFiles((Engine) any);
                 result = scanFilesAsBatches;
                 minTimes = 0;
             }

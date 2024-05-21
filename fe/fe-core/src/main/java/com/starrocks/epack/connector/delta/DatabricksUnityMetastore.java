@@ -18,9 +18,9 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
-import io.delta.kernel.client.TableClient;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.utils.CloseableIterator;
 import org.apache.logging.log4j.LogManager;
@@ -126,12 +126,12 @@ public class DatabricksUnityMetastore implements IMetastore {
         }
 
         List<String> partitionKeys = Lists.newArrayList();
-        TableClient tableClient = deltaLakeTable.getTableClient();
+        Engine deltaEngine = deltaLakeTable.getDeltaEngine();
         List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
 
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(tableClient);
+        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
         Scan scan = scanBuilder.build();
-        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(tableClient)) {
+        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
             while (scanFilesAsBatches.hasNext()) {
                 FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
 

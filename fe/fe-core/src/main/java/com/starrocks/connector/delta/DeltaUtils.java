@@ -27,9 +27,8 @@ import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import io.delta.kernel.Table;
-import io.delta.kernel.TableNotFoundException;
-import io.delta.kernel.client.TableClient;
-import io.delta.kernel.defaults.client.DefaultTableClient;
+import io.delta.kernel.defaults.engine.DefaultEngine;
+import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.internal.actions.Protocol;
@@ -71,13 +70,13 @@ public class DeltaUtils {
 
     public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                        Configuration configuration, long createTime) {
-        TableClient deltaTableClient = DefaultTableClient.create(configuration);
+        DefaultEngine deltaEngine = DefaultEngine.create(configuration);
 
         Table deltaTable = null;
         SnapshotImpl snapshot = null;
         try {
-            deltaTable = Table.forPath(deltaTableClient, path);
-            snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaTableClient);
+            deltaTable = Table.forPath(deltaEngine, path);
+            snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaEngine);
         } catch (TableNotFoundException e) {
             LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());
             throw new SemanticException("Failed to find Delta table for " + catalog + "." + dbName + "." + tblName);
@@ -86,7 +85,7 @@ public class DeltaUtils {
             throw new SemanticException("Failed to get latest snapshot for " + catalog + "." + dbName + "." + tblName);
         }
 
-        StructType deltaSchema = snapshot.getSchema(deltaTableClient);
+        StructType deltaSchema = snapshot.getSchema(deltaEngine);
         if (deltaSchema == null) {
             throw new IllegalArgumentException(String.format("Unable to find Schema information in Delta log for " +
                     "%s.%s.%s", catalog, dbName, tblName));
@@ -108,7 +107,7 @@ public class DeltaUtils {
 
         return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName,
                 fullSchema, Lists.newArrayList(snapshot.getMetadata().getPartitionColNames()), snapshot, path,
-                deltaTableClient, createTime);
+                deltaEngine, createTime);
     }
 
     public static RemoteFileInputFormat getRemoteFileFormat(String format) {

@@ -106,7 +106,7 @@ public class ExpressionConverter implements AstVisitor<Predicate, Void> {
         if (node.isNotNull()) {
             return new Predicate("IS_NOT_NULL", column);
         } else {
-            return new Predicate("NOT", new Predicate("IS_NOT_NULL", column));
+            return new Predicate("IS_NULL", column);
         }
     }
 
