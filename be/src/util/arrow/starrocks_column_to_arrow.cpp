@@ -22,6 +22,7 @@
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
 #include "runtime/large_int_value.h"
+#include "runtime/types.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -614,6 +615,24 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), array);
+        auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
+        if (!arrow_st.ok()) {
+            return Status::InvalidArgument(arrow_st.ToString());
+        }
+    }
+    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
+    return Status::OK();
+}
+
+Status convert_columns_to_arrow_batch(size_t num_rows, const Columns& columns, arrow::MemoryPool* pool,
+                                      const TypeDescriptor* type_descs, const std::shared_ptr<arrow::Schema>& schema,
+                                      std::shared_ptr<arrow::RecordBatch>* result) {
+    size_t num_columns = columns.size();
+    std::vector<std::shared_ptr<arrow::Array>> arrays(num_columns);
+
+    for (size_t i = 0; i < num_columns; ++i) {
+        auto& array = arrays[i];
+        ColumnToArrowArrayConverter converter(columns[i], pool, type_descs[i], schema->field(i)->type(), array);
         auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
         if (!arrow_st.ok()) {
             return Status::InvalidArgument(arrow_st.ToString());
