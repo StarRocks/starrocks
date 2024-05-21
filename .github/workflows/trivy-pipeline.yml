@@ -11,7 +11,7 @@ on:
       - main
 
 concurrency:
-  group: ${{ github.event.number }}
+  group: ${{ github.event.number }}-trivy
   cancel-in-progress: true
 
 jobs:
