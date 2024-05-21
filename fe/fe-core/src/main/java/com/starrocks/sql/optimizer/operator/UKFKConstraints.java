@@ -28,6 +28,7 @@ import java.util.Map;
 public class UKFKConstraints {
     // ColumnRefOperator::id -> UniqueConstraint
     private final Map<Integer, UniqueConstraintWrapper> uniqueKeys = Maps.newHashMap();
+    // The unique key of the data table needs to be collected when eliminating aggregation
     private Map<Integer, UniqueConstraintWrapper> tableUniqueKeys = Maps.newHashMap();
     // ColumnRefOperator::id -> ForeignKeyConstraint
     private final Map<Integer, ForeignKeyConstraintWrapper> foreignKeys = Maps.newHashMap();
@@ -79,7 +80,7 @@ public class UKFKConstraints {
                 .filter(entry -> toOutputColumns.contains(entry.getKey()))
                 .forEach(entry -> clone.foreignKeys.put(entry.getKey(), entry.getValue()));
         if (!(from.getTableUniqueKeys().isEmpty()) &&
-                toOutputColumns.containsAll(new ArrayList<>(from.getTableUniqueKeys().keySet()))) {
+                toOutputColumns.containsAll(Lists.newArrayList((from.getTableUniqueKeys().keySet())))) {
             clone.setTableUniqueKeys(from.getTableUniqueKeys());
         }
 
