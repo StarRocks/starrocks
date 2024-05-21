@@ -2198,18 +2198,25 @@ public class GlobalStateMgr {
                 // apply
                 EditLog.loadJournal(this, entity);
             } catch (Throwable e) {
+<<<<<<< HEAD
                 if (canSkipBadReplayedJournal()) {
                     LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
                             replayedJournalId.incrementAndGet(),
                             entity == null ? null : entity.getData(),
                             e);
+=======
+                if (canSkipBadReplayedJournal(e)) {
+                    LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
+                            replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
+>>>>>>> 759125c841 ([Enhancement] Log the content of journal entity on replay failure (#46011))
                     if (!readSucc) {
                         cursor.skipNext();
                     }
                     continue;
                 }
                 // handled in outer loop
-                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                LOG.warn("catch exception when replaying journal, id: {}, data: {},",
+                        replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
                 throw e;
             }
 
@@ -2247,7 +2254,29 @@ public class GlobalStateMgr {
         return false;
     }
 
+<<<<<<< HEAD
     private boolean canSkipBadReplayedJournal() {
+=======
+    private String journalEntityToReadableString(JournalEntity entity) {
+        if (entity == null) {
+            return "null";
+        }
+        Writable data = entity.getData();
+        try {
+            return GsonUtils.GSON.toJson(data);
+        } catch (Exception e) {
+            // In older version, data may not be json, here we just return the class name.
+            return data.getClass().getName();
+        }
+    }
+
+    protected boolean canSkipBadReplayedJournal(Throwable t) {
+        if (Config.metadata_enable_recovery_mode) {
+            LOG.warn("skip journal load failure because cluster is in recovery mode");
+            return true;
+        }
+
+>>>>>>> 759125c841 ([Enhancement] Log the content of journal entity on replay failure (#46011))
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
