@@ -1172,7 +1172,7 @@ LOCATION
 create database tpch_hive_csv;
 use tpch_hive_csv;
 
---Create customer appearance
+--Create the customer external table.
 CREATE EXTERNAL TABLE `customer`(
   `c_custkey` int,
   `c_name` varchar(25),
@@ -1194,7 +1194,7 @@ OUTPUTFORMAT
 LOCATION
   'hdfs://emr-header-1.cluster-49146:9000/user/tmp/csv/customer_csv';
  
---Create lineitem appearance
+--Create the lineitem external table.
 CREATE EXTERNAL TABLE `lineitem`(
   `l_orderkey` int,
   `l_partkey` int,
@@ -1225,7 +1225,7 @@ LOCATION
   'hdfs://emr-header-1.cluster-49146:9000/user/tmp/csv/lineitem_csv';
  
 
---Create nation appearance
+--Create the nation external table.
 CREATE EXTERNAL TABLE `nation`(
   `n_nationkey` int,
   `n_name` varchar(25),
@@ -1243,7 +1243,7 @@ OUTPUTFORMAT
 LOCATION
   'hdfs://emr-header-1.cluster-49146:9000/user/tmp/csv/nation_csv';
   
---Create orders table
+--Create the orders external table.
 CREATE EXTERNAL TABLE `orders`(
   `o_orderkey` int,
   `o_custkey` int,
@@ -1266,7 +1266,7 @@ OUTPUTFORMAT
 LOCATION
   'hdfs://emr-header-1.cluster-49146:9000/user/tmp/csv/orders_csv';
   
---Create part appearance
+--Create the part external table.
 CREATE EXTERNAL TABLE `part`(
   `p_partkey` int,
   `p_name` varchar(55),
@@ -1289,7 +1289,7 @@ OUTPUTFORMAT
 LOCATION
   'hdfs://emr-header-1.cluster-49146:9000/user/tmp/csv/part_csv';
   
---Create partsupp appearance
+--Create the partsupp external table.
 CREATE EXTERNAL TABLE `partsupp`(
   `ps_partkey` int,
   `ps_suppkey` int,
@@ -1308,7 +1308,7 @@ OUTPUTFORMAT
 LOCATION
   'hdfs://emr-header-1.cluster-49146:9000/user/tmp/csv/partsupp_csv';
   
---Create region table
+--Create the region external table.
 CREATE EXTERNAL TABLE `region`(
   `r_regionkey` int,
   `r_name` varchar(25),
@@ -1325,7 +1325,7 @@ OUTPUTFORMAT
 LOCATION
   'hdfs://emr-header-1.cluster-49146:9000/user/tmp/csv/region_csv';
   
---Create supplier appearance
+--Create the supplier external table.
 CREATE EXTERNAL TABLE `supplier`(
   `s_suppkey` int,
   `s_name` varchar(25),
