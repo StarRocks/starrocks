@@ -31,6 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/chunk_writer.h"
+#include "formats/parquet/arrow_memory_pool.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs.h"
@@ -420,6 +421,7 @@ Status ParquetFileWriter::init() {
                           ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
                           ->compression(compression)
                           ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
+                          ->memory_pool(getArrowMemoryPool())
                           ->build();
 
     _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);
