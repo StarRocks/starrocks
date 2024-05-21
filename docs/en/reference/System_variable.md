@@ -144,6 +144,24 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
 
+### enable_materialized_view_union_rewrite (2.5.20 and later)
+
+  Whether to enable materialized view union rewrite. If this item is set to `true`, the system seeks to compensate the predicates using UNION ALL when the predicates in the materialized view cannot satisfy the query's predicates. The default value is `true`.
+
+### enable_materialized_view_plan_cache (2.5.13 and later)
+
+  Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. The default value `true` indicates enabling it.
+
+### follower_query_forward_mode (2.5.20 and later)
+
+  Specifies to which FE nodes the query statements are routed.
+
+  * Valid values:
+
+    * `default`: Routes the query statement to the Leader FE or Follower FEs, depending on the Follower's replay progress. If the Follower FE nodes have not completed replay progress, queries will be routed to the Leader FE node. If the replay progress is complete, queries will be preferentially routed to the Follower FE node.
+    * `leader`: Routes the query statement to the Leader FE.
+    * `follower`: Routes the query statement to Follower FE.
+
 ### character_set_database (global)
 
   The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
