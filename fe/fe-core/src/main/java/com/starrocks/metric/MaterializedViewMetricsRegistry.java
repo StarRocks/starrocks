@@ -65,6 +65,7 @@ public class MaterializedViewMetricsRegistry {
         }
     }
 
+<<<<<<< HEAD
     // collect materialized-view-level metrics
     // collect materialized-view-level metrics
     public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
@@ -94,12 +95,33 @@ public class MaterializedViewMetricsRegistry {
                     if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
                         continue;
                     }
+=======
+    private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,
+                                       MetricVisitor visitor, boolean minifyMetrics) {
+        if (Objects.isNull(entity.dbName) || Objects.isNull(entity.mvName)) {
+            LOG.debug("Invalid materialized view metrics entity, mvId: {}", mvId);
+            return;
+        }
+        for (Metric m : entity.getMetrics()) {
+            // minify metrics if needed
+            if (minifyMetrics) {
+                if (null == m.getValue()) {
+                    continue;
                 }
-                m.addLabel(new MetricLabel("db_name", entity.dbName))
-                        .addLabel(new MetricLabel("mv_name", entity.mvName))
-                        .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())));
-                visitor.visit(m);
+                // ignore gauge metrics since it will try db lock and visit more metadata
+                if (Metric.MetricType.GAUGE == m.type) {
+                    continue;
+                }
+                // ignore counter metrics with 0 value
+                if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
+                    continue;
+>>>>>>> 607961596b ([BugFix] Fix mv metrics npe problem (#46014))
+                }
             }
+            m.addLabel(new MetricLabel("db_name", entity.dbName))
+                    .addLabel(new MetricLabel("mv_name", entity.mvName))
+                    .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())));
+            visitor.visit(m);
         }
 
         // Histogram metrics should only output once
@@ -107,6 +129,24 @@ public class MaterializedViewMetricsRegistry {
             for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
                     .metricRegistry.getHistograms().entrySet()) {
                 visitor.visitHistogram(e.getKey(), e.getValue());
+            }
+        }
+    }
+
+    // collect materialized-view-level metrics
+    public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
+        MaterializedViewMetricsRegistry instance = MaterializedViewMetricsRegistry.getInstance();
+        for (Map.Entry<MvId, MaterializedViewMetricsEntity> entry : instance.idToMVMetrics.entrySet()) {
+            IMaterializedViewMetricsEntity mvEntity = entry.getValue();
+            if (mvEntity == null || mvEntity instanceof MaterializedViewMetricsBlackHoleEntity) {
+                continue;
+            }
+            try {
+                MvId mvId = entry.getKey();
+                MaterializedViewMetricsEntity entity = (MaterializedViewMetricsEntity) mvEntity;
+                doCollectMetrics(mvId, entity, visitor, minifyMetrics);
+            } catch (Exception e) {
+                LOG.warn("Failed to collect materialized view metrics for mvId: {}", entry.getKey(), e);
             }
         }
     }

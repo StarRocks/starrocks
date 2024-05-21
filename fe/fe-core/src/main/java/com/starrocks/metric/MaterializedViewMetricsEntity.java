@@ -194,7 +194,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Table table = db.getTable(mvId.getId());
-                if (!table.isMaterializedView()) {
+                if (table == null || !table.isMaterializedView()) {
                     return 0L;
                 }
 
@@ -220,7 +220,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Table table = db.getTable(mvId.getId());
-                if (!table.isMaterializedView()) {
+                if (table == null || !table.isMaterializedView()) {
                     return 0L;
                 }
 
@@ -246,7 +246,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
                 Table table = db.getTable(mvId.getId());
-                if (!table.isMaterializedView()) {
+                if (table == null || !table.isMaterializedView()) {
                     return 0;
                 }
                 MaterializedView mv = (MaterializedView) table;
@@ -264,7 +264,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
                 Table table = db.getTable(mvId.getId());
-                if (!table.isMaterializedView()) {
+                if (table == null || !table.isMaterializedView()) {
                     return 0;
                 }
                 MaterializedView mv = (MaterializedView) table;
