@@ -1353,6 +1353,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         continue;
                     }
 
+                    RootPathLoadStatistic pathLoadStatistic = loadStatistic
+                            .getRootPathLoadStatistic(replica.getBackendId(), replica.getPathHash());
+                    if (pathLoadStatistic == null || pathLoadStatistic.getDiskState() != DiskInfo.DiskState.ONLINE) {
+                        continue;
+                    }
+
                     if (beIds != null) {
                         tablets.computeIfPresent(replica.getBackendId(), (k, v) -> {
                             v.add(tablet.getId());
