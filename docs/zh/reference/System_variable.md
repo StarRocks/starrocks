@@ -251,6 +251,12 @@ SELECT /*+ SET_VAR
 * 默认值：true
 * 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
 
+### enable_materialized_view_plan_cache
+
+* 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是 `true`，即开启物化视图查询计划缓存。
+* 默认值：true
+* 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
+
 ### follower_query_forward_mode
 
 * 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。
