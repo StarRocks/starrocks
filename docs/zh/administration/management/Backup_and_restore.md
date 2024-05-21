@@ -15,6 +15,7 @@ StarRocks 支持在以下外部存储系统中备份数据：
 - Google GCS
 - 阿里云 OSS
 - 腾讯云 COS
+- 华为云 OBS
 
 > **说明**
 >
