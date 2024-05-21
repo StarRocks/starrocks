@@ -157,7 +157,7 @@ public:
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
@@ -183,6 +183,8 @@ public:
     Status execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata, TxnLogPB* txn_log);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
+
+    Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
 
 private:
     // print memory tracker state

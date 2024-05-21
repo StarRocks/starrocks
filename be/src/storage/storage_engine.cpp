@@ -59,6 +59,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/dictionary_cache_manager.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
@@ -131,6 +132,9 @@ StorageEngine::StorageEngine(const EngineOptions& options)
         return _unused_rowsets.size();
     })
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
+#ifdef USE_STAROS
+    _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
+#endif
 }
 
 StorageEngine::~StorageEngine() {
@@ -242,6 +246,10 @@ Status StorageEngine::_open(const EngineOptions& options) {
     REGISTER_THREAD_POOL_METRICS(segment_replicate, _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
+
+#ifdef USE_STAROS
+    RETURN_IF_ERROR_WITH_WARN(_local_pk_index_manager->init(), "init LocalPkIndexManager failed");
+#endif
 
     return Status::OK();
 }

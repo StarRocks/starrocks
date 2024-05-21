@@ -340,6 +340,8 @@ public:
 
     double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
+    void set_pk_index_write_amp_score(double score) { _pk_index_write_amp_score.store(score); }
+
     Status pk_index_major_compaction();
 
     // get the max rowset creation time for largest major version

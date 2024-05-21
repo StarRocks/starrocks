@@ -85,4 +85,9 @@ Status PersistentIndexTabletLoader::rowset_iterator(
     }
     return Status::OK();
 }
+
+void PersistentIndexTabletLoader::set_write_amp_score(double score) {
+    _tablet->updates()->set_pk_index_write_amp_score(score);
+}
+
 } // namespace starrocks

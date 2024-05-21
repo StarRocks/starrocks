@@ -68,6 +68,10 @@ namespace bthread {
 class Executor;
 }
 
+namespace starrocks::lake {
+class LocalPkIndexManager;
+}
+
 namespace starrocks {
 
 class DataDir;
@@ -239,6 +243,10 @@ public:
     SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
 
     UpdateManager* update_manager() { return _update_manager.get(); }
+
+#ifdef USE_STAROS
+    lake::LocalPkIndexManager* local_pk_index_manager() { return _local_pk_index_manager.get(); }
+#endif
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
 
@@ -499,6 +507,10 @@ private:
     std::mutex _delta_column_group_cache_lock;
     std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
+
+#ifdef USE_STAROS
+    std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;
+#endif
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

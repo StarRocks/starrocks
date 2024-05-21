@@ -411,6 +411,12 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
             _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
                 return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
             });
+#ifdef USE_STAROS
+            auto update_manager = ExecEnv::GetInstance()->lake_update_manager();
+            _local_pk_index_manager->schedule([&]() {
+                return _local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(update_manager);
+            });
+#endif
         }
     }
 

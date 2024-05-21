@@ -138,6 +138,7 @@ private:
                 LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
                 // release and remove index entry's reference
                 _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+                _guard.reset(nullptr);
                 _index_entry = nullptr;
                 // rebuild delvec and pk index
                 LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
@@ -292,7 +293,7 @@ private:
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
     DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
-    std::unique_ptr<std::lock_guard<std::mutex>> _guard{nullptr};
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;
 };
