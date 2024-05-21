@@ -209,13 +209,13 @@ static Status add_nullable_struct_column(Column* column, const TypeDescriptor& t
                                          simdjson::ondemand::value* value) {
     auto nullable_column = down_cast<NullableColumn*>(column);
 
-    auto& null_column = nullable_column->null_column();
-    auto& data_column = nullable_column->data_column();
-
     if (value->is_null()) {
         nullable_column->append_nulls(1);
         return Status::OK();
     }
+    
+    auto& null_column = nullable_column->null_column();
+    auto& data_column = nullable_column->data_column();
 
     RETURN_IF_ERROR(add_struct_column(data_column.get(), type_desc, name, value));
 
