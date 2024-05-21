@@ -20,11 +20,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
@@ -50,10 +50,10 @@ import java.util.Set;
 public class FileListRepoTest {
 
     @Mocked
-    private WarehouseManager warehouseManager;
+    private WarehouseManagerEPack warehouseManager;
 
     public FileListRepoTest() {
-        warehouseManager = new WarehouseManager();
+        warehouseManager = new WarehouseManagerEPack();
         warehouseManager.initDefaultWarehouse();
     }
 
@@ -366,7 +366,7 @@ public class FileListRepoTest {
 
         RepoExecutor executor = RepoExecutor.getInstance();
 
-        Assert.assertThrows(SemanticException.class, () -> executor.executeDQL("select now()"));
+        Assert.assertTrue(executor.executeDQL("select now()").isEmpty());
 
         Assert.assertThrows(SemanticException.class, () -> executor.executeDML("insert into a.b values (1) "));
 
