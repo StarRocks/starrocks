@@ -38,12 +38,11 @@ public:
         if (size == 0) {
             *out = kZeroSizeArea;
         }
-        auto ptr = std::aligned_alloc(kDefaultBufferAlignment, size);
-        if (ptr == nullptr) {
+        // On Linux (and other systems), posix_memalign() does not modify memptr on failure.
+        if (posix_memalign(reinterpret_cast<void**>(out), kDefaultBufferAlignment, size)) {
             return Status::OutOfMemory("malloc of size ", size, " failed");
         }
         _bytes_allocated.fetch_add(size);
-        *out = static_cast<uint8_t*>(ptr);
         return Status::OK();
     }
 
@@ -69,9 +68,8 @@ public:
         DCHECK(out);
         // Copy contents and release old memory chunk
         memcpy(out, *ptr, static_cast<size_t>(std::min(new_size, old_size)));
-        free(*ptr);
+        Free(*ptr, old_size);
         *ptr = out;
-        _bytes_allocated.fetch_add(new_size - old_size);
         return Status::OK();
     }
 
