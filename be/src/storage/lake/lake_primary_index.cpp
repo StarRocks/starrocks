@@ -216,9 +216,11 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
         RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, _tablet_id, &index_meta));
         RETURN_IF_ERROR(PrimaryIndex::commit(&index_meta));
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, _tablet_id, index_meta));
+        RETURN_IF_ERROR(on_commited());
+        set_local_pk_index_write_amp_score(PersistentIndex::major_compaction_score(index_meta));
         // Call `on_commited` here, which will be safe to remove old files.
         // Because if version publishing fails after `on_commited`, index will be rebuild.
-        return on_commited();
+        return Status::OK();
     }
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
