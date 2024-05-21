@@ -127,7 +127,6 @@ public class EliminateAggRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
@@ -143,6 +142,7 @@ public class EliminateAggRule extends TransformationRule {
                 ScalarOperator scalarOperator = callOperator.getArguments().get(0);
                 if (isColumnRefType(scalarOperator)) {
                     ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator;
+                    LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
                     ScalarOperator projectColumnRef = projectOp.getColumnRefMap().get(columnRef);
                     if (projectColumnRef instanceof CallOperator) {
                         // 2. select pk, sum(t0 + t1) from demo group by pk
