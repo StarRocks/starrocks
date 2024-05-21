@@ -268,7 +268,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         long startRefreshTs = System.currentTimeMillis();
 
         // refresh materialized view
-        doRefreshMaterializedViewWithRetry(context, mvEntity);
+        RefreshJobStatus result = doRefreshMaterializedViewWithRetry(context, mvEntity);
 
         // do not generate next task run if the current task run is killed
         if (mvContext.hasNextBatchPartition() && !mvContext.getTaskRun().isKilled()) {
@@ -279,7 +279,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         LOG.info("Refresh {} success, cost time(s): {}", materializedView.getName(),
                 DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000.0));
         mvEntity.updateRefreshDuration(refreshDurationMs);
-        return RefreshJobStatus.SUCCESS;
+        return result;
     }
 
     private void logMvToRefreshInfoIntoTaskRun(Set<String> finalMvToRefreshedPartitions,
