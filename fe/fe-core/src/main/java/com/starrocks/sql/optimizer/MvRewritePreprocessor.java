@@ -536,6 +536,7 @@ public class MvRewritePreprocessor {
         if (CollectionUtils.isNotEmpty(queryTables) &&
                 !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
+            return Pair.create(false, "MV contains extra tables besides FK-PK");
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
         if (connectContext == null || connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
