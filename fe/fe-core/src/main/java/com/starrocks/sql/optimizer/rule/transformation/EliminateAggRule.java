@@ -162,7 +162,7 @@ public class EliminateAggRule extends TransformationRule {
                 .forEach(columnRefOperator -> newProjectMap.put(columnRefOperator, columnRefOperator));
 
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
-        return List.of(OptExpression.create(newProjectOp, input.inputAt(0).getInputs()));
+        return List.of(OptExpression.create(newProjectOp, input.inputAt(0)));
     }
 
     private boolean isColumnRefType(ScalarOperator scalarOperator) {
