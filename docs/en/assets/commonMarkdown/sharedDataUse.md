@@ -94,4 +94,4 @@ Tables in a shared-data StarRocks cluster support all types of queries provided 
 
 > **NOTE**
 >
-> Shared-data StarRocks clusters support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) from v3.3.0 onwards.
+> Shared-data StarRocks clusters do not support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md).
