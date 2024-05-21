@@ -71,6 +71,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -79,6 +80,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -97,6 +99,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -523,9 +526,10 @@ public class OlapScanNode extends ScanNode {
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-                if (computeNodeIds.isEmpty()) {
-                    throw new UserException(" no backend or compute node in warehouse " + warehouseId);
+                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
+                    Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                    ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
                 }
 
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
@@ -951,6 +955,13 @@ public class OlapScanNode extends ScanNode {
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.lake_scan_node.setColumn_access_paths(columnAccessPathToThrift());
             }
+
+            if (!scanTabletIds.isEmpty()) {
+                msg.lake_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+                msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+            }
+
+            msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -971,6 +982,8 @@ public class OlapScanNode extends ScanNode {
                         ConnectContext.get().getSessionVariable().getMaxParallelScanInstanceNum());
                 msg.olap_scan_node.setEnable_prune_column_after_index_filter(
                         ConnectContext.get().getSessionVariable().isEnablePruneColumnAfterIndexFilter());
+                msg.olap_scan_node.setEnable_gin_filter(
+                        ConnectContext.get().getSessionVariable().isEnableGinFilter());
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
@@ -1320,7 +1333,7 @@ public class OlapScanNode extends ScanNode {
             // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
             // maybe invalid.
             Preconditions.checkState(tabletToPartitionMap.containsKey(tabletId),
-                    String.format("Invalid tablet id: '%s'", tabletId));
+                    "Invalid tablet id: '" + tabletId + "'");
             long partitionId = tabletToPartitionMap.get(tabletId);
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }

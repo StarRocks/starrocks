@@ -79,6 +79,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
@@ -135,7 +136,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // this lock is protect List<MultiDeleteInfo> add / remove dbToDeleteInfos is use newConcurrentMap
     // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
     // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
     private final Set<Long> killJobSet;
 
     public DeleteMgr() {
@@ -162,25 +163,24 @@ public class DeleteMgr implements Writable, MemoryTrackable {
 
     public void process(DeleteStmt stmt) throws DdlException, QueryStateException {
         String dbName = stmt.getTableName().getDb();
+        String tableName = stmt.getTableName().getTbl();
+
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + dbName);
         }
 
+        Table table = db.getTable(tableName);
+        if (table == null) {
+            throw new DdlException("Table does not exist. name: " + tableName);
+        }
+
         DeleteJob deleteJob = null;
         try {
-            Table table = null;
-            long transactionId = -1L;
             List<Partition> partitions = Lists.newArrayList();
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
             try {
-                String tableName = stmt.getTableName().getTbl();
-                table = db.getTable(tableName);
-                if (table == null) {
-                    throw new DdlException("Table does not exist. name: " + tableName);
-                }
-
                 if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
                 }
@@ -191,17 +191,17 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                     return;
                 }
 
-                transactionId = deleteJob.getTransactionId();
             } catch (Throwable t) {
                 LOG.warn("error occurred during delete process", t);
                 // if transaction has been begun, need to abort it
-                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), transactionId) !=
-                        null) {
+                long transactionId = deleteJob == null ? -1 : deleteJob.getTransactionId();
+                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(db.getId(), transactionId) != null) {
                     cancelJob(deleteJob, CancelType.UNKNOWN, t.getMessage());
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
             }
 
             deleteJob.run(stmt, db, table, partitions);
@@ -883,7 +883,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             count += value.size();
         }
         return ImmutableMap.of("DeleteInfo", getDeleteInfoCount(),
-                               "DeleteJob", (long) idToDeleteJob.size());
+                "DeleteJob", (long) idToDeleteJob.size());
     }
 
 }

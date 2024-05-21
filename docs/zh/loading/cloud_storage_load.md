@@ -16,7 +16,7 @@ Broker Load 能够保证单次导入事务的原子性，即单次导入的多�
 >
 > Broker Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
-从 3.1 版本起，StarRocks 新增支持使用 INSERT 语句和 `FILES` 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 FILES 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
+从 3.1 版本起，StarRocks 新增支持使用 INSERT 语句和 `FILES` 关键字直接从 AWS S3 导入特定格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 FILES 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
 
 本文主要介绍如何使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 从云存储系统导入数据。
 
@@ -1100,7 +1100,7 @@ PROPERTIES
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_701
 (
-    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    DATA INFILE("s3://bucket_minio/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -1147,7 +1147,7 @@ SELECT * FROM table1;
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_702
 (
-    DATA INFILE("obs://bucket_minio/input/*")
+    DATA INFILE("s3://bucket_minio/input/*")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
@@ -1198,12 +1198,12 @@ SELECT * FROM table1;
 ```SQL
 LOAD LABEL test_db.label_brokerloadtest_703
 (
-    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    DATA INFILE("s3://bucket_minio/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("obs://bucket_minio/input/file2.csv")
+    DATA INFILE("s3://bucket_minio/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, name, score)

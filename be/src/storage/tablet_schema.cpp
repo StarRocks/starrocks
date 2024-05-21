@@ -310,6 +310,19 @@ void TabletColumn::add_sub_column(TabletColumn&& sub_column) {
     _get_or_alloc_extra_fields()->sub_columns.emplace_back(std::move(sub_column));
 }
 
+bool TabletColumn::is_support_checksum() const {
+    if (!is_support_checksum_type(_type)) {
+        return false;
+    }
+    for (auto i = 0; i < subcolumn_count(); ++i) {
+        const auto& sub_col = subcolumn(i);
+        if (!sub_col.is_support_checksum()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /******************************************************************
  * TabletSchema
  ******************************************************************/
@@ -352,7 +365,7 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
 }
 
 std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchemaCSPtr& tablet_schema,
-                                                            const std::vector<uint32_t>& unique_column_ids) {
+                                                            const std::vector<ColumnUID>& unique_column_ids) {
     std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
     std::vector<int32_t> column_indexes;
     for (int cid = 0; cid < tablet_schema->columns().size(); cid++) {

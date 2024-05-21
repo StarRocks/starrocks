@@ -30,6 +30,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -151,8 +152,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
-        return normal.prepareMetadata(item, tracers);
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
+        return normal.prepareMetadata(item, tracers, connectContext);
     }
 
     @Override
@@ -250,8 +251,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
-        normal.truncateTable(truncateTableStmt);
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
+        normal.truncateTable(truncateTableStmt, context);
     }
 
     @Override
@@ -261,7 +262,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
+            throws DdlException {
         normal.addPartitions(db, tableName, addPartitionClause);
     }
 

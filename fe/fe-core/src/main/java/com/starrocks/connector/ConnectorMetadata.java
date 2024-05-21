@@ -29,6 +29,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -197,12 +198,17 @@ public interface ConnectorMetadata {
         return Statistics.builder().build();
     }
 
-    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         return true;
     }
 
     default List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
         throw new StarRocksConnectorException("This connector doesn't support pruning partitions");
+    }
+
+    // return true if the connector has self info schema
+    default boolean hasSelfInfoSchema() {
+        return false;
     }
 
     /**
@@ -272,14 +278,14 @@ public interface ConnectorMetadata {
     default void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
     }
 
-    default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
+    default void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
     }
 
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
     }
 
     default void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
+            throws DdlException {
     }
 
     default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {

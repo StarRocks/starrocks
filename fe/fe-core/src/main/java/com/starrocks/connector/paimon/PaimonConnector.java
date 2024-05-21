@@ -71,7 +71,7 @@ public class PaimonConnector implements Connector {
                         HIVE_METASTORE_URIS);
             }
         }
-        if (Strings.isNullOrEmpty(warehousePath)) {
+        if (Strings.isNullOrEmpty(warehousePath) && !catalogType.equals("hive")) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);

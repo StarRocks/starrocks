@@ -33,6 +33,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.PlanMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
@@ -211,6 +212,18 @@ public class SetStmtAnalyzer {
             }
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.COMPUTATION_FRAGMENT_SCHEDULING_POLICY)) {
+            String policy = resolvedExpression.getStringValue();
+            SessionVariableConstants.ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy =
+                    Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                            StringUtils.upperCase(policy)).orNull();
+            if (computationFragmentSchedulingPolicy == null) {
+                String supportedList = Joiner.on(",").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+                throw new SemanticException(String.format("Unsupported computation_fragment_scheduling_policy: %s, " +
+                        "supported list is %s", policy, supportedList));
+            }
+        }
+
         // materialized_view_rewrite_mode
         if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
             String rewriteModeName = resolvedExpression.getStringValue();
@@ -292,6 +305,10 @@ public class SetStmtAnalyzer {
                 throw new SemanticException(String.format("Unsupported compression codec %s." +
                         " Use any of (uncompressed, snappy, lz4, zstd, gzip)", codec));
             }
+        }
+        // check plan mode
+        if (variable.equalsIgnoreCase(SessionVariable.PLAN_MODE)) {
+            PlanMode.fromName(resolvedExpression.getStringValue());
         }
 
         var.setResolvedExpression(resolvedExpression);

@@ -23,28 +23,27 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/utils.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
 Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
-    IndexValueWithVerPB index_value_ver;
+    IndexValuesWithVerPB index_value_ver;
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
     }
-    if (index_value_ver.versions_size() != index_value_ver.values_size()) {
-        return Status::InternalError("The size of version and the size of value are not equal");
-    }
-    if (index_value_ver.versions_size() == 0) {
+    if (index_value_ver.values_size() == 0) {
         return Status::OK();
     }
 
-    auto version = index_value_ver.versions(0);
-    auto index_value = index_value_ver.values(0);
+    auto version = index_value_ver.values(0).version();
+    auto index_value = build_index_value(index_value_ver.values(0));
     if (_key == key) {
         if (_index_value_vers.empty()) {
             _index_value_vers.emplace_front(version, index_value);
@@ -66,10 +65,12 @@ void KeyValueMerger::flush() {
         return;
     }
 
-    IndexValueWithVerPB index_value_pb;
+    IndexValuesWithVerPB index_value_pb;
     for (const auto& index_value_with_ver : _index_value_vers) {
-        index_value_pb.add_versions(index_value_with_ver.first);
-        index_value_pb.add_values(index_value_with_ver.second.get_value());
+        auto* value = index_value_pb.add_values();
+        value->set_version(index_value_with_ver.first);
+        value->set_rssid(index_value_with_ver.second.get_rssid());
+        value->set_rowid(index_value_with_ver.second.get_rowid());
     }
     _builder->Add(Slice(_key), Slice(index_value_pb.SerializeAsString()));
     _index_value_vers.clear();
@@ -116,6 +117,7 @@ bool LakePersistentIndex::is_memtable_full() const {
 }
 
 Status LakePersistentIndex::minor_compact() {
+    TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(location));
@@ -128,13 +130,14 @@ Status LakePersistentIndex::minor_compact() {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
-    sstable_pb.set_version(_version.major_number());
+    sstable_pb.set_version(_immutable_memtable->max_version());
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     _sstables.emplace_back(std::move(sstable));
+    TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
     return Status::OK();
 }
 
@@ -202,6 +205,7 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
 }
 
 Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_us");
     RETURN_IF_ERROR(_memtable->insert(n, keys, values, version));
     if (is_memtable_full()) {
         RETURN_IF_ERROR(flush_memtable());
@@ -368,20 +372,24 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                        return filenames.contains(sstable->sstable_pb().filename());
                                    }),
                     _sstables.end());
-    if (!_sstables.empty()) {
-        DCHECK(sstable_pb.version() <= _sstables[0]->sstable_pb().version());
-    }
     _sstables.insert(_sstables.begin(), std::move(sstable));
     return Status::OK();
 }
 
-void LakePersistentIndex::commit(MetaFileBuilder* builder) {
+Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
     PersistentIndexSstableMetaPB sstable_meta;
+    int64_t last_version = 0;
     for (auto& sstable : _sstables) {
+        int64_t sstable_version = sstable->sstable_pb().version();
+        if (last_version > sstable_version) {
+            return Status::InternalError("Versions of sstables are not ordered");
+        }
+        last_version = sstable_version;
         auto* sstable_pb = sstable_meta.add_sstables();
         sstable_pb->CopyFrom(sstable->sstable_pb());
     }
     builder->finalize_sstable_meta(sstable_meta);
+    return Status::OK();
 }
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
@@ -402,6 +410,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     if (max_sstable_version > base_version) {
         return Status::OK();
     }
+    TRACE_COUNTER_INCREMENT("max_sstable_version", max_sstable_version);
+    TRACE_COUNTER_INCREMENT("new_version", metadata->version());
 
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
@@ -418,6 +428,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     // Rowset whose version is between max_sstable_version and base_version should be recovered.
     for (auto& rowset : rowsets) {
+        TRACE_COUNTER_INCREMENT("total_rowsets", 1);
+        TRACE_COUNTER_INCREMENT("total_segments", rowset->num_segments());
+        TRACE_COUNTER_INCREMENT("total_datasize_bytes", rowset->data_size());
+        TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
         // If it is upgraded from old version of sr, the rowset version will be not set.
         // The generated rowset version will be treated as base_version.
         int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
@@ -481,6 +495,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             }
             itr->close();
         }
+        TRACE_COUNTER_INCREMENT("loaded_rowsets", 1);
+        TRACE_COUNTER_INCREMENT("loaded_segments", rowset->num_segments());
+        TRACE_COUNTER_INCREMENT("loaded_datasize_bytes", rowset->data_size());
+        TRACE_COUNTER_INCREMENT("loaded_num_rows", rowset->num_rows());
     }
     return Status::OK();
 }

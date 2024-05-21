@@ -273,6 +273,6 @@ public class DecimalTypeTest extends PlanTestBase {
         String sql = "select '1969-12-10 23:46:53' > c_0_0 from tab0";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
-                "  |  <slot 16> : CAST(1: c_0_0 AS VARCHAR) < '1969-12-10 23:46:53'");
+                "  |  <slot 16> : CAST(1: c_0_0 AS DOUBLE) < CAST('1969-12-10 23:46:53' AS DOUBLE)");
     }
 }

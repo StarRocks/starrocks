@@ -72,7 +72,7 @@ public:
                   const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                   TCompressionType::type compression_type, const std::shared_ptr<ORCWriterOptions>& writer_options,
-                  const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                  const std::function<void()>& rollback_action, PriorityThreadPool* executors,
                   RuntimeState* runtime_state);
 
     ~ORCFileWriter() override = default;
@@ -95,7 +95,7 @@ private:
 
     static void _populate_orc_notnull(orc::ColumnVectorBatch& orc_column, uint8_t* null_column, size_t column_size);
 
-    StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(ChunkPtr chunk);
+    StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(const ChunkPtr& chunk);
 
     Status _write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type_desc);
 

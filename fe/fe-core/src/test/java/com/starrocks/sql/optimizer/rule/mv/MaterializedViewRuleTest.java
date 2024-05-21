@@ -91,7 +91,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         ColumnRefFactory tmpRefFactory = new ColumnRefFactory();
         ColumnRefOperator queryColumnRef = tmpRefFactory.create("count", Type.INT, false);
         ColumnRefOperator mvColumnRef = tmpRefFactory.create("count", Type.INT, false);
-        Column mvColumn = new Column();
+        Column mvColumn = new Column("k1", Type.INT);
         List<ScalarOperator> arguments = Lists.newArrayList();
         arguments.add(queryColumnRef);
         CallOperator aggCall = new CallOperator(FunctionSet.COUNT, Type.BIGINT, arguments);

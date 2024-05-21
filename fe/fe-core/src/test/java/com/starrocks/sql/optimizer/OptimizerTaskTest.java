@@ -1188,7 +1188,7 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column());
+        scanColumnMap.put(column1, new Column("k1", Type.INT));
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         LogicalAggregationOperator aggregationOperator =
@@ -1427,7 +1427,7 @@ public class OptimizerTaskTest {
 
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column());
+        scanColumnMap.put(column1, new Column("k1", Type.INT));
 
         Map<ColumnRefOperator, ScalarOperator> projectColumnMap = Maps.newHashMap();
         projectColumnMap.put(column1, column1);
@@ -1548,7 +1548,7 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(column1, new Column());
+        scanColumnMap.put(column1, new Column("k1", Type.INT));
 
         Map<ColumnRefOperator, ScalarOperator> projectColumnMap1 = Maps.newHashMap();
         projectColumnMap1.put(column3, column1);

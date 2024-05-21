@@ -71,6 +71,7 @@ class ManifestGroup {
     private boolean dataFileCacheWithMetrics;
     private Cache<String, Set<DataFile>> dataFileCache;
     private DeleteFileIndex preparedDeleteFileIndex;
+    private Set<Integer> identifierFieldIds;
 
     ManifestGroup(FileIO io, Iterable<ManifestFile> manifests) {
         this(
@@ -183,6 +184,12 @@ class ManifestGroup {
         this.dataFileCache = fileCache;
         return this;
     }
+
+    ManifestGroup identifierFieldIds(Set<Integer> identifierFieldIds) {
+        this.identifierFieldIds = identifierFieldIds;
+        return this;
+    }
+
 
     ManifestGroup preparedDeleteFileIndex(DeleteFileIndex deleteFileIndex) {
         this.preparedDeleteFileIndex = deleteFileIndex;
@@ -346,6 +353,7 @@ class ManifestGroup {
                                                 .select(columns)
                                                 .dataFileCache(dataFileCache)
                                                 .cacheWithMetrics(dataFileCacheWithMetrics)
+                                                .identifierFieldIds(identifierFieldIds)
                                                 .scanMetrics(scanMetrics);
 
                                 CloseableIterable<ManifestEntry<DataFile>> entries;

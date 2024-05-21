@@ -107,8 +107,9 @@ jobs:
             else
               branch=main
             fi
-            [[ $((`date +%d` % 2)) -eq 1 ]] && BE_UT_LINUX=ubuntu
+            [[ $((`date +%e` % 2)) -eq 1 ]] && BE_UT_LINUX=ubuntu
             base_sha=$(gh api /repos/${REPO}/branches/${branch} | jq -r .commit.sha)
+            echo "::notice::${branch}(${BE_UT_LINUX} ${base_sha})"
             [[ "${base_sha}" == "null" ]] && (echo "::error::Get HEAD SHA error, please check." && exit -1);
             echo "BRANCH=${branch}" >> $GITHUB_OUTPUT
             echo "PR_NUMBER=${base_sha}" >> $GITHUB_OUTPUT

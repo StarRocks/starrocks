@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
@@ -27,13 +28,11 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
-import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Future;
-import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class TaskRunManager implements MemoryTrackable {
@@ -48,9 +47,11 @@ public class TaskRunManager implements MemoryTrackable {
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
 
-    private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock(true);
+    private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock();
 
     public SubmitResult submitTaskRun(TaskRun taskRun, ExecuteOption option) {
+        LOG.info("submit task run:{}", taskRun);
+
         // duplicate submit
         if (taskRun.getStatus() != null) {
             return new SubmitResult(taskRun.getStatus().getQueryId(), SubmitResult.SubmitStatus.FAILED);
@@ -68,7 +69,7 @@ public class TaskRunManager implements MemoryTrackable {
         status.setPriority(option.getPriority());
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
-        if (!arrangeTaskRun(taskRun)) {
+        if (!arrangeTaskRun(taskRun, false)) {
             LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
@@ -95,20 +96,19 @@ public class TaskRunManager implements MemoryTrackable {
     // The manual priority is higher. For manual tasks, we do not merge operations.
     // For automatic tasks, we will compare the definition, and if they are the same,
     // we will perform the merge operation.
-    public boolean arrangeTaskRun(TaskRun taskRun) {
+    public boolean arrangeTaskRun(TaskRun taskRun, boolean isReplay) {
         if (!tryTaskRunLock()) {
             return false;
         }
+        List<TaskRun> mergedTaskRuns = Lists.newArrayList();
         try {
             long taskId = taskRun.getTaskId();
-            Queue<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+            Set<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();
             if (taskRuns != null && executeOption.isMergeRedundant()) {
-                Iterator<TaskRun> iter = taskRuns.iterator();
-                while (iter.hasNext()) {
-                    TaskRun oldTaskRun = iter.next();
+                for (TaskRun oldTaskRun : taskRuns) {
                     if (oldTaskRun == null) {
                         continue;
                     }
@@ -123,7 +123,7 @@ public class TaskRunManager implements MemoryTrackable {
                     // but other attributes may be different, such as priority, creation time.
                     // higher priority and create time will be result after merge is complete
                     // and queryId will be changed.
-                    if (!oldTaskRun.equals(taskRun)) {
+                    if (!oldTaskRun.isEqualTask(taskRun)) {
                         LOG.warn("failed to remove TaskRun definition is [{}]",
                                 taskRun);
                         continue;
@@ -140,16 +140,7 @@ public class TaskRunManager implements MemoryTrackable {
                     }
                     LOG.info("Merge redundant task run, oldTaskRun: {}, taskRun: {}",
                             oldTaskRun, taskRun);
-
-                    taskRunScheduler.removePendingTaskRunFromQueue(oldTaskRun);
-                    iter.remove();
-
-                    // Update follower's state to SUCCESS, otherwise the merged task run will always be PENDING.
-                    // TODO: 1. add a MERGED state later. 2. support batch update to reduce the number of edit logs.
-                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
-                            oldTaskRun.getStatus().getState(), Constants.TaskRunState.SUCCESS);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                    mergedTaskRuns.add(oldTaskRun);
                 }
             }
             if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
@@ -157,41 +148,40 @@ public class TaskRunManager implements MemoryTrackable {
                 return false;
             }
         } finally {
+            // NOTE: If isReplay is true, we don't need to update the status of the old TaskRun because follower FE cannot
+            // update edit log.
+            if (!isReplay && !mergedTaskRuns.isEmpty()) {
+                for (TaskRun oldTaskRun : mergedTaskRuns) {
+                    // TODO: support batch update to reduce the number of edit logs.
+                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
+                    oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
+                    TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
+                            oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                    taskRunScheduler.removePendingTaskRun(oldTaskRun);
+                }
+            }
             taskRunUnlock();
         }
         return true;
     }
 
-    // Because java PriorityQueue does not provide an interface for searching by element,
-    // so find it by code O(n), which can be optimized later
-    @Nullable
-    private TaskRun getTaskRun(PriorityBlockingQueue<TaskRun> taskRuns, TaskRun taskRun) {
-        TaskRun oldTaskRun = null;
-        for (TaskRun run : taskRuns) {
-            if (run.equals(taskRun)) {
-                oldTaskRun = run;
-                break;
-            }
-        }
-        return oldTaskRun;
-    }
-
     // check if a running TaskRun is complete and remove it from running TaskRun map
     public void checkRunningTaskRun() {
-        Map<Long, TaskRun> runningTaskRunMap = taskRunScheduler.getRunningTaskRunMap();
-        Iterator<Long> runningIterator = runningTaskRunMap.keySet().iterator();
-        while (runningIterator.hasNext()) {
-            Long taskId = runningIterator.next();
-            TaskRun taskRun = runningTaskRunMap.get(taskId);
+        Set<Long> runningTaskIds = taskRunScheduler.getCopiedRunningTaskIds();
+        for (Long taskId : runningTaskIds) {
+            TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
             if (taskRun == null) {
                 LOG.warn("failed to get running TaskRun by taskId:{}", taskId);
-                runningIterator.remove();
+                taskRunScheduler.removeRunningTask(taskId);
                 return;
             }
+
             Future<?> future = taskRun.getFuture();
             if (future.isDone()) {
-                runningIterator.remove();
+                taskRunScheduler.removeRunningTask(taskId);
                 LOG.info("Task run is done from state RUNNING to {}, {}", taskRun.getStatus().getState(), taskRun);
+
                 taskRunHistory.addHistory(taskRun.getStatus());
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
@@ -239,46 +229,19 @@ public class TaskRunManager implements MemoryTrackable {
         this.taskRunLock.unlock();
     }
 
-    public TaskRun getRunnableTaskRun(long taskId) {
-        return taskRunScheduler.getRunnableTaskRun(taskId);
-    }
-
-    public Queue<TaskRun> getPendingTaskRuns() {
-        return taskRunScheduler.getPendingTaskRuns();
-    }
-    public Map<Long, Queue<TaskRun>> getPendingTaskRunMap() {
-        return taskRunScheduler.getPendingTaskRunMap();
-    }
-
-    public Map<Long, TaskRun> getRunningTaskRunMap() {
-        return taskRunScheduler.getRunningTaskRunMap();
+    public TaskRunScheduler getTaskRunScheduler() {
+        return taskRunScheduler;
     }
 
     public TaskRunHistory getTaskRunHistory() {
         return taskRunHistory;
     }
 
-    public boolean containsTaskInRunningTaskRunMap(long taskId) {
-        return taskRunScheduler.getRunningTaskRunMap().containsKey(taskId);
-    }
-
-    public long getPendingTaskRunCount(long taskId) {
-        taskRunLock.lock();
-        try {
-            Queue<TaskRun> pendingTaskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
-            return  pendingTaskRuns == null ? 0L : pendingTaskRuns.size();
-        } catch (Exception e) {
-            return 0L;
-        } finally {
-            taskRunLock.unlock();
-        }
-    }
-
     @Override
     public Map<String, Long> estimateCount() {
         long validPendingCount = taskRunScheduler.getPendingQueueCount();
         return ImmutableMap.of("PendingTaskRun", validPendingCount,
-                "RunningTaskRun", (long) taskRunScheduler.getRunningTaskRunMap().size(),
+                "RunningTaskRun", (long) taskRunScheduler.getRunningTaskCount(),
                 "HistoryTaskRun", taskRunHistory.getTaskRunCount());
     }
   

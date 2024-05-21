@@ -129,6 +129,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
@@ -579,9 +580,18 @@ public class AlterJobMgr {
                     if (!dropPartitionClause.isTempPartition()) {
                         DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                     }
-                    if (dropPartitionClause.getPartitionName()
+                    if (dropPartitionClause.getPartitionName() != null && dropPartitionClause.getPartitionName()
                             .startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                         throw new DdlException("Deletion of shadow partitions is not allowed");
+                    }
+                    List<String> partitionNames = dropPartitionClause.getPartitionNames();
+                    if (CollectionUtils.isNotEmpty(partitionNames)) {
+                        boolean hasShadowPartition = partitionNames.stream()
+                                .anyMatch(partitionName -> partitionName.startsWith(
+                                        ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX));
+                        if (hasShadowPartition) {
+                            throw new DdlException("Deletion of shadow partitions is not allowed");
+                        }
                     }
                     GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 } else if (alterClause instanceof ReplacePartitionClause) {
@@ -651,7 +661,9 @@ public class AlterJobMgr {
                 TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
                 TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
                 TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt);
+                ConnectContext ctx = new ConnectContext();
+                ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt, ctx);
             } else if (alterClause instanceof ModifyPartitionClause) {
                 ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                 Map<String, String> properties = clause.getProperties();

@@ -114,6 +114,8 @@ struct IndexValue {
     explicit IndexValue(const uint64_t val) { UNALIGNED_STORE64(v, val); }
 
     uint64_t get_value() const { return UNALIGNED_LOAD64(v); }
+    uint32_t get_rssid() const { return (uint32_t)(get_value() >> 32); }
+    uint32_t get_rowid() const { return (uint32_t)(get_value() & 0xFFFFFFFF); }
     bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
@@ -664,6 +666,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
+    size_t usage() const { return _usage; }
     virtual size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
@@ -780,6 +783,18 @@ public:
         }
         return res;
     }
+
+    // not thread safe, just for unit test
+    std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
+        std::pair<int64_t, int64_t> res;
+        for (auto [_, stat] : _usage_and_size_by_key_length) {
+            res.first += stat.first;
+            res.second += stat.second;
+        }
+        return res;
+    }
+
+    void clear_kv_stat() { _usage_and_size_by_key_length.clear(); }
 
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 

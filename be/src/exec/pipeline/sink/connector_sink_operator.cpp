@@ -14,6 +14,8 @@
 
 #include "connector_sink_operator.h"
 
+#include <utility>
+
 #include "formats/utils.h"
 #include "glog/logging.h"
 #include "connector/async_io_poller.h"
@@ -108,7 +110,7 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
         std::shared_ptr<connector::ConnectorChunkSinkContext> sink_context, FragmentContext* fragment_context)
         : OperatorFactory(id, "connector sink operator", Operator::s_pseudo_plan_node_id_for_final_sink),
           _data_sink_provider(std::move(data_sink_provider)),
-          _sink_context(sink_context),
+          _sink_context(std::move(sink_context)),
           _fragment_context(fragment_context) {
     MemTracker* mem_tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
     _sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(mem_tracker);

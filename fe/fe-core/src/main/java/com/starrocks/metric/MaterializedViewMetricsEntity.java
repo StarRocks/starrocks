@@ -28,6 +28,7 @@ import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -86,10 +87,16 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     // record the materialized view's refresh job duration only if it's refreshed successfully.
     public Histogram histRefreshJobDuration;
 
+    public final String dbName;
+    public final String mvName;
     public MaterializedViewMetricsEntity(MetricRegistry metricRegistry, MvId mvId) {
         this.metricRegistry = metricRegistry;
         this.mvId = mvId;
-
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getDb(mvId.getDbId());
+        dbName = (db != null) ? db.getFullName() : "";
+        Table table = (db != null) ? db.getTable(mvId.getId()) : null;
+        mvName = (table != null) ? table.getName() : "";
         initMaterializedViewMetrics();
     }
 
@@ -158,7 +165,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Long taskId = taskManager.getTask(mvTaskName).getId();
-                return taskManager.getTaskRunManager().getPendingTaskRunCount(taskId);
+                TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
+                return taskRunScheduler.getTaskIdPendingTaskRunCount(taskId);
             }
         };
         metrics.add(counterRefreshPendingJobs);
@@ -176,7 +184,8 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Long taskId = taskManager.getTask(mvTaskName).getId();
-                if (taskManager.getTaskRunManager().containsTaskInRunningTaskRunMap(taskId)) {
+                TaskRunScheduler taskRunScheduler = taskManager.getTaskRunManager().getTaskRunScheduler();
+                if (taskRunScheduler.isTaskRunning(taskId)) {
                     return 1L;
                 } else {
                     return 0L;
@@ -198,10 +207,10 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
 
+                MaterializedView mv = (MaterializedView) table;
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    MaterializedView mv = (MaterializedView) table;
                     return mv.getRowCount();
                 } catch (Exception e) {
                     return 0L;
@@ -225,10 +234,10 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
 
+                MaterializedView mv = (MaterializedView) table;
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    MaterializedView mv = (MaterializedView) table;
                     return mv.getDataSize();
                 } catch (Exception e) {
                     return 0L;
@@ -251,15 +260,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 if (!table.isMaterializedView()) {
                     return 0;
                 }
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
                 try {
                     MaterializedView mv = (MaterializedView) table;
                     return mv.isActive() ? 0 : 1;
                 } catch (Exception e) {
                     return 0;
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };
@@ -278,13 +283,13 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
                 MaterializedView mv = (MaterializedView) table;
+                if (!mv.isPartitionedTable()) {
+                    return 0;
+                }
 
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    if (!mv.getPartitionInfo().isPartitioned()) {
-                        return 0;
-                    }
                     return mv.getPartitions().size();
                 } catch (Exception e) {
                     return 0;

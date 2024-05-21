@@ -105,6 +105,8 @@ public class FunctionSet {
     public static final String UTC_TIME = "utc_time";
     public static final String LOCALTIME = "localtime";
     public static final String LOCALTIMESTAMP = "localtimestamp";
+
+    public static final String WEEK = "week";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -239,6 +241,7 @@ public class FunctionSet {
     public static final String HOST_NAME = "host_name";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
+    public static final String APPROX_COUNT_DISTINCT_HLL_SKETCH = "approx_count_distinct_hll_sketch";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -597,6 +600,7 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+                    .add(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH)
                     .add(FunctionSet.MD5_SUM_NUMERIC)
                     .add(FunctionSet.BITMAP_EMPTY)
                     .add(FunctionSet.HLL_EMPTY)
@@ -1014,6 +1018,12 @@ public class FunctionSet {
             // alias of ndv, compute approx count distinct use HyperLogLog
             addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+
+            //APPROX_COUNT_DISTINCT_HLL_SKETCH
+            //compute approx count distinct use DataSketches HyperLogLog
+            addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT_HLL_SKETCH,
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
                     true, false, true));
 
             // HLL_RAW

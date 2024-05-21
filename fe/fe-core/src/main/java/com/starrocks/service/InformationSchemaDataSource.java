@@ -46,6 +46,7 @@ import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -56,6 +57,8 @@ import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
+import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -66,8 +69,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 public class InformationSchemaDataSource {
 
@@ -199,17 +205,13 @@ public class InformationSchemaDataSource {
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
-        if (partitionInfo.isRangePartition()) {
-            int idx = 0;
-            for (Column column : partitionInfo.getPartitionColumns()) {
-                if (idx != 0) {
-                    partitionKeySb.append(", ");
-                }
-                partitionKeySb.append("`").append(column.getName()).append("`");
-                idx++;
+        int idx = 0;
+        for (Column column : partitionInfo.getPartitionColumns()) {
+            if (idx != 0) {
+                partitionKeySb.append(", ");
             }
-        } else {
-            partitionKeySb.append(DEFAULT_EMPTY_STRING);
+            partitionKeySb.append("`").append(column.getName()).append("`");
+            idx++;
         }
 
         // PRIMARY KEYS
@@ -222,7 +224,7 @@ public class InformationSchemaDataSource {
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
                 || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
-        tableConfigInfo.setPartition_key(partitionKeySb.toString());
+        tableConfigInfo.setPartition_key(partitionKeySb.length() > 0 ? partitionKeySb.toString() : DEFAULT_EMPTY_STRING);
 
         // Distribution info
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
@@ -311,8 +313,9 @@ public class InformationSchemaDataSource {
     }
 
     private static void genPartitionMetaInfo(Database db, OlapTable table,
-            PartitionInfo partitionInfo, Partition partition, PhysicalPartition physicalPartition,
-            TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
+                                             PartitionInfo partitionInfo, Partition partition,
+                                             PhysicalPartition physicalPartition,
+                                             TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
         // PARTITION_NAME
         partitionMetaInfo.setPartition_name(partition.getName());
         // PARTITION_ID
@@ -375,7 +378,6 @@ public class InformationSchemaDataSource {
 
     // tables
     public static TGetTablesInfoResponse generateTablesInfoResponse(TGetTablesInfoRequest request) throws TException {
-
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
 
@@ -391,79 +393,185 @@ public class InformationSchemaDataSource {
 
         for (String dbName : result.authorizedDbs) {
             Database db = metadataMgr.getDb(catalogName, dbName);
+            if (db == null) {
+                continue;
+            }
 
-            if (db != null) {
-                Locker locker = new Locker();
+            List<BasicTable> tables = new ArrayList<>();
+            Locker locker = new Locker();
+            try {
                 locker.lockDatabase(db, LockType.READ);
-                try {
-                    List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
-                    for (String tableName : tableNames) {
-                        BasicTable table = null;
-                        try {
-                            table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
-                        } catch (Exception e) {
-                            LOG.warn(e.getMessage());
-                        }
-
-                        if (table == null) {
+                List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+                for (String tableName : tableNames) {
+                    if (request.isSetTable_name()) {
+                        if (!tableName.equals(request.getTable_name())) {
                             continue;
                         }
-
-                        try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
-                        } catch (AccessDeniedException e) {
-                            continue;
-                        }
-
-                        TTableInfo info = new TTableInfo();
-
-                        // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
-                        // the catalog name is always `def`
-                        info.setTable_catalog(DEF);
-                        info.setTable_schema(dbName);
-                        info.setTable_name(table.getName());
-                        info.setTable_type(table.getMysqlType());
-                        info.setEngine(table.getEngine());
-                        info.setVersion(DEFAULT_EMPTY_NUM);
-                        // TABLE_ROWS (depend on the table type)
-                        // AVG_ROW_LENGTH (depend on the table type)
-                        // DATA_LENGTH (depend on the table type)
-                        info.setMax_data_length(DEFAULT_EMPTY_NUM);
-                        info.setIndex_length(DEFAULT_EMPTY_NUM);
-                        info.setData_free(DEFAULT_EMPTY_NUM);
-                        info.setAuto_increment(DEFAULT_EMPTY_NUM);
-                        info.setCreate_time(table.getCreateTime());
-                        // UPDATE_TIME (depend on the table type)
-                        info.setCheck_time(table.getLastCheckTime() / 1000);
-                        info.setTable_collation(UTF8_GENERAL_CI);
-                        info.setChecksum(DEFAULT_EMPTY_NUM);
-                        info.setTable_comment(table.getComment());
-
-                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
-                            // OLAP (done)
-                            // OLAP_EXTERNAL (done)
-                            // MATERIALIZED_VIEW (done)
-                            // LAKE (done)
-                            // LAKE_MATERIALIZED_VIEW (done)
-                            genNormalTableInfo(table, info);
-                        } else {
-                            // SCHEMA (use default)
-                            // INLINE_VIEW (use default)
-                            // VIEW (use default)
-                            // BROKER (use default)
-                            // EXTERNAL TABLE (use default)
-                            genDefaultConfigInfo(info);
-                        }
-                        infos.add(info);
                     }
+
+                    BasicTable table = null;
+                    try {
+                        table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
+                    } catch (Exception e) {
+                        LOG.warn(e.getMessage());
+                    }
+                    if (table == null) {
+                        continue;
+                    }
+
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
+                    tables.add(table);
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+
+            for (BasicTable table : tables) {
+                Locker tableLocker = new Locker();
+                try {
+                    if (table.isNativeTableOrMaterializedView()) {
+                        tableLocker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(((OlapTable) table).getId()),
+                                LockType.READ);
+                    }
+
+                    TTableInfo info = new TTableInfo();
+
+                    // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
+                    // the catalog name is always `def`
+                    info.setTable_catalog(DEF);
+                    info.setTable_schema(dbName);
+                    info.setTable_name(table.getName());
+                    info.setTable_type(table.getMysqlType());
+                    info.setEngine(table.getEngine());
+                    info.setVersion(DEFAULT_EMPTY_NUM);
+                    // TABLE_ROWS (depend on the table type)
+                    // AVG_ROW_LENGTH (depend on the table type)
+                    // DATA_LENGTH (depend on the table type)
+                    info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                    info.setIndex_length(DEFAULT_EMPTY_NUM);
+                    info.setData_free(DEFAULT_EMPTY_NUM);
+                    info.setAuto_increment(DEFAULT_EMPTY_NUM);
+                    info.setCreate_time(table.getCreateTime());
+                    // UPDATE_TIME (depend on the table type)
+                    info.setCheck_time(table.getLastCheckTime() / 1000);
+                    info.setTable_collation(UTF8_GENERAL_CI);
+                    info.setChecksum(DEFAULT_EMPTY_NUM);
+                    info.setTable_comment(table.getComment());
+
+                    if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        // OLAP (done)
+                        // OLAP_EXTERNAL (done)
+                        // MATERIALIZED_VIEW (done)
+                        // LAKE (done)
+                        // LAKE_MATERIALIZED_VIEW (done)
+                        genNormalTableInfo(table, info);
+                    } else {
+                        // SCHEMA (use default)
+                        // INLINE_VIEW (use default)
+                        // VIEW (use default)
+                        // BROKER (use default)
+                        // EXTERNAL TABLE (use default)
+                        genDefaultConfigInfo(info);
+                    }
+                    infos.add(info);
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    if (table.isNativeTableOrMaterializedView()) {
+                        tableLocker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(((OlapTable) table).getId()),
+                                LockType.READ);
+                    }
                 }
             }
         }
         response.setTables_infos(infos);
         return response;
     }
+
+    public static TGetTemporaryTablesInfoResponse generateTemporaryTablesInfoResponse(TGetTemporaryTablesInfoRequest request)
+            throws TException {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        TAuthInfo authInfo = request.getAuth_info();
+        AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        if (authInfo.isSetCatalog_name()) {
+            catalogName = authInfo.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        Set<Long> requiredDbIds = new HashSet<>();
+        for (String dbName : result.authorizedDbs) {
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            if (db != null) {
+                requiredDbIds.add(db.getId());
+            }
+        }
+
+        com.google.common.collect.Table<Long, UUID, Long> allTables = temporaryTableMgr.getAllTemporaryTables(requiredDbIds);
+
+        List<TTableInfo> tableInfos = new ArrayList<>();
+        for (Long databaseId : allTables.rowKeySet()) {
+            Database db = metadataMgr.getDb(databaseId);
+            if (db != null) {
+                Map<UUID, Long> tableMap = allTables.row(databaseId);
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                try {
+                    for (Map.Entry<UUID, Long> entry : tableMap.entrySet()) {
+                        UUID sessionId = entry.getKey();
+                        Long tableId = entry.getValue();
+                        Table table = db.getTable(tableId);
+                        if (table != null) {
+                            TTableInfo info = new TTableInfo();
+
+                            // the catalog name is always `def`
+                            info.setTable_catalog(DEF);
+                            info.setTable_schema(db.getFullName());
+                            info.setTable_name(table.getName());
+                            info.setTable_type(table.getMysqlType());
+                            info.setEngine(table.getEngine());
+                            info.setVersion(DEFAULT_EMPTY_NUM);
+                            // TABLE_ROWS (depend on the table type)
+                            // AVG_ROW_LENGTH (depend on the table type)
+                            // DATA_LENGTH (depend on the table type)
+                            info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                            info.setIndex_length(DEFAULT_EMPTY_NUM);
+                            info.setData_free(DEFAULT_EMPTY_NUM);
+                            info.setAuto_increment(DEFAULT_EMPTY_NUM);
+                            info.setCreate_time(table.getCreateTime());
+                            // UPDATE_TIME (depend on the table type)
+                            info.setCheck_time(table.getLastCheckTime() / 1000);
+                            info.setTable_collation(UTF8_GENERAL_CI);
+                            info.setChecksum(DEFAULT_EMPTY_NUM);
+                            info.setTable_comment(table.getComment());
+                            info.setSession_id(sessionId.toString());
+                            info.setTable_id(table.getId());
+                            genNormalTableInfo(table, info);
+                            tableInfos.add(info);
+                            if (request.isSetLimit() && tableInfos.size() >= request.getLimit()) {
+                                break;
+                            }
+                        }
+                    }
+                    if (request.isSetLimit() && tableInfos.size() >= request.getLimit()) {
+                        break;
+                    }
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+            }
+        }
+
+        TGetTemporaryTablesInfoResponse response = new TGetTemporaryTablesInfoResponse();
+        response.setTables_infos(tableInfos);
+        return response;
+    }
+
 
     public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 

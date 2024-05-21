@@ -607,7 +607,7 @@ public class AlterTest {
                 " );";
         alterTableWithNewParser(stmt, false);
 
-        Assert.assertTrue(tbl.getTableProperty().getDynamicPartitionProperty().getEnable());
+        Assert.assertTrue(tbl.getTableProperty().getDynamicPartitionProperty().isEnabled());
         Assert.assertEquals(4, tbl.getIndexIdToSchema().size());
 
         // add partition when dynamic partition is enable
@@ -624,7 +624,7 @@ public class AlterTest {
         // disable the dynamic partition
         stmt = "alter table test.tbl1 set ('dynamic_partition.enable' = 'false')";
         alterTableWithNewParser(stmt, false);
-        Assert.assertFalse(tbl.getTableProperty().getDynamicPartitionProperty().getEnable());
+        Assert.assertFalse(tbl.getTableProperty().getDynamicPartitionProperty().isEnabled());
 
         // add partition when dynamic partition is disable
         stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01') " +
@@ -1056,11 +1056,13 @@ public class AlterTest {
         Assert.assertTrue(partition.isPresent());
         Assert.assertEquals(table.getPhysicalPartitions().size(), 1);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 1);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 1,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(partition.get().getSubPartitions().size(), 2);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 2);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 2,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(partition.get().getSubPartitions().size(), 4);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 4);
 
@@ -1111,14 +1113,16 @@ public class AlterTest {
         Partition partition = table.getPartition("p20140101");
         Assert.assertNotNull(partition);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition, 1);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition, 1,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 4);
         Assert.assertEquals(partition.getSubPartitions().size(), 2);
 
         partition = table.getPartition("p20140103");
         Assert.assertNotNull(partition);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition, 2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition, 2,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assert.assertEquals(table.getPhysicalPartitions().size(), 6);
         Assert.assertEquals(partition.getSubPartitions().size(), 3);
 
@@ -1155,7 +1159,8 @@ public class AlterTest {
         Assert.assertTrue(partition.isPresent());
         Assert.assertEquals(table.getPhysicalPartitions().size(), 1);
 
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table.getName(), partition.get(), 1);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addSubPartitions(db, table, partition.get(), 1,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     @Test

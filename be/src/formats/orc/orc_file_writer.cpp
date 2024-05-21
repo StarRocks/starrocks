@@ -118,7 +118,7 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::shared_ptr<orc::O
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                              TCompressionType::type compression_type,
                              const std::shared_ptr<ORCWriterOptions>& writer_options,
-                             const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                             const std::function<void()>& rollback_action, PriorityThreadPool* executors,
                              RuntimeState* runtime_state)
         : _location(location),
           _output_stream(std::move(output_stream)),
@@ -180,7 +180,7 @@ FileWriter::CommitResult ORCFileWriter::commit() {
     return result;
 }
 
-StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(ChunkPtr chunk) {
+StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(const ChunkPtr& chunk) {
     auto cvb = _writer->createRowBatch(chunk->num_rows());
     auto root = down_cast<orc::StructVectorBatch*>(cvb.get());
 

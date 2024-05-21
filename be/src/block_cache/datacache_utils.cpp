@@ -17,13 +17,13 @@
 namespace starrocks {
 void DataCacheUtils::set_metrics_from_thrift(TDataCacheMetrics& t_metrics, const DataCacheMetrics& metrics) {
     switch (metrics.status) {
-    case starcache::CacheStatus::NORMAL:
+    case DataCacheStatus::NORMAL:
         t_metrics.__set_status(TDataCacheStatus::NORMAL);
         break;
-    case starcache::CacheStatus::UPDATING:
+    case DataCacheStatus::UPDATING:
         t_metrics.__set_status(TDataCacheStatus::UPDATING);
         break;
-    case starcache::CacheStatus::LOADING:
+    case DataCacheStatus::LOADING:
         t_metrics.__set_status(TDataCacheStatus::LOADING);
         break;
     default:

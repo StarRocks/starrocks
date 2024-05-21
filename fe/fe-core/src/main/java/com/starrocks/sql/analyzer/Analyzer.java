@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -319,18 +318,27 @@ public class Analyzer {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
+            StatementBase taskStmt = null;
             if (statement.getCreateTableAsSelectStmt() != null) {
                 CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
                 QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
                 Analyzer.analyze(queryStatement, context);
+                taskStmt = queryStatement;
             } else if (statement.getInsertStmt() != null) {
                 InsertStmt insertStmt = statement.getInsertStmt();
                 InsertAnalyzer.analyze(insertStmt, context);
+                taskStmt = insertStmt;
             } else if (statement.getDataCacheSelectStmt() != null) {
                 DataCacheStmtAnalyzer.analyze(statement.getDataCacheSelectStmt(), context);
+                taskStmt = statement.getDataCacheSelectStmt();
             } else {
                 throw new SemanticException("Submit task statement is not supported");
             }
+            boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(taskStmt);
+            if (hasTemporaryTable) {
+                throw new SemanticException("Cannot submit task based on temporary table");
+            }
+
             OriginStatement origStmt = statement.getOrigStmt();
             String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);
@@ -482,11 +490,7 @@ public class Analyzer {
 
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
-            try {
-                statement.analyze(context);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            new CreateFunctionAnalyzer().analyze(statement, context);
             return null;
         }
 

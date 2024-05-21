@@ -85,7 +85,7 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
-                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor());
+                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -136,5 +136,20 @@ public class IcebergConnector implements Connector {
         if (refreshOtherFeExecutor != null) {
             refreshOtherFeExecutor.shutdown();
         }
+    }
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return icebergCatalogProperties.enableIcebergMetadataCache() && icebergNativeCatalog != null;
+    }
+
+    @Override
+    public long estimateSize() {
+        return icebergNativeCatalog.estimateSize();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return icebergNativeCatalog.estimateCount();
     }
 }

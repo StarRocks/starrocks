@@ -63,14 +63,14 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _conjunct_ctxs(param._conjunct_ctxs),
           _build_row_descriptor(param._build_row_descriptor),
           _probe_row_descriptor(param._probe_row_descriptor),
-          _row_descriptor(param._row_descriptor),
           _build_node_type(param._build_node_type),
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
           _build_output_slots(param._build_output_slots),
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
-          _mor_reader_mode(param._mor_reader_mode) {
+          _mor_reader_mode(param._mor_reader_mode),
+          _enable_late_materialization(param._enable_late_materialization) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -137,12 +137,12 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
-    param->row_desc = &_row_descriptor;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
     param->mor_reader_mode = _mor_reader_mode;
+    param->enable_late_materialization = _enable_late_materialization;
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {

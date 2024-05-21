@@ -33,11 +33,11 @@ set partial_update_mode = "column";
 -- !result
 update tab1 set k4 = 1, k2 = 1, k3 = 1;
 -- result:
-[REGEX].*table with sort key do not support partial update.*
+[REGEX].*column mode partial update on table with sort key cannot update sort key column.*
 -- !result
 update tab1 set k4 = 1, k2 = 1;
 -- result:
-[REGEX].*table with sort key do not support partial update.*
+[REGEX].*column mode partial update on table with sort key cannot update sort key column.*
 -- !result
 update tab1 set k4 = 1;
 -- result:

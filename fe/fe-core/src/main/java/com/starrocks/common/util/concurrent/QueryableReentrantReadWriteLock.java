@@ -27,7 +27,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 /*
@@ -37,15 +36,11 @@ import java.util.stream.Collectors;
  * call the helper method like sharedLock(), exclusiveLock() instead of
  * directly calling readLock().lock(), writeLock.lock().
  */
-public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
+public class QueryableReentrantReadWriteLock extends FairReentrantReadWriteLock {
     // threadId -> lockTime
     private final Map<Thread, Long> sharedLockThreads = new ConcurrentHashMap<>();
 
     AtomicLong exclusiveLockTime = new AtomicLong(-1L);
-
-    public QueryableReentrantReadWriteLock(boolean fair) {
-        super(fair);
-    }
 
     public void sharedLock() {
         this.readLock().lock();

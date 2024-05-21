@@ -4,6 +4,31 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.11
+
+Release date: April 28, 2024
+
+### Behavior Changes
+
+- Users are not allowed to drop views in the system database `information_schema` using DROP TABLE. [#43556](https://github.com/StarRocks/starrocks/pull/43556)
+- Users are not allowed to specify duplicate keys in the ORDER BY clause when creating a Primary Key table. [#43374](https://github.com/StarRocks/starrocks/pull/43374)
+
+### Improvements
+
+- Queries on Parquet-formatted Iceberg v2 tables support equality deletes.
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When a user queries data from an external table in an external catalog, access to this table is denied even when the user has the SELECT privilege on this table. SHOW GRANTS also shows that the user has this privilege. [#44061](https://github.com/StarRocks/starrocks/pull/44061)
+- `str_to_map` may cause BEs to crash. [#43930](https://github.com/StarRocks/starrocks/pull/43930)
+- When a Routine Load job is going on, running `show proc '/routine_loads'` is stuck due to deadlock. [#44249](https://github.com/StarRocks/starrocks/pull/44249)
+- Persistent Index of Primary Key tables may cause BEs to crash due to issues in concurrency control. [#43720](https://github.com/StarRocks/starrocks/pull/43720)
+- The `pending_task_run_count` displayed on the page of `leaderFE_IP:8030` is incorrect. The displayed number is the sum of Pending and Running tasks, not Pending tasks. In addition, the information of the metric `refresh_pending` cannot be displayed using `followerFE_IP:8030`. [#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- Querying `information_schema.task_runs` fails frequently. [#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- Some SQL queries that contain CTEs may encounter the `Invalid plan: PhysicalTopNOperator` error. [#44185](https://github.com/StarRocks/starrocks/pull/44185)
+
 ## 3.1.10 (Yanked)
 
 :::tip
@@ -23,6 +48,7 @@ Release date: March 29, 2024
 ### New Features
 
 - Primary Key tables support Size-tiered Compaction. [#42474](https://github.com/StarRocks/starrocks/pull/42474)
+- Added a pattern-matching function `regexp_extract_all`. [#42178](https://github.com/StarRocks/starrocks/pull/42178)
 
 ### Behavior Changes
 
@@ -48,7 +74,6 @@ Release date: March 8, 2024
 ### New Features
 
 - Cloud-native Primary Key tables in shared-data clusters support Size-tiered Compaction to reduce write I/O amplification for the loading of a large number of small-sized files. [#41610](https://github.com/StarRocks/starrocks/pull/41610)
-- Added the function `regexp_extract_all`. [#42178](https://github.com/StarRocks/starrocks/pull/42178)
 - Added the view `information_schema.partitions_meta`, which records detailed metadata of partitions. [#41101](https://github.com/StarRocks/starrocks/pull/41101)
 - Added the view `sys.fe_memory_usage`, which records the memory usage for StarRocks. [#41083](https://github.com/StarRocks/starrocks/pull/41083)
 
@@ -91,7 +116,6 @@ Release date: February 5, 2024
 - StarRocks Community provides the StarRocks Cross-cluster Data Migration Tool, which supports migrating data from a shared-nothing cluster to either another shared-nothing cluster or a shared-data cluster.
 - Supports creating synchronous materialized views with the WHERE clause specified.
 - Added metrics that show memory usage of the data cache to MemTracker. [#39600](https://github.com/StarRocks/starrocks/pull/39600)
-- Added an array function, `array_unique_agg`.
 
 ### Parameter Change
 
