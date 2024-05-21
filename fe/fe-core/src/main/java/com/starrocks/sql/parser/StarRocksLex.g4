@@ -460,6 +460,7 @@ YEAR: 'YEAR';
 LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 LOW_PRIORITY: 'LOW_PRIORITY';
+DISK: 'DISK';
 
 EQ  : '=';
 NEQ : '<>' | '!=';

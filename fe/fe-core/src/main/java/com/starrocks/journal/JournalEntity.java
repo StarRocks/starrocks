@@ -78,8 +78,11 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.CancelDecommissionDiskInfo;
+import com.starrocks.persist.CancelDisableDiskInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
@@ -88,6 +91,8 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DecommissionDiskInfo;
+import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -469,6 +474,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DELETE_REPLICA:
             case OperationType.OP_CLEAR_ROLLUP_INFO: {
                 data = ReplicaPersistInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_BATCH_DELETE_REPLICA: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), BatchDeleteReplicaInfo.class);
                 isRead = true;
                 break;
             }
@@ -1124,6 +1134,22 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_RECOVER_PARTITION_VERSION:
                 data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_DECOMMISSION_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DecommissionDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_CANCEL_DECOMMISSION_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDecommissionDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_DISABLE_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DisableDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_CANCEL_DISABLE_DISK:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
                 isRead = true;
                 break;
             default: {

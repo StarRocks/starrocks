@@ -141,6 +141,7 @@ import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
@@ -2735,6 +2736,46 @@ public class LocalMetastore implements ConnectorMetadata {
             tablet.deleteReplicaByBackendId(info.getBackendId());
         } finally {
             db.writeUnlock();
+        }
+    }
+
+    public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        for (long tabletId : info.getTablets()) {
+            TabletMeta meta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+            if (meta == null) {
+                continue;
+            }
+            Database db = getDbIncludeRecycleBin(meta.getDbId());
+            if (db == null) {
+                LOG.warn("replay delete replica failed, db is null, meta: {}", meta);
+                continue;
+            }
+            db.writeLock();
+            try {
+                OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, meta.getTableId());
+                if (olapTable == null) {
+                    LOG.warn("replay delete replica failed, table is null, meta: {}", meta);
+                    continue;
+                }
+                Partition partition = getPartitionIncludeRecycleBin(olapTable, meta.getPartitionId());
+                if (partition == null) {
+                    LOG.warn("replay delete replica failed, partition is null, meta: {}", meta);
+                    continue;
+                }
+                MaterializedIndex materializedIndex = partition.getIndex(meta.getIndexId());
+                if (materializedIndex == null) {
+                    LOG.warn("replay delete replica failed, materializedIndex is null, meta: {}", meta);
+                    continue;
+                }
+                LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(tabletId);
+                if (tablet == null) {
+                    LOG.warn("replay delete replica failed, tablet is null, meta: {}", meta);
+                    continue;
+                }
+                tablet.deleteReplicaByBackendId(info.getBackendId());
+            } finally {
+                db.writeUnlock();
+            }
         }
     }
 
