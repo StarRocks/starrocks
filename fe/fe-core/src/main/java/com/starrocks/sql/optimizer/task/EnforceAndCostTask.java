@@ -157,6 +157,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 if (childBestExpr == null && prevChildIndex >= curChildIndex) {
                     // If there can not find best child expr or push child's OptimizeGroupTask, The child has been
                     // pruned because of UpperBound cost prune, and parent task can break here and return
+                    recordLowerBoundCost(context.getUpperBoundCost() + 1);
                     break;
                 }
 
@@ -185,6 +186,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
                 curTotalCost += childBestExpr.getCost(childRequiredProperty);
                 if (curTotalCost > context.getUpperBoundCost()) {
+                    recordLowerBoundCost(curTotalCost);
                     break;
                 }
             }
@@ -202,11 +204,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 curTotalCost = childOutputPropertyGuarantor.enforceLegalChildOutputProperty();
 
                 if (curTotalCost > context.getUpperBoundCost()) {
+                    recordLowerBoundCost(curTotalCost);
                     break;
                 }
 
-                // update current group statistics and re-compute costs
-                if (!computeCurrentGroupStatistics()) {
+                if (!checkCurrentGroupStatistics()) {
                     // child group has been pruned
                     return;
                 }
@@ -224,6 +226,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             childrenBestExprList.clear();
             childrenOutputProperties.clear();
         }
+    }
+
+    private void recordLowerBoundCost(double cost) {
+        groupExpression.getGroup().setCostLowerBound(context.getRequiredProperty(), cost);
     }
 
     private boolean checkCTEPropertyValid(GroupExpression groupExpression, PhysicalPropertySet requiredPropertySet) {
@@ -400,7 +406,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 return false;
             }
             // 1.2 disable one stage agg with distinct aggregate
-            if (distinctAggCallOperator.size() > 0) {
+            if (!distinctAggCallOperator.isEmpty()) {
                 return false;
             }
             // 1.3 disable one stage agg with multi group by columns
@@ -409,8 +415,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         return true;
     }
 
-    private boolean computeCurrentGroupStatistics() {
+    private boolean checkCurrentGroupStatistics() {
         if (groupExpression.getInputs().stream().anyMatch(group -> group.getStatistics() == null)) {
+            Preconditions.checkState(false);
             return false;
         }
 
