@@ -36,7 +36,7 @@ package com.starrocks.http;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
-import com.starrocks.epack.http.WarehouseAction;
+import com.starrocks.epack.http.rest.WarehouseAction;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.IndexAction;
