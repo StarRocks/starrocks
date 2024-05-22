@@ -191,6 +191,8 @@ public enum RuleType {
     TF_MERGE_CONSTANT_UNION,
 
     TF_ELIMINATE_GROUP_BY_CONSTANT,
+    TF_ELIMINATE_AGG,
+
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
