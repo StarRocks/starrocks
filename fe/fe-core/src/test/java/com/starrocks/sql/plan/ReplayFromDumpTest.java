@@ -780,7 +780,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testTwoStageAgg() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/two_stage_agg"),
@@ -928,7 +927,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  \n" +
                 "  24:EXCHANGE"));
     }
-=======
+
+    @Test
     public void testNestedViewWithCTE() throws Exception {
 
         Pair<QueryDumpInfo, String> replayPair =
@@ -944,5 +944,4 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  limit: 100"));
     }
 
->>>>>>> 504b4bf1da ([BugFix] record cte expressionMapping all the time (#42080))
 }
