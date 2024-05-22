@@ -16,6 +16,7 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
@@ -63,6 +64,11 @@ public class MaterializedViewMetricsRegistry {
                 idToMVMetrics.clear();
             }
         }
+    }
+
+    @VisibleForTesting
+    public void clear() {
+        idToMVMetrics.clear();
     }
 
     private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,

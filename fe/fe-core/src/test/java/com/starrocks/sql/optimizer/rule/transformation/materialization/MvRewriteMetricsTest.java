@@ -198,6 +198,7 @@ public class MvRewriteMetricsTest extends MvRewriteTestBase {
     @Test
     public void testMvMetricsWithInvalidMvId1() {
         MvId invalid = new MvId(-1, -1);
+        MaterializedViewMetricsRegistry.getInstance().clear();
         MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(invalid);
         JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
         MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, true);
@@ -208,6 +209,7 @@ public class MvRewriteMetricsTest extends MvRewriteTestBase {
 
     @Test
     public void testMvMetricsWithInvalidMvId2() {
+        MaterializedViewMetricsRegistry.getInstance().clear();
         // mv1: invalid
         {
             MvId invalid = new MvId(-1, -1);
