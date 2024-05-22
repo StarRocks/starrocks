@@ -149,6 +149,10 @@ public class FileSystemManager {
     private static final String FS_COS_ENDPOINT = "fs.cosn.bucket.endpoint_suffix";
     private static final String FS_COS_IMPL_DISABLE_CACHE = "fs.cosn.impl.disable.cache";
     private static final String FS_COS_IMPL = "fs.cosn.impl";
+    private static final String FS_ABSTRACTFILESYSTEM_COSN_IMPL = "fs.AbstractFileSystem.cosn.impl";
+    private static final String FS_COSN_TRSF_FS_ABSTRACTFILESYSTEM_OFS_IMPL = "fs.cosn.trsf.fs.AbstractFileSystem.ofs.impl";
+    private static final String FS_COSN_TRSF_FS_OFS_IMPL = "fs.cosn.trsf.fs.ofs.impl";
+    private static final String FS_COSN_CREDENTIALS_PROVIDER = "fs.cosn.credentials.provider";
 
     // arguments for obs
     private static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
@@ -828,10 +832,11 @@ public class FileSystemManager {
                 String authentication = properties.getOrDefault(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                         AUTHENTICATION_SIMPLE);
                 if (authentication.equalsIgnoreCase(AUTHENTICATION_KERBEROS)) {
-                    conf.set("fs.AbstractFileSystem.cosn.impl", "org.apache.hadoop.fs.CosN");
-                    conf.set("fs.cosn.trsf.fs.AbstractFileSystem.ofs.impl", "com.qcloud.chdfs.fs.CHDFSDelegateFSAdapter");
-                    conf.set("fs.cosn.trsf.fs.ofs.impl", "com.qcloud.chdfs.fs.CHDFSHadoopFileSystemAdapter");
-                    conf.set("fs.cosn.credentials.provider", "org.apache.hadoop.fs.auth.RangerCredentialsProvider");
+                    conf.set(FS_ABSTRACTFILESYSTEM_COSN_IMPL, "org.apache.hadoop.fs.CosN");
+                    conf.set(FS_COSN_TRSF_FS_ABSTRACTFILESYSTEM_OFS_IMPL, "com.qcloud.chdfs.fs.CHDFSDelegateFSAdapter");
+                    conf.set(FS_COSN_TRSF_FS_OFS_IMPL, "com.qcloud.chdfs.fs.CHDFSHadoopFileSystemAdapter");
+                    conf.set(FS_COSN_CREDENTIALS_PROVIDER, "org.apache.hadoop.fs.auth.RangerCredentialsProvider");
+
                     String principal = properties.getOrDefault(KERBEROS_PRINCIPAL,"");
                     String keytab = properties.getOrDefault(KERBEROS_KEYTAB,"");
 
