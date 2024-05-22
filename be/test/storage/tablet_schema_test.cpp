@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/tablet_schema.h"
+
 #include <gtest/gtest.h>
 
-#include "storage/tablet_schema.h"
+#include "storage/tablet_schema_helper.h"
 #include "storage/tablet_schema_map.h"
 
 namespace starrocks {
@@ -70,4 +72,43 @@ TEST(TabletSchemaTest, test_estimate_row_size) {
     size_t row_size = tablet_schema.estimate_row_size(100);
     ASSERT_EQ(row_size, 135);
 }
+
+TEST(TabletSchemaTest, test_is_support_checksum) {
+    // struct<int, varchar>
+    TabletColumn struct_column1 = create_struct(0, true);
+    TabletColumn f11 = create_int_value(1, STORAGE_AGGREGATE_NONE, true);
+    struct_column1.add_sub_column(f11);
+    TabletColumn f12 = create_varchar_key(2, true);
+    struct_column1.add_sub_column(f12);
+    ASSERT_TRUE(struct_column1.is_support_checksum());
+
+    // struct<int, bitmap>
+    TabletColumn struct_column2 = create_struct(0, true);
+    TabletColumn f21 = create_int_value(1, STORAGE_AGGREGATE_NONE, true);
+    struct_column2.add_sub_column(f21);
+    TabletColumn f22;
+    f22.set_unique_id(2);
+    f22.set_type(TYPE_OBJECT);
+    struct_column2.add_sub_column(f22);
+    ASSERT_FALSE(struct_column2.is_support_checksum());
+
+    // map<int, int>
+    TabletColumn map_column1 = create_map(0, true);
+    TabletColumn key1 = create_int_value(1, STORAGE_AGGREGATE_NONE, true);
+    map_column1.add_sub_column(key1);
+    TabletColumn value1 = create_int_value(2, STORAGE_AGGREGATE_NONE, true);
+    map_column1.add_sub_column(value1);
+    ASSERT_TRUE(map_column1.is_support_checksum());
+
+    // map<int, bitmap>
+    TabletColumn map_column2 = create_map(0, true);
+    TabletColumn key2 = create_int_value(1, STORAGE_AGGREGATE_NONE, true);
+    map_column2.add_sub_column(key2);
+    TabletColumn value2;
+    value2.set_unique_id(2);
+    value2.set_type(TYPE_OBJECT);
+    map_column2.add_sub_column(value2);
+    ASSERT_FALSE(map_column2.is_support_checksum());
+}
+
 } // namespace starrocks
