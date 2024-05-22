@@ -140,10 +140,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::update_compaction_num_threads_per_disk);
         });
         _config_callback.emplace("pindex_major_compaction_num_threads", [&]() {
-            PersistentIndexCompactionManager* mgr =
-                    StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
             const int max_pk_index_compaction_thread_cnt = std::max(1, config::pindex_major_compaction_num_threads);
-            (void)mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
+            (void)StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr()->update_max_threads(
+                    max_pk_index_compaction_thread_cnt);
 #ifdef USE_STAROS
             (void)StorageEngine::instance()->local_pk_index_manager()->update_max_threads(
                     max_pk_index_compaction_thread_cnt);
