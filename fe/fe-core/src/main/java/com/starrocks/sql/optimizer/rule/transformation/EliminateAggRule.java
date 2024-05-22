@@ -136,7 +136,7 @@ public class EliminateAggRule extends TransformationRule {
             newProjectMap.put(aggColumnRef, newOperator);
         }
 
-        aggOp.getPartitionByColumns()
+        aggOp.getGroupingKeys()
                 .forEach(columnRefOperator -> newProjectMap.put(columnRefOperator, columnRefOperator));
 
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
