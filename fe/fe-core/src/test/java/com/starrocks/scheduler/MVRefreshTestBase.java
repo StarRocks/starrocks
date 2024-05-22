@@ -95,9 +95,9 @@ public class MVRefreshTestBase {
 
     protected TaskRun buildMVTaskRun(MaterializedView mv, String dbName) {
         Task task = TaskBuilder.buildMvTask(mv, dbName);
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         Map<String, String> testProperties = task.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         return taskRun;
     }
 
