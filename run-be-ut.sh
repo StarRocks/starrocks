@@ -85,6 +85,11 @@ OPTS=$(getopt \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
+<<<<<<< HEAD
+=======
+  -l 'without-starcache' \
+  -l 'with-brpc-keepalive' \
+>>>>>>> d2fae64344 ([Enhancement] Add option for with-brpc-keepalive to run-be-ut.sh (#46042))
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -106,6 +111,11 @@ HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
+<<<<<<< HEAD
+=======
+WITH_STARCACHE=ON
+WITH_BRPC_KEEPALIVE=OFF
+>>>>>>> d2fae64344 ([Enhancement] Add option for with-brpc-keepalive to run-be-ut.sh (#46042))
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -117,6 +127,11 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+<<<<<<< HEAD
+=======
+        --without-starcache) WITH_STARCACHE=OFF; shift ;;
+        --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
+>>>>>>> d2fae64344 ([Enhancement] Add option for with-brpc-keepalive to run-be-ut.sh (#46042))
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
@@ -174,6 +189,11 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
+<<<<<<< HEAD
+=======
+            -DWITH_STARCACHE=${WITH_STARCACHE} \
+            -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
+>>>>>>> d2fae64344 ([Enhancement] Add option for with-brpc-keepalive to run-be-ut.sh (#46042))
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
