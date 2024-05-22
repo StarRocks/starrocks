@@ -44,6 +44,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /*
@@ -146,6 +147,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
 
         List<ColumnRefOperator> allGroupByRefs = repeat.getRepeatColumnRef()
                 .get(repeat.getRepeatColumnRef().size() - 1);
+        allGroupByRefs.retainAll(aggregate.getGroupingKeys());
 
         List<ColumnRefOperator> partitionRefs = Collections.emptyList();
         if (null == repeatInput.getStatistics()) {
@@ -263,7 +265,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         });
 
         List<List<ColumnRefOperator>> repeatRefs = repeat.getRepeatColumnRef().stream().limit(subGroups)
-                .map(l -> l.stream().map(outputs::get).collect(Collectors.toList()))
+                .map(l -> l.stream().map(outputs::get).filter(Objects::nonNull).collect(Collectors.toList()))
                 .collect(Collectors.toList());
 
         List<List<Long>> groupingIds = repeat.getGroupingIds().stream()

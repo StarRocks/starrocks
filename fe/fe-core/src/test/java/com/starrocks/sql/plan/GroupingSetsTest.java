@@ -309,4 +309,25 @@ public class GroupingSetsTest extends PlanTestBase {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
     }
+
+    @Test
+    public void testPushDownGroupingSetSomeGroupKey() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            String sql = "select distinct t1b, x1, x2 from ( " +
+                    "   select t1b, t1c, grouping_id(t1b) x1, grouping_id(t1c, t1d) x2 " +
+                    "   from test_all_type " +
+                    "   group by rollup(t1b, t1c, t1d, id_date) ) xxx";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  group by: 2: t1b\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "  7:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 3 lines [[], [14], [14], [14]]\n");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
 }
