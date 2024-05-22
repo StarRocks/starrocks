@@ -2198,17 +2198,9 @@ public class GlobalStateMgr {
                 // apply
                 EditLog.loadJournal(this, entity);
             } catch (Throwable e) {
-<<<<<<< HEAD
                 if (canSkipBadReplayedJournal()) {
-                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
-                            replayedJournalId.incrementAndGet(),
-                            entity == null ? null : entity.getData(),
-                            e);
-=======
-                if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
                             replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
->>>>>>> 759125c841 ([Enhancement] Log the content of journal entity on replay failure (#46011))
                     if (!readSucc) {
                         cursor.skipNext();
                     }
@@ -2254,9 +2246,6 @@ public class GlobalStateMgr {
         return false;
     }
 
-<<<<<<< HEAD
-    private boolean canSkipBadReplayedJournal() {
-=======
     private String journalEntityToReadableString(JournalEntity entity) {
         if (entity == null) {
             return "null";
@@ -2270,13 +2259,7 @@ public class GlobalStateMgr {
         }
     }
 
-    protected boolean canSkipBadReplayedJournal(Throwable t) {
-        if (Config.metadata_enable_recovery_mode) {
-            LOG.warn("skip journal load failure because cluster is in recovery mode");
-            return true;
-        }
-
->>>>>>> 759125c841 ([Enhancement] Log the content of journal entity on replay failure (#46011))
+    private boolean canSkipBadReplayedJournal() {
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
