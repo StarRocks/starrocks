@@ -191,7 +191,7 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         idToDataProperty.remove(partitionId);
         idToReplicationNum.remove(partitionId);
         idToInMemory.remove(partitionId);
-        // only add into clear map when FE is leader
+        // only put dropped partition into clear map when FE is leader
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partitionId);
         }
