@@ -262,15 +262,6 @@ public class MaterializedViewAnalyzerTest {
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT k1, k2, v1 from test.tbl1");
-<<<<<<< HEAD
-        ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
-                (ShowStmt) analyzeSuccess("show full columns from mv1"));
-        ShowResultSet showResultSet = showExecutor.execute();
-        Assert.assertEquals("[[a, date, , YES, YES, null, , , a1]," +
-                        " [b, int, , YES, YES, null, , , b2]," +
-                        " [c, int, , YES, YES, null, , , ]]",
-                showResultSet.getResultRows().toString());
-=======
         {
             ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) analyzeSuccess("show full columns from mv1"),
                     starRocksAssert.getCtx());
@@ -285,7 +276,6 @@ public class MaterializedViewAnalyzerTest {
             String result = showResultSet.getResultRows().toString();
             Assert.assertTrue(result.contains("zstd"));
         }
->>>>>>> 8755ada528 ([Enhancement] support specify compression in mv table (#46040))
     }
 
     @Test
