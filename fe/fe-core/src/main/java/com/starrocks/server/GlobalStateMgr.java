@@ -2246,16 +2246,16 @@ public class GlobalStateMgr {
         return false;
     }
 
-    private String journalEntityToReadableString(JournalEntity entity) {
+    private Writable journalEntityToReadableString(JournalEntity entity) {
         if (entity == null) {
-            return "null";
+            return null;
         }
         Writable data = entity.getData();
         try {
             return GsonUtils.GSON.toJson(data);
         } catch (Exception e) {
-            // In older version, data may not be json, here we just return the class name.
-            return data.getClass().getName();
+            // In older version, data may not be json, here we just return the binary data.
+            return data.
         }
     }
 
