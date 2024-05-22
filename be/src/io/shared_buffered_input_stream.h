@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -80,6 +81,9 @@ public:
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
     void release_to_offset(int64_t offset);
     void release();
+    void try_release() override;
+    int increase_hold_count();
+
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
     void set_align_size(int64_t size) { _align_size = size; }
 
@@ -98,6 +102,9 @@ public:
     const std::string& filename() const override { return _filename; }
     bool is_cache_hit() const override { return false; }
     StatusOr<std::string_view> peek_shared_buffer(int64_t count, SharedBufferPtr* shared_buffer);
+
+    // for test
+    int get_shared_buffer_size() { return _map.size(); }
 
 private:
     void _update_estimated_mem_usage();
@@ -120,6 +127,9 @@ private:
     int64_t _direct_io_timer = 0;
     int64_t _align_size = 0;
     int64_t _estimated_mem_usage = 0;
+
+    // indicates the number of objects hold the shared_buffered_stream
+    std::atomic<int32_t> hold_count = 1;
 };
 
 } // namespace starrocks::io

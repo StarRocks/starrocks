@@ -48,6 +48,29 @@ PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
     ASSERT_OK(sb.status());
 }
 
+PARALLEL_TEST(SharedBufferedInputStreamTest, test_try_release) {
+    size_t len = 1 * 1024 * 1024; // 1MB
+    const std::string rand_string = random_string(len);
+    auto in = std::make_shared<TestInputStream>(rand_string, len);
+    auto sb_stream = std::make_shared<io::SharedBufferedInputStream>(in, "test", len);
+    sb_stream->set_align_size(256 * 1024); // 1024
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+
+    auto range = io::SharedBufferedInputStream::IORange(150 * 1024, 370 * 1024, true);
+    ranges.push_back(range);
+
+    auto st = sb_stream->set_io_ranges(ranges);
+    ASSERT_EQ(1, sb_stream->increase_hold_count());
+    ASSERT_EQ(2, sb_stream->increase_hold_count());
+
+    sb_stream->try_release();
+    ASSERT_EQ(1, sb_stream->get_shared_buffer_size());
+    sb_stream->try_release();
+    ASSERT_EQ(1, sb_stream->get_shared_buffer_size());
+    sb_stream->try_release();
+    ASSERT_EQ(0, sb_stream->get_shared_buffer_size());
+}
+
 TEST_F(SharedBufferedInputStreamTest, test_orc) {
     size_t len = 100 * 1024 * 1024; // 1MB
     const std::string rand_string = random_string(len);

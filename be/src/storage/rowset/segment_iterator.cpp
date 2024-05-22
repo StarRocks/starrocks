@@ -336,8 +336,7 @@ private:
     DelVectorPtr _del_vec;
     DeltaColumnGroupList _dcgs;
     roaring::api::roaring_uint32_iterator_t _roaring_iter;
-
-    std::unordered_map<ColumnId, std::unique_ptr<io::SeekableInputStream>> _column_files;
+    std::unordered_map<ColumnId, std::shared_ptr<io::SeekableInputStream>> _column_files;
 
     SparseRange<> _scan_range;
     SparseRangeIterator<> _range_iter;
@@ -404,6 +403,9 @@ private:
 
     Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
                                   const std::map<std::string, std::string>& query_params);
+    // All columns share the same stream in shared data,
+    // when enable_lake_io_coalesce is true and segment_size is less than lake_small_segment_file_threshold_size
+    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
 };
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
@@ -817,17 +819,43 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
-            ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
-            auto shared_buffered_input_stream =
-                    std::make_unique<io::SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
-            auto options = io::SharedBufferedInputStream::CoalesceOptions{
+            int64_t file_size = 0;
+            if (_segment->file_info().size.has_value()) {
+                file_size = _segment->file_info().size.value();
+            } else {
+                file_size = rfile->get_size().value();
+            }
+
+            const io::SharedBufferedInputStream::CoalesceOptions options = {
                     .max_dist_size = config::io_coalesce_read_max_distance_size,
                     .max_buffer_size = config::io_coalesce_read_max_buffer_size};
-            shared_buffered_input_stream->set_coalesce_options(options);
-            iter_opts.read_file = shared_buffered_input_stream.get();
-            iter_opts.is_io_coalesce = true;
-            _column_files[cid] = std::move(shared_buffered_input_stream);
-            _io_coalesce_column_index.emplace_back(cid);
+
+            // if the size of segment file is small, read the whole file directly
+            if (file_size <= config::lake_small_segment_file_threshold_size) {
+                if (_shared_buffered_input_stream == nullptr) {
+                    _shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(
+                            rfile->stream(), _segment->file_name(), file_size);
+                    _shared_buffered_input_stream->set_coalesce_options(options);
+
+                    // read the entire file at once by set range{0, file_size}
+                    std::vector<io::SharedBufferedInputStream::IORange> ranges = {{0, file_size}};
+                    RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
+                } else {
+                    _shared_buffered_input_stream->increase_hold_count();
+                }
+
+                iter_opts.read_file = _shared_buffered_input_stream.get();
+                _column_files[cid] = _shared_buffered_input_stream;
+            } else {
+                auto shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(
+                        rfile->stream(), _segment->file_name(), file_size);
+                shared_buffered_input_stream->set_coalesce_options(options);
+                iter_opts.read_file = shared_buffered_input_stream.get();
+                iter_opts.is_io_coalesce = true;
+                _column_files[cid] = std::move(shared_buffered_input_stream);
+                _io_coalesce_column_index.emplace_back(cid);
+            }
+
         } else {
             iter_opts.read_file = rfile.get();
             _column_files[cid] = std::move(rfile);
@@ -2557,6 +2585,10 @@ void SegmentIterator::close() {
         // update statistics before reset column file
         _update_stats(rfile.get());
         rfile.reset();
+    }
+
+    if (_shared_buffered_input_stream) {
+        _shared_buffered_input_stream.reset();
     }
 
     STLClearObject(&_selection);
