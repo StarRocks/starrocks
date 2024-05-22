@@ -44,6 +44,7 @@ public class PaimonConnector implements Connector {
     private static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
     private static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+    private static final String DLF_CATGALOG_ID = "dlf.catalog.id";
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
     private final String catalogName;
@@ -69,6 +70,11 @@ public class PaimonConnector implements Connector {
             } else {
                 throw new StarRocksConnectorException("The property %s must be set if paimon catalog is hive.",
                         HIVE_METASTORE_URIS);
+            }
+        } else if (catalogType.equalsIgnoreCase("dlf")) {
+            String dlfCatalogId = properties.get(DLF_CATGALOG_ID);
+            if (null != dlfCatalogId && !dlfCatalogId.isEmpty()) {
+                paimonOptions.setString(DLF_CATGALOG_ID, dlfCatalogId);
             }
         }
         if (Strings.isNullOrEmpty(warehousePath) && !catalogType.equals("hive")) {
