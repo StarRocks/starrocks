@@ -507,6 +507,14 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             // Get source schema from previous saved in tablet meta
             source_schema = tablet->tablet_meta()->source_schema();
         }
+
+        if (source_schema == nullptr) {
+            LOG(WARNING) << "Failed to get source schema, tablet meta has schema: "
+                         << snapshot_meta.tablet_meta().has_schema() << ", rowset meta has schema: "
+                         << (!snapshot_meta.rowset_metas().empty() &&
+                             snapshot_meta.rowset_metas().front().has_tablet_schema());
+            return Status::Corruption("Failed to get source schema");
+        }
     }
 
     std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
