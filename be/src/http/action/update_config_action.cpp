@@ -143,9 +143,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             PersistentIndexCompactionManager* mgr =
                     StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
             const int max_pk_index_compaction_thread_cnt = std::max(1, config::pindex_major_compaction_num_threads);
-            if (mgr != nullptr) {
-                (void)mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
-            }
+            (void)mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
 #ifdef USE_STAROS
             (void)StorageEngine::instance()->local_pk_index_manager()->update_max_threads(
                     max_pk_index_compaction_thread_cnt);
