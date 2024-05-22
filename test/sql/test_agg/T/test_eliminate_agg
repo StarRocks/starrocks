@@ -258,7 +258,6 @@ ORDER BY
     id;
 
 drop table test_agg_group_single_unique_key;
-
 drop table test_agg_group_multi_unique_key;
 
 
