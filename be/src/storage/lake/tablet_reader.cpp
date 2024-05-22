@@ -120,6 +120,9 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 
         // not split for data skew between tablet
         if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
+            // set _need_split false to make iterator can get data this round if split do not happen,
+            // otherwise, iterator will return empty.
+            _need_split = false;
             return init_collector(read_params);
         }
 
