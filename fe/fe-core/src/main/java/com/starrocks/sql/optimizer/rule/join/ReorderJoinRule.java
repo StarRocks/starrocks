@@ -165,6 +165,10 @@ public class ReorderJoinRule extends Rule {
     // This method is only called in RBO phase, so it return the rewritten plan instead of copying its into memo,
     // it adopts JoinReorderCardinalityPreserving algorithm to reorder multi-joins to adapt to table pruning.
     public OptExpression rewrite(OptExpression input, OptimizerContext context) {
+        return rewrite(input, JoinReorderFactory.createJoinReorderCardinalityPreserving(), context);
+    }
+
+    public OptExpression rewrite(OptExpression input, JoinReorderFactory joinReorderFactory, OptimizerContext context) {
         List<Pair<OptExpression, Pair<OptExpression, Integer>>> innerJoinTreesAndParents = Lists.newArrayList();
         extractRootInnerJoin(null, -1, input, innerJoinTreesAndParents, false);
         if (!innerJoinTreesAndParents.isEmpty()) {
@@ -180,7 +184,7 @@ public class ReorderJoinRule extends Rule {
                     continue;
                 }
                 Optional<OptExpression> newChild =
-                        enumerate(new JoinReorderCardinalityPreserving(context), context, child, multiJoinNode, false);
+                        enumerate(joinReorderFactory.create(context), context, child, multiJoinNode, false);
                 if (newChild.isPresent()) {
                     int prevNumCrossJoins =
                             Utils.countJoinNodeSize(child, Sets.newHashSet(JoinOperator.CROSS_JOIN));

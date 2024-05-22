@@ -470,7 +470,7 @@ public class OpUtil {
                                                Map<StrictOp, Integer> existingOps) {
         Op op = hllOp.getOp();
         Op arg;
-        if (op.isFun(FunctionSet.NDV) && op.isFun(FunctionSet.APPROX_COUNT_DISTINCT)) {
+        if (op.isFun(FunctionSet.NDV) || op.isFun(FunctionSet.APPROX_COUNT_DISTINCT)) {
             arg = Op.apply(Type.HLL, FunctionSet.HLL_RAW, true, op.getArgs());
         } else if (op.isFun(FunctionSet.HLL_UNION_AGG)) {
             arg = Op.apply(Type.HLL, FunctionSet.HLL_UNION, true, op.getArgs());

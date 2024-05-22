@@ -12,35 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.automv.pn;
+package com.starrocks.sql.automv.pieces;
 
-import java.util.Objects;
-
-// OpPlus is used to rewrite agg function,
-// An OpPlus is created from DerivedColumn's id and expr.
-public final class OpPlus {
-
-    private final Op op;
-    private final Integer id;
-
-    private OpPlus(Op op, Integer id) {
-        this.op = Objects.requireNonNull(op);
-        this.id = Objects.requireNonNull(id);
+public abstract class PlanPieceVisitor<R, C> {
+    public R visit(PlanPiece piece, C context) {
+        return piece.accept(this, context);
     }
 
-    public static OpPlus of(Op op, Integer id) {
-        return new OpPlus(op, id);
+    public R visitPlanPiece(PlanPiece piece, C context) {
+        return visit(piece, context);
     }
 
-    public Op getOp() {
-        return op;
+    public R visitTable(TablePiece tablePiece, C context) {
+        return visitPlanPiece(tablePiece, context);
     }
 
-    public Integer getId() {
-        return id;
+    public R visitStarJoin(StarJoinPiece joinPiece, C context) {
+        return visitPlanPiece(joinPiece, context);
     }
 
-    public Var toVar() {
-        return Apply.var(op.getType(), id);
+    public R visitAggregate(AggregatePiece aggPiece, C context) {
+        return visitPlanPiece(aggPiece, context);
     }
 }

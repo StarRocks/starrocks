@@ -21,6 +21,15 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+// OpPlus2 is used to rewrite aggregation function, it represents
+// rewrite result. for an example:
+// rewrite: OpPlus->OpPlus2
+// After rewriting, OpPlus2.op is equivalent to the input OpPlus but it is
+// expressed using OpPlus2.args, OpPlus2.args are dependent aggregation functions
+// if the dependent function is already-existing, then we put it in EitherOr.first,
+// otherwise, it is a new-created dependent aggregation function, so we put it in
+// EitherOr.second, we use List<EitherOr<OpPlus>> as the data structure to avoid
+// create duplicate aggregation functions.
 public class OpPlus2 {
     private final OpPlus op;
     private final List<EitherOr<OpPlus>> args;

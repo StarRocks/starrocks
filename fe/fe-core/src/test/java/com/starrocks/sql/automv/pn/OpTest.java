@@ -30,8 +30,10 @@ import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.column.OriginalColumn;
+import com.starrocks.sql.automv.util.EitherOr;
 import com.starrocks.sql.automv.util.TieredList;
 import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -57,8 +59,11 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -67,12 +72,20 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
 
 public class OpTest {
     private final TableName tableName = new TableName("default_catalog", "test_db", "t");
-    private final List<ColumnRefOperator> columnRefs = IntStream.range(0, 10)
-            .mapToObj(i -> new ColumnRefOperator(i, Type.VARCHAR, "c" + i, false))
-            .collect(Collectors.toList());
+    private final List<ColumnRefOperator> columnRefs =
+            Stream.of(
+                            IntStream.range(0, 3).boxed().map(i -> Pair.create(i, Type.VARCHAR)),
+                            IntStream.range(3, 6).boxed().map(i -> Pair.create(i, Type.INT)),
+                            Stream.of(Pair.create(6, ScalarType.createDecimalV3NarrowestType(38, 9))),
+                            Stream.of(Pair.create(7, ScalarType.createDecimalV3NarrowestType(15, 3))),
+                            Stream.of(Pair.create(8, ScalarType.createDecimalV3NarrowestType(7, 2))),
+                            Stream.of(Pair.create(9, Type.DOUBLE)))
+                    .flatMap(Function.identity())
+                    .map(p -> new ColumnRefOperator(p.first, p.second, "c" + p.first, false))
+                    .collect(Collectors.toList());
 
     private final List<Var> vars = columnRefs.stream()
-            .map(colRef -> Op.var(Type.VARCHAR, colRef.getId()))
+            .map(colRef -> Op.var(colRef.getType(), colRef.getId()))
             .collect(Collectors.toList());
     private final TieredMap<Integer, GenericColumn> inputColumns = IntStream.range(0, 10)
             .mapToObj(i -> Pair.create(i + 1, GenericColumn.original(tableName, new Column("c" + i, Type.VARCHAR))))
@@ -531,4 +544,340 @@ public class OpTest {
             Assert.assertEquals(conjunct2, conjunct2, "(\"2022-06-02\" <= t1.a3)");
         }
     }
+
+    private void aggRewriteHelper(CallOperator aggCall,
+                                  TieredMap<Integer, GenericColumn> otherColumns,
+                                  ColumnRefToIdConverter newIdConverter,
+                                  AggRewriter aggRewriter,
+                                  Consumer<Optional<OpPlus2>> checker) {
+        Function<ScalarOperator, Op> newOpConverter = OpUtil.toOpConverter(newIdConverter, inputColumns);
+        Op aggOp = newOpConverter.apply(aggCall);
+        GenericColumn avgColumn = GenericColumn.derived(aggOp);
+        int avgId = newIdConverter.nextId();
+        OpPlus avgPlus = OpPlus.of(avgColumn.getOp(), avgId);
+        TieredMap<StrictOp, Integer> alreadyExists = otherColumns.entrySet()
+                .stream()
+                .collect(TieredMap.toMap(e -> e.getValue().getOp().strict(), Map.Entry::getKey));
+        Optional<OpPlus2> result = aggRewriter.rewrite(avgPlus, newIdConverter::nextId, alreadyExists);
+        checker.accept(result);
+    }
+
+    private void aggRewriteSuccessHelper(CallOperator aggCall, List<ScalarOperator> otherColumns,
+                                         AggRewriter aggRewriter, List<String> expect) {
+        ColumnRefToIdConverter newIdConverter = idConverter.duplicate();
+        TieredMap<Integer, GenericColumn> columns =
+                otherColumns.stream().collect(TieredMap.toMap(
+                        op -> newIdConverter.nextId(),
+                        op -> GenericColumn.derived(opConverter.apply(op))));
+        aggRewriteSuccessHelper(aggCall, columns, newIdConverter, aggRewriter, expect);
+    }
+
+    private void aggRewriteSuccessHelper(CallOperator aggCall,
+                                         TieredMap<Integer, GenericColumn> otherColumns,
+                                         ColumnRefToIdConverter newIdConverter,
+                                         AggRewriter aggRewriter, List<String> expect) {
+
+        Consumer<Optional<OpPlus2>> checker2 = result -> {
+            Assert.assertTrue(result.isPresent());
+            TieredMap.Builder<Integer, ColumnAlias> newColumnAliasesBuilder = columnAliases.newTier();
+            result.get().getNewArgs().forEach(newArg -> {
+                if (!columnAliases.containsKey(newArg.getId())) {
+                    newColumnAliasesBuilder.put(newArg.getId(), ColumnAlias.of("tmp", "col_" + newArg.getId()));
+                }
+            });
+            TieredMap<Integer, ColumnAlias> newColumnAliases = newColumnAliasesBuilder.build();
+            TieredMap.Builder<Integer, ColumnAlias> newColumnAliasesBuilder2 = newColumnAliases.newTier();
+            otherColumns.forEach((key, value) -> {
+                if (!newColumnAliases.containsKey(key)) {
+                    newColumnAliasesBuilder2.put(key, ColumnAlias.of("tmp", "col_" + key));
+                }
+            });
+            Function<Op, String> newOpToSql = OpUtil.toOpToSqlConverter(newColumnAliasesBuilder2.build());
+
+            Op newAggOp = result.get().getOp().getOp();
+            List<OpPlus> newArgs = result.get().getNewArgs().collect(Collectors.toList());
+            List<OpPlus> args = result.get().getArgs().stream().map(EitherOr::get).collect(Collectors.toList());
+            ColumnRefSet usedColumnIds = newAggOp.getIds();
+            ColumnRefSet columnIds =
+                    ColumnRefSet.createByIds(args.stream().map(OpPlus::getId).collect(Collectors.toList()));
+
+            ColumnRefSet newColumnIds =
+                    ColumnRefSet.createByIds(newArgs.stream().map(OpPlus::getId).collect(Collectors.toList()));
+            Assert.assertTrue(usedColumnIds.containsAll(newColumnIds));
+            Assert.assertEquals(usedColumnIds, columnIds);
+
+            List<String> actual = Stream.concat(Stream.of(newAggOp), args.stream().map(OpPlus::getOp))
+                    .map(newOpToSql).collect(Collectors.toList());
+            Assert.assertEquals(actual.size(), expect.size());
+            for (int i = 0; i < actual.size(); ++i) {
+                Assert.assertEquals(actual.get(i), actual.get(i), expect.get(i));
+            }
+        };
+        aggRewriteHelper(aggCall, otherColumns, newIdConverter, aggRewriter, checker2);
+    }
+
+    @Test
+    public void testRewriteAvg() {
+        CallOperator avgCallOp = new CallOperator(FunctionSet.AVG, Type.DOUBLE, ImmutableList.of(columnRefs.get(9)));
+        CallOperator sumCallOp = new CallOperator(FunctionSet.SUM, Type.DOUBLE, ImmutableList.of(columnRefs.get(9)));
+        CallOperator countCallOp =
+                new CallOperator(FunctionSet.COUNT, Type.BIGINT, ImmutableList.of(columnRefs.get(9)));
+
+        Object[][] testCases = new Object[][] {
+                {Arrays.asList(),
+                        Arrays.asList("(tmp.col_12 / tmp.col_13)", "sum(`test_db`.`t`.c9)", "count(`test_db`.`t`.c9)")},
+                {Arrays.asList(sumCallOp),
+                        Arrays.asList("(tmp.col_11 / tmp.col_13)", "sum(`test_db`.`t`.c9)", "count(`test_db`.`t`.c9)")},
+                {Arrays.asList(countCallOp),
+                        Arrays.asList("(tmp.col_13 / tmp.col_11)", "sum(`test_db`.`t`.c9)", "count(`test_db`.`t`.c9)")},
+                {Arrays.asList(sumCallOp, countCallOp),
+                        Arrays.asList("(tmp.col_11 / tmp.col_12)", "sum(`test_db`.`t`.c9)", "count(`test_db`.`t`.c9)")},
+                {Arrays.asList(countCallOp, sumCallOp),
+                        Arrays.asList("(tmp.col_12 / tmp.col_11)", "sum(`test_db`.`t`.c9)", "count(`test_db`.`t`.c9)")},
+        };
+
+        for (Object[] tc : testCases) {
+            List<ScalarOperator> otherAggCall = (List<ScalarOperator>) tc[0];
+            List<String> expect = (List<String>) tc[1];
+            aggRewriteSuccessHelper(avgCallOp, otherAggCall, OpUtil::rewriteAvg, expect);
+        }
+    }
+
+    @Test
+    public void testRewriteSumExprAndConstant() {
+        ColumnRefOperator colRef = columnRefs.get(8);
+        Type type = colRef.getType();
+        CallOperator exprAddConstantCallOp = new CallOperator(
+                ArithmeticExpr.Operator.ADD.getName(), type, Arrays.asList(colRef, ConstantOperator.createInt(10)));
+
+        CallOperator sumExprAddConstantCallOp =
+                new CallOperator(FunctionSet.SUM, type, ImmutableList.of(exprAddConstantCallOp));
+        CallOperator sumCallOp = new CallOperator(FunctionSet.SUM, type, ImmutableList.of(colRef));
+        CallOperator countCallOp =
+                new CallOperator(FunctionSet.COUNT, Type.BIGINT, ImmutableList.of(colRef));
+
+        Object[][] testCases = new Object[][] {
+                {Arrays.asList(),
+                        Arrays.asList("(tmp.col_12 + (10 * tmp.col_13))", "sum(`test_db`.`t`.c8)",
+                                "count(`test_db`.`t`.c8)")},
+                {Arrays.asList(sumCallOp),
+                        Arrays.asList("(tmp.col_11 + (10 * tmp.col_13))", "sum(`test_db`.`t`.c8)",
+                                "count(`test_db`.`t`.c8)")},
+                {Arrays.asList(countCallOp),
+                        Arrays.asList("(tmp.col_13 + (10 * tmp.col_11))", "sum(`test_db`.`t`.c8)",
+                                "count(`test_db`.`t`.c8)")},
+                {Arrays.asList(sumCallOp, countCallOp),
+                        Arrays.asList("(tmp.col_11 + (10 * tmp.col_12))", "sum(`test_db`.`t`.c8)",
+                                "count(`test_db`.`t`.c8)")},
+                {Arrays.asList(countCallOp, sumCallOp),
+                        Arrays.asList("(tmp.col_12 + (10 * tmp.col_11))", "sum(`test_db`.`t`.c8)",
+                                "count(`test_db`.`t`.c8)")},
+        };
+
+        for (Object[] tc : testCases) {
+            List<ScalarOperator> otherAggCall = (List<ScalarOperator>) tc[0];
+            List<String> expect = (List<String>) tc[1];
+            aggRewriteSuccessHelper(sumExprAddConstantCallOp, otherAggCall, OpUtil::rewriteSumExprAddConstant, expect);
+        }
+    }
+
+    @Test
+    public void testRewriteCountDistinctByBitmap() {
+        ColumnRefOperator colRef = columnRefs.get(3);
+        Type type = colRef.getType();
+        com.starrocks.catalog.Function searchDesc =
+                new com.starrocks.catalog.Function(new FunctionName(FunctionSet.COUNT),
+                        new Type[] {type}, Type.BIGINT, false);
+        com.starrocks.catalog.Function
+                fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+        CallOperator countDistinctCallOp = new CallOperator(
+                FunctionSet.COUNT, Type.BIGINT, Arrays.asList(colRef), fn, true);
+
+        CallOperator bitmapAggCallOp = new CallOperator(FunctionSet.BITMAP_AGG, Type.BITMAP, ImmutableList.of(colRef));
+
+        Object[][] testCases = new Object[][] {
+                {Arrays.asList(),
+                        Arrays.asList("bitmap_count(tmp.col_12)", "bitmap_agg(`test_db`.`t`.c3)")},
+                {Arrays.asList(bitmapAggCallOp),
+                        Arrays.asList("bitmap_count(tmp.col_11)", "bitmap_agg(`test_db`.`t`.c3)")},
+        };
+
+        for (Object[] tc : testCases) {
+            List<ScalarOperator> otherAggCall = (List<ScalarOperator>) tc[0];
+            List<String> expect = (List<String>) tc[1];
+            aggRewriteSuccessHelper(countDistinctCallOp, otherAggCall, OpUtil::rewriteDistinctByBitmapAgg, expect);
+        }
+    }
+
+    @Test
+    public void testRewriteCountDistinctByHll() {
+        ColumnRefOperator colRef = columnRefs.get(3);
+        Type type = colRef.getType();
+        com.starrocks.catalog.Function searchDesc =
+                new com.starrocks.catalog.Function(new FunctionName(FunctionSet.COUNT),
+                        new Type[] {type}, Type.BIGINT, false);
+        com.starrocks.catalog.Function
+                fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+        CallOperator countDistinctCallOp = new CallOperator(
+                FunctionSet.COUNT, Type.BIGINT, Arrays.asList(colRef), fn, true);
+
+        CallOperator hllHashCallOp = new CallOperator(FunctionSet.HLL_HASH, Type.HLL, ImmutableList.of(colRef));
+        CallOperator hllAggCallOp = new CallOperator(FunctionSet.HLL_UNION, Type.HLL, ImmutableList.of(hllHashCallOp));
+
+        Object[][] testCases = new Object[][] {
+                {Arrays.asList(),
+                        Arrays.asList("hll_cardinality(tmp.col_12)", "hll_union(hll_hash(`test_db`.`t`.c3))")},
+                {Arrays.asList(hllAggCallOp),
+                        Arrays.asList("hll_cardinality(tmp.col_11)", "hll_union(hll_hash(`test_db`.`t`.c3))")},
+        };
+
+        for (Object[] tc : testCases) {
+            List<ScalarOperator> otherAggCall = (List<ScalarOperator>) tc[0];
+            List<String> expect = (List<String>) tc[1];
+            aggRewriteSuccessHelper(countDistinctCallOp, otherAggCall, OpUtil::rewriteDistinctByHllAgg, expect);
+        }
+    }
+
+    @Test
+    public void testRewriteCountDistinctByArrayAgg() {
+        ColumnRefOperator colRef = columnRefs.get(3);
+        Type type = colRef.getType();
+        com.starrocks.catalog.Function searchDesc =
+                new com.starrocks.catalog.Function(new FunctionName(FunctionSet.COUNT),
+                        new Type[] {type}, Type.BIGINT, false);
+        com.starrocks.catalog.Function
+                fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+        CallOperator countDistinctCallOp = new CallOperator(
+                FunctionSet.COUNT, Type.BIGINT, Arrays.asList(colRef), fn, true);
+        com.starrocks.catalog.Function searchDesc2 =
+                new com.starrocks.catalog.Function(new FunctionName(FunctionSet.ARRAY_AGG),
+                        new Type[] {type}, Type.ARRAY_INT, false);
+        com.starrocks.catalog.Function
+                arrayAggDistinctFn =
+                GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+
+        CallOperator arrayAggDistinctCallOp =
+                new CallOperator(FunctionSet.ARRAY_AGG, Type.ARRAY_INT, ImmutableList.of(colRef),
+                        arrayAggDistinctFn, true);
+
+        Object[][] testCases = new Object[][] {
+                {Arrays.asList(),
+                        Arrays.asList("array_length(array_filter((x_0)->(x_0 IS NOT NULL), tmp.col_12))",
+                                "array_agg(DISTINCT `test_db`.`t`.c3)")},
+                {Arrays.asList(arrayAggDistinctCallOp),
+                        Arrays.asList("array_length(array_filter((x_0)->(x_0 IS NOT NULL), tmp.col_11))",
+                                "array_agg(DISTINCT `test_db`.`t`.c3)")},
+        };
+
+        for (Object[] tc : testCases) {
+            List<ScalarOperator> otherAggCall = (List<ScalarOperator>) tc[0];
+            List<String> expect = (List<String>) tc[1];
+            aggRewriteSuccessHelper(countDistinctCallOp, otherAggCall, OpUtil::rewriteDistinctByArrayAggDistinct,
+                    expect);
+        }
+    }
+
+    @Test
+    public void testRewriteBitmap() {
+        ColumnRefOperator colRef = columnRefs.get(3);
+        Type type = colRef.getType();
+        CallOperator bitmapUnionIntAggCall = new CallOperator(
+                FunctionSet.BITMAP_UNION_INT, Type.BIGINT, Arrays.asList(colRef));
+        CallOperator bitmapUnionCountAggCall = new CallOperator(
+                FunctionSet.BITMAP_UNION_COUNT, Type.BIGINT, Arrays.asList(colRef));
+
+        CallOperator bitmapAggCall = new CallOperator(
+                FunctionSet.BITMAP_AGG, Type.BITMAP, Arrays.asList(colRef));
+        CallOperator bitmapUnionCall = new CallOperator(
+                FunctionSet.BITMAP_UNION, Type.BITMAP, Arrays.asList(colRef));
+
+        Object[][] testCases = new Object[][] {
+                {bitmapUnionIntAggCall, Arrays.asList(),
+                        Arrays.asList("bitmap_count(tmp.col_12)", "bitmap_agg(`test_db`.`t`.c3)")},
+                {bitmapUnionIntAggCall, Arrays.asList(bitmapAggCall),
+                        Arrays.asList("bitmap_count(tmp.col_11)", "bitmap_agg(`test_db`.`t`.c3)")},
+                {bitmapUnionCountAggCall, Arrays.asList(),
+                        Arrays.asList("bitmap_count(tmp.col_12)", "bitmap_union(`test_db`.`t`.c3)")},
+                {bitmapUnionCountAggCall, Arrays.asList(bitmapUnionCall),
+                        Arrays.asList("bitmap_count(tmp.col_11)", "bitmap_union(`test_db`.`t`.c3)")},
+        };
+
+        for (Object[] tc : testCases) {
+            CallOperator bitmapAgg = (CallOperator) tc[0];
+            List<ScalarOperator> otherAggCall = (List<ScalarOperator>) tc[1];
+            List<String> expect = (List<String>) tc[2];
+            aggRewriteSuccessHelper(bitmapAgg, otherAggCall, OpUtil::rewriteBitmap, expect);
+        }
+    }
+
+    @Test
+    public void testRewriteHll() {
+        ColumnRefOperator colRef = columnRefs.get(3);
+        CallOperator ndvAggCall = new CallOperator(
+                FunctionSet.NDV, Type.BIGINT, Arrays.asList(colRef));
+        CallOperator approxCountDistinctAggCall = new CallOperator(
+                FunctionSet.APPROX_COUNT_DISTINCT, Type.BIGINT, Arrays.asList(colRef));
+        CallOperator hllUnionAggCall = new CallOperator(
+                FunctionSet.HLL_UNION_AGG, Type.BIGINT, Arrays.asList(colRef));
+
+        CallOperator hllRawCall = new CallOperator(
+                FunctionSet.HLL_RAW, Type.HLL, Arrays.asList(colRef));
+        CallOperator hllUnionCall = new CallOperator(
+                FunctionSet.HLL_UNION, Type.HLL, Arrays.asList(colRef));
+
+        Object[][] testCases = new Object[][] {
+                {ndvAggCall, Arrays.asList(),
+                        Arrays.asList("hll_cardinality(tmp.col_12)", "hll_raw(`test_db`.`t`.c3)")},
+                {ndvAggCall, Arrays.asList(hllRawCall),
+                        Arrays.asList("hll_cardinality(tmp.col_11)", "hll_raw(`test_db`.`t`.c3)")},
+                {approxCountDistinctAggCall, Arrays.asList(),
+                        Arrays.asList("hll_cardinality(tmp.col_12)", "hll_raw(`test_db`.`t`.c3)")},
+                {approxCountDistinctAggCall, Arrays.asList(hllRawCall),
+                        Arrays.asList("hll_cardinality(tmp.col_11)", "hll_raw(`test_db`.`t`.c3)")},
+                {hllUnionAggCall, Arrays.asList(),
+                        Arrays.asList("hll_cardinality(tmp.col_12)", "hll_union(`test_db`.`t`.c3)")},
+                {hllUnionAggCall, Arrays.asList(hllUnionCall),
+                        Arrays.asList("hll_cardinality(tmp.col_11)", "hll_union(`test_db`.`t`.c3)")},
+        };
+
+        for (Object[] tc : testCases) {
+            CallOperator bitmapAgg = (CallOperator) tc[0];
+            List<ScalarOperator> otherAggCall = (List<ScalarOperator>) tc[1];
+            List<String> expect = (List<String>) tc[2];
+            aggRewriteSuccessHelper(bitmapAgg, otherAggCall, OpUtil::rewriteHll, expect);
+        }
+    }
+
+    @Test
+    public void testRewritePercentile() {
+        ColumnRefOperator colRef = columnRefs.get(9);
+        Type type = colRef.getType();
+        CallOperator percentileApproxAggCall = new CallOperator(
+                FunctionSet.PERCENTILE_APPROX, type, Arrays.asList(colRef, ConstantOperator.createDouble(0.5)));
+        CallOperator percentileHashCall = new CallOperator(
+                FunctionSet.PERCENTILE_HASH, Type.PERCENTILE, Arrays.asList(colRef));
+        CallOperator percentileUnionCall = new CallOperator(
+                FunctionSet.PERCENTILE_UNION, Type.PERCENTILE, Arrays.asList(percentileHashCall));
+
+        Object[][] testCases = new Object[][] {
+                {percentileApproxAggCall, Arrays.asList(),
+                        Arrays.asList("percentile_approx_raw(tmp.col_12, 0.5)",
+                                "percentile_union(percentile_hash(`test_db`.`t`.c9))")},
+                {percentileApproxAggCall, Arrays.asList(percentileUnionCall),
+                        Arrays.asList("percentile_approx_raw(tmp.col_11, 0.5)",
+                                "percentile_union(percentile_hash(`test_db`.`t`.c9))")},
+        };
+
+        for (Object[] tc : testCases) {
+            CallOperator bitmapAgg = (CallOperator) tc[0];
+            List<ScalarOperator> otherAggCall = (List<ScalarOperator>) tc[1];
+            List<String> expect = (List<String>) tc[2];
+            aggRewriteSuccessHelper(bitmapAgg, otherAggCall, OpUtil::rewritePercentile, expect);
+        }
+    }
+
+    interface AggRewriter {
+        Optional<OpPlus2> rewrite(OpPlus agg, Supplier<Integer> nextId, TieredMap<StrictOp, Integer> alreadyExisting);
+    }
+
 }

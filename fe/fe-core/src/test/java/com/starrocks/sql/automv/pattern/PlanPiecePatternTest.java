@@ -16,7 +16,7 @@ package com.starrocks.sql.automv.pattern;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.automv.qe.Optimizer;
+import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -171,7 +171,7 @@ public class PlanPiecePatternTest {
             String name = p.first;
             String sql = p.second;
             ConnectContext ctx = getStarRocksAssert().getCtx();
-            List<OptExpression> subPlans = Optimizer.getSubPlans(sql, ctx, PlanPiecePattern.getSPJG());
+            List<OptExpression> subPlans = RboOptimizer.getSubPlans(sql, ctx, PlanPiecePattern.getSPJG()).second;
             Assert.assertTrue(nextResult.hasNext());
             Object[] result = nextResult.next();
             String expectName = (String) result[0];

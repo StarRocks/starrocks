@@ -273,7 +273,7 @@ public class PrettyPrinter {
         if (items.isEmpty()) {
             return this;
         }
-        add(items.get(0));
+        printItem.apply(this, items.get(0));
         items.stream().skip(1).forEach(item -> printItem.apply(this.add(delimiter), item));
         return this;
     }
