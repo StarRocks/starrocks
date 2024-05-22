@@ -42,9 +42,11 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /*
@@ -84,13 +86,17 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         List<ColumnRefOperator> allRepeatRefs = repeatOperator.getRepeatColumnRef()
                 .get(repeatOperator.getRepeatColumnRef().size() - 1);
         // check grouping sets, rollup/cube, last group must contain all keys
-        for (List<ColumnRefOperator> refs : repeatOperator.getRepeatColumnRef()) {
+        Set<ColumnRefOperator> checkRefs = new HashSet<>(allRepeatRefs);
+        for (int i = 0; i < repeatOperator.getRepeatColumnRef().size() - 1; i++) {
+            List<ColumnRefOperator> refs = repeatOperator.getRepeatColumnRef().get(i);
             if (refs.stream().anyMatch(ref -> !allRepeatRefs.contains(ref))) {
                 return false;
             }
+            refs.forEach(checkRefs::remove);
         }
 
-        return true;
+        checkRefs.addAll(repeatOperator.getOutputGrouping());
+        return !checkRefs.containsAll(aggregate.getGroupingKeys());
     }
 
     @Override
