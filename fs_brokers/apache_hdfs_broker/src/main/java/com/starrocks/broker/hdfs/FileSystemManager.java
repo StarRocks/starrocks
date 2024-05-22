@@ -831,6 +831,7 @@ public class FileSystemManager {
 
                 String authentication = properties.getOrDefault(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                         AUTHENTICATION_SIMPLE);
+                UserGroupInformation ugi = null;
                 if (authentication.equalsIgnoreCase(AUTHENTICATION_KERBEROS)) {
                     conf.set(FS_ABSTRACTFILESYSTEM_COSN_IMPL, "org.apache.hadoop.fs.CosN");
                     conf.set(FS_COSN_TRSF_FS_ABSTRACTFILESYSTEM_OFS_IMPL, "com.qcloud.chdfs.fs.CHDFSDelegateFSAdapter");
@@ -842,12 +843,22 @@ public class FileSystemManager {
 
                     UserGroupInformation.setConfiguration(conf);
                     if (!principal.isEmpty() && !keytab.isEmpty()) {
-                        UserGroupInformation.loginUserFromKeytab(principal, keytab);
+                        ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab);
                     }
                 }
 
-                FileSystem cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
-                fileSystem.setFileSystem(cosFileSystem);
+                FileSystem cosFileSystem;
+                if (ugi != null) {
+                    cosFileSystem = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
+                        @Override
+                        public FileSystem run() throws Exception {
+                            return FileSystem.get(pathUri.getUri(), conf);
+                        }
+                    });
+                } else {
+                    cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                }
+                fileSystem.setFileSystem(cosFileSystem, authentication.equalsIgnoreCase(AUTHENTICATION_KERBEROS));
             }
             return fileSystem;
         } catch (Exception e) {
