@@ -1096,6 +1096,11 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
     _server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
+    _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
+    _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
+    _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
+    _alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+    _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
 }
 
 void OlapTableSink::set_profile(RuntimeProfile* profile) {
