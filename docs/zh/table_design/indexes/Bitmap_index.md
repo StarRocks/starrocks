@@ -241,13 +241,13 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 #### 查询没有创建 Bitmap 索引的表
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 SELECT count(1) FROM lineorder_without_index WHERE lo_shipmode="MAIL";
 ```
 
-**查询性能分析：**因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_shipmode` 列数据的 Page 全部读出来，再进行谓词过滤。
+**查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_shipmode` 列数据的 Page 全部读出来，再进行谓词过滤。
 
 总共耗时约 0.91 ms**，其中加载数据花了 0.47 ms**，低基数优化字典解码花了 0.31 ms，谓词过滤花了 0.23 ms。
 
@@ -273,13 +273,13 @@ IOTaskExecTime: 914ms // Scan 数据的总时间。
 
 :::
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 ```
 
-**查询性能分析：**由于查询的列是低基数列，因此 Bitmap 索引对查询过滤效果不佳，即使 Bitmap 索引能够快速定位到实际数据的行号，但是待读取的数据行较多并且散落在各个 Page 中，因此实际上无法过滤掉需要读取的 Page。反而因为强制使用 Bitmap 索引，引入了加载 Bitmap 索引和使用 Bitmap 索引过滤数据的开销，总时间更多。
+**查询性能分析**：由于查询的列是低基数列，因此 Bitmap 索引对查询过滤效果不佳，即使 Bitmap 索引能够快速定位到实际数据的行号，但是待读取的数据行较多并且散落在各个 Page 中，因此实际上无法过滤掉需要读取的 Page。反而因为强制使用 Bitmap 索引，引入了加载 Bitmap 索引和使用 Bitmap 索引过滤数据的开销，总时间更多。
 
 总共耗时 2.7s，**其中加载数据和 Bitmap 索引花了 0.93s**，低基数优化字典解码花了 0.33s，使用 Bitmap 索引过滤数据花了 0.42s，ZoneMap 索引过滤数据花了 0.17s。
 
@@ -298,13 +298,13 @@ IOTaskExecTime: 2s77ms // Scan 数据总时间，相对于没创建 Bitmap 索�
 
 ##### 由 StarRocks 默认配置决定是否使用 Bitmap 索引
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 ```
 
-**查询性能分析：**因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引，然而实际上该值大于 1/1000，因此查询没有使用 Bitmap 索引，查询效果等同于查询没有创建 Bitmap 索引的表。
+**查询性能分析**：因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引，然而实际上该值大于 1/1000，因此查询没有使用 Bitmap 索引，查询效果等同于查询没有创建 Bitmap 索引的表。
 
 ```SQL
 PullRowNum: 20.566M (20566493) // 返回结果集的行数。
@@ -322,13 +322,13 @@ IOTaskExecTime: 914.279ms // Scan 数据的总时间。
 
 #### 查询没有创建 Bitmap 索引的表
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 SELECT count(1) FROM lineorder_without_index WHERE lo_shipmode="MAIL" AND lo_quantity=10 AND lo_discount=9 AND lo_tax=8;
 ```
 
-**查询性能分析：**因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_shipmode` 、`lo_quantity`、`lo_discount` 和 `lo_tax` 这四列数据的 Page 全部读出来，再进行谓词过滤。
+**查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_shipmode` 、`lo_quantity`、`lo_discount` 和 `lo_tax` 这四列数据的 Page 全部读出来，再进行谓词过滤。
 
 总共耗时 1.76s，**其中加载数据（4 个列的数据）花了 1.6s**，谓词过滤花了 0.1s。
 
@@ -353,13 +353,13 @@ IOTaskExecTime: 1s761ms // Scan 数据的总时间
 
 :::
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL" AND lo_quantity=10 AND lo_discount=9 AND lo_tax=8;
 ```
 
-**查询性能分析：**由于是基于多个低基数列的组合查询，Bitmap 索引效果较好，能够过滤掉一部分 Page，读取数据的时间明显减少。
+**查询性能分析**：由于是基于多个低基数列的组合查询，Bitmap 索引效果较好，能够过滤掉一部分 Page，读取数据的时间明显减少。
 
 总共耗时 0.68s，**其中加载数据和 Bitmap 索引花了 0.54s，**Bitmap 索引过滤数据花了 0.14s。
 
@@ -375,13 +375,13 @@ IOTaskExecTime: 683.471ms // Scan 数据的总时间，相对于没创建 Bitmap
 
 ##### 由 StarRocks 的默认配置决定是否使用 Bitmap 索引
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL" AND lo_quantity=10 AND lo_discount=9 AND lo_tax=8;
 ```
 
-**查询性能分析：**因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引。实际上该值确实小于 1/1000，因此查询使用 Bitmap 索引，查询效果等同于强制使用 Bitmap 索引。
+**查询性能分析**：因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引。实际上该值确实小于 1/1000，因此查询使用 Bitmap 索引，查询效果等同于强制使用 Bitmap 索引。
 
 总共耗时 0.67s，**其中加载数据和 Bitmap 索引花了 0.54s，**Bitmap 索引过滤数据花了 0.13s。
 
@@ -399,15 +399,15 @@ IOTaskExecTime: 672.029ms // Scan 数据的总时间，相对于没创建 Bitmap
 
 #### 查询没有创建 Bitmap 索引的表
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 select count(1) from lineorder_without_index where lo_partkey=10000;
 ```
 
-**查询性能分析：**因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_partkey` 列数据的 page 全部读出来，再进行谓词过滤。
+**查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_partkey` 列数据的 page 全部读出来，再进行谓词过滤。
 
-总共耗时约 0.43 ms**，其中加载数据花了 0.39 ms，**谓词过滤花了 0.02 ms。
+总共耗时约 0.43 ms，**其中加载数据花了 0.39 ms**，谓词过滤花了 0.02 ms。
 
 ```SQL
 PullRowNum: 255 // 返回结果集的行数。
@@ -430,7 +430,7 @@ IOTaskExecTime: 428.258ms // Scan 数据的总时间。
 
 :::
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
@@ -453,13 +453,13 @@ IOTaskExecTime: 15.354ms  // Scan 数据的总时间，相对于没创建 Bitmap
 
 ##### 由 StarRocks 的默认配置决定是否使用 Bitmap 索引
 
-**查询语句：**
+**查询语句**：
 
 ```SQL
 SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 ```
 
-**查询性能分析：**因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引。实际上该值确实小于 1/1000，因此查询使用 Bitmap 索引，查询效果等同于强制使用 Bitmap 索引。
+**查询性能分析**：因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引。实际上该值确实小于 1/1000，因此查询使用 Bitmap 索引，查询效果等同于强制使用 Bitmap 索引。
 
 总共耗时 0.014s，**其中加载数据和 Bitmap 索引花了 0.008s，**Bitmap 索引过滤数据花了 0.003s。
 
