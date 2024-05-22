@@ -41,6 +41,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -848,7 +849,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 setActive();
             }
         } catch (Throwable e) {
-            LOG.error("reload mv failed: {}", this, e);
+            LOG.error("reload mv failed: {}", this, DebugUtil.getStackTrace(e));
             setInactiveAndReason("reload failed: " + e.getMessage());
         }
     }
