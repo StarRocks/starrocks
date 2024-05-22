@@ -2455,33 +2455,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-<<<<<<< HEAD
     private void processConstraint(
             Database db, OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
         List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, olapTable);
         if (uniqueConstraints != null) {
             olapTable.setUniqueConstraints(uniqueConstraints);
-=======
-    public void replayCreateTable(CreateTableInfo info) {
-        Table table = info.getTable();
-        Database db = this.fullNameToDb.get(info.getDbName());
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            db.registerTableUnlocked(table);
-            if (table.isTemporaryTable()) {
-                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-                UUID sessionId = ((OlapTable) table).getSessionId();
-                temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), table.getName(), table.getId());
-            }
-            table.onReload();
-        } catch (Throwable e) {
-            LOG.error("replay create table failed: {}", table, e);
-            // Rethrow, we should not eat the exception when replaying editlog.
-            throw e;
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
->>>>>>> 759125c841 ([Enhancement] Log the content of journal entity on replay failure (#46011))
         }
 
         List<ForeignKeyConstraint> foreignKeyConstraints =
