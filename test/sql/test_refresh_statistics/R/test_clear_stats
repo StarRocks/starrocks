@@ -65,7 +65,7 @@ analyze table test_clear_stats.tbl WITH SYNC MODE;
 -- result:
 test_clear_stats.tbl	analyze	status	OK
 -- !result
-select sleep(60);
+select sleep(80);
 -- result:
 1
 -- !result
