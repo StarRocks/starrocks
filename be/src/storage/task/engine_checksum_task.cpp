@@ -82,13 +82,8 @@ Status EngineChecksumTask::_compute_checksum() {
 
     size_t num_columns = tablet_schema.num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-<<<<<<< HEAD
-        LogicalType type = tablet_schema.column(i).type();
-        if (is_support_checksum_type(type)) {
-=======
-        const auto& column = tablet_schema->column(i);
+        const auto& column = tablet_schema.column(i);
         if (column.is_support_checksum()) {
->>>>>>> 3ade3a36bf ([BugFix] Fix Struct<ObjectColumn> checksum crash (#44906))
             return_columns.push_back(i);
         }
     }
