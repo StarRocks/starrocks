@@ -137,8 +137,6 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
                 // For now, we only handle one column primary key or foreign key
                 if (ukConstraint.getUniqueColumns().size() == 1) {
                     String ukColumn = ukConstraint.getUniqueColumns().get(0);
-
-                    // Get non-uk original column ids
                     ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
                             .map(Column::getName)
                             .filter(columnNameToColRefMap::containsKey)
@@ -151,6 +149,34 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
                         constraint.addUniqueKey(columnRefOperator.getId(),
                                 new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
                                         nonUkColumnRefs, usedColumns.isEmpty()));
+                        constraint.addTableUniqueKey(columnRefOperator.getId(),
+                                new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
+                                        nonUkColumnRefs, usedColumns.isEmpty()));
+                    }
+                } else {
+                    List<String> ukColNames = ukConstraint.getUniqueColumns();
+                    boolean containsAllUk = true;
+                    for (String colName : ukColNames) {
+                        ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(colName);
+                        if (columnRefOperator == null || !outputColumns.contains(columnRefOperator)) {
+                            containsAllUk = false;
+                            break;
+                        }
+                    }
+
+                    if (containsAllUk) {
+                        ColumnRefSet nonUkColumnRefs = new ColumnRefSet(table.getColumns().stream()
+                                .map(Column::getName)
+                                .filter(columnNameToColRefMap::containsKey)
+                                .filter(name -> !ukColNames.contains(name))
+                                .map(columnNameToColRefMap::get)
+                                .collect(Collectors.toList()));
+                        for (String colName : ukColNames) {
+                            ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(colName);
+                            constraint.addTableUniqueKey(columnRefOperator.getId(),
+                                    new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
+                                            nonUkColumnRefs, usedColumns.isEmpty()));
+                        }
                     }
                 }
             }

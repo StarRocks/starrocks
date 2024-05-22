@@ -672,9 +672,10 @@ public class InsertPlanTest extends PlanTestBase {
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
-                    "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: min(2: v1), max(3: v2)\n" +
-                    "  |  group by: 1: pk");
+                    "  1:Project\n" +
+                    "  |  <slot 1> : 1: pk\n" +
+                    "  |  <slot 4> : CAST(2: v1 AS VARCHAR)\n" +
+                    "  |  <slot 5> : 3: v2\n");
         }
         {
             // KesType is AGG_KEYS
