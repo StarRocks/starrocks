@@ -1617,6 +1617,33 @@ class StarrocksSQLApiLib(object):
 
         tools.assert_true(finished, "analyze timeout")
 
+    def wait_compaction_finish(self, table_name: str, expected_num_segments: int):
+        timeout = 300
+        scan_table_sql = f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false)*/ COUNT(1) FROM {table_name}"
+        fetch_segments_sql = r"""
+            with profile as (
+                select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
+            )
+            select regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1) as value 
+            from profile 
+            where line like "%- SegmentsReadCount%"
+        """
+
+        while timeout > 0:
+            res = self.execute_sql(scan_table_sql)
+            tools.assert_true(res["status"], f'Fail to execute scan_table_sql, error=[{res["msg"]}]')
+
+            res = self.execute_sql(fetch_segments_sql)
+            tools.assert_true(res["status"], f'Fail to execute fetch_segments_sql, error=[{res["msg"]}]')
+
+            if res["result"] == str(expected_num_segments):
+                break
+
+            time.sleep(1)
+            timeout -= 1
+        else:
+            tools.assert_true(False, "wait compaction timeout")
+
     def _get_backend_http_endpoints(self) -> List[Dict]:
         """Get the http host and port of all the backends.
 
