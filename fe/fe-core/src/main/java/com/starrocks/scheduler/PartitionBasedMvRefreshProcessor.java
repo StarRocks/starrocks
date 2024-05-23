@@ -2068,8 +2068,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
             Map<String, Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
             Preconditions.checkState(partitionDataInfos.size() == 1);
-            if (partitionDataInfos.get(0).isPresent()) {
-                PartitionDataInfo partitionDataInfo = partitionDataInfos.get(0).get();
+            if (partitionDataInfos.get(partitionName).isPresent()) {
+                PartitionDataInfo partitionDataInfo = partitionDataInfos.get(partitionName).get();
                 basePartitionInfo.setLastFileModifiedTime(partitionDataInfo.getLastFileModifiedTime());
                 basePartitionInfo.setFileNumber(partitionDataInfo.getFileNumber());
             }
