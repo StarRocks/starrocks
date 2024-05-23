@@ -638,11 +638,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             if (!res.ok()) {
                 return res.status();
             }
-            serialize_to_iobuf<PTabletWriterAddChunksRequest>(
-                    request, &_add_batch_closures[_current_request_index]->cntl.request_attachment());
-            res.value()->tablet_writer_add_chunks_via_http(&_add_batch_closures[_current_request_index]->cntl, nullptr,
-                                                           &_add_batch_closures[_current_request_index]->result,
-                                                           _add_batch_closures[_current_request_index]);
+            auto closure = _add_batch_closures[_current_request_index];
+            serialize_to_iobuf<PTabletWriterAddChunksRequest>(request, &closure->cntl.request_attachment());
+            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
@@ -660,11 +658,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             if (!res.ok()) {
                 return res.status();
             }
-            serialize_to_iobuf<PTabletWriterAddChunkRequest>(
-                    request.requests(0), &_add_batch_closures[_current_request_index]->cntl.request_attachment());
-            res.value()->tablet_writer_add_chunk_via_http(&_add_batch_closures[_current_request_index]->cntl, nullptr,
-                                                          &_add_batch_closures[_current_request_index]->result,
-                                                          _add_batch_closures[_current_request_index]);
+            auto closure = _add_batch_closures[_current_request_index];
+            serialize_to_iobuf<PTabletWriterAddChunkRequest>(request.requests(0), &closure->cntl.request_attachment());
+            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunk(
