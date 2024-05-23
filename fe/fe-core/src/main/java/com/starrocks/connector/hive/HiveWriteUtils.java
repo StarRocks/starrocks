@@ -49,7 +49,7 @@ public class HiveWriteUtils {
 
     public static void checkExternalLocationProperties(Map<String, String> properties) throws DdlException {
         if (!properties.containsKey(EXTERNAL_LOCATION_PROPERTY)) {
-            throw new DdlException("Can't create external Hive table with external_location property. ");
+            throw new DdlException("Can't create external Hive table without external_location property.");
         }
     }
 

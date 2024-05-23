@@ -674,8 +674,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (partitionInfoMap == null || partitionInfoMap.isEmpty()) {
                         return;
                     }
-                    boolean isAutoRefresh = (mvContext.type == Constants.TaskType.PERIODICAL ||
-                            mvContext.type == Constants.TaskType.EVENT_TRIGGERED);
+                    boolean isAutoRefresh = materializedView.getRefreshScheme().isAsync();
                     int autoRefreshPartitionsLimit = -1;
                     if (isAutoRefresh) {
                         // only work for auto refresh

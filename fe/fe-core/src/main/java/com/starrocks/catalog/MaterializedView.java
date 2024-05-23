@@ -364,6 +364,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return this.type.equals(RefreshType.SYNC);
         }
 
+        public boolean isAsync() {
+            return type.equals(RefreshType.ASYNC);
+        }
+
         public RefreshMoment getMoment() {
             return moment;
         }
