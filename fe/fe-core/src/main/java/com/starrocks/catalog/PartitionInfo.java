@@ -42,7 +42,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -191,10 +190,6 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         idToDataProperty.remove(partitionId);
         idToReplicationNum.remove(partitionId);
         idToInMemory.remove(partitionId);
-        // only put dropped partition into clear map when FE is leader
-        if (GlobalStateMgr.getCurrentState().isLeader()) {
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partitionId);
-        }
     }
 
     public void moveRangeFromTempToFormal(long tempPartitionId) {

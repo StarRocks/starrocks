@@ -424,8 +424,7 @@ public class AnalyzeMgr implements Writable {
         dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
         dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
     }
-
-    public void dropPartition(long partitionId) {
+    public void recordDropPartition(long partitionId) {
         dropPartitionIds.add(partitionId);
     }
 
