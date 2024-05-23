@@ -1657,10 +1657,13 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
                 Range<PartitionKey> partitionRange = null;
-                if (partitionInfo instanceof RangePartitionInfo && partition != null) {
-                    partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                if (partition != null) {
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
+                    if (partitionInfo instanceof RangePartitionInfo) {
+                        partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                    }
                 }
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
+
                 olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
                 if (olapTable instanceof MaterializedView) {
                     MaterializedView mv = (MaterializedView) olapTable;
