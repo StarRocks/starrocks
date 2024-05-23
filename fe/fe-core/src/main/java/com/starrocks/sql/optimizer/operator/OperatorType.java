@@ -104,6 +104,8 @@ public enum OperatorType {
     PHYSICAL_STREAM_JOIN,
     PHYSICAL_STREAM_AGG,
     PHYSICAL_TABLE_FUNCTION_TABLE_SCAN,
+    PHYSICAL_SPLIT_PRODUCE,
+    PHYSICAL_SPLIT_CONSUME,
 
     /**
      * Scalar operator
