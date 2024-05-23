@@ -81,21 +81,9 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
         switch (dataType) {
-            case Types.BIT:
-                primitiveType = PrimitiveType.BOOLEAN;
-                break;
             case Types.SMALLINT:
                 primitiveType = PrimitiveType.SMALLINT;
                 break;
-            case Types.INTEGER:
-                primitiveType = PrimitiveType.INT;
-                break;
-            case Types.BIGINT:
-            // LONG
-            case -1:
-                primitiveType = PrimitiveType.BIGINT;
-                break;
-            case Types.REAL:
             case Types.FLOAT:
             // BINARY_FLOAT
             case 100:
@@ -116,7 +104,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 return ScalarType.createCharType(columnSize);
             case Types.VARCHAR:
             // NVARCHAR2
-            case -9:
+            case Types.NVARCHAR:
                 if (columnSize > 0) {
                     return ScalarType.createVarcharType(columnSize);
                 } else {
@@ -124,33 +112,32 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 }
             case Types.BLOB:
             case Types.CLOB:
+            case Types.NCLOB:
+            // LONG
+            case Types.LONGVARCHAR:
                 return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
+            // Don't support timestamp type, just convert it to string
             case Types.TIMESTAMP:
             // TIMESTAMP WITH LOCAL TIME ZONE
             case -102:
             // TIMESTAMP WITH TIME ZONE
             case -101:
-                primitiveType = PrimitiveType.DATETIME;
-                break;
+                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            ScalarType scalarType = ScalarType.createType(primitiveType);
-            return scalarType;
+            return ScalarType.createType(primitiveType);
         } else {
             int precision = columnSize + max(-digits, 0);
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
-            // Testing has found that in some cases where the field type is NUMBER.
-            // there may be situations where `columnSize` is zero but the `digits` is not zero. 
-            // So I added a judgment of columnSize == 0
-            if (precision == 0 || columnSize == 0) {
+            if (precision == 0) {
                 return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             }
             return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));

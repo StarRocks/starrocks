@@ -41,6 +41,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -141,6 +142,9 @@ public class CatalogMgr {
             if (!isResourceMappingCatalog(catalogName)) {
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
             }
+        } catch (StarRocksConnectorException e) {
+            LOG.error("connector create failed. catalog [{}] ", catalogName, e);
+            throw new DdlException(String.format("connector create failed {%s}", e.getMessage()));
         } finally {
             writeUnLock();
         }
