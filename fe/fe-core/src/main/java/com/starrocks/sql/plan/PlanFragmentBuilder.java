@@ -471,8 +471,8 @@ public class PlanFragmentBuilder {
         }
 
         /**
-         * Set the columns that do not need to be output by ScanNode. They are columns that are only used in predicates
-         * that can be pushed down, rather than columns that are not pushable predicates and outputs.
+         * Set the columns which do not need to be output by ScanNode. They are columns which are only used in pushdownable
+         * predicates rather than columns which are used in non-pushdownable predicates and output columns.
          *
          * <p> The columns that can be pushed down need to meet:
          * <ul>
@@ -506,6 +506,9 @@ public class PlanFragmentBuilder {
                 return;
             }
 
+            // ------------------------------------------------------------------------------------
+            // Get outputColumnIds.
+            // ------------------------------------------------------------------------------------
             Set<Integer> outputColumnIds = node.getOutputColumns().stream()
                     .map(ColumnRefOperator::getId)
                     .collect(Collectors.toSet());
@@ -517,6 +520,9 @@ public class PlanFragmentBuilder {
                 }
             }
 
+            // ------------------------------------------------------------------------------------
+            // Get nonPushdownColumnIds.
+            // ------------------------------------------------------------------------------------
             Set<Integer> nonPushdownColumnIds = Collections.emptySet();
             if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
                     materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -531,8 +537,11 @@ public class PlanFragmentBuilder {
                         .collect(Collectors.toSet());
             }
 
-            Set<Integer> pushdownPredColumnIds = new HashSet<>();
-            Set<Integer> nonPushdownPredColumnIds = new HashSet<>();
+            // ------------------------------------------------------------------------------------
+            // Get pushdownPredUsedColumnIds and nonPushdownPredUsedColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> pushdownPredUsedColumnIds = new HashSet<>();
+            Set<Integer> nonPushdownPredUsedColumnIds = new HashSet<>();
             for (ScalarOperator predicate : predicates) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
                 boolean isPushdown =
@@ -540,22 +549,22 @@ public class PlanFragmentBuilder {
                                 && Arrays.stream(usedColumns.getColumnIds()).noneMatch(nonPushdownColumnIds::contains);
                 if (isPushdown) {
                     for (int cid : usedColumns.getColumnIds()) {
-                        pushdownPredColumnIds.add(cid);
+                        pushdownPredUsedColumnIds.add(cid);
                     }
                 } else {
                     for (int cid : usedColumns.getColumnIds()) {
-                        nonPushdownPredColumnIds.add(cid);
+                        nonPushdownPredUsedColumnIds.add(cid);
                     }
                 }
             }
 
-            Set<Integer> unUsedOutputColumnIds = new HashSet<>();
-            for (Integer newCid : pushdownPredColumnIds) {
-                if (!nonPushdownPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
-                    unUsedOutputColumnIds.add(newCid);
-                }
-            }
-
+            // ------------------------------------------------------------------------------------
+            // Get unUsedOutputColumnIds which are in pushdownPredUsedColumnIds
+            // but not in nonPushdownPredUsedColumnIds and outputColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> unUsedOutputColumnIds = pushdownPredUsedColumnIds.stream()
+                    .filter(cid -> !nonPushdownPredUsedColumnIds.contains(cid) && !outputColumnIds.contains(cid))
+                    .collect(Collectors.toSet());
             scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
         }
 
