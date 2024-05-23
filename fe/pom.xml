@@ -43,7 +43,7 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
-        <jprotobuf.version>2.4.22</jprotobuf.version>
+        <jprotobuf.version>2.4.23</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.4.3</spark.version>
@@ -327,27 +327,6 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf</artifactId>
                 <version>${jprotobuf.version}</version>
-                <classifier>jar-with-dependencies</classifier>
-                <exclusions>
-                    <exclusion>
-                        <groupId>com.google.auto.value</groupId>
-                        <artifactId>auto-value</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>com.google.guava</groupId>
-                        <artifactId>guava</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>commons-collections</groupId>
-                        <artifactId>commons-collections</artifactId>
-                    </exclusion>
-                </exclusions>
-            </dependency>
-            <!-- fixed for cve problems -->
-            <dependency>
-                <groupId>com.google.auto.value</groupId>
-                <artifactId>auto-value</artifactId>
-                <version>1.10.4</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-common -->
