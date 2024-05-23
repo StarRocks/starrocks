@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-public class CelerDataHadoopExt extends HadoopExt {
+public class HadoopExtEPack extends HadoopExt {
     public static final String HIVE_METASTORE_SASL_ENABLED = "hive.metastore.sasl.enabled";
     public static final String HIVE_METASTORE_KERBEROS_KEYTAB_FILE = "hive.metastore.kerberos.keytab.file";
     public static final String HIVE_METASTORE_CLIENT_KERBEROS_PRINCIPAL = "hive.metastore.client.kerberos.principal";
@@ -33,24 +33,24 @@ public class CelerDataHadoopExt extends HadoopExt {
     public static final String HADOOP_HDFS_CLIENT_KERBEROS_PRINCIPAL = "hadoop.hdfs.client.kerberos.principal";
 
     private static final Logger LOGGER =
-            LoggerFactory.getLogger(CelerDataHadoopExt.class);
+            LoggerFactory.getLogger(HadoopExtEPack.class);
     public static final String HADOOP_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
     public static final String STARROCKS_HOME_ENV = "STARROCKS_HOME";
 
-    private CelerDataUGIManager globalUGIManager;
+    private UGIManager globalUGIManager;
 
     public static void addConfigResourcesToConfiguration(Configuration conf) {
         String configResources = conf.get(HADOOP_CONFIG_RESOURCES);
         addConfigResourcesToConfiguration(configResources, conf);
     }
 
-    public CelerDataHadoopExt() {
-        LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " Initialize CelerDataHadoopExt");
+    public HadoopExtEPack() {
+        LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " Initialize " + HadoopExtEPack.class.getName());
         if (!UserGroupInformation.isInitialized()) {
             Configuration conf = new Configuration();
             UserGroupInformation.setConfiguration(conf);
         }
-        globalUGIManager = new CelerDataUGIManager();
+        globalUGIManager = new UGIManager();
     }
 
     public static void addConfigResourcesToConfiguration(String configResources, Configuration conf) {
@@ -167,7 +167,7 @@ public class CelerDataHadoopExt extends HadoopExt {
         if (ugi == null) {
             return action.run();
         }
-        try (CelerDataUGIManager.SwitchUserRequest request = new CelerDataUGIManager.SwitchUserRequest(ugi)) {
+        try (UGIManager.SwitchUserRequest request = new UGIManager.SwitchUserRequest(ugi)) {
             return executeActionInDoAs(ugi, action);
         } catch (Exception e) {
             throw new RuntimeException(e);

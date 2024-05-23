@@ -28,7 +28,7 @@ import static org.apache.hadoop.security.UGIExceptionMessages.*;
 import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
 import static org.apache.hadoop.util.StringUtils.getTrimmedStringCollection;
 
-import com.starrocks.connector.hadoop.CelerDataUGIManager;
+import com.starrocks.connector.hadoop.UGIManager;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import java.io.File;
@@ -389,7 +389,7 @@ public class UserGroupInformation {
     public static boolean isSecurityEnabled() {
         //    return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
         AuthenticationMethod method = authenticationMethod;
-        UserGroupInformation ugi = CelerDataUGIManager.getCurrentUser();
+        UserGroupInformation ugi = UGIManager.getCurrentUser();
         if (ugi != null) {
             method = ugi.getAuthenticationMethod();
         }
@@ -585,7 +585,7 @@ public class UserGroupInformation {
     @InterfaceAudience.Public
     @InterfaceStability.Evolving
     public static UserGroupInformation getCurrentUser() throws IOException {
-        UserGroupInformation ugi = CelerDataUGIManager.getCurrentUser();
+        UserGroupInformation ugi = UGIManager.getCurrentUser();
         if (ugi != null) {
             return ugi;
         }

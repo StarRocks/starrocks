@@ -29,9 +29,9 @@ import javax.security.auth.Subject;
 
 import static java.util.Objects.requireNonNull;
 
-public class CelerDataUGIManager {
+public class UGIManager {
     private static final Logger LOGGER =
-            LoggerFactory.getLogger(CelerDataUGIManager.class);
+            LoggerFactory.getLogger(UGIManager.class);
 
     protected static ThreadLocal<UserGroupInformation> currentUser = new ThreadLocal<>();
 
@@ -102,12 +102,12 @@ public class CelerDataUGIManager {
 
     private final ExecutorService executorService;
 
-    public CelerDataUGIManager() {
+    public UGIManager() {
         kerberosUserCache = new ConcurrentHashMap<>();
         remoteUserCache = new ConcurrentHashMap<>();
         executorService = Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r);
-            thread.setName(CelerDataUGIManager.class.getName());
+            thread.setName(UGIManager.class.getName());
             return thread;
         });
         executorService.submit(() -> {
