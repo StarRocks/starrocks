@@ -54,8 +54,4 @@ public class ObjectBasedUpdateArbitrator extends TableUpdateArbitrator {
         }
         return partitionDataInfos;
     }
-
-
-
-
 }
