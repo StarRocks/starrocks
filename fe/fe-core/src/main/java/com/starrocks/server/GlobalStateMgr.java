@@ -2255,7 +2255,7 @@ public class GlobalStateMgr {
             return GsonUtils.GSON.toJson(data);
         } catch (Exception e) {
             // In older version, data may not be json, here we just return the binary data.
-            return data.
+            return data;
         }
     }
 
