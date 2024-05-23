@@ -231,6 +231,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
         version++;
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+    _tablet_mgr->prune_metacache();
+    // fill delvec cache again
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+    EXPECT_TRUE(_tablet_mgr->metacache()->memory_usage() > 0);
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
