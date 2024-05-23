@@ -1,7 +1,11 @@
 
  <p align="center">
  <a href="https://starrocks.io/index">
+<<<<<<< HEAD
     <img  width="526" src="images/logo.png">
+=======
+    <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png?t=12234">
+>>>>>>> b87073ca7f ([Doc] Replace Header Image in Readme (#46096))
    </a>
 </p>
 <p align="center">
