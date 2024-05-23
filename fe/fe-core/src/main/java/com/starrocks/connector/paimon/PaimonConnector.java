@@ -77,7 +77,9 @@ public class PaimonConnector implements Connector {
                 paimonOptions.setString(DLF_CATGALOG_ID, dlfCatalogId);
             }
         }
-        if (Strings.isNullOrEmpty(warehousePath) && !catalogType.equals("hive")) {
+        if (Strings.isNullOrEmpty(warehousePath)
+                && !catalogType.equals("hive")
+                && !catalogType.equalsIgnoreCase("dlf")) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
