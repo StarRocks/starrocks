@@ -1224,6 +1224,7 @@ vectorized_functions = [
     # map, array common functions
     [170100, 'cardinality', True, False, 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
     [170101, 'cardinality', True, False, 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
+    [170102, 'cardinality', True, False, 'BIGINT', ['HLL'], 'HyperloglogFunctions::hll_cardinality'],
 
     # struct functions
     [170500, 'row', True, False, 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::new_struct'],
