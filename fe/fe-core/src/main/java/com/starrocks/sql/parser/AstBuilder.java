@@ -5163,6 +5163,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
         String functionType = "SCALAR";
+        boolean replaceIfExists = context.orRep lace() != null;
         boolean isGlobal = context.GLOBAL() != null;
         if (context.functionType != null) {
             functionType = context.functionType.getText();
@@ -5195,7 +5196,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new CreateFunctionStmt(functionType, fnName,
-                getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
+                getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties, replaceIfExists);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------
