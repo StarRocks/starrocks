@@ -2,7 +2,7 @@
 
 -- Setup configs.
 set scan_or_to_union_limit = 1;
--- set enable_show_predicate_tree_in_profile = true;
+set enable_show_predicate_tree_in_profile = true;
 set enable_profile = true;
 set enable_async_profile=false;
 
@@ -105,11 +105,12 @@ from __row_util ;
 insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_non_null1, c_str_8_seq_non_null2) select null, '<null>', '<null>', '<null>', '<null>';
 insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_non_null1, c_str_8_seq_non_null2) select null, '<null>', '<null>', '<null>', '<null>';
 
+ALTER TABLE t1 COMPACT;
+function: wait_compaction_finish("t1", 32)
 
 create view __profile(idx, k, v) as 
 select 1, 2, 3;
 
--- TODO: use the real profile view
 -- create view __profile(idx, k, v) as 
 -- with 
 --   __profile as (
@@ -457,6 +458,155 @@ where
   );
  select * from __profile order by idx, k, v;
 
+
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+  );
+ select * from __profile order by idx, k, v;
+
+
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_1_seq like '%abc%'
+    and c_str_1_seq != 'abc1-4'
+  );
+ select * from __profile order by idx, k, v;
+
+
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+ select * from __profile order by idx, k, v;
+
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+ select * from __profile order by idx, k, v;
+
+
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq not in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+ select * from __profile order by idx, k, v;
+
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq not in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+ select * from __profile order by idx, k, v;
+
+select count(1) from t1 where c_str_3_low1 in ('a1', 'b1', 'c1');
+ select * from __profile order by idx, k, v;
+
+select count(1) from t1 where c_str_3_low1 in ('a1', 'b1');
+ select * from __profile order by idx, k, v;
+
+
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_3_low1 in ('a1', 'b1', 'c1')
+    and c_str_5_low_non_null1 in ('a1', 'b1', 'c1')
+  );
+ select * from __profile order by idx, k, v;
+
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_3_low1 in ('a1', 'b1')
+    and c_int_1_seq != 1280004
+  );
+ select * from __profile order by idx, k, v;
+
+
+select count(1) from t1
+where
+  c_str_3_low1 in ('a1')
+  or c_str_5_low_non_null1 in ('a1');
+ select * from __profile order by idx, k, v;
+
+select count(1) from t1
+where
+  c_str_3_low1 in ('a1')
+  and c_str_5_low_non_null1 in ('a1');
+ select * from __profile order by idx, k, v;
 
 update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
 

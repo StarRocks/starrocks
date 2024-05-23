@@ -100,6 +100,8 @@ public:
         return false;
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         for (auto value : _values) {
@@ -172,7 +174,7 @@ public:
 
     std::string debug_string() const override {
         std::stringstream ss;
-        ss << "(columnId=" << _column_id << ",In(";
+        ss << "((columnId=" << _column_id << ")IN(";
         int i = 0;
         for (auto& item : _values) {
             if (i++ != 0) {
@@ -180,7 +182,7 @@ public:
             }
             ss << this->type_info()->to_string(&item);
         }
-        ss << ")";
+        ss << "))";
         return ss.str();
     }
 
@@ -281,6 +283,8 @@ public:
         }
         return false;
     }
+
+    bool support_bitmap_filter() const override { return true; }
 
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();

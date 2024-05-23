@@ -119,7 +119,6 @@ private:
     std::vector<SegmentSharedPtr> _segments;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
-    PredicateMap _pushdown_predicates;
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
