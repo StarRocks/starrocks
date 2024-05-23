@@ -1,7 +1,7 @@
 
  <p align="center">
  <a href="https://starrocks.io/index">
-    <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png">
+    <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png?t=12234">
    </a>
 </p>
 <p align="center">
