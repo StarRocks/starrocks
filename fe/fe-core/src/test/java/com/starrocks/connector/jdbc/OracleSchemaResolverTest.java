@@ -16,7 +16,6 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
@@ -29,7 +28,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -56,16 +54,15 @@ public class OracleSchemaResolverTest {
         tableResult = new MockResultSet("tables");
         tableResult.addColumn("TABLE_NAME", Arrays.asList("tbl1", "tbl2", "tbl3"));
         columnResult = new MockResultSet("columns");
-        columnResult.addColumn("DATA_TYPE", Arrays.asList(Types.BIT, Types.INTEGER, Types.INTEGER, Types.REAL, Types.DOUBLE,
+        columnResult.addColumn("DATA_TYPE", Arrays.asList(100, 101,
                 3, Types.CHAR, Types.VARCHAR, Types.BLOB, Types.CLOB, Types.DATE, Types.TIMESTAMP, -101, -102));
-        columnResult.addColumn("TYPE_NAME", Arrays.asList("BOOL", "INTEGER", "SERIAL", "FLOAT4", "FLOAT8",
+        columnResult.addColumn("TYPE_NAME", Arrays.asList("BINARY_FLOAT", "BINARY_DOUBLE",
                 "NUMBER", "CHAR", "VARCHAR", "BLOB", "CLOB", "DATE", "TIMESTAMP",
                 "TIMESTAMP(6) WITH LOCAL TIME ZONE", "TIMESTAMP(6) WITH TIME ZONE"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 4000, 4000, 7, 11, 11, 13));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 0, 6, 6, 6));
-        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k",
-                "l", "m", "n"));
-        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO",
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(8, 16, 10, 10, 10, 4000, 4000, 8, 11, 11, 13));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
+        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"));
+        columnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "NO", "NO", "NO", "YES", "NO",
                 "NO", "NO", "NO", "YES", "YES"));
         properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "oracle.jdbc.driver.OracleDriver");
@@ -173,12 +170,17 @@ public class OracleSchemaResolverTest {
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
             Assert.assertEquals("tbl1", table.getName());
             Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
-            PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
-            ResultSet columnSet = postgresSchemaResolver.getColumns(connection, "test", "tbl1");
-            List<Column> fullSchema = postgresSchemaResolver.convertToSRTable(columnSet);
-            Table table1 = postgresSchemaResolver.getTable(1, "tbl1", fullSchema, "test", "catalog", properties);
-            Assert.assertTrue(table1 instanceof JDBCTable);
-            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Assert.assertTrue(table.getColumn("a").getType().isFloat());
+            Assert.assertTrue(table.getColumn("b").getType().isDouble());
+            Assert.assertTrue(table.getColumn("c").getType().isDecimalV3());
+            Assert.assertTrue(table.getColumn("d").getType().isStringType());
+            Assert.assertTrue(table.getColumn("e").getType().isStringType());
+            Assert.assertTrue(table.getColumn("f").getType().isStringType());
+            Assert.assertTrue(table.getColumn("g").getType().isStringType());
+            Assert.assertTrue(table.getColumn("h").getType().isDate());
+            Assert.assertTrue(table.getColumn("i").getType().isStringType());
+            Assert.assertTrue(table.getColumn("j").getType().isStringType());
+            Assert.assertTrue(table.getColumn("k").getType().isStringType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
