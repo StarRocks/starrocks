@@ -339,6 +339,42 @@ under the License.
             <version>${hadoop.version}</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
+        <dependency>
+            <groupId>com.qcloud.cos</groupId>
+            <artifactId>hadoop-cos</artifactId>
+            <version>3.3.0-8.3.7</version>
+        </dependency>
+
+
+        <!-- https://mvnrepository.com/artifact/com.qcloud/cos_api-bundle -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>cos_api-bundle</artifactId>
+            <version>5.6.137.2</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.qcloud/cosn-ranger-interface -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>cosn-ranger-interface</artifactId>
+            <version>1.0.5</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>chdfs_hadoop_plugin_network</artifactId>
+            <version>3.5</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.qcloud/hadoop-ranger-client-for-hadoop -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>hadoop-ranger-client-for-hadoop</artifactId>
+            <version>3.3.0-4.1</version>
+        </dependency>
     </dependencies>
 
     <build>
