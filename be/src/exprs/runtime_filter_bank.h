@@ -48,15 +48,21 @@ public:
     // ==================================
     // serialization and deserialization.
     static size_t max_runtime_filter_serialized_size(const JoinRuntimeFilter* rf);
+    static size_t max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column);
     static size_t serialize_runtime_filter(RuntimeState* state, const JoinRuntimeFilter* rf, uint8_t* data);
     static size_t serialize_runtime_filter(int serialize_version, const JoinRuntimeFilter* rf, uint8_t* data);
+    static size_t serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
+                                                                   uint8_t* data);
     static int deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data, size_t size);
+    static int deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool, SkewBroadcastRfMaterial** material,
+                                                                  const uint8_t* data, size_t size,
+                                                                  const PTypeDesc& ptype);
     static JoinRuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
 
     // ====================================
     static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type);
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, JoinRuntimeFilter* filter,
-                                            size_t column_offset, bool eq_null);
+                                            size_t column_offset, bool eq_null, bool insert_into_bf = true);
 
     static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,
                                                                             Chunk* chunk);
@@ -117,6 +123,7 @@ public:
     // only use when layout type == local colocate
     size_t num_colocate_partition() const { return _num_colocate_partition; }
     void set_num_colocate_partition(size_t num) { _num_colocate_partition = num; }
+    bool is_broad_cast_in_skew() { return _is_broad_cast_in_skew; }
 
 private:
     friend class HashJoinNode;
@@ -135,6 +142,9 @@ private:
     JoinRuntimeFilter* _runtime_filter = nullptr;
     bool _is_pipeline = false;
     size_t _num_colocate_partition = 0;
+
+    bool _is_broad_cast_in_skew = false;
+    int32_t _skew_shuffle_filter_id = -1;
 
     std::mutex _mutex;
 };
