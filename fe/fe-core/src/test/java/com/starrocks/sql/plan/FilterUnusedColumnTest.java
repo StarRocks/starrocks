@@ -181,10 +181,42 @@ public class FilterUnusedColumnTest extends PlanTestBase {
 
     @Test
     public void testFilterPrimaryKeyTable() throws Exception {
-        String sql = "select timestamp\n" +
-                "               from primary_table where k3 = \"test\" limit 10;";
-        String plan = getThriftPlan(sql);
-        assertContains(plan, "unused_output_column_name:[]");
+        {
+            String sql = "select timestamp from primary_table where k3 = \"test\" limit 10;";
+            String plan = getThriftPlan(sql);
+            assertContains(plan, "unused_output_column_name:[]");
+        }
+        {
+            // tags_id is can be pushdown, and only used by the pushdownable predicate.
+            String sql = "select timestamp from primary_table where k3 = \"test\" and tags_id = 1;";
+            String plan = getThriftPlan(sql);
+            System.out.println(plan);
+            assertContains(plan, "unused_output_column_name:[tags_id]");
+        }
+        {
+            // tags_id is can be pushdown and only used by the pushdownable predicate,
+            // but it also be the output column.
+            String sql = "select tags_id from primary_table where k3 = \"test\" and tags_id = 1;";
+            String plan = getThriftPlan(sql);
+            System.out.println(plan);
+            assertContains(plan, "unused_output_column_name:[]");
+        }
+        {
+            // tags_id is can be pushdown and used by the pushdownable predicate,
+            // but it also be used by the non-pushdownable predicate.
+            String sql = "select k3 from primary_table where timestamp + tags_id = \"test\" and tags_id = 1;";
+            String plan = getThriftPlan(sql);
+            System.out.println(plan);
+            assertContains(plan, "unused_output_column_name:[]");
+        }
+        {
+            // tags_id is can be pushdown and used by the pushdownable predicate,
+            // but it also be used by the non-pushdownable predicate.
+            String sql = "select timestamp from primary_table where k3 + tags_id = \"test\" and tags_id = 1;";
+            String plan = getThriftPlan(sql);
+            System.out.println(plan);
+            assertContains(plan, "unused_output_column_name:[]");
+        }
     }
 
     @Test
