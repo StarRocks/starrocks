@@ -832,6 +832,7 @@ DROP Catalog deltalake_catalog_glue;
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
+<<<<<<< HEAD
 
 ## 手动或自动更新元数据缓存
 
@@ -939,3 +940,5 @@ StarRocks 采用如下策略更新和淘汰缓存的元数据：
 - 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 2 小时，则 StarRocks 会更新 `p1` 的缓存元数据。
 - 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 的元数据。
 - 如果继上次更新结束后，`p1` 在 36 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。
+=======
+>>>>>>> fbc6f503b5 ([Doc]Update deltalake_catalog.md (#45683))
