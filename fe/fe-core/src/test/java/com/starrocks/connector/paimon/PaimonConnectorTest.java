@@ -75,6 +75,15 @@ public class PaimonConnectorTest {
     }
 
     @Test
+    public void testCreateDLFPaimonConnector() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "dlf");
+        properties.put("dlf.catalog.id", "dlf_test");
+
+        new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+    }
+
+    @Test
     public void testCreatePaimonTable(@Mocked Catalog paimonNativeCatalog,
                                       @Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         Map<String, String> properties = new HashMap<>();
