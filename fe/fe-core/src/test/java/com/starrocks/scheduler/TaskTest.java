@@ -15,9 +15,14 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.WarehouseManager;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class TaskTest {
 
@@ -36,5 +41,16 @@ public class TaskTest {
         Assert.assertFalse(Constants.isFinishState(Constants.TaskRunState.RUNNING));
         Assert.assertTrue(Constants.isFinishState(Constants.TaskRunState.FAILED));
         Assert.assertTrue(Constants.isFinishState(Constants.TaskRunState.SUCCESS));
+    }
+
+    @Test
+    public void testGetWarehouseName() {
+        Task task = new Task();
+        Assert.assertEquals(task.getWarehouseName(), WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+
+        Map<String, String> properties = new HashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, "aaa");
+        task.setProperties(properties);
+        Assert.assertEquals(task.getWarehouseName(), "aaa");
     }
 }

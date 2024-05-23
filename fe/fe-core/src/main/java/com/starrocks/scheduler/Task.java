@@ -23,6 +23,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.server.WarehouseManager;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -182,6 +183,15 @@ public class Task implements Writable {
 
     public Constants.TaskSource getSource() {
         return source;
+    }
+
+    public String getWarehouseName() {
+        if (properties != null) {
+            return properties.getOrDefault(PropertyAnalyzer.PROPERTIES_WAREHOUSE,
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        } else {
+            return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        }
     }
 
     public void setSource(Constants.TaskSource source) {

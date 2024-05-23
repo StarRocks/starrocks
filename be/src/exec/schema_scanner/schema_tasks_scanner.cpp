@@ -26,6 +26,7 @@ SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"WAREHOUSE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
@@ -56,6 +57,10 @@ DatumArray SchemaTasksScanner::_build_row() {
         // Compatible for upgrades
         task.catalog = "default_catalog";
     }
+    if (!task.__isset.warehouse) {
+        // Compatible for upgrades
+        task.warehouse = "default_warehouse";
+    }
     Datum expire_time = task.__isset.expire_time && task.expire_time > 0
                                 ? TimestampValue::create_from_unixtime(task.expire_time, _runtime_state->timezone_obj())
                                 : kNullDatum;
@@ -64,8 +69,9 @@ DatumArray SchemaTasksScanner::_build_row() {
                                 : kNullDatum;
 
     return {
-            Slice(task.task_name),  create_time, Slice(task.schedule),   Slice(task.catalog), Slice(task.database),
-            Slice(task.definition), expire_time, Slice(task.properties),
+            Slice(task.task_name),  create_time,           Slice(task.schedule),
+            Slice(task.catalog),    Slice(task.warehouse), Slice(task.database),
+            Slice(task.definition), expire_time,           Slice(task.properties),
     };
 }
 

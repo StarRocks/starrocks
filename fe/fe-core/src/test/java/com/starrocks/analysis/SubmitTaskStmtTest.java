@@ -160,19 +160,6 @@ public class SubmitTaskStmtTest {
     public void testSubmitWithWarehouse() throws Exception {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
-        // not supported
-        Exception e = assertThrows(AnalysisException.class, () ->
-                starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
-                        "insert into tbl1 select * from tbl1")
-        );
-        Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter warehouse.", e.getMessage());
-
-        // mock the warehouse
-        new MockUp<TaskAnalyzer>() {
-            @Mock
-            public void analyzeTaskProperties(Map<String, String> properties) {
-            }
-        };
         new MockUp<WarehouseManager>() {
             @Mock
             public Warehouse getWarehouse(String name) {

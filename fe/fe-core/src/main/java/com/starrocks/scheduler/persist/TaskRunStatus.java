@@ -21,8 +21,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.server.WarehouseManager;
 import org.apache.commons.collections.MapUtils;
 
 import java.io.DataInput;
@@ -186,6 +188,15 @@ public class TaskRunStatus implements Writable {
 
     public void setCatalogName(String catalogName) {
         this.catalogName = catalogName;
+    }
+
+    public String getWarehouseName() {
+        if (properties != null) {
+            return properties.getOrDefault(PropertyAnalyzer.PROPERTIES_WAREHOUSE,
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        } else {
+            return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        }
     }
 
     public String getDbName() {

@@ -21,12 +21,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import org.apache.commons.collections.MapUtils;
-
-import java.util.Map;
 
 public class TaskAnalyzer {
 
@@ -45,7 +41,6 @@ public class TaskAnalyzer {
         }
         submitTaskStmt.setCatalogName(catalogName);
         submitTaskStmt.setDbName(dbName);
-        analyzeTaskProperties(submitTaskStmt.getProperties());
         analyzeTaskSchedule(submitTaskStmt.getSchedule());
     }
 
@@ -63,15 +58,4 @@ public class TaskAnalyzer {
             schedule.setStartTime(TimeUtils.getEpochSeconds());
         }
     }
-
-    public static void analyzeTaskProperties(Map<String, String> properties) {
-        if (MapUtils.isEmpty(properties)) {
-            return;
-        }
-        String value = properties.get(SessionVariable.WAREHOUSE);
-        if (value != null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, SessionVariable.WAREHOUSE);
-        }
-    }
-
 }

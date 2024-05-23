@@ -846,6 +846,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             info.setSchedule(scheduleStr);
             info.setCatalog(task.getCatalogName());
+            info.setWarehouse(task.getWarehouseName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
@@ -895,6 +896,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setFinish_time(status.getFinishTime() / 1000);
             info.setState(status.getState().toString());
             info.setCatalog(status.getCatalogName());
+            info.setWarehouse(status.getWarehouseName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
             try {
                 // NOTE: use task's definition to display task-run's definition here

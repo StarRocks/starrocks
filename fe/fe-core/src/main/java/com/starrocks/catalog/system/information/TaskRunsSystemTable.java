@@ -35,6 +35,7 @@ public class TaskRunsSystemTable {
                         .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("STATE", ScalarType.createVarchar(16))
                         .column("CATALOG", ScalarType.createVarchar(64))
+                        .column("WAREHOUSE", ScalarType.createVarchar(64))
                         .column("DATABASE", ScalarType.createVarchar(64))
                         .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
                         .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
