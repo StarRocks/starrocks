@@ -171,10 +171,14 @@ enum TSchemaTableType {
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
     SYS_FE_LOCKS,
-    SCH_BE_DATACACHE_METRICS,
-    SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
+<<<<<<< HEAD
     SCH_TEMP_TABLES,
+=======
+    SCH_PARTITIONS_META,
+    SCH_BE_DATACACHE_METRICS,
+    SCH_TEMP_TABLES
+>>>>>>> 77d7929a8b ([BugFix] fix compatibility issue (#46141))
 }
 
 enum THdfsCompression {
