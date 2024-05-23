@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.DebugUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,8 +67,7 @@ public class MaterializedViewMetricsRegistry {
 
     private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,
                                        MetricVisitor visitor, boolean minifyMetrics) {
-        entity.initDbAndTableName();
-        if (entity.mvNameOpt.isEmpty() || entity.dbNameOpt.isEmpty()) {
+        if (!entity.initDbAndTableName()) {
             LOG.debug("Invalid materialized view metrics entity, mvId: {}", mvId);
             return;
         }
@@ -115,7 +115,8 @@ public class MaterializedViewMetricsRegistry {
                 MaterializedViewMetricsEntity entity = (MaterializedViewMetricsEntity) mvEntity;
                 doCollectMetrics(mvId, entity, visitor, minifyMetrics);
             } catch (Exception e) {
-                LOG.warn("Failed to collect materialized view metrics for mvId: {}", entry.getKey(), e);
+                LOG.warn("Failed to collect materialized view metrics for mvId: {}", entry.getKey(),
+                        DebugUtil.getStackTrace(e));
             }
         }
     }

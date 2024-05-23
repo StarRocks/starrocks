@@ -96,9 +96,9 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         initDbAndTableName();
     }
 
-    public void initDbAndTableName() {
+    public boolean initDbAndTableName() {
         if (dbNameOpt.isPresent() && mvNameOpt.isPresent()) {
-            return;
+            return true;
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -108,8 +108,10 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
             Table table = db.getTable(mvId.getId());
             if (table != null) {
                 mvNameOpt = Optional.of(table.getName());
+                return true;
             }
         }
+        return false;
     }
 
     @Override
