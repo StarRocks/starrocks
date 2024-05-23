@@ -2738,38 +2738,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### parquet_late_materialization_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否使用延迟物化优化parquet读性能。
+- 描述：是否使用延迟物化优化 Parquet 读性能。
 - 引入版本：-
--->
 
-<!--
+
 ##### parquet_late_materialization_v2_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否使用v2版延迟物化优化parquet读性能。v3.2版本包含两个版本的parquet reader延迟物化，v3.3版本仅保留新版延迟物化，并删除该参数。
+- 描述：是否使用 v2 版延迟物化优化 Parquet 读性能。v3.2 版本包含两个版本的 Parquet Reader 延迟物化，v3.3 版本仅保留新版延迟物化，并删除该参数。
 - 引入版本：v3.2
--->
 
-<!--
 ##### parquet_page_index_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否使用parquet pageindex信息优化读性能。
+- 描述：是否使用 Parquet Pageindex 信息优化读性能。
 - 引入版本：v3.3
--->
 
 <!--
 ##### io_coalesce_read_max_buffer_size
@@ -2793,16 +2788,14 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### io_coalesce_adaptive_lazy_active
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：根据谓词选择度，自适应决定是否将谓词列IO和非谓词列IO进行合并。
+- 描述：根据谓词选择度，自适应决定是否将谓词列 IO 和非谓词列 IO 进行合并。
 - 引入版本：v3.2
--->
 
 <!--
 ##### io_tasks_per_scan_operator
