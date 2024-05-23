@@ -69,7 +69,7 @@ public class TaskRunManager implements MemoryTrackable {
         status.setPriority(option.getPriority());
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
-        if (!arrangeTaskRun(taskRun)) {
+        if (!arrangeTaskRun(taskRun, false)) {
             LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
@@ -96,17 +96,17 @@ public class TaskRunManager implements MemoryTrackable {
     // The manual priority is higher. For manual tasks, we do not merge operations.
     // For automatic tasks, we will compare the definition, and if they are the same,
     // we will perform the merge operation.
-    public boolean arrangeTaskRun(TaskRun taskRun) {
+    public boolean arrangeTaskRun(TaskRun taskRun, boolean isReplay) {
         if (!tryTaskRunLock()) {
             return false;
         }
+        List<TaskRun> mergedTaskRuns = Lists.newArrayList();
         try {
             long taskId = taskRun.getTaskId();
             Set<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();
-            List<TaskRun> mergedTaskRuns = Lists.newArrayList();
             if (taskRuns != null && executeOption.isMergeRedundant()) {
                 for (TaskRun oldTaskRun : taskRuns) {
                     if (oldTaskRun == null) {
@@ -143,17 +143,26 @@ public class TaskRunManager implements MemoryTrackable {
                     mergedTaskRuns.add(oldTaskRun);
                 }
             }
-            for (TaskRun oldTaskRun : mergedTaskRuns) {
-                // TODO: support batch update to reduce the number of edit logs.
-                oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
-                        oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
-                taskRunScheduler.removePendingTaskRun(oldTaskRun);
-            }
             if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
                 LOG.warn("failed to offer task: {}", taskRun);
                 return false;
+            }
+
+            // if it 's not replay, update the status of the old TaskRun to MERGED in FOLLOWER/LEADER.
+            // if it is replay, no need to update the status of the old TaskRun because follower FE cannot
+            // update edit log.
+            if (!isReplay && !mergedTaskRuns.isEmpty()) {
+                // TODO: support batch update to reduce the number of edit logs.
+                for (TaskRun oldTaskRun : mergedTaskRuns) {
+                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
+                    // update the state of the old TaskRun to MERGED in FOLLOWER
+                    TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
+                            oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                    // update the state of the old TaskRun to MERGED in LEADER
+                    oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
+                    taskRunScheduler.removePendingTaskRun(oldTaskRun);
+                }
             }
         } finally {
             taskRunUnlock();
