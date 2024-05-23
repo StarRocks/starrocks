@@ -52,7 +52,7 @@ public class DeltaLakeScanNodeTest {
     }
 
     @Test
-    public void testNodeExplain(@Mocked GlobalStateMgr globalStateMgr, @Mocked CatalogConnector connector,
+    public void testNodeExplain(@Mocked GlobalStateMgr globalStateMgr, @Mocked Connector connector,
                             @Mocked DeltaLakeTable table) {
         String catalogName = "delta0";
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.
