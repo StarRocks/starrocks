@@ -991,7 +991,7 @@ StarRocks supports building asynchronous materialized views on Hive catalogs, Hu
 
 - Hudi, Iceberg, Paimon, or JDBC catalog-based materialized views do not support Union rewrite.
 - Hudi, Iceberg, Paimon, or JDBC catalog-based materialized views do not support View Delta Join rewrite.
-- Hudi, Iceberg, Paimon, or JDBC catalog-based materialized views do not support the incremental refresh of partitions.
+- Hudi, Iceberg, or JDBC catalog-based materialized views do not support the incremental refresh of partitions.
 
 ## Text-based materialized view rewrite
 

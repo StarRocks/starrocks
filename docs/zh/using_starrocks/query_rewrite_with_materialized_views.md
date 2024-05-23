@@ -989,7 +989,7 @@ StarRocks 支持基于 Hive Catalog、Hudi Catalog、Iceberg Catalog 和 Paimon 
 
 - 基于 Hudi、Iceberg、Paimon 和 JDBC Catalog 创建的物化视图不支持 Union 改写。
 - 基于 Hudi、Iceberg、Paimon 和 JDBC Catalog 创建的物化视图不支持 View Delta Join 改写。
-- 基于 Hudi、Iceberg、Paimon 和 JDBC Catalog 创建的物化视图不支持分区增量刷新。
+- 基于 Hudi、Iceberg 和 JDBC Catalog 创建的物化视图不支持分区增量刷新。
 
 ## 基于文本的物化视图改写
 
