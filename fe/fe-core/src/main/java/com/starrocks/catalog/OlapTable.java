@@ -1202,8 +1202,6 @@ public class OlapTable extends Table {
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
-
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
     }
 
     protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {

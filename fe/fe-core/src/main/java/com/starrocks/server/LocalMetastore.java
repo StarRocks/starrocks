@@ -1657,9 +1657,13 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
                 Range<PartitionKey> partitionRange = null;
-                if (partitionInfo instanceof RangePartitionInfo && partition != null) {
-                    partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                if (partition != null) {
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
+                    if (partitionInfo instanceof RangePartitionInfo) {
+                        partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                    }
                 }
+
                 olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
                 if (olapTable instanceof MaterializedView) {
                     MaterializedView mv = (MaterializedView) olapTable;
@@ -4699,10 +4703,12 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
 
                     origPartitions.put(partName, partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                 }
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
                     origPartitions.put(partition.getName(), partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                 }
             }
 
@@ -5041,6 +5047,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 
+            partitionNames.stream().forEach(e ->
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(olapTable.getPartition(e).getId()));
             olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
 
             // write log
