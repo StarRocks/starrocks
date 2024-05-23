@@ -16,11 +16,17 @@ package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.UserException;
+import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
+
+import static org.mockito.Mockito.mock;
 
 public class GlobalFunctionMgrTest {
     private GlobalFunctionMgr globalFunctionMgr;
@@ -53,5 +59,52 @@ public class GlobalFunctionMgrTest {
             List<Function> functions = globalFunctionMgr.getFunctions();
             Assert.assertEquals(functions.size(), 0);
         }
+    }
+
+    @Test
+    public void testCreateGlobalUdfGivenUdfAlreadyExists() throws UserException {
+        Type[] argTypes = new Type[2];
+        argTypes[0] = Type.INT;
+        argTypes[1] = Type.INT;
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setAsGlobalFunction();
+        Function f = new Function(name, argTypes, Type.INT, false);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return mock();
+            }
+        };
+
+        // Add the UDF for the first time
+        globalFunctionMgr.userAddFunction(f, false);
+
+        // Attempt to add the same UDF again, expecting an exception
+        Assert.assertThrows(UserException.class, () -> globalFunctionMgr.userAddFunction(f, false));
+    }
+
+    @Test
+    public void testCreateGlobalUdfGivenUdfAlreadyExistsAllowExisting() throws UserException {
+        Type[] argTypes = new Type[2];
+        argTypes[0] = Type.INT;
+        argTypes[1] = Type.INT;
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setAsGlobalFunction();
+        Function f = new Function(name, argTypes, Type.INT, false);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return mock();
+            }
+        };
+
+        // Add the UDF for the first time
+        globalFunctionMgr.userAddFunction(f, true);
+        // Attempt to add the same UDF again
+        globalFunctionMgr.userAddFunction(f, true);
+
+        List<Function> functions = globalFunctionMgr.getFunctions();
+        Assert.assertEquals(functions.size(), 1);
+        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
     }
 }

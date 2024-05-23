@@ -35,7 +35,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.persist.CreateTableInfo;
@@ -98,6 +100,10 @@ public class DatabaseTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = new LockManager();
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = 1L;
             }
         };
     }
@@ -222,5 +228,40 @@ public class DatabaseTest {
         Database db3 = new Database(101, "db3");
         db3.setCatalogName("hive");
         Assert.assertEquals("hive.db3", db3.getUUID());
+    }
+
+    @Test
+    public void testCreateDatabaseUdfGivenUdfAlreadyExists() throws UserException {
+        Type[] argTypes = new Type[2];
+        argTypes[0] = Type.INT;
+        argTypes[1] = Type.INT;
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f, false);
+
+        // Attempt to add the same UDF again, expecting an exception
+        Assert.assertThrows(UserException.class, () -> db.addFunction(f, false));
+    }
+
+    @Test
+    public void testCreateGlobalUdfGivenUdfAlreadyExistsAllowExisting() throws UserException {
+        Type[] argTypes = new Type[2];
+        argTypes[0] = Type.INT;
+        argTypes[1] = Type.INT;
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f, true);
+        // Attempt to add the same UDF again
+        db.addFunction(f, true);
+
+        List<Function> functions = db.getFunctions();
+        Assert.assertEquals(functions.size(), 1);
+        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
     }
 }

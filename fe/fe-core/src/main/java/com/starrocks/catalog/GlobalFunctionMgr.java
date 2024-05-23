@@ -76,15 +76,13 @@ public class GlobalFunctionMgr {
         return func;
     }
 
-    private void addFunction(Function function, boolean isReplay) throws UserException {
+    private void addFunction(Function function, boolean isReplay, boolean allowExists) throws UserException {
         String functionName = function.getFunctionName().getFunction();
-        List<Function> existFuncs = name2Function.get(functionName);
+        List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (!isReplay) {
-            if (existFuncs != null) {
-                for (Function existFunc : existFuncs) {
-                    if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
-                        throw new UserException("function already exists");
-                    }
+            for (Function existFunc : existFuncs) {
+                if (!allowExists && function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+                    throw new UserException("function already exists");
                 }
             }
             // Get function id for this UDF, use CatalogIdGenerator. Only get function id
@@ -94,23 +92,20 @@ public class GlobalFunctionMgr {
             function.setFunctionId(-functionId);
         }
 
-        com.google.common.collect.ImmutableList.Builder<Function> builder =
-                com.google.common.collect.ImmutableList.builder();
-        if (existFuncs != null) {
-            builder.addAll(existFuncs);
-        }
-        builder.add(function);
-        name2Function.put(functionName, builder.build());
+        existFuncs = existFuncs.stream()
+                .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
+                .collect(ImmutableList.toImmutableList());
+        name2Function.put(functionName, ImmutableList.<Function>builder().addAll(existFuncs).add(function).build());
     }
 
-    public synchronized void userAddFunction(Function f) throws UserException {
-        addFunction(f, false);
+    public synchronized void userAddFunction(Function f, boolean allowExists) throws UserException {
+        addFunction(f, false, allowExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(f);
     }
 
     public synchronized void replayAddFunction(Function f) {
         try {
-            addFunction(f, true);
+            addFunction(f, true, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
