@@ -879,7 +879,8 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
         LOG(INFO) << "sender_id=" << sender_id << " #finished_tablets=" << finish_response.tablet_vec_size();
 
         if (sender_id == 0 && fail_tablet == 0) {
-            ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code());
+            ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code())
+                    << finish_response.status().error_msgs(0);
             ASSERT_TRUE(finish_response.has_lake_tablet_data());
             ASSERT_EQ(4, finish_response.lake_tablet_data().txn_logs_size());
             auto metacache = _tablet_manager->metacache();
