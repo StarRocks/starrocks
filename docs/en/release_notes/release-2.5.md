@@ -8,10 +8,6 @@ displayed_sidebar: "English"
 
 Release date: May 15, 2024
 
-### Parameter changes
-
-- Decreased the default value of BE parameter `update_compaction_size_threshold` from 256 MB to 64 MB to increase the trigger frequency for Primary Key table compaction.
-
 ### Improvements
 
 - Optimized the usage of database locks for materialized view refresh to prevent deadlock. [#42801](https://github.com/StarRocks/starrocks/pull/42801)
@@ -58,7 +54,6 @@ Release date: February 8, 2024
 
 ### New features
 
-- Added a pattern-matching function: [regexp_extract_all](https://docs.starrocks.io/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/).
 - Added Bitmap value processing functions: serialize, deserialize, and serializeToString. [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
 
 ### Improvements

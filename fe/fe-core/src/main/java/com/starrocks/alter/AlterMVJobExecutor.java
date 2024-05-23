@@ -170,6 +170,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.setWarehouseId(warehouse.getId());
         }
 
+        // labels.location
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            if (!materializedView.isCloudNativeMaterializedView()) {
+                PropertyAnalyzer.analyzeLocation(materializedView, properties);
+            }
+        }
+
         if (!properties.isEmpty()) {
             if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                 throw new SemanticException("Modify failed because unsupported properties: " +

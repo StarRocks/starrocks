@@ -135,11 +135,11 @@ public class HiveMetastoreApiConverter {
         return "";
     }
 
-    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
+    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database, String dbName) {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), database.getName(),
+        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName.toLowerCase(),
                 database.getLocationUri());
     }
 

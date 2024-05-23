@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
 
 import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
 
-public class MaterializedViewPartitionFunctionChecker {
+public class PartitionFunctionChecker {
     @FunctionalInterface
     public interface CheckPartitionFunction {
         boolean check(Expr expr);
@@ -41,8 +41,8 @@ public class MaterializedViewPartitionFunctionChecker {
     static {
         FN_NAME_TO_PATTERN = Maps.newHashMap();
         // can add some other functions
-        FN_NAME_TO_PATTERN.put("date_trunc", MaterializedViewPartitionFunctionChecker::checkDateTrunc);
-        FN_NAME_TO_PATTERN.put("str2date", MaterializedViewPartitionFunctionChecker::checkStr2date);
+        FN_NAME_TO_PATTERN.put("date_trunc", PartitionFunctionChecker::checkDateTrunc);
+        FN_NAME_TO_PATTERN.put("str2date", PartitionFunctionChecker::checkStr2date);
     }
 
     public static boolean checkDateTrunc(Expr expr) {
@@ -120,6 +120,10 @@ public class MaterializedViewPartitionFunctionChecker {
         FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
         String fnNameString = fnExpr.getFnName().getFunction();
         if (!fnNameString.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            return false;
+        }
+
+        if (fnExpr.getChildren().size() != 2) {
             return false;
         }
 

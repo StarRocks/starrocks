@@ -43,7 +43,6 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "kudu",
-    "kudu.master" = "<kudu_master_addresses>",
     CatalogParams,
 )
 ```
@@ -75,6 +74,7 @@ StarRocks 访问 Kudu 集群元数据的相关参数配置。
 | 参数                            | 是否必须 | 说明                                                                                                                                                                                                                                                |
 |-------------------------------|------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | kudu.catalog.type             | 是    | Kudu 使用的元数据类型。设置为 `kudu`、`hive`。                                                                                                                                                                                                                  |
+| kudu.master                   | 否    | 指定 `Kudu Master` 连接地址，默认为：`localhost:7051`。                                                                                                                                                                                                                  |
 | kudu.metastore.uris           | 否    | HMS 的 URI， 格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。仅在 `kudu.catalog.type` = `hive` 时设置。<br />如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 | kudu.schema-emulation.enabled | 否    | 是否启用模拟 `schema` 功能，默认处于关闭状态（`false`），即所有表都属于 `default` `schema`。                                                                                                                                                                                  |
 | kudu.schema-emulation.prefix  | 否    | 仅在 `kudu.schema-emulation.enabled` = `true` 即启用模拟 `schema` 功能时，需设置匹配前缀，默认采用前缀空字符串：` `。                                                                                                                                                            |
@@ -107,7 +107,7 @@ StarRocks 访问 Kudu 集群元数据的相关参数配置。
   (
       "type" = "kudu",
       "kudu.master" = "localhost:7051",
-      "kudu.metastore.type" = "kudu",
+      "kudu.metastore.type" = "hive",
       "kudu.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
   );
   ```

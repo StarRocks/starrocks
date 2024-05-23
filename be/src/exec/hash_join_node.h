@@ -115,7 +115,7 @@ private:
     std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
-    bool _enable_lazy_materialize = false;
+    bool _enable_late_materialization = false;
 
     JoinHashTable _ht;
 

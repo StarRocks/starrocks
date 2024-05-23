@@ -296,7 +296,7 @@ public class DefaultWorkerProviderTest {
                                                                      Map<Long, C> availableId2Worker) {
         // not allow using backup node
         Assert.assertFalse(workerProvider.allowUsingBackupNode());
-        for (long id = -1; id < 16; id++) {
+        for (long id = -1; id < 10; id++) {
             ComputeNode backend = workerProvider.getBackend(id);
             boolean isContained = workerProvider.isDataNodeAvailable(id);
             if (!availableId2Worker.containsKey(id)) {

@@ -136,6 +136,8 @@ public class Config extends ConfigBase {
     public static String audit_log_roll_interval = "DAY";
     @ConfField
     public static String audit_log_delete_age = "30d";
+    @ConfField(mutable = true)
+    public static boolean audit_log_json_format = false;
 
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
@@ -2375,6 +2377,9 @@ public class Config extends ConfigBase {
     public static boolean enable_experimental_rowstore = false;
 
     @ConfField(mutable = true)
+    public static boolean enable_experimental_gin = false;
+
+    @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
     /**
@@ -2593,6 +2598,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String profile_info_format = "default";
+
+    /**
+     * When the session variable `enable_profile` is set to `false` and `big_query_profile_threshold` is set to 0,
+     * the amount of time taken by a load exceeds the default_big_load_profile_threshold_second,
+     * a profile is generated for that load.
+     */
+    @ConfField(mutable = true)
+    public static long default_big_load_profile_threshold_second = 300;
 
     /**
      * Max number of roles that can be granted to user including all direct roles and all parent roles
@@ -2857,7 +2870,7 @@ public class Config extends ConfigBase {
      * Whether to use LockManager to manage lock usage
      */
     @ConfField
-    public static boolean lock_manager_enabled = false;
+    public static boolean lock_manager_enabled = true;
 
     /**
      * Number of Hash of Lock Table

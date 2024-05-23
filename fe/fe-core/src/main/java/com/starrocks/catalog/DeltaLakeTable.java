@@ -30,7 +30,7 @@ import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import io.delta.kernel.Snapshot;
-import io.delta.kernel.client.TableClient;
+import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.Metadata;
 
@@ -45,7 +45,7 @@ public class DeltaLakeTable extends Table {
     private List<String> partColumnNames;
     private SnapshotImpl deltaSnapshot;
     private String tableLocation;
-    private TableClient tableClient;
+    private Engine deltaEngine;
 
 
     public static final String PARTITION_NULL_VALUE = "null";
@@ -57,7 +57,7 @@ public class DeltaLakeTable extends Table {
 
     public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> schema,
                           List<String> partitionNames, SnapshotImpl deltaSnapshot, String tableLocation,
-                          TableClient tableClient, long createTime) {
+                          Engine deltaEngine, long createTime) {
         super(id, tableName, TableType.DELTALAKE, schema);
         this.catalogName = catalogName;
         this.dbName = dbName;
@@ -65,7 +65,7 @@ public class DeltaLakeTable extends Table {
         this.partColumnNames = partitionNames;
         this.deltaSnapshot = deltaSnapshot;
         this.tableLocation = tableLocation;
-        this.tableClient = tableClient;
+        this.deltaEngine = deltaEngine;
         this.createTime = createTime;
     }
 
@@ -86,8 +86,8 @@ public class DeltaLakeTable extends Table {
         return deltaSnapshot;
     }
 
-    public TableClient getTableClient() {
-        return tableClient;
+    public Engine getDeltaEngine() {
+        return deltaEngine;
     }
 
     @Override

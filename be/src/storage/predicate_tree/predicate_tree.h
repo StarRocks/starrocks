@@ -386,7 +386,7 @@ public:
     /// The immediate children of the root contain ColumnPredicates and OR relations.
     /// This method get all the ColumnPredicates in the root immediate children.
     /// In this way, we can use the ColumnPredicates part where OR predicates are not supported.
-    ColumnPredicateMap get_immediate_column_predicate_map() const;
+    const ColumnPredicateMap& get_immediate_column_predicate_map() const;
 
 private:
     explicit PredicateTree(PredicateAndNode&& root, uint32_t num_compound_nodes);

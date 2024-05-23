@@ -784,7 +784,7 @@ public class TaskManager implements MemoryTrackable {
 
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                if (!taskRunManager.arrangeTaskRun(taskRun)) {
+                if (!taskRunManager.arrangeTaskRun(taskRun, true)) {
                     LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
                 }
                 break;

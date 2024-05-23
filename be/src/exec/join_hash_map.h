@@ -130,7 +130,7 @@ struct JoinHashTableItems {
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
     bool mor_reader_mode = false;
-    bool enable_lazy_materialize = false;
+    bool enable_late_materialization = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -276,7 +276,7 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
-    bool enable_lazy_materialize = false;
+    bool enable_late_materialization = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
@@ -540,7 +540,7 @@ public:
             _probe_output<false>(probe_chunk, chunk);
             _build_output<false>(chunk);
 
-            if (_table_items->enable_lazy_materialize) {
+            if (_table_items->enable_late_materialization) {
                 _probe_index_output(chunk);
             }
             break;
@@ -559,6 +559,7 @@ public:
         return;
     }
 
+    template <bool is_remain>
     void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
         if ((*result_chunk)->num_rows() < _probe_state->count) {
             _probe_state->match_flag = JoinMatchFlag::NORMAL;
@@ -665,11 +666,16 @@ public:
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain);
     void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain);
+    template <bool is_remain>
+    void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
 private:
+    template <bool is_lazy>
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
+    template <bool is_lazy>
     void _probe_null_output(ChunkPtr* chunk, size_t count);
 
+    template <bool is_lazy>
     void _build_output(ChunkPtr* chunk);
     void _build_default_output(ChunkPtr* chunk, size_t count);
 
@@ -680,6 +686,9 @@ private:
     void _copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
 
     void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
+
+    void _probe_index_output(ChunkPtr* chunk);
+    void _build_index_output(ChunkPtr* chunk);
 
     void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
     void _search_ht_remain(RuntimeState* state);
@@ -816,6 +825,8 @@ public:
     void reset_probe_state(RuntimeState* state);
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+    template <bool is_remain>
+    Status lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
     void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
     // convert input column to spill schema order
