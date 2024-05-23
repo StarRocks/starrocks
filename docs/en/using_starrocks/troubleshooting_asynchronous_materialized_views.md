@@ -245,7 +245,7 @@ If you failed to create an asynchronous materialized view, that is, the CREATE M
 
   In addition to the SQL statement, the main difference between the two materialized views is that asynchronous materialized views support all query syntax that StarRocks provides, but synchronous materialized views only support limited choices of aggregate functions.
 
-- **Check whether you have specified a correct  `Partition By`  column.**
+- **Check whether you have specified a correct  `PARTITION BY`  column.**
 
   When creating an asynchronous materialized view, you can specify a partitioning strategy, which allows you to refresh the materialized view on a finer granularity level.
 
@@ -255,7 +255,7 @@ If you failed to create an asynchronous materialized view, that is, the CREATE M
 
   When creating an asynchronous materialized view, you need the SELECT privileges of all objects (tables, views, materialized views) that are queried. When UDFs are used in the query, you also need the USAGE privileges of the functions.
 
-### Materialized view fails to refresh
+### Materialized view Refresh Failure
 
 If the materialized view fails to refresh, that is, the state of the refresh task is not SUCCESS, you can look into the following aspects:
 
@@ -270,32 +270,40 @@ If the materialized view fails to refresh, that is, the state of the refresh tas
   - Specify a partitioning strategy for the materialized view to refresh one partition each time.
   - Enable the Spill to Disk feature for the refresh task. From v3.1 onwards, StarRocks supports spilling the intermediate results to disks when refreshing a materialized view. Execute the following statement to enable Spill to Disk:
 
-    ```SQL
-    SET enable_spill = true;
-    ```
+  ```SQL
+  -- Define the properties when creating the materialized view
+  CREATE MATERIALIZED VIEW mv1 
+  REFRESH ASYNC
+  PROPERTIES ( 'session.enable_spill'='true' )
+  AS <query>;
 
-- **Check whether the refresh task exceeds the timeout duration.**
+  -- Add the properties.
+  ALTER MATERIALIZED VIEW mv2 SET ('session.enable_spill' = 'true');
+  ```
 
-  A large-scale materialized view can fail to refresh because the refresh task exceeds the timeout duration. To solve this problem, you can:
+### Materialized View Refresh Timeout
 
-  - Specify a partitioning strategy for the materialized view to refresh one partition each time.
-  - Set a longer timeout duration.
+Larger materialized views may fail to refresh because the refresh task exceeds the timeout period. Typically, the following solutions can be considered:
 
-From v3.0 onwards, you can define the following properties (session variables) while creating the materialized view or adding them using ALTER MATERIALIZED VIEW.
+- **Specify Partitioning Strategy for the Materialized View to Achieve Fine-Grained Refresh**
 
-Example:
+  As described in the section [Creating Partitioned Materialized Views](./create_partitioned_materialized_view.md) partitioning the materialized view can achieve incremental build and refresh, avoiding the issue of consuming too many resources during the initial refresh.
 
-```SQL
--- Define the properties when creating the materialized view
-CREATE MATERIALIZED VIEW mv1 
-REFRESH ASYNC
-PROPERTIES ( 'session.enable_spill'='true' )
-AS <query>;
+- **Set a Longer Timeout Period**
 
--- Add the properties.
-ALTER MATERIALIZED VIEW mv2 
-    SET ('session.enable_spill' = 'true');
-```
+  The default timeout for materialized view refresh tasks is 5 minutes in older versions and 1 hour in version 3.2 and later. When encountering timeout exceptions, you can try adjusting the timeout period:
+
+  ```sql
+  ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
+  ```
+
+- **Analyze Performance Bottlenecks of the Materialized View**
+
+  If the materialized view computation is complex and inherently time-consuming, you can analyze the performance bottlenecks to optimize it:
+  - Find the query_id: You can find the query_id corresponding to each refresh task through information_schema.task_runs.
+  - Analyze the Query Profile: Use the above query_id to analyze its Query Profile.
+      - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): retrive original profile
+      - [ANALYZE PROFILE](../sql-reference/sql-statements/Administration/ANALYZE_PROFILE.md): try to get insights from the profile
 
 ### Materialized view state is not active
 
@@ -331,18 +339,35 @@ To stop a refresh task that occupies too many resources, you can:
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-- Terminate the running refresh task by using SHOW PROCESSLIST and KILL:
+- [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 
   ```SQL
-  -- Get the ConnectionId of the running refresh task.
-  SHOW PROCESSLIST;
-  -- Terminate the running refresh task.
-  KILL QUERY <ConnectionId>;
+  CANCEL REFRESH MATERIALIZED VIEW mv1;
   ```
 
 ### Materialized view fails to rewrite queries
 
 If your materialized view fails to rewrite relevant queries, you can look into the following aspects:
+
+
+- **Diagnose Rewrite Failure Using TRACE command**
+
+  StarRocks provides the TRACE command to diagnose why a materialized view cannot be rewritten:
+    - `TRACE LOGS MV <query>`: Available in version 3.2 and later, this command analyzes the detailed rewrite process and the reasons for failure.
+    - `TRACE REASON MV <query>`: Available in version 3.2.8 and later, this command provides concise reasons for rewrite failure.
+    
+    
+  ```SQL
+  MySQL root@127.1:(none)> trace reason mv select sum(c1) from `glue_ice`.`iceberg_test`.`ice_test3`
+  +----------------------------------------------------------------------------------------------------------------------+
+  | Explain String                                                                                                       |
+  +----------------------------------------------------------------------------------------------------------------------+
+  |     MV rewrite fail for mv1: Rewrite aggregate rollup sum(1: c1) failed: only column-ref is supported after rewrite  |
+  |     MV rewrite fail for mv1: Rewrite aggregate function failed, cannot get rollup function: sum(1: c1)               |
+  |     MV rewrite fail for mv1: Rewrite rollup aggregate failed: cannot rewrite aggregate functions                     |
+  +----------------------------------------------------------------------------------------------------------------------+
+  ```
+
 
 - **Check whether the  materialized view  and the  query  match.**
 
