@@ -437,6 +437,7 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 ```SQL
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
+<<<<<<< HEAD
 
 ## Manually or automatically update metadata cache
 
@@ -544,3 +545,5 @@ Then StarRocks updates or discards the metadata in compliance with the following
 - If another query hits `p1` again and the current time from the last update is more than 2 hours, StarRocks updates the cached metadata of `p1`.
 - If `p1` has not been accessed within 24 hours from the last update, StarRocks discards the cached metadata of `p1`. The metadata will be cached at the next query.
 - If `p1` has not been accessed within 36 hours from the last update, StarRocks discards the cached metadata of the underlying data files of `p1`. The metadata will be cached at the next query.
+=======
+>>>>>>> 5e45cefcb0 ([Doc]Update deltalake_catalog.md (#45684))
