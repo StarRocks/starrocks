@@ -295,6 +295,14 @@ public class FeExecuteCoordinator extends Coordinator {
         return false;
     }
 
+    @Override
+    public String getWarehouseName() {
+        if (connectContext == null) {
+            return "";
+        }
+        return connectContext.getSessionVariable().getWarehouseName();
+    }
+
     private List<ByteBuffer> covertToMySQLRowBuffer() {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) execPlan.getPhysicalPlan().getOp();

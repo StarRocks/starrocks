@@ -39,7 +39,9 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -223,5 +225,29 @@ public class ConnectContextTest {
         ctx.setThreadLocalInfo();
         Assert.assertNotNull(ConnectContext.get());
         Assert.assertEquals(ctx, ConnectContext.get());
+    }
+
+    @Test
+    public void testWarehouse(@Mocked WarehouseManager warehouseManager) {
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(socketChannel);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentWarehouse("wh1");
+        Assert.assertEquals("wh1", ctx.getCurrentWarehouseName());
+
+        ctx.setCurrentWarehouseId(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assert.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, ctx.getCurrentWarehouseId());
     }
 }
