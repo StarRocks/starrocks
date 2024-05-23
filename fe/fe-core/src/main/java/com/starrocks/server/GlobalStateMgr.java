@@ -2199,17 +2199,16 @@ public class GlobalStateMgr {
                 EditLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal()) {
-                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
-                            replayedJournalId.incrementAndGet(),
-                            entity == null ? null : entity.getData(),
-                            e);
+                    LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
+                            replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
                     if (!readSucc) {
                         cursor.skipNext();
                     }
                     continue;
                 }
                 // handled in outer loop
-                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                LOG.warn("catch exception when replaying journal, id: {}, data: {},",
+                        replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
                 throw e;
             }
 
@@ -2245,6 +2244,19 @@ public class GlobalStateMgr {
             return true;
         }
         return false;
+    }
+
+    private String journalEntityToReadableString(JournalEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+        Writable data = entity.getData();
+        try {
+            return GsonUtils.GSON.toJson(data);
+        } catch (Exception e) {
+            // In older version, data may not be json, here we just return the binary data.
+            return data.toString();
+        }
     }
 
     private boolean canSkipBadReplayedJournal() {
