@@ -2745,7 +2745,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
+- 描述：是否使用延迟物化优化parquet读性能。
 - 引入版本：-
 -->
 
@@ -2756,8 +2756,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
-- 引入版本：-
+- 描述：是否使用v2版延迟物化优化parquet读性能。v3.2版本包含两个版本的parquet reader延迟物化，v3.3版本仅保留新版延迟物化，并删除该参数。
+- 引入版本：v3.2
 -->
 
 <!--
@@ -2767,8 +2767,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
-- 引入版本：-
+- 描述：是否使用parquet pageindex信息优化读性能。
+- 引入版本：v3.3
 -->
 
 <!--
@@ -2800,8 +2800,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
+- 描述：根据谓词选择度，自适应决定是否将谓词列IO和非谓词列IO进行合并。
+- 引入版本：v3.2
 -->
 
 <!--

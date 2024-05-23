@@ -2801,7 +2801,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: A boolean value to control whether to enable the late materialization of parquet reader to improve performance. true indicates enabling late materialization, and false indicates disabling it.
 - Introduced in: -
 -->
 
@@ -2812,8 +2812,8 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
+- Description: A boolean value to control whether to enable the late materialization v2 of parquet reader to improve performance. true indicates enabling late materialization v2, and false indicates disabling it. In v3.3, only new version late materialization is reserved, and this configuration is deprecated.
+- Introduced in: v3.2
 -->
 
 <!--
@@ -2823,8 +2823,8 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
+- Description: A boolean value to control whether to enable the pageindex of parquet file to improve performance. true indicates enabling pageindex, and false indicates disabling it.
+- Introduced in: v3.3
 -->
 
 <!--
@@ -2856,8 +2856,8 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
+- Description: Depending on the selectivity of conjuncts, adaptively coalesce io of columns with conjuncts and io of other columns.
+- Introduced in: v3.2
 -->
 
 <!--
