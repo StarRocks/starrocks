@@ -704,7 +704,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private List<String> getUpdatedPartitionNames(
             List<String> partitionNames,
             Map<String, MaterializedView.BasePartitionInfo> tablePartitionInfoMap,
-            Map<String , Optional<PartitionDataInfo>> partitionDataInfos) {
+            Map<String, Optional<PartitionDataInfo>> partitionDataInfos) {
         List<String> updatedPartitionNames = Lists.newArrayList();
         for (int i = 0; i < partitionNames.size(); i++) {
             String partitionName = partitionNames.get(i);
