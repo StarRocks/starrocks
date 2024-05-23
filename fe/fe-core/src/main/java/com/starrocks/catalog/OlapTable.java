@@ -976,6 +976,7 @@ public class OlapTable extends Table {
         //    If "reserveTablets" is true, the tablets of this partition will not to delete.
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
+<<<<<<< HEAD
         if (partition != null) {
             if (partitionInfo.isRangePartition()) {
                 idToPartition.remove(partition.getId());
@@ -1008,6 +1009,43 @@ public class OlapTable extends Table {
                 listPartitionInfo.dropPartition(partition.getId());
             }
             GlobalStateMgr.getCurrentAnalyzeMgr().dropPartition(partition.getId());
+=======
+        if (partition == null) {
+            return;
+        }
+
+        if (!reserveTablets) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
+            recyclePartitionInfo.setRecoverable(!isForceDrop);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+        }
+
+        partitionInfo.dropPartition(partition.getId());
+        idToPartition.remove(partition.getId());
+        nameToPartition.remove(partitionName);
+        physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
+                .stream().map(PhysicalPartition::getId)
+                .collect(Collectors.toList()));
+    }
+
+    protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
+        if (partitionInfo.isRangePartition()) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            return new RecycleRangePartitionInfo(dbId, id, partition,
+                    rangePartitionInfo.getRange(partition.getId()),
+                    rangePartitionInfo.getDataProperty(partition.getId()),
+                    rangePartitionInfo.getReplicationNum(partition.getId()),
+                    rangePartitionInfo.getIsInMemory(partition.getId()),
+                    rangePartitionInfo.getDataCacheInfo(partition.getId()));
+        } else if (partitionInfo.isListPartition()) {
+            return new RecycleListPartitionInfo(dbId, id, partition,
+                    partitionInfo.getDataProperty(partition.getId()),
+                    partitionInfo.getReplicationNum(partition.getId()),
+                    partitionInfo.getIsInMemory(partition.getId()),
+                    partitionInfo.getDataCacheInfo(partition.getId()));
+        } else {
+            throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
+>>>>>>> 1e4bd06191 ([BugFix] clean stale column stats periodically  (#45839))
         }
     }
 

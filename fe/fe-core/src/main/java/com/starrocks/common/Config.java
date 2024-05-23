@@ -1769,6 +1769,12 @@ public class Config extends ConfigBase {
     public static boolean statistic_check_expire_partition = true;
 
     /**
+     * Clear stale partition statistics data job work interval
+     */
+    @ConfField(mutable = true)
+    public static long clear_stale_stats_interval_sec = 12 * 60 * 60L; // 12 hour
+
+    /**
      * The collect thread work interval
      */
     @ConfField(mutable = true)
