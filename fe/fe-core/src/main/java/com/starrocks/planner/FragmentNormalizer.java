@@ -50,6 +50,7 @@ import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TSimpleJSONProtocol;
+import org.apache.thrift.transport.TTransportException;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -231,9 +232,8 @@ public class FragmentNormalizer {
     public ByteBuffer normalizeExpr(Expr expr) {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
-        //TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
-        TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
         try {
+            TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
