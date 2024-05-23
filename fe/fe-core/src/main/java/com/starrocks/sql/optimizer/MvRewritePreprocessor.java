@@ -204,6 +204,7 @@ public class MvRewritePreprocessor {
     }
 
     public void prepare(OptExpression queryOptExpression) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
         // MV Rewrite will be used when cbo is enabled.
         if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
                 !sessionVariable.isEnableMaterializedViewRewrite()) {
