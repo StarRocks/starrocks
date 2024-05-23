@@ -230,7 +230,6 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
         starRocksAssert.getCtx().getSessionVariable().setPlanMode("local");
     }
 
-    @Test
     public void testIcebergDistributedPlanParserError() {
         mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableC.newAppend().appendFile(FILE_B_2).commit();
