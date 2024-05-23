@@ -252,6 +252,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v2.5.20, v3.1.9, v3.2.7, v3.3.0
 
+### enable_materialized_view_plan_cache
+
+* **Description**: Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. Setting it to `true` indicates enabling it.
+* **Default**: true
+* **Introduced in**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
+
 ### follower_query_forward_mode
 
 * **Description**: Specifies to which FE nodes the query statements are routed.
@@ -905,8 +911,6 @@ Used to set the time zone of the current session. The time zone can affect the r
 * **Description**: Used to control where to output the logs of query trace profiles. Valid values:
   * `command`: Return query trace profile logs as the **Explain String** after executing TRACE LOGS.
   * `file`: Return query trace profile logs in the FE log file **fe.log** with the class name being `FileLogTracer`.
-
-  For more information on query trace profile, see [Query Trace Profile](../developers/trace-tools/query_trace_profile.md).
 
 * **Default**: `command`
 * **Data type**: String

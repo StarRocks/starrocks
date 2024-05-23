@@ -171,13 +171,16 @@ public class CreateFunctionAnalyzer {
             System.setSecurityManager(null);
         }
 
+        Function createdFunction = null;
         if (stmt.isScalar()) {
-            analyzeStarrocksJarUdf(stmt, checksum, handleClass);
+            createdFunction = analyzeStarrocksJarUdf(stmt, checksum, handleClass);
         } else if (stmt.isAggregate()) {
-            analyzeStarrocksJarUdaf(stmt, checksum, handleClass, stateClass);
+            createdFunction = analyzeStarrocksJarUdaf(stmt, checksum, handleClass, stateClass);
         } else {
-            analyzeStarrocksJarUdtf(stmt, checksum, handleClass);
+            createdFunction = analyzeStarrocksJarUdtf(stmt, checksum, handleClass);
         }
+        
+        stmt.setFunction(createdFunction);
     }
 
     private void checkStarrocksJarUdfClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass) {
@@ -194,7 +197,7 @@ public class CreateFunctionAnalyzer {
         }
     }
 
-    private void analyzeStarrocksJarUdf(CreateFunctionStmt stmt, String checksum,
+    private Function analyzeStarrocksJarUdf(CreateFunctionStmt stmt, String checksum,
                                                JavaUDFInternalClass handleClass) {
         checkStarrocksJarUdfClass(stmt, handleClass);
 
@@ -209,6 +212,7 @@ public class CreateFunctionAnalyzer {
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
                 objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation));
         function.setChecksum(checksum);
+        return function;
     }
 
     private void checkStarrocksJarUdafStateClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass,
@@ -299,7 +303,7 @@ public class CreateFunctionAnalyzer {
         }
     }
 
-    private void analyzeStarrocksJarUdaf(CreateFunctionStmt stmt, String checksum,
+    private Function analyzeStarrocksJarUdaf(CreateFunctionStmt stmt, String checksum,
                                                 JavaUDFInternalClass mainClass,
                                                 JavaUDFInternalClass udafStateClass) {
         FunctionName functionName = stmt.getFunctionName();
@@ -321,10 +325,10 @@ public class CreateFunctionAnalyzer {
                 .symbolName(mainClass.getCanonicalName());
         Function function = builder.build();
         function.setChecksum(checksum);
-        stmt.setFunction(function);
+        return function;
     }
 
-    private void analyzeStarrocksJarUdtf(CreateFunctionStmt stmt, String checksum,
+    private Function analyzeStarrocksJarUdtf(CreateFunctionStmt stmt, String checksum,
                                                 JavaUDFInternalClass mainClass) {
         FunctionName functionName = stmt.getFunctionName();
         FunctionArgsDef argsDef = stmt.getArgsDef();
@@ -348,7 +352,7 @@ public class CreateFunctionAnalyzer {
         tableFunction.setChecksum(checksum);
         tableFunction.setLocation(new HdfsURI(objectFile));
         tableFunction.setSymbolName(mainClass.getCanonicalName());
-        stmt.setFunction(tableFunction);
+        return tableFunction;
     }
 
     private static final ImmutableMap<PrimitiveType, Class<?>> PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE =

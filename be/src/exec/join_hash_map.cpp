@@ -265,6 +265,18 @@ void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& t
     }
 }
 
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_index_output(ChunkPtr* chunk) {
+    _probe_state->probe_index.resize((*chunk)->num_rows());
+    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_index_output(ChunkPtr* chunk) {
+    _probe_state->build_index.resize(_probe_state->count);
+    (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+}
+
 JoinHashTable JoinHashTable::clone_readable_table() {
     JoinHashTable ht;
 
@@ -323,7 +335,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->mor_reader_mode = param.mor_reader_mode;
-    _table_items->enable_lazy_materialize = param.enable_lazy_materialize;
+    _table_items->enable_late_materialization = param.enable_late_materialization;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
         _table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN) {
@@ -356,7 +368,7 @@ void JoinHashTable::_init_probe_column(const HashTableParam& param) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
 
-            if (param.enable_lazy_materialize) {
+            if (param.enable_late_materialization) {
                 if (param.probe_output_slots.empty()) {
                     // Empty means need output all
                     hash_table_slot.need_output = true;
@@ -414,7 +426,7 @@ void JoinHashTable::_init_build_column(const HashTableParam& param) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
 
-            if (!param.mor_reader_mode && param.enable_lazy_materialize) {
+            if (!param.mor_reader_mode && param.enable_late_materialization) {
                 if (param.build_output_slots.empty()) {
                     hash_table_slot.need_output = true;
                     hash_table_slot.need_lazy_materialize = false;
@@ -931,5 +943,25 @@ void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Filter* filter) 
         }
     }
 }
+
+template class JoinHashMapForDirectMapping(TYPE_BOOLEAN);
+template class JoinHashMapForDirectMapping(TYPE_TINYINT);
+template class JoinHashMapForDirectMapping(TYPE_SMALLINT);
+template class JoinHashMapForOneKey(TYPE_INT);
+template class JoinHashMapForOneKey(TYPE_BIGINT);
+template class JoinHashMapForOneKey(TYPE_LARGEINT);
+template class JoinHashMapForOneKey(TYPE_FLOAT);
+template class JoinHashMapForOneKey(TYPE_DOUBLE);
+template class JoinHashMapForOneKey(TYPE_VARCHAR);
+template class JoinHashMapForOneKey(TYPE_DATE);
+template class JoinHashMapForOneKey(TYPE_DATETIME);
+template class JoinHashMapForOneKey(TYPE_DECIMALV2);
+template class JoinHashMapForOneKey(TYPE_DECIMAL32);
+template class JoinHashMapForOneKey(TYPE_DECIMAL64);
+template class JoinHashMapForOneKey(TYPE_DECIMAL128);
+template class JoinHashMapForSerializedKey(TYPE_VARCHAR);
+template class JoinHashMapForFixedSizeKey(TYPE_INT);
+template class JoinHashMapForFixedSizeKey(TYPE_BIGINT);
+template class JoinHashMapForFixedSizeKey(TYPE_LARGEINT);
 
 } // namespace starrocks

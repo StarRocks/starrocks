@@ -47,9 +47,9 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
-import io.delta.kernel.client.TableClient;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
@@ -70,8 +70,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-
-import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
 public class DeltaLakeScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
@@ -152,13 +150,13 @@ public class DeltaLakeScanNode extends ScanNode {
         // PartitionKey -> partition id
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
-        TableClient tableClient = deltaLakeTable.getTableClient();
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(tableClient);
+        Engine deltaEngine = deltaLakeTable.getDeltaEngine();
+        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
         Scan scan = deltaLakePredicates.isPresent() ?
-                scanBuilder.withFilter(tableClient, deltaLakePredicates.get()).build() :
+                scanBuilder.withFilter(deltaEngine, deltaLakePredicates.get()).build() :
                 scanBuilder.build();
 
-        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(tableClient)) {
+        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
             while (scanFilesAsBatches.hasNext()) {
                 FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
 
@@ -260,19 +258,8 @@ public class DeltaLakeScanNode extends ScanNode {
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
-        List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
-
-        output.append(prefix).append(
-                String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        partitionNames.size() == 0 ? 1 : partitionNames.size()));
+        output.append(prefix).append(String.format("cardinality=%s", cardinality));
         output.append("\n");
-
-        // TODO: support it in verbose
-        if (detailLevel != VERBOSE) {
-            output.append(prefix).append(String.format("cardinality=%s", cardinality));
-            output.append("\n");
-        }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
@@ -285,6 +272,14 @@ public class DeltaLakeScanNode extends ScanNode {
                             .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
+
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+
+            output.append(prefix).append(
+                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
+            output.append("\n");
         }
 
         return output.toString();

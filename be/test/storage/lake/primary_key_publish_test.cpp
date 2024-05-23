@@ -660,6 +660,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
+        auto sstable_meta = new_tablet_metadata->sstable_meta();
+        for (auto& sstable : sstable_meta.sstables()) {
+            EXPECT_GT(sstable.version(), 0);
+            EXPECT_LE(sstable.version(), version);
+        }
+    }
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 

@@ -5164,6 +5164,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     }
     RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
     RETURN_IF_ERROR(_build_commit(loader, index_meta));
+    loader->set_write_amp_score(PersistentIndex::major_compaction_score(index_meta));
     LOG(INFO) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
               << " #rowset:" << loader->rowset_num() << " #segment:" << loader->total_segments()
               << " data_size:" << loader->total_data_size() << " size: " << _size << " l0_size: " << _l0->size()

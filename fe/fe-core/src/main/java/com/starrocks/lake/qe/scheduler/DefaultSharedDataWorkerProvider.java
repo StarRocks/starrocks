@@ -20,14 +20,18 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -68,16 +72,23 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                                                ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
                                                long warehouseId) {
 
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-            List<Long> computeNodeIds =
-                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseId);
             computeNodeIds.forEach(nodeId -> builder.put(nodeId,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
             ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
             if (LOG.isDebugEnabled()) {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
-            return new DefaultSharedDataWorkerProvider(idToComputeNode, filterAvailableWorkers(idToComputeNode));
+
+            ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode);
+            if (availableComputeNodes.isEmpty()) {
+                Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+            }
+
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);
         }
     }
 

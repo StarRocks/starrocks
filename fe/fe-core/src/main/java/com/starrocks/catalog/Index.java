@@ -171,7 +171,7 @@ public class Index implements Writable {
     @Override
     public int hashCode() {
         return 31 * (Long.hashCode(indexId) + indexName.hashCode()
-                + columns.hashCode() + indexType.hashCode() +
+                + columns.hashCode() + ((indexType != null) ? indexType.hashCode() : 0) +
                 ((properties != null) ? properties.hashCode() : 0));
     }
 
