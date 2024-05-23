@@ -790,7 +790,6 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 // but with coalesce read enabled, this value is not used.
 CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
-CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
