@@ -24,7 +24,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
-import java.util.Objects;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -67,10 +66,12 @@ public class MaterializedViewMetricsRegistry {
 
     private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,
                                        MetricVisitor visitor, boolean minifyMetrics) {
-        if (Objects.isNull(entity.dbName) || Objects.isNull(entity.mvName)) {
+        entity.initDbAndTableName();
+        if (entity.mvNameOpt.isEmpty() || entity.dbNameOpt.isEmpty()) {
             LOG.debug("Invalid materialized view metrics entity, mvId: {}", mvId);
             return;
         }
+
         for (Metric m : entity.getMetrics()) {
             // minify metrics if needed
             if (minifyMetrics) {
@@ -86,8 +87,8 @@ public class MaterializedViewMetricsRegistry {
                     continue;
                 }
             }
-            m.addLabel(new MetricLabel("db_name", entity.dbName))
-                    .addLabel(new MetricLabel("mv_name", entity.mvName))
+            m.addLabel(new MetricLabel("db_name", entity.dbNameOpt.get()))
+                    .addLabel(new MetricLabel("mv_name", entity.mvNameOpt.get()))
                     .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())));
             visitor.visit(m);
         }
