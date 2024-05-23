@@ -14,11 +14,12 @@
 
 package com.starrocks.connector;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 // used to check whether data in object storage system has changed.
@@ -26,15 +27,16 @@ import java.util.Optional;
 public class ObjectBasedUpdateArbitrator extends TableUpdateArbitrator {
 
     @Override
-    public List<Optional<PartitionDataInfo>> getPartitionDataInfos() {
-        List<Optional<PartitionDataInfo>> partitionDataInfos = Lists.newArrayList();
+    public Map<String, Optional<PartitionDataInfo>> getPartitionDataInfos() {
+        Map<String, Optional<PartitionDataInfo>> partitionDataInfos = Maps.newHashMap();
         List<String> partitionNameToFetch = partitionNames;
         if (partitionLimit >= 0) {
             partitionNameToFetch = partitionNames.subList(0, partitionLimit);
         }
         List<RemoteFileInfo> remoteFileInfos =
                     GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(table, partitionNameToFetch);
-        for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
+        for (int i = 0; i < partitionNameToFetch.size(); i++) {
+            RemoteFileInfo remoteFileInfo = remoteFileInfos.get(0);
             List<RemoteFileDesc> remoteFileDescs = remoteFileInfo.getFiles();
             if (remoteFileDescs != null) {
                 long lastFileModifiedTime = Long.MIN_VALUE;
@@ -45,9 +47,9 @@ public class ObjectBasedUpdateArbitrator extends TableUpdateArbitrator {
                     lastFileModifiedTime = maxLastModifiedTimeFile.get().getModificationTime();
                 }
                 PartitionDataInfo partitionDataInfo = new PartitionDataInfo(lastFileModifiedTime, fileNumber);
-                partitionDataInfos.add(Optional.of(partitionDataInfo));
+                partitionDataInfos.put(partitionNameToFetch.get(i), Optional.of(partitionDataInfo));
             } else {
-                partitionDataInfos.add(Optional.empty());
+                partitionDataInfos.put(partitionNameToFetch.get(i), Optional.empty());
             }
         }
         return partitionDataInfos;

@@ -687,7 +687,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             autoRefreshPartitionsLimit,
                             partitionNames);
                     TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-                    List<Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+                    Map<String, Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
                     List<String> updatedPartitionNames =
                             getUpdatedPartitionNames(partitionNames, partitionInfoMap, partitionDataInfos);
                     LOG.info("try to get updated partitions names based on data." +
@@ -704,11 +704,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private List<String> getUpdatedPartitionNames(
             List<String> partitionNames,
             Map<String, MaterializedView.BasePartitionInfo> tablePartitionInfoMap,
-            List<Optional<PartitionDataInfo>> partitionDataInfos) {
+            Map<String , Optional<PartitionDataInfo>> partitionDataInfos) {
         List<String> updatedPartitionNames = Lists.newArrayList();
         for (int i = 0; i < partitionNames.size(); i++) {
-            MaterializedView.BasePartitionInfo basePartitionInfo = tablePartitionInfoMap.get(partitionNames.get(i));
-            Optional<PartitionDataInfo> partitionDataInfoOptional = partitionDataInfos.get(i);
+            String partitionName = partitionNames.get(i);
+            if (!partitionDataInfos.containsKey(partitionName)) {
+                continue;
+            }
+            MaterializedView.BasePartitionInfo basePartitionInfo = tablePartitionInfoMap.get(partitionName);
+            Optional<PartitionDataInfo> partitionDataInfoOptional = partitionDataInfos.get(partitionName);
             if (partitionDataInfoOptional.isEmpty()) {
                 updatedPartitionNames.add(partitionNames.get(i));
             } else {
@@ -2062,7 +2066,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     -1,
                     Lists.newArrayList(partitionName));
             TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-            List<Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+            Map<String, Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
             Preconditions.checkState(partitionDataInfos.size() == 1);
             if (partitionDataInfos.get(0).isPresent()) {
                 PartitionDataInfo partitionDataInfo = partitionDataInfos.get(0).get();

@@ -64,6 +64,6 @@ public abstract class TableUpdateArbitrator {
         return arbitrator;
     }
 
-    public abstract List<Optional<PartitionDataInfo>> getPartitionDataInfos();
+    public abstract Map<String, Optional<PartitionDataInfo>> getPartitionDataInfos();
 
 }
