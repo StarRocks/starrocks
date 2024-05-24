@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
@@ -710,7 +711,20 @@ public class ConnectProcessor {
             }
             // 0 for compatibility.
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
-            executor = new StmtExecutor(ctx, new OriginStatement(request.getSql(), idx), true);
+
+            List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
+            StatementBase statement = stmts.get(idx);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(statement);
+
+            executor = new StmtExecutor(ctx, statement);
+            executor.setProxy();
             executor.execute();
         } catch (IOException e) {
             // Client failed.
