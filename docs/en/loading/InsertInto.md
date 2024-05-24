@@ -321,7 +321,7 @@ Empty set (0.00 sec)
 :::note
 For tables that use the `PARTITION BY column` strategy, INSERT OVERWRITE supports creates new partitions in the destination table by specifying the value of the partition key. Existing partitions are overwritten as usual.
 
-The following example creates the table `activity` with the list partitioning strategy, and creates a new partition in the table while inserting data into it:
+The following example creates the partitioned table `activity`, and creates a new partition in the table while inserting data into it:
 
 ```SQL
 CREATE TABLE activity (
