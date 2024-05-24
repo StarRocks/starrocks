@@ -1589,8 +1589,8 @@ public class LocalMetastore implements ConnectorMetadata {
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
+            Partition partition = olapTable.getPartition(partitionName);
             if (!clause.isForceDrop()) {
-                Partition partition = olapTable.getPartition(partitionName);
                 if (partition != null) {
                     if (stateMgr.getGlobalTransactionMgr()
                             .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
@@ -1601,6 +1601,10 @@ public class LocalMetastore implements ConnectorMetadata {
                                         " please use \"DROP PARTITION <partition> FORCE\".");
                     }
                 }
+            }
+
+            if (partition != null) {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
             }
             olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             if (olapTable instanceof MaterializedView) {
@@ -5029,10 +5033,12 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
 
                     origPartitions.put(partName, partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                 }
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
                     origPartitions.put(partition.getName(), partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                 }
             }
 
@@ -5349,7 +5355,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException("Temp partition[" + partName + "] does not exist");
                 }
             }
-
+            partitionNames.stream().forEach(e ->
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(olapTable.getPartition(e).getId()));
             olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
 
             // write log
