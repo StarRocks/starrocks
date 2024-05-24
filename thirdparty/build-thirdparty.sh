@@ -1208,39 +1208,6 @@ build_libdeflate() {
     ${BUILD_SYSTEM} install
 }
 
-<<<<<<< HEAD
-=======
-#clucene
-build_clucene() {
-
-    check_if_source_exist "${CLUCENE_SOURCE}"
-    cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
-
-    mkdir -p "${BUILD_DIR}"
-    cd "${BUILD_DIR}"
-    rm -rf CMakeCache.txt CMakeFiles/
-
-    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
-        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
-        -DCMAKE_INSTALL_LIBDIR=lib64 \
-        -DBUILD_STATIC_LIBRARIES=ON \
-        -DBUILD_SHARED_LIBRARIES=OFF \
-        -DBOOST_ROOT="$TP_INSTALL_DIR" \
-        -DZLIB_ROOT="$TP_INSTALL_DIR" \
-        -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" \
-        -DUSE_STAT64=0 \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_CONTRIBS_LIB=ON ..
-    ${BUILD_SYSTEM} -j "${PARALLEL}"
-    ${BUILD_SYSTEM} install
-
-    cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
-    if [[ ! -d "$TP_INSTALL_DIR"/share ]]; then
-        mkdir -p "$TP_INSTALL_DIR"/share
-    fi
-}
-
->>>>>>> fad3f1b76e ([Tool] Force file relative path in BE's debug symbol (#46030))
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
