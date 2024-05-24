@@ -212,6 +212,12 @@ under the License.
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+            <groupId>com.baidu</groupId>
+            <artifactId>jprotobuf</artifactId>
+            <classifier>jar-with-dependencies</classifier>
+            <scope>provided</scope>
+        </dependency>
         <!-- fixed for cve problems -->
         <dependency>
             <groupId>com.google.auto.value</groupId>

@@ -328,6 +328,13 @@ under the License.
                 <artifactId>jprotobuf</artifactId>
                 <version>${jprotobuf.version}</version>
             </dependency>
+            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
+            <dependency>
+                <groupId>com.baidu</groupId>
+                <artifactId>jprotobuf</artifactId>
+                <classifier>jar-with-dependencies</classifier>
+                <version>${jprotobuf.version}</version>
+            </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-common -->
             <dependency>
