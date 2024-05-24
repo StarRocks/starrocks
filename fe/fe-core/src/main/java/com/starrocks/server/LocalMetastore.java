@@ -1581,26 +1581,13 @@ public class LocalMetastore implements ConnectorMetadata {
                                         " please use \"DROP PARTITION <partition> FORCE\".");
                     }
                 }
-<<<<<<< HEAD
-=======
-                Range<PartitionKey> partitionRange = null;
-                if (partition != null) {
-                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
-                    if (partitionInfo instanceof RangePartitionInfo) {
-                        partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
-                    }
-                }
-
-                olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
-                if (olapTable instanceof MaterializedView) {
-                    MaterializedView mv = (MaterializedView) olapTable;
-                    SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
-                }
->>>>>>> 1e4bd06191 ([BugFix] clean stale column stats periodically  (#45839))
             }
             Range<PartitionKey> partitionRange = null;
-            if (partitionInfo instanceof RangePartitionInfo && partition != null) {
-                partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+            if (partition != null) {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
+                if (partitionInfo instanceof RangePartitionInfo) {
+                    partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                }
             }
             olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             if (olapTable instanceof MaterializedView) {
