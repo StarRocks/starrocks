@@ -48,6 +48,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -59,7 +60,9 @@ import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.FieldDef;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -77,6 +80,8 @@ import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
@@ -88,6 +93,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext> {
+
+    private static final Logger LOG = LogManager.getLogger(AlterTableClauseVisitor.class);
 
     private Table table;
 
@@ -677,6 +684,28 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
     }
 
     @Override
+    public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColumnName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Add field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        FieldDef fieldDef = clause.getFieldDef();
+        try {
+            fieldDef.analyze(baseColumn, false);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
+        }
+        LOG.info("Analyze add field definition finished");
+        throw new SemanticException("Analyze add field definition success");
+    }
+
+    @Override
     public Void visitDropColumnClause(DropColumnClause clause, ConnectContext context) {
         if (Strings.isNullOrEmpty(clause.getColName())) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(clause.getColName()));
@@ -696,6 +725,28 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
             }
         }
         return null;
+    }
+
+    @Override
+    public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Drop field only support olap table");
+        }
+        
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        FieldDef fieldDef = new FieldDef(clause.getFieldName(), clause.getParentFieldNames(), null, null);
+        try {
+            fieldDef.analyze(baseColumn, true);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
+        }
+        LOG.info("Analyze drop field definition finished");
+        throw new SemanticException("Analyze drop field definition success");
     }
 
     @Override

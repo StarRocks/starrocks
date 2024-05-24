@@ -114,6 +114,7 @@ import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddFollowerClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -220,6 +221,7 @@ import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropDictionaryStmt;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -246,6 +248,7 @@ import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.FieldDef;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -4066,6 +4069,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitAddFieldClause(StarRocksParser.AddFieldClauseContext context) {
+        String columnName = getIdentifierName(context.identifier(0));
+        String rollupName = null;
+        StarRocksParser.SubfieldDescContext subFieldDescContext = context.subfieldDesc();
+        List<String> parts = null;
+        if (subFieldDescContext.nestedFieldName() != null) {
+            parts = getFieldName(subFieldDescContext.nestedFieldName());
+        }
+        String fieldName = null;
+        if (parts != null && !parts.isEmpty()) {
+            fieldName = parts.get(parts.size() - 1);
+            parts.remove(parts.size() - 1);
+        }
+        TypeDef typeDef = new TypeDef(getType(subFieldDescContext.type()), createPos(subFieldDescContext.type()));
+        ColumnPosition fieldPosition = null;
+        if (context.FIRST() != null) {
+            fieldPosition = ColumnPosition.FIRST;
+        } else if (context.AFTER() != null) {
+            StarRocksParser.IdentifierContext identifier = context.identifier(1);
+            String afterFieldName = getIdentifierName(identifier);
+            fieldPosition = new ColumnPosition(afterFieldName, createPos(identifier));
+        }
+        FieldDef fieldDef = new FieldDef(fieldName, parts, typeDef, fieldPosition);
+        return new AddFieldClause(columnName, fieldDef, rollupName, getProperties(context.properties()));
+    }
+
+    @Override
     public ParseNode visitDropColumnClause(StarRocksParser.DropColumnClauseContext context) {
         String columnName = getIdentifierName(context.identifier(0));
         String rollupName = null;
@@ -4073,6 +4103,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             rollupName = getIdentifierName(context.rollupName);
         }
         return new DropColumnClause(columnName, rollupName, getProperties(context.properties()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropFieldClause(StarRocksParser.DropFieldClauseContext context) {
+        String columnName = getIdentifierName(context.identifier());
+        String rollupName = null;
+        List<String> parts = getFieldName(context.nestedFieldName());
+        String fieldName = null;
+        if (parts != null && !parts.isEmpty()) {
+            fieldName = parts.get(parts.size() - 1);
+            parts.remove(parts.size() - 1);
+        }
+        return new DropFieldClause(columnName, fieldName, parts, rollupName, getProperties(context.properties()));
     }
 
     @Override
@@ -7343,6 +7386,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return QualifiedName.of(parts, pos);
+    }
+
+    private List<String> getFieldName(StarRocksParser.NestedFieldNameContext context) {
+        List<String> parts = new ArrayList<>();
+        for (ParseTree c : context.children) {
+            if (c instanceof StarRocksParser.SubfieldNameContext) {
+                StarRocksParser.SubfieldNameContext subfieldNameContext = (StarRocksParser.SubfieldNameContext) c;
+                if (subfieldNameContext.ARRAR_ELEMENT() != null) {
+                    TerminalNode t = subfieldNameContext.ARRAR_ELEMENT();
+                    parts.add(t.getText());
+                } else {
+                    StarRocksParser.IdentifierContext identifierContext = subfieldNameContext.identifier();
+                    Identifier identifier = (Identifier) visit(identifierContext);
+                    parts.add(identifier.getValue());
+                }
+            }
+        }
+        return parts;
     }
 
     private TaskName qualifiedNameToTaskName(QualifiedName qualifiedName) {

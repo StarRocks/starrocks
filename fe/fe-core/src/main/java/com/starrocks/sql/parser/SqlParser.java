@@ -129,6 +129,7 @@ public class SqlParser {
     }
 
     private static List<StatementBase> parseWithStarRocksDialect(String sql, SessionVariable sessionVariable) {
+        LOG.info("origin sql is {}", sql);
         List<StatementBase> statements = Lists.newArrayList();
         Pair<ParserRuleContext, StarRocksParser> pair = invokeParser(sql, sessionVariable, StarRocksParser::sqlStatements);
         StarRocksParser.SqlStatementsContext sqlStatementsContext = (StarRocksParser.SqlStatementsContext) pair.first;

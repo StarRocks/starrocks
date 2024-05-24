@@ -34,6 +34,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -47,6 +48,7 @@ import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
@@ -227,6 +229,18 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitCompactionClause(CompactionClause clause, ConnectContext context) {
+        unsupportedException("Not support");
+        return null;
+    }
+
+    @Override
+    public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
+        unsupportedException("Not support");
+        return null;
+    }
+
+    @Override
+    public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
         unsupportedException("Not support");
         return null;
     }

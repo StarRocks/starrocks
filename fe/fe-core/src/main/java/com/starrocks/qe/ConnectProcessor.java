@@ -363,6 +363,7 @@ public class ConnectProcessor {
             ending--;
         }
         originStmt = new String(bytes, 1, ending, StandardCharsets.UTF_8);
+        LOG.info("originStmt is {}", originStmt);
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
