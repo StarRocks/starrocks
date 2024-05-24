@@ -834,17 +834,17 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
+    auto open_request = _open_request;
+    open_request.set_sender_id(0);
+    open_request.set_num_senders(num_sender);
+    open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
+
+    auto open_response = PTabletWriterOpenResult{};
+
+    ASSERT_OK(_tablets_channel->open(open_request, &open_response, _schema_param, false));
+    ASSERT_EQ(0, open_response.status().status_code());
+
     auto sender_task = [&](int sender_id) {
-        auto open_request = _open_request;
-        open_request.set_sender_id(sender_id);
-        open_request.set_num_senders(num_sender);
-        open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
-
-        auto open_response = PTabletWriterOpenResult{};
-
-        ASSERT_OK(_tablets_channel->open(open_request, &open_response, _schema_param, false));
-        ASSERT_EQ(0, open_response.status().status_code());
-
         PTabletWriterAddChunkRequest add_chunk_request;
         PTabletWriterAddBatchResult add_chunk_response;
         add_chunk_request.set_index_id(kIndexId);
