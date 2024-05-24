@@ -271,13 +271,13 @@ If the materialized view fails to refresh, that is, the state of the refresh tas
   - Enable the Spill to Disk feature for the refresh task. From v3.1 onwards, StarRocks supports spilling the intermediate results to disks when refreshing a materialized view. Execute the following statement to enable Spill to Disk:
 
   ```SQL
-  -- Define the properties when creating the materialized view
+  -- Define the properties when creating the materialized view.
   CREATE MATERIALIZED VIEW mv1 
   REFRESH ASYNC
   PROPERTIES ( 'session.enable_spill'='true' )
   AS <query>;
 
-  -- Add the properties.
+  -- Add the properties to an existing materialized view.
   ALTER MATERIALIZED VIEW mv2 SET ('session.enable_spill' = 'true');
   ```
 
