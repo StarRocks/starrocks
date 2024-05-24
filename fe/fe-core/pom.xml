@@ -212,6 +212,7 @@ under the License.
                 </exclusion>
             </exclusions>
         </dependency>
+        <!--jar-with-dependencies only used by compile protobuf, but will not compile into fe-->
         <dependency>
             <groupId>com.baidu</groupId>
             <artifactId>jprotobuf</artifactId>
@@ -828,11 +829,11 @@ under the License.
             <artifactId>paimon-codegen-loader</artifactId>
             <version>${paimon.version}</version>
         </dependency>
-<!--        <dependency>-->
-<!--            <groupId>org.apache.paimon</groupId>-->
-<!--            <artifactId>paimon-format</artifactId>-->
-<!--            <version>${paimon.version}</version>-->
-<!--        </dependency>-->
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-format</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-hive-catalog</artifactId>
