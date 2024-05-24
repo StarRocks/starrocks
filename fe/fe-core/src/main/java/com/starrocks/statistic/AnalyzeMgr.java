@@ -460,7 +460,7 @@ public class AnalyzeMgr implements Writable {
         }
 
         //  do the clear task once every 12 hours.
-        if (Duration.between(lastCleanTime, LocalDateTime.now()).toSeconds() < Config.clear_stale_stats_interval_sec) {
+        if (Duration.between(lastCleanTime, LocalDateTime.now()).toMinutes() * 60 < Config.clear_stale_stats_interval_sec) {
             return;
         }
 
