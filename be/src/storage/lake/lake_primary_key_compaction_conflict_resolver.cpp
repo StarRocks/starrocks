@@ -47,7 +47,7 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_each_segment_iterator(pkey_schema, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments());
     // init delvec loader
-    auto delvec_loader = std::make_unique<LakeDelvecLoader>(_update_manager, _builder);
+    auto delvec_loader = std::make_unique<LakeDelvecLoader>(_update_manager, _builder, false /* fill cache */);
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();

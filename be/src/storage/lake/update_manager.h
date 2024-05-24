@@ -44,13 +44,14 @@ using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
-    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder)
-            : _update_mgr(update_mgr), _pk_builder(pk_builder) {}
+    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder, bool fill_cache)
+            : _update_mgr(update_mgr), _pk_builder(pk_builder), _fill_cache(fill_cache) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
 
 private:
     UpdateManager* _update_mgr = nullptr;
     const MetaFileBuilder* _pk_builder = nullptr;
+    bool _fill_cache = false;
 };
 
 class PersistentIndexBlockCache {
@@ -96,11 +97,11 @@ public:
                              vector<std::unique_ptr<Column>>* columns,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
-    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
+    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder, bool fill_cache,
                        DelVectorPtr* pdelvec);
 
     // get delvec from tablet meta file
-    Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec);
+    Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache, DelVector* delvec);
     // set delvec cache
     Status set_cached_del_vec(const std::vector<std::pair<TabletSegmentId, DelVectorPtr>>& cache_delvec_updates,
                               int64_t version);
