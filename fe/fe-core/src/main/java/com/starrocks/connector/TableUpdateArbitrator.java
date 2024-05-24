@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
@@ -27,6 +28,12 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 public abstract class TableUpdateArbitrator {
+    private static ImmutableList<String> SUPPORTED_SCHEMA = ImmutableList.<String>builder()
+            .add("OSS")
+            .add("S3")
+            .add("HDFS")
+            .build();
+
     private static final Map<Pair<Table.TableType, String>, Supplier<TableUpdateArbitrator>> TRAITS_TABLE =
             ImmutableMap.<Pair<Table.TableType, String>, Supplier<TableUpdateArbitrator>>builder()
                     .put(Pair.create(Table.TableType.HIVE, "OSS"), ObjectBasedUpdateArbitrator::new)
@@ -54,6 +61,9 @@ public abstract class TableUpdateArbitrator {
         String location = context.table.getTableLocation();
         URI uri = URI.create(location);
         String scheme = Optional.ofNullable(uri.getScheme()).orElse("").toUpperCase(Locale.ROOT);
+        if (!SUPPORTED_SCHEMA.contains(scheme)) {
+            return null;
+        }
         Pair key = Pair.create(context.table.getType(), scheme);
         TableUpdateArbitrator arbitrator = Preconditions.checkNotNull(TRAITS_TABLE.get(key),
                 String.format("table type:%s, schema:%s not supported in update arbitrator's traits",

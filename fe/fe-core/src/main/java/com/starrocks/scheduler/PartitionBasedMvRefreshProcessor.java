@@ -662,6 +662,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
                 }
                 Table newTable = newTableOptional.get();
+                if (!(newTable instanceof HiveTable)
+                        || ((HiveTable) newTable).getHiveTableType() != HiveTable.HiveTableType.EXTERNAL_TABLE ) {
+                    continue;
+                }
                 if (!baseTableInfo.getTableIdentifier().equals(newTable.getTableIdentifier())) {
                     // table identifier changed, original table may be dropped and recreated
                     // consider auto refresh partition limit
@@ -687,6 +691,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             autoRefreshPartitionsLimit,
                             partitionNames);
                     TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
+                    if (arbitrator == null) {
+                        return;
+                    }
                     Map<String, Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
                     List<String> updatedPartitionNames =
                             getUpdatedPartitionNames(partitionNames, partitionInfoMap, partitionDataInfos);
@@ -2065,13 +2072,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     table,
                     -1,
                     Lists.newArrayList(partitionName));
-            TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-            Map<String, Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
-            Preconditions.checkState(partitionDataInfos.size() == 1);
-            if (partitionDataInfos.get(partitionName).isPresent()) {
-                PartitionDataInfo partitionDataInfo = partitionDataInfos.get(partitionName).get();
-                basePartitionInfo.setLastFileModifiedTime(partitionDataInfo.getLastFileModifiedTime());
-                basePartitionInfo.setFileNumber(partitionDataInfo.getFileNumber());
+            if (table instanceof HiveTable
+                    && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+                TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
+                if (arbitrator != null) {
+                    Map<String, Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+                    Preconditions.checkState(partitionDataInfos.size() == 1);
+                    if (partitionDataInfos.get(partitionName).isPresent()) {
+                        PartitionDataInfo partitionDataInfo = partitionDataInfos.get(partitionName).get();
+                        basePartitionInfo.setLastFileModifiedTime(partitionDataInfo.getLastFileModifiedTime());
+                        basePartitionInfo.setFileNumber(partitionDataInfo.getFileNumber());
+                    }
+                }
             }
             partitionInfos.put(partitionName, basePartitionInfo);
         }

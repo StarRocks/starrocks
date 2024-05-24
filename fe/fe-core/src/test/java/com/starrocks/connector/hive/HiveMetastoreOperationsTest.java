@@ -351,7 +351,7 @@ public class HiveMetastoreOperationsTest {
 
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
-                true,
+                false,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
                         new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
@@ -388,7 +388,7 @@ public class HiveMetastoreOperationsTest {
         // Table Like DDL, the system looks for the like table from hms.
         CreateTableStmt stmt = new CreateTableStmt(
                 false,
-                true,
+                false,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
                         new ColumnDef("col1", TypeDef.create(PrimitiveType.INT)),
