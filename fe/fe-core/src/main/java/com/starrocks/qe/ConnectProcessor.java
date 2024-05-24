@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
@@ -105,7 +106,6 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
-
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -528,7 +528,7 @@ public class ConnectProcessor {
         packetBuf.get(nullBitmap);
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
-            
+
             // new_params_bind_flag
             if (packetBuf.hasRemaining() && (int) packetBuf.get() != 0) {
                 // parse params types
@@ -560,7 +560,7 @@ public class ConnectProcessor {
             if (enableAudit) {
                 auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
             }
-        } catch (Throwable e)  {
+        } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe palo bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
@@ -828,7 +828,20 @@ public class ConnectProcessor {
             }
             // 0 for compatibility.
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
-            executor = new StmtExecutor(ctx, new OriginStatement(request.getSql(), idx), true);
+
+            List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
+            StatementBase statement = stmts.get(idx);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(statement);
+
+            executor = new StmtExecutor(ctx, statement);
+            executor.setProxy();
             executor.execute();
         } catch (IOException e) {
             // Client failed.
