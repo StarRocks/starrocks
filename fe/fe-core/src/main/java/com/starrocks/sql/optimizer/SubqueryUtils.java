@@ -99,7 +99,7 @@ public class SubqueryUtils {
     public static LogicalPlan getLogicalPlan(ConnectContext session, CTETransformerContext cteContext,
                                              ColumnRefFactory columnRefFactory, QueryRelation relation,
                                              ExpressionMapping outer) {
-        if (relation instanceof QueryRelation) {
+        if (!(relation instanceof QueryRelation)) {
             throw new SemanticException("Currently only subquery of the Select type are supported");
         }
 
