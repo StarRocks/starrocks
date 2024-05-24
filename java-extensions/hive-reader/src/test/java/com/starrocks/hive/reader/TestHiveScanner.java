@@ -44,6 +44,45 @@ public class TestHiveScanner {
         return params;
     }
 
+    Map<String, String> createComplexTypeScanTestParams() {
+        Map<String, String> params = new HashMap<>();
+        URL resource = TestHiveScanner.class.getResource("/test_complex_type");
+        String basePath = resource.getPath().toString();
+        String filePath = basePath + "/complex_type_test.avro";
+        File file = new File(filePath);
+        params.put("data_file_path", filePath);
+        params.put("block_offset", "0");
+        params.put("block_length", String.valueOf(file.length()));
+        params.put("hive_column_names",
+                "id,array_col,map_col,struct_col");
+        params.put("hive_column_types",
+                "string#array<string>#map<string,string>#struct<uid:string,device_list:array<string>,info:map<string,string>>");
+        params.put("input_format", "org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat");
+        params.put("serde", "org.apache.hadoop.hive.serde2.avro.AvroSerDe");
+        params.put("required_fields", "id,array_col,map_col,struct_col");
+        return params;
+    }
+
+    String runComplexTypeScanOnParams(Map<String, String> params) throws Exception {
+        HiveScanner scanner = new HiveScanner(4096, params);
+        System.out.println(scanner.toString());
+        scanner.open();
+        StringBuilder sb = new StringBuilder();
+        while (true) {
+            scanner.getNextOffHeapChunk();
+            OffHeapTable table = scanner.getOffHeapTable();
+            if (table.getNumRows() == 0) {
+                break;
+            }
+            table.show(4096);
+            sb.append(table.dump(4096));
+            table.checkTableMeta(true);
+            table.close();
+        }
+        scanner.close();
+        return sb.toString();
+    }
+
     String runScanOnParams(Map<String, String> params) throws IOException {
         HiveScanner scanner = new HiveScanner(4096, params);
         System.out.println(scanner.toString());
@@ -69,5 +108,12 @@ public class TestHiveScanner {
     public void c1DoScanTestOnPrimitiveType() throws IOException {
         Map<String, String> params = createScanTestParams();
         runScanOnParams(params);
+    }
+
+    @Test
+    public void complexTypeTest() throws Exception {
+        Map<String, String> params = createComplexTypeScanTestParams();
+        // if error, NegativeArraySizeException will be throw
+        runComplexTypeScanOnParams(params);
     }
 }
