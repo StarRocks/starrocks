@@ -4155,6 +4155,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAddPartitionClause(StarRocksParser.AddPartitionClauseContext context) {
         boolean temporary = context.TEMPORARY() != null;
+        boolean force = context.FORCE() != null;
         PartitionDesc partitionDesc = null;
         if (context.singleRangePartition() != null) {
             partitionDesc = (PartitionDesc) visitSingleRangePartition(context.singleRangePartition());
@@ -4176,7 +4177,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new AddPartitionClause(partitionDesc, distributionDesc, properties, temporary, createPos(context));
+        return new AddPartitionClause(partitionDesc, distributionDesc, properties, temporary, force, createPos(context));
     }
 
     @Override

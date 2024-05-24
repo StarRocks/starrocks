@@ -1009,7 +1009,7 @@ compactionClause
 // ---------Alter partition clause---------
 
 addPartitionClause
-    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
+    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties? FORCE?
     | ADD TEMPORARY? (singleItemListPartitionDesc | multiItemListPartitionDesc) distributionDesc? properties?
     ;
 

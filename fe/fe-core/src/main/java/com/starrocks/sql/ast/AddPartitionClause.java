@@ -22,7 +22,7 @@ import java.util.Map;
 
 // clause which is used to add partition
 public class AddPartitionClause extends AlterTableClause {
-
+    private final boolean force;
     private final PartitionDesc partitionDesc;
     private final DistributionDesc distributionDesc;
     private final Map<String, String> properties;
@@ -41,22 +41,51 @@ public class AddPartitionClause extends AlterTableClause {
         return isTempPartition;
     }
 
-    public AddPartitionClause(PartitionDesc partitionDesc,
-                              DistributionDesc distributionDesc,
-                              Map<String, String> properties,
-                              boolean isTempPartition) {
-        this(partitionDesc, distributionDesc, properties, isTempPartition, NodePosition.ZERO);
+    public boolean isForce() {
+        return force;
     }
 
     public AddPartitionClause(PartitionDesc partitionDesc,
                               DistributionDesc distributionDesc,
                               Map<String, String> properties,
-                              boolean isTempPartition, NodePosition pos) {
+                              boolean isTempPartition) {
+        this(partitionDesc, distributionDesc, properties, isTempPartition, false, NodePosition.ZERO);
+    }
+
+    public AddPartitionClause(PartitionDesc partitionDesc,
+                              DistributionDesc distributionDesc,
+                              Map<String, String> properties,
+                              boolean isTempPartition,
+                              boolean force) {
+        this(partitionDesc, distributionDesc, properties, isTempPartition, force, NodePosition.ZERO);
+    }
+
+    public AddPartitionClause(PartitionDesc partitionDesc,
+                              DistributionDesc distributionDesc,
+                              Map<String, String> properties,
+                              boolean isTempPartition,
+                              NodePosition pos) {
         super(AlterOpType.ADD_PARTITION, pos);
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.isTempPartition = isTempPartition;
+        this.force = false;
+        this.needTableStable = false;
+    }
+
+    public AddPartitionClause(PartitionDesc partitionDesc,
+                              DistributionDesc distributionDesc,
+                              Map<String, String> properties,
+                              boolean isTempPartition,
+                              boolean force,
+                              NodePosition pos) {
+        super(AlterOpType.ADD_PARTITION, pos);
+        this.partitionDesc = partitionDesc;
+        this.distributionDesc = distributionDesc;
+        this.properties = properties;
+        this.isTempPartition = isTempPartition;
+        this.force = force;
         this.needTableStable = false;
     }
 

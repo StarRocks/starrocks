@@ -650,7 +650,8 @@ public class AlterJobMgr {
             Preconditions.checkState(alterClauses.size() == 1);
             AlterClause alterClause = alterClauses.get(0);
             if (alterClause instanceof AddPartitionClause) {
-                if (!((AddPartitionClause) alterClause).isTempPartition()) {
+                if (!((AddPartitionClause) alterClause).isTempPartition()
+                        && !((AddPartitionClause) alterClause).isForce()) {
                     DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                 }
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
