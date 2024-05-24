@@ -2803,38 +2803,32 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
 ##### parquet_late_materialization_enable
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
+- Description: A boolean value to control whether to enable the late materialization of Parquet reader to improve performance. `true` indicates enabling late materialization, and `false` indicates disabling it.
 - Introduced in: -
--->
 
-<!--
 ##### parquet_late_materialization_v2_enable
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Description: A boolean value to control whether to enable the late materialization v2 of Parquet reader to improve performance. `true` indicates enabling late materialization v2, and `false` indicates disabling it. In v3.3, only `parquet_late_materialization_enable` is used, and this variable is deprecated.
+- Introduced in: v3.2
 
-<!--
 ##### parquet_page_index_enable
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Description: A boolean value to control whether to enable the pageindex of Parquet file to improve performance. `true` indicates enabling pageindex, and `false` indicates disabling it.
+- Introduced in: v3.3
 
 <!--
 ##### io_coalesce_read_max_buffer_size
@@ -2858,16 +2852,14 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
 ##### io_coalesce_adaptive_lazy_active
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: Based on the selectivity of predicates, adaptively determines whether to combine the I/O of predicate columns and non-predicate columns.
+- Introduced in: v3.2
 
 <!--
 ##### io_tasks_per_scan_operator
