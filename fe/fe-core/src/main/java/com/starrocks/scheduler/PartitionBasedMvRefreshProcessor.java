@@ -663,7 +663,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
                 Table newTable = newTableOptional.get();
                 if (!(newTable instanceof HiveTable)
-                        || ((HiveTable) newTable).getHiveTableType() != HiveTable.HiveTableType.EXTERNAL_TABLE ) {
+                        || ((HiveTable) newTable).getHiveTableType() != HiveTable.HiveTableType.EXTERNAL_TABLE) {
                     continue;
                 }
                 if (!baseTableInfo.getTableIdentifier().equals(newTable.getTableIdentifier())) {
