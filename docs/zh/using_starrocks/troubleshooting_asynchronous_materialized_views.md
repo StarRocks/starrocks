@@ -288,7 +288,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
 - **为物化视图指定分区策略，实现细粒度的刷新**
 
-  如 [创建分区物化视图](./create_partitioned_materialized_view.md) 所描述，对物化视图进行可以分区可以实现增量构建与刷新，能够规避在初始刷新时占用太多资源的问题。
+  如 [创建分区物化视图](./create_partitioned_materialized_view.md) 所描述，对物化视图进行分区可以实现增量构建与刷新，能够规避在初始刷新时占用太多资源的问题。
 
 - **设置更大的超时时间**
 
@@ -303,7 +303,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
   如果物化视图计算复杂，其本身计算耗时就会很久。您可以通过 Query Profile 分析性能瓶颈，并进行优化：
 
   1. 通过查询 `information_schema.task_runs` 获取刷新任务的 `query_id`。
-  2. 通过上述的 `query_id`，获取并分析分析其 Query Profile。
+  2. 通过上述的 `query_id`，获取并分析其 Query Profile。
      - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): 根据 `query_id` 获取原始 Query Profile。
      - [ANALYZE PROFILE](../sql-reference/sql-statements/Administration/ANALYZE_PROFILE.md): 以 Fragment 为单位分析 Query Profile，并以树形结构展示。
 
