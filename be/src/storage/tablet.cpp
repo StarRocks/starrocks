@@ -1792,7 +1792,6 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         }
         _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
     }
-    return;
 }
 
 const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {
