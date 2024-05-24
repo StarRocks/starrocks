@@ -99,7 +99,7 @@ public class TaskBuilder {
     private static void handleSpecialTaskProperties(Task task) {
         Map<String, String> properties = task.getProperties();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE)) {
+            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
                 Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getValue());
                 Preconditions.checkArgument(wa != null, "warehouse not exists: " + entry.getValue());
             }
