@@ -167,12 +167,24 @@ Table: lineitem
 
 StarRocks supports populating the data cache in synchronous or asynchronous mode.
 
-### Synchronous population (default)
+### Synchronous cache population (default)
 
-In synchronous population mode, all the remote data read by the current query is cached locally. Synchronous population is efficient, but may affect the efficiency of initial queries because the cache population operation is performed during data reading.
+In synchronous population mode, all the remote data read by the current query is cached locally. Synchronous population is efficient but may affect the performance of initial queries because it happens during data reading.
 
-### Asynchronous population (since v3.2.7)
+### Asynchronous cache population (since v3.2.7)
 
-In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data will be cached. Multiple attempts may be required to cache all the accessed data.
+In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data can be cached. Multiple attempts may be needed to cache all the accessed data.
 
-The current system defaults to synchronous caching. Users can enable asynchronous cache population by modifying the following session variables:
+By default, the system uses synchronous cache population. You can enable asynchronous cache population by setting the session variable [enable_datacache_async_populate_mode](../reference/System_variable.md):
+
+- Enable asynchronous cache population for a single session.
+
+  ```sql
+  SET enable_datacache_async_populate_mode = true;
+  ```
+
+- Enable asynchronous cache population globally for all sessions.
+
+  ```sql
+  SET GLOBAL enable_datacache_async_populate_mode = true;
+  ```

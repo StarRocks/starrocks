@@ -173,16 +173,16 @@ Data Cache 支持以同步或异步的方式进行缓存填充。
 
   使用异步填充方式时，系统会尝试在尽可能不影响读取性能的前提下在后台对访问到的数据进行缓存。异步方式能够减少缓存填充对首次读取性能的影响，但填充效率较低。通常单次查询不能保证将访问到的所以数据都缓存到本地，往往需要多次。
 
-当前系统默认以同步方式进行缓存，您可以通过修改以下 session 变量启用异步填充方式：
+当前系统默认以同步方式进行缓存，您可以通过修改 session 变量 [enable_datacache_async_populate_mode](../reference/System_variable.md) 来启用异步填充：
 
 - 按需在单个会话中开启 Data Cache 异步填充。
 
   ```sql
-  SET enable_datacache_async_populate_mode = true
+  SET enable_datacache_async_populate_mode = true;
   ```
 
 - 为当前所有会话开启 Data Cache 异步填充。
 
   ```sql
-  SET GLOBAL enable_datacache_async_populate_mode = true
+  SET GLOBAL enable_datacache_async_populate_mode = true;
   ```
