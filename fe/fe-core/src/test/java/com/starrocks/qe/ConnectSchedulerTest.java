@@ -67,7 +67,7 @@ public class ConnectSchedulerTest {
                 // mock negotiate
                 MysqlProto.negotiate((ConnectContext) any);
                 minTimes = 0;
-                result = new MysqlProto.NegotiateResult(null, true);
+                result = new MysqlProto.NegotiateResult(null, MysqlProto.NegotiateState.OK);
 
                 MysqlProto.sendResponsePacket((ConnectContext) any);
                 minTimes = 0;
