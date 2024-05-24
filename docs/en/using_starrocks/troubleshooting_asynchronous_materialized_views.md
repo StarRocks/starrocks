@@ -245,7 +245,7 @@ If you failed to create an asynchronous materialized view, that is, the CREATE M
 
   In addition to the SQL statement, the main difference between the two materialized views is that asynchronous materialized views support all query syntax that StarRocks provides, but synchronous materialized views only support limited choices of aggregate functions.
 
-- **Check whether you have specified a correct `PARTITION BY` column.**
+- **Check whether you have specified a correct partition column.**
 
   When creating an asynchronous materialized view, you can specify a partitioning strategy, which allows you to refresh the materialized view on a finer granularity level.
 
@@ -283,7 +283,7 @@ If the materialized view fails to refresh, that is, the state of the refresh tas
 
 ### Materialized view refresh timeout
 
-Oversized materialized views may fail to refresh because the refresh task exceeds the timeout period. You can consider the following solutions to solve this problem:
+Large materialized views may fail to refresh because the refresh task exceeds the timeout period. You can consider the following solutions to solve this problem:
 
 - **Specify a partitioning strategy for the materialized view to achieve fine-grained refresh**
 
@@ -291,7 +291,7 @@ Oversized materialized views may fail to refresh because the refresh task exceed
 
 - **Set a longer timeout period**
 
-  The default timeout for materialized view refresh tasks is 5 minutes versions earlier than v3.2 and 1 hour in v3.2 and later. If you encounter timeout exceptions, you can adjust the timeout period by using the following statement:
+  The default timeout for materialized view refresh tasks is 5 minutes in versions earlier than v3.2 and 1 hour in v3.2 and later. If you encounter timeout exceptions, you can adjust the timeout period by using the following statement:
 
   ```sql
   ALTER MATERIALIZED VIEW mv2 SET ('session.query_timeout' = '4000');
@@ -299,7 +299,7 @@ Oversized materialized views may fail to refresh because the refresh task exceed
 
 - **Analyze performance bottlenecks of the materialized view refresh**
 
-  Refreshing materialized views with complex computation is inherently time-consuming. You can analyze its performance bottlenecks by analyzing the query profile of the refresh task:
+  Refreshing materialized views with complex computation is time-consuming. You can analyze its performance bottlenecks by analyzing the query profile of the refresh task:
 
   - Obtain the `query_id` corresponding to the refresh task by querying `information_schema.task_runs`.
   - Analyze the query profile of the refresh task using the following statements:
@@ -320,7 +320,7 @@ If setting the materialized view state to active does not take effect, you need 
 
 If you find that the refresh tasks are using excessive system resources, you can look into the following aspects:
 
-- **Check whether you have created an oversized materialized view.**
+- **Check whether you have created a materialized view too large.**
 
   If you have joined too many tables that cause a significant amount of calculation, the refresh task will occupy many resources. To solve this problem, you need to assess the size of the materialized view and re-plan it.
 
@@ -352,7 +352,7 @@ If your materialized view fails to rewrite relevant queries, you can look into t
 
 - **Diagnose rewrite failure using TRACE**
 
-  StarRocks supports the TRACE statement for the diagnosis of materialized view rewrite failure:
+  StarRocks provides the TRACE statement for you to diagnose materialized view rewrite failure:
   
     - `TRACE LOGS MV <query>`: Available in v3.2 and later, this command analyzes the detailed rewrite process and the reasons of the failure.
     - `TRACE REASON MV <query>`: Available in v3.2.8 and later, this command provides concise reasons for rewrite failure.
