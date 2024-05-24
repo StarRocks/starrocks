@@ -126,7 +126,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
     }
 
     @Override
-    public FileStatus[] getFileStatus(Path[] files) {
+    public FileStatus[] getFileStatus(Path... files) {
         throw new UnsupportedOperationException("getFileStatus");
     }
 }

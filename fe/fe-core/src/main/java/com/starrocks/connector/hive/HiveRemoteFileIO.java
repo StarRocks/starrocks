@@ -238,7 +238,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     }
 
     @Override
-    public FileStatus[] getFileStatus(Path[] files) throws IOException {
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
         if (files == null || files.length <= 0) {
             return null;
         }

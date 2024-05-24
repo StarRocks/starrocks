@@ -150,7 +150,7 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     }
 
     @Override
-    public FileStatus[] getFileStatus(Path[] files) throws IOException {
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
         return fileIO.getFileStatus(files);
     }
 }

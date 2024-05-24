@@ -291,7 +291,7 @@ public class RemoteFileOperations {
         }
     }
 
-    public FileStatus[] getFileStatus(Path[] paths) {
+    public FileStatus[] getFileStatus(Path... paths) {
         try {
             return remoteFileIO.getFileStatus(paths);
         } catch (Exception e) {

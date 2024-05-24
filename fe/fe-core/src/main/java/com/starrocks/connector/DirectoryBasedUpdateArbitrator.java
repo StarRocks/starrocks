@@ -27,8 +27,8 @@ import java.util.Optional;
 // So just check the directory of partition, not list all files under parition directory.
 public class DirectoryBasedUpdateArbitrator extends TableUpdateArbitrator {
     @Override
-    public Map<String, Optional<PartitionDataInfo>> getPartitionDataInfos() {
-        Map<String, Optional<PartitionDataInfo>> partitionDataInfos = Maps.newHashMap();
+    public Map<String, Optional<HivePartitionDataInfo>> getPartitionDataInfos() {
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = Maps.newHashMap();
         List<String> partitionNameToFetch = partitionNames;
         if (partitionLimit >= 0) {
             partitionNameToFetch = partitionNames.subList(0, partitionLimit);
@@ -46,8 +46,8 @@ public class DirectoryBasedUpdateArbitrator extends TableUpdateArbitrator {
                 if (maxLastModifiedTimeFile.isPresent()) {
                     lastFileModifiedTime = maxLastModifiedTimeFile.get().getModificationTime();
                 }
-                PartitionDataInfo partitionDataInfo = new PartitionDataInfo(lastFileModifiedTime, fileNumber);
-                partitionDataInfos.put(partitionNameToFetch.get(i), Optional.of(partitionDataInfo));
+                HivePartitionDataInfo hivePartitionDataInfo = new HivePartitionDataInfo(lastFileModifiedTime, fileNumber);
+                partitionDataInfos.put(partitionNameToFetch.get(i), Optional.of(hivePartitionDataInfo));
             } else {
                 partitionDataInfos.put(partitionNameToFetch.get(i), Optional.empty());
             }

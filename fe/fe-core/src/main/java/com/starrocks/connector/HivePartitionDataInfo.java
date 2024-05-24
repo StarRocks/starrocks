@@ -14,11 +14,11 @@
 
 package com.starrocks.connector;
 
-public class PartitionDataInfo {
+public class HivePartitionDataInfo {
     private long lastFileModifiedTime;
     private int fileNumber;
 
-    public PartitionDataInfo(long lastFileModifiedTime, int fileNumber) {
+    public HivePartitionDataInfo(long lastFileModifiedTime, int fileNumber) {
         this.lastFileModifiedTime = lastFileModifiedTime;
         this.fileNumber = fileNumber;
     }
@@ -27,15 +27,7 @@ public class PartitionDataInfo {
         return lastFileModifiedTime;
     }
 
-    public void setLastFileModifiedTime(long lastFileModifiedTime) {
-        this.lastFileModifiedTime = lastFileModifiedTime;
-    }
-
     public int getFileNumber() {
         return fileNumber;
-    }
-
-    public void setFileNumber(int fileNumber) {
-        this.fileNumber = fileNumber;
     }
 }

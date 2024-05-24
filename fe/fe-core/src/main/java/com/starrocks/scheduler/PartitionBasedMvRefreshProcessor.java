@@ -62,7 +62,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableInfo;
-import com.starrocks.connector.PartitionDataInfo;
+import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.TableUpdateArbitrator;
 import com.starrocks.lake.LakeMaterializedView;
@@ -638,8 +638,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
             }
 
-            Optional<Table> tableOptional = MvUtils.getTable(baseTableInfo);
-            if (tableOptional.isEmpty()) {
+            Optional<Table> optTable = MvUtils.getTable(baseTableInfo);
+            if (optTable.isEmpty()) {
                 LOG.warn("table {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getTableInfoStr(), materializedView.getName());
                 materializedView.setInactiveAndReason(
@@ -647,21 +647,21 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }
 
-            Table table = tableOptional.get();
+            Table table = optTable.get();
             if (!table.isNativeTableOrMaterializedView() && !table.isConnectorView()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
                 // should clear query cache
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
-                Optional<Table> newTableOptional = MvUtils.getTable(baseTableInfo);
-                if (tableOptional.isEmpty()) {
+                Optional<Table> optNewTable = MvUtils.getTable(baseTableInfo);
+                if (optTable.isEmpty()) {
                     LOG.warn("table {} does not exist after refreshing materialized view:{}",
                             baseTableInfo.getTableInfoStr(), materializedView.getName());
                     materializedView.setInactiveAndReason(
                             MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                     throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
                 }
-                Table newTable = newTableOptional.get();
+                Table newTable = optNewTable.get();
                 if (!(newTable instanceof HiveTable)
                         || ((HiveTable) newTable).getHiveTableType() != HiveTable.HiveTableType.EXTERNAL_TABLE) {
                     continue;
@@ -694,7 +694,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (arbitrator == null) {
                         return;
                     }
-                    Map<String, Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+                    Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
                     List<String> updatedPartitionNames =
                             getUpdatedPartitionNames(partitionNames, partitionInfoMap, partitionDataInfos);
                     LOG.info("try to get updated partitions names based on data." +
@@ -711,7 +711,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private List<String> getUpdatedPartitionNames(
             List<String> partitionNames,
             Map<String, MaterializedView.BasePartitionInfo> tablePartitionInfoMap,
-            Map<String, Optional<PartitionDataInfo>> partitionDataInfos) {
+            Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos) {
         List<String> updatedPartitionNames = Lists.newArrayList();
         for (int i = 0; i < partitionNames.size(); i++) {
             String partitionName = partitionNames.get(i);
@@ -719,15 +719,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 continue;
             }
             MaterializedView.BasePartitionInfo basePartitionInfo = tablePartitionInfoMap.get(partitionName);
-            Optional<PartitionDataInfo> partitionDataInfoOptional = partitionDataInfos.get(partitionName);
+            Optional<HivePartitionDataInfo> partitionDataInfoOptional = partitionDataInfos.get(partitionName);
             if (partitionDataInfoOptional.isEmpty()) {
                 updatedPartitionNames.add(partitionNames.get(i));
             } else {
-                PartitionDataInfo partitionDataInfo = partitionDataInfoOptional.get();
+                HivePartitionDataInfo hivePartitionDataInfo = partitionDataInfoOptional.get();
                 // if file last modified time changed or file number under partition change,
                 // the partition is treated as changed
-                if (basePartitionInfo.getLastFileModifiedTime() != partitionDataInfo.getLastFileModifiedTime()
-                        || basePartitionInfo.getFileNumber() != partitionDataInfo.getFileNumber()) {
+                if (basePartitionInfo.getExtLastFileModifiedTime() != hivePartitionDataInfo.getLastFileModifiedTime()
+                        || basePartitionInfo.getFileNumber() != hivePartitionDataInfo.getFileNumber()) {
                     updatedPartitionNames.add(partitionNames.get(i));
                 }
             }
@@ -762,7 +762,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         com.starrocks.connector.PartitionInfo newPartitionInfo = newPartitionInfos.get(entry.getKey());
                         MaterializedView.BasePartitionInfo newBasePartitionInfo = new MaterializedView.BasePartitionInfo(
                                 entry.getValue().getId(), newPartitionInfo.getModifiedTime(), newPartitionInfo.getModifiedTime());
-                        newBasePartitionInfo.setLastFileModifiedTime(oldBasePartitionInfo.getLastFileModifiedTime());
+                        newBasePartitionInfo.setExtLastFileModifiedTime(oldBasePartitionInfo.getExtLastFileModifiedTime());
                         newBasePartitionInfo.setFileNumber(oldBasePartitionInfo.getFileNumber());
                         newPartitionInfoMap.put(entry.getKey(), newBasePartitionInfo);
                     } else {
@@ -1560,11 +1560,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
             Table snapshotTable = snapshotInfo.getBaseTable();
 
-            Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
-            if (tableOptional.isEmpty()) {
+            Optional<Table> optTable = MvUtils.getTableWithIdentifier(baseTableInfo);
+            if (optTable.isEmpty()) {
                 return true;
             }
-            Table table = tableOptional.get();
+            Table table = optTable.get();
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
                 PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
@@ -2076,12 +2076,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
                 TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
                 if (arbitrator != null) {
-                    Map<String, Optional<PartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+                    Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
                     Preconditions.checkState(partitionDataInfos.size() == 1);
                     if (partitionDataInfos.get(partitionName).isPresent()) {
-                        PartitionDataInfo partitionDataInfo = partitionDataInfos.get(partitionName).get();
-                        basePartitionInfo.setLastFileModifiedTime(partitionDataInfo.getLastFileModifiedTime());
-                        basePartitionInfo.setFileNumber(partitionDataInfo.getFileNumber());
+                        HivePartitionDataInfo hivePartitionDataInfo = partitionDataInfos.get(partitionName).get();
+                        basePartitionInfo.setExtLastFileModifiedTime(hivePartitionDataInfo.getLastFileModifiedTime());
+                        basePartitionInfo.setFileNumber(hivePartitionDataInfo.getFileNumber());
                     }
                 }
             }

@@ -26,5 +26,5 @@ public interface RemoteFileIO {
 
     Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey);
 
-    FileStatus[] getFileStatus(Path[] files) throws IOException;
+    FileStatus[] getFileStatus(Path... files) throws IOException;
 }

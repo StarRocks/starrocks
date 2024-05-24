@@ -14,19 +14,12 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.ExceptionChecker;
-import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.BeforeClass;
 import org.junit.Test;

@@ -146,7 +146,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // last modified time of partition data path
         @SerializedName(value = "lastFileModifiedTime")
-        private long lastFileModifiedTime;
+        private long extLastFileModifiedTime;
 
         // file number in the partition data path
         @SerializedName(value = "fileNumber")
@@ -156,7 +156,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.id = id;
             this.version = version;
             this.lastRefreshTime = lastRefreshTime;
-            this.lastFileModifiedTime = -1;
+            this.extLastFileModifiedTime = -1;
             this.fileNumber = -1;
         }
 
@@ -181,12 +181,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return lastRefreshTime;
         }
 
-        public long getLastFileModifiedTime() {
-            return lastFileModifiedTime;
+        public long getExtLastFileModifiedTime() {
+            return extLastFileModifiedTime;
         }
 
-        public void setLastFileModifiedTime(long lastFileModifiedTime) {
-            this.lastFileModifiedTime = lastFileModifiedTime;
+        public void setExtLastFileModifiedTime(long extLastFileModifiedTime) {
+            this.extLastFileModifiedTime = extLastFileModifiedTime;
         }
 
         public int getFileNumber() {
@@ -203,7 +203,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     "id=" + id +
                     ", version=" + version +
                     ", lastRefreshTime=" + lastRefreshTime +
-                    ", lastFileModifiedTime=" + lastFileModifiedTime +
+                    ", lastFileModifiedTime=" + extLastFileModifiedTime +
                     ", fileNumber=" + fileNumber +
                     '}';
         }
@@ -984,9 +984,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Table table = null;
             try {
-                Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
-                if (tableOptional.isPresent()) {
-                    table = tableOptional.get();
+                Optional<Table> optTable = MvUtils.getTableWithIdentifier(baseTableInfo);
+                if (optTable.isPresent()) {
+                    table = optTable.get();
                 }
             } catch (Exception e) {
                 LOG.warn("failed to get base table {} of MV {}", baseTableInfo, this, e);
@@ -1570,12 +1570,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (info.getBucketNum() == 0) {
             int inferredBucketNum = 0;
             for (BaseTableInfo base : getBaseTableInfos()) {
-                Optional<Table> tableOptional = MvUtils.getTable(base);
-                if (tableOptional.isEmpty()) {
-                    LOG.warn("base table: {} dropped", base.getReadableString());
+                Optional<Table> optTable = MvUtils.getTable(base);
+                if (optTable.isEmpty()) {
                     continue;
                 }
-                Table table = tableOptional.get();
+                Table table = optTable.get();
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable olapTable = (OlapTable) table;
                     DistributionInfo dist = olapTable.getDefaultDistributionInfo();

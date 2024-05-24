@@ -74,6 +74,6 @@ public abstract class TableUpdateArbitrator {
         return arbitrator;
     }
 
-    public abstract Map<String, Optional<PartitionDataInfo>> getPartitionDataInfos();
+    public abstract Map<String, Optional<HivePartitionDataInfo>> getPartitionDataInfos();
 
 }
