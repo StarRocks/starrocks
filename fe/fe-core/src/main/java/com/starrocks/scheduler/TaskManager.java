@@ -646,6 +646,10 @@ public class TaskManager implements MemoryTrackable {
 
         writer.writeJson(runStatusList.size());
         for (TaskRunStatus status : runStatusList) {
+            // TODO: compatible with old version, remove this later.
+            if (status.getState().equals(Constants.TaskRunState.MERGED)) {
+                status.setState(Constants.TaskRunState.SUCCESS);
+            }
             writer.writeJson(status);
         }
 
