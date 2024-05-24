@@ -19,10 +19,6 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
-<<<<<<< HEAD
-=======
-#include "common/utils.h"
->>>>>>> c449ab93ac ([Enhancement] tablet sink support add chunk large than 2GB (#43009))
 #include "config.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
