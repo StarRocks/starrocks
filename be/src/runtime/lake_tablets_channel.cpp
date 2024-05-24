@@ -275,6 +275,7 @@ LakeTabletsChannel::~LakeTabletsChannel() {
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
+    DCHECK_EQ(-1, _txn_id);
     SCOPED_TIMER(_open_timer);
     COUNTER_UPDATE(_open_counter, 1);
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
