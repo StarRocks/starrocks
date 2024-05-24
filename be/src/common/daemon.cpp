@@ -45,6 +45,7 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/memory/mem_chunk_allocator.h"
@@ -298,6 +299,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     LOG(INFO) << DiskInfo::debug_string();
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
+    LOG(INFO) << "openssl aesni support: " << openssl_supports_aesni();
 
     CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
