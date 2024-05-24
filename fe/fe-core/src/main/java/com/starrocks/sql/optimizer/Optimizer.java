@@ -268,8 +268,9 @@ public class Optimizer {
         // statistics won't set correctly after physicalRuleRewrite.
         // we need set plan costs before physical rewrite stage.
         final CostEstimate costs = Explain.buildCost(result);
-        connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
-                .setPlanMemCosts(costs.getMemoryCost());
+        connectContext.getAuditEventBuilder()
+                .setPlanCpuCosts((long) costs.getCpuCost())
+                .setPlanMemCosts((long) costs.getMemoryCost());
         OptExpression finalPlan;
         try (Timer ignored = Tracers.watchScope("PhysicalRewrite")) {
             finalPlan = physicalRuleRewrite(rootTaskContext, result);
