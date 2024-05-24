@@ -55,12 +55,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.asc_hint = options.asc_hint;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
-<<<<<<< HEAD
-        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), nullptr);
-=======
-        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), nullptr,
-                                                                       seg_options.lake_io_opts.fill_data_cache);
->>>>>>> 354127a71f ([Enhancement] refactor cloud native table's delvec file cache strategy (#46135))
+        seg_options.delvec_loader = 
+                std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), nullptr, options.fill_data_cache);
         seg_options.version = options.version;
         seg_options.tablet_id = _tablet->id();
         seg_options.rowset_id = _rowset_metadata->id();
@@ -183,12 +179,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     seg_options.stats = stats;
     seg_options.is_primary_keys = true;
-<<<<<<< HEAD
-    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), builder);
-=======
     seg_options.delvec_loader =
-            std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), builder, true /*fill cache*/);
->>>>>>> 354127a71f ([Enhancement] refactor cloud native table's delvec file cache strategy (#46135))
+            std::make_shared<LakeDelvecLoader>(_tablet->update_mgr(), builder, true /*fill cache*/);
     seg_options.version = version;
     seg_options.tablet_id = _tablet->id();
     seg_options.rowset_id = _rowset_metadata->id();

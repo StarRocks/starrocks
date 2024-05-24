@@ -271,16 +271,8 @@ void MetaFileBuilder::_fill_delvec_cache() {
     }
 }
 
-<<<<<<< HEAD
-Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec) {
-=======
-void MetaFileBuilder::finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta) {
-    _tablet_meta->mutable_sstable_meta()->CopyFrom(sstable_meta);
-}
-
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    DelVector* delvec) {
->>>>>>> 354127a71f ([Enhancement] refactor cloud native table's delvec file cache strategy (#46135))
     // find delvec by segment id
     auto iter = metadata.delvec_meta().delvecs().find(segment_id);
     if (iter != metadata.delvec_meta().delvecs().end()) {

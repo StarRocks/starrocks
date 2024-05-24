@@ -29,11 +29,8 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
-<<<<<<< HEAD
-#include "storage/lake/tablet.h"
-=======
 #include "storage/lake/metacache.h"
->>>>>>> 354127a71f ([Enhancement] refactor cloud native table's delvec file cache strategy (#46135))
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
