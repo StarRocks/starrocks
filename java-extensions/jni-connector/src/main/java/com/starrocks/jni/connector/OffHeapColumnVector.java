@@ -142,18 +142,31 @@ public class OffHeapColumnVector {
             this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
         } else if (type.isByteStorageType()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
-            int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
-            this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
-                    ColumnType.TypeValue.BYTE));
+            // Just create a new object at the first time, otherwise the data will be lost during expansion,
+            // and because the OFFSET record is continuous, the new offset address starts from 0 during the 
+            // expansion, which will cause the offset records to be negatively numbered. After being passed
+            // to BE, it becomes a non-sign number. This is a very huge number. When processing, the array 
+            // will cross the boundary, which may cause crash.
+            //
+            // The child's capacity is not expanded here because the child's appendValue function is used 
+            // to add data to it will automatically expand.
+            if (this.childColumns == null) {
+                int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
+                this.childColumns = new OffHeapColumnVector[1];
+                this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
+                        ColumnType.TypeValue.BYTE));
+            }
         } else if (type.isArray() || type.isMap() || type.isStruct()) {
             if (type.isArray() || type.isMap()) {
                 this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             }
-            int size = type.childTypes.size();
-            this.childColumns = new OffHeapColumnVector[size];
-            for (int i = 0; i < size; i++) {
-                this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+            // Same as the above
+            if (this.childColumns == null) {
+                int size = type.childTypes.size();
+                this.childColumns = new OffHeapColumnVector[size];
+                for (int i = 0; i < size; i++) {
+                    this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+                }
             }
         } else {
             throw new RuntimeException("Unhandled type: " + type);
