@@ -2688,6 +2688,12 @@ public class Config extends ConfigBase {
     public static String ssl_truststore_password = "";
 
     /**
+     * True to disable all non-SSL connections except those from localhost.
+     */
+    @ConfField(mutable = true)
+    public static boolean ssl_force_secure_transport = false;
+
+    /**
      * ignore check db status when show proc '/catalog/catalog_name'
      */
     @ConfField(mutable = true)

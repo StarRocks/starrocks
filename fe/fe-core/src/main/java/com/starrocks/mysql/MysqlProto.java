@@ -154,6 +154,11 @@ public class MysqlProto {
             if (authPacket == null) {
                 return new NegotiateResult(null, false);
             }
+        } else if (Config.ssl_force_secure_transport && !"127.0.0.1".equals(context.getRemoteIP())) {
+            LOG.warn("server requires SSL connection, and non-SSL connection is forbidden");
+            ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_FOR_NON_SSL_CONNECTION);
+            sendResponsePacket(context);
+            return new NegotiateResult(authPacket, false);
         }
 
         // check capability
