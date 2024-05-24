@@ -68,7 +68,7 @@ inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
 }
 
 Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
-    return _update_mgr->get_del_vec(tsid, version, _pk_builder, pdelvec);
+    return _update_mgr->get_del_vec(tsid, version, _pk_builder, _fill_cache, pdelvec);
 }
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata& metadata, Tablet* tablet,
@@ -210,7 +210,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             tsid.tablet_id = tablet->id();
             tsid.segment_id = rssid;
             DelVectorPtr old_del_vec;
-            RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, &old_del_vec));
+            RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false /* file cache */, &old_del_vec));
             new_del_vecs[idx].first = rssid;
             old_del_vec->add_dels_as_new_version(new_delete.second, metadata.version(), &(new_del_vecs[idx].second));
             size_t cur_old = old_del_vec->cardinality();
@@ -496,7 +496,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
 }
 
 Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
-                                  DelVectorPtr* pdelvec) {
+                                  bool fill_cache, DelVectorPtr* pdelvec) {
     if (builder != nullptr) {
         // 1. find in meta builder first
         auto found = builder->find_delvec(tsid, pdelvec);
@@ -509,14 +509,15 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
     }
     (*pdelvec).reset(new DelVector());
     // 2. find in delvec file
-    return get_del_vec_in_meta(tsid, version, pdelvec->get());
+    return get_del_vec_in_meta(tsid, version, fill_cache, pdelvec->get());
 }
 
 // get delvec in meta file
-Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec) {
+Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache,
+                                          DelVector* delvec) {
     std::string filepath = _tablet_mgr->tablet_metadata_location(tsid.tablet_id, meta_ver);
-    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, false));
-    RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, delvec));
+    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, fill_cache));
+    RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, fill_cache, delvec));
     return Status::OK();
 }
 
@@ -577,7 +578,7 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
         TabletSegmentId tsid;
         tsid.tablet_id = tablet_id;
         tsid.segment_id = rowset_meta.id() + i;
-        auto st = get_del_vec(tsid, version, nullptr, &delvec);
+        auto st = get_del_vec(tsid, version, nullptr, false /* fill cache */, &delvec);
         if (!st.ok()) {
             LOG(WARNING) << "get_rowset_num_deletes: error get del vector " << st;
             continue;
