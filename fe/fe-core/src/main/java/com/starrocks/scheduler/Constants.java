@@ -57,8 +57,8 @@ public class Constants {
         PENDING,    // The task run is created and in the pending queue waiting to be scheduled
         RUNNING,    // The task run is scheduled into running queue and is running
         FAILED,     // The task run is failed
-        MERGED,     // The task run is merged into another task run
         SUCCESS,    // The task run is finished successfully
+        MERGED,     // The task run is merged
     }
 
     public static boolean isFinishState(TaskRunState state) {
