@@ -318,6 +318,28 @@ MySQL > select * from insert_wiki_edit;
 Empty set (0.00 sec)
 ```
 
+:::note
+For tables that uses the list partitioning strategy, that is, `PARTITION BY value`, INSERT OVERWRITE supports creates new partitions in the destination table by specifying the value of the partition key. Existing partitions are overwritten as usual.
+
+The following example creates the table `activity` with the list partitioning strategy, and creates a new partition in the table while inserting data into it:
+
+```SQL
+CREATE TABLE activity (
+id INT          NOT NULL,
+dt VARCHAR(10)  NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+PARTITION BY (`id`, `dt`)
+DISTRIBUTED BY HASH(`id`);
+
+INSERT OVERWRITE activity
+PARTITION(id='4', dt='2022-01-01')
+WITH LABEL insert_activity_auto_partition
+VALUES ('4', '2022-01-01');
+```
+
+:::
+
 - The following example overwrites the target table `insert_wiki_edit` with the `event_time` and `channel` columns from the source table. The default value is assigned to the columns into which no data is overwritten.
 
 ```SQL
