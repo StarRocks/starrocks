@@ -203,8 +203,8 @@ private:
     RuntimeProfile* _profile;
 
     // initialized in open function
-    int64_t _txn_id = -1;
-    int64_t _index_id = -1;
+    int64_t _txn_id = kInvalidTxnId;
+    int64_t _index_id = kInvalidIndexId;
     std::shared_ptr<OlapTableSchemaParam> _schema;
 
     std::vector<Sender> _senders;
@@ -275,9 +275,19 @@ LakeTabletsChannel::~LakeTabletsChannel() {
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
+    DCHECK(params.has_txn_id());
+    DCHECK(params.has_index_id());
     SCOPED_TIMER(_open_timer);
     COUNTER_UPDATE(_open_counter, 1);
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
+    bool first_open = _txn_id == kInvalidTxnId;
+#if !defined(NDEBUG) || defined(BE_TEST)
+    if (!first_open) {
+        CHECK_EQ(_txn_id, params.txn_id());
+        CHECK_EQ(_index_id, params.index_id());
+        CHECK_EQ(_senders.size(), params.num_senders());
+    }
+#endif
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
@@ -287,11 +297,13 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
                                                                    : lake::DeltaWriterFinishMode::kDontWriteTxnLog;
     }
 
-    _senders = std::vector<Sender>(params.num_senders());
+    if (first_open) {
+        _senders = std::vector<Sender>(params.num_senders());
+    }
     if (_is_incremental_channel) {
         _num_remaining_senders.fetch_add(1, std::memory_order_release);
         _senders[params.sender_id()].has_incremental_open = true;
-    } else {
+    } else if (first_open) {
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
         _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }

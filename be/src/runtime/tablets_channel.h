@@ -69,6 +69,9 @@ public:
     virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
 
 protected:
+    constexpr static int64_t kInvalidTxnId = -1;
+    constexpr static int64_t kInvalidIndexId = -1;
+
     // counter of remaining senders
     std::atomic<int> _num_remaining_senders = 0;
 
