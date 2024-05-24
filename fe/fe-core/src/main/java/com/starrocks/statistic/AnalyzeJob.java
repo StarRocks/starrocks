@@ -160,7 +160,7 @@ public class AnalyzeJob implements Writable {
         }
 
         if (!hasFailedCollectJob) {
-            setStatus(StatsConstants.ScheduleStatus.PENDING);
+            setStatus(ScheduleStatus.FINISH);
             setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }
