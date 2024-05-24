@@ -2754,7 +2754,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否使用 v2 版延迟物化优化 Parquet 读性能。v3.2 版本包含两个版本的 Parquet Reader 延迟物化，v3.3 版本仅保留新版延迟物化，并删除该参数。
+- 描述：是否使用 v2 版延迟物化优化 Parquet 读性能。v3.2 版本支持两个版本的 Parquet Reader 延迟物化，v3.3 版本仅保留 `parquet_late_materialization_enable` 延迟物化，并删除该变量。
 - 引入版本：v3.2
 
 ##### parquet_page_index_enable
