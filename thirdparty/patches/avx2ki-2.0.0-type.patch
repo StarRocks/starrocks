@@ -1,5 +1,12 @@
 --- avx2ki_type.h       2023-11-29 20:49:37.574577780 +0800
 +++ avx2ki_type.h_1     2024-02-19 18:09:11.244710150 +0800
+@@ -20,6 +20,7 @@ extern "C" {
+
+ #pragma push_macro("FORCE_INLINE")
+ #pragma push_macro("ALIGN_STRUCT")
++#undef FORCE_INLINE
+ #define FORCE_INLINE static inline __attribute__((always_inline))
+ #define FUNC_HIDDEN __attribute__((visibility("hidden")))
 @@ -141,7 +141,7 @@ __extension__
  #define _CMP_GT_OQ 0x1e
  #define _CMP_TRUE_US 0x1f
