@@ -271,7 +271,16 @@ void MetaFileBuilder::_fill_delvec_cache() {
     }
 }
 
+<<<<<<< HEAD
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec) {
+=======
+void MetaFileBuilder::finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta) {
+    _tablet_meta->mutable_sstable_meta()->CopyFrom(sstable_meta);
+}
+
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
+                   DelVector* delvec) {
+>>>>>>> 354127a71f ([Enhancement] refactor cloud native table's delvec file cache strategy (#46135))
     // find delvec by segment id
     auto iter = metadata.delvec_meta().delvecs().find(segment_id);
     if (iter != metadata.delvec_meta().delvecs().end()) {
@@ -294,16 +303,18 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
             return Status::InternalError("Can't find delvec file name");
         }
         const auto& delvec_name = iter2->second.name();
-        RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+        RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
         ASSIGN_OR_RETURN(auto rf,
                          fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
         RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
         // parse delvec
         RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
         // put in cache
-        auto delvec_cache_ptr = std::make_shared<DelVector>();
-        delvec_cache_ptr->copy_from(*delvec);
-        tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+        if (fill_cache) {
+            auto delvec_cache_ptr = std::make_shared<DelVector>();
+            delvec_cache_ptr->copy_from(*delvec);
+            tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+        }
         TRACE("end load delvec");
         return Status::OK();
     }
