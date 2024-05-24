@@ -75,6 +75,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
@@ -400,7 +401,7 @@ public class ConnectProcessor {
                 if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
                     ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
                     if (!(((PrepareStmt) parsedStmt).getInnerStmt() instanceof QueryStatement)) {
-                        throw new AnalysisException("prepare statement only support QueryStatement");
+                        ErrorReport.reportAnalysisException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
                     }
                 }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
