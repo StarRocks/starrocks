@@ -278,7 +278,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
   PROPERTIES ( 'session.enable_spill'='true' )
   AS <query>;
 
-  -- 添加属性。
+  -- 为已有物化视图添加属性。
   ALTER MATERIALIZED VIEW mv2 SET ('session.enable_spill' = 'true');
   ```
 
@@ -290,10 +290,9 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
   如 [创建分区物化视图](./create_partitioned_materialized_view.md) 所描述，对物化视图进行可以分区可以实现增量构建与刷新，能够规避在初始刷新时占用太多资源的问题。
 
-
 - **设置更大的超时时间**
 
-  物化视图刷新任务的默认超时时间在旧版本是 5分钟，3.2 版本之后默认 1小时。当遇到超时异常时，可以尝试修改超时时间：
+  v3.2 之前版本中，物化视图刷新任务的默认超时时间为 5 分钟，v3.2 版本之后默认为 1 小时。当遇到超时异常时，可以尝试修改超时时间：
 
   ```SQL
   ALTER MATERIALIZED VIEW mv2 SET ( 'session.query_timeout' = '4000' );
@@ -301,11 +300,12 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
 - **分析物化视图性能瓶颈**
 
-  如果物化视图计算复杂，可能本身计算耗时就会很久，此时可以通过分析性能瓶颈，来对其进行优化：
-  1. 查找 query_id: 通过 `information_schema.task_runs` 可以看到每次刷新任务对应的 query_id
-  2. 分析 Query Profile：通过上述的 query_id，分析其 Query Profile 
-      - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): 获取原始 profile
-      - [ANALYZE PROFILE](../sql-reference/sql-statements/Administration/ANALYZE_PROFILE.md): 对 profile 进行简单的分析
+  如果物化视图计算复杂，其本身计算耗时就会很久。您可以通过 Query Profile 分析性能瓶颈，并进行优化：
+
+  1. 通过查询 `information_schema.task_runs` 获取刷新任务的 `query_id`。
+  2. 通过上述的 `query_id`，获取并分析分析其 Query Profile。
+     - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): 根据 `query_id` 获取原始 Query Profile。
+     - [ANALYZE PROFILE](../sql-reference/sql-statements/Administration/ANALYZE_PROFILE.md): 以 Fragment 为单位分析 Query Profile，并以树形结构展示。
 
 ### 物化视图不可用
 
@@ -341,8 +341,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-- [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
-
+- 通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 终止正在运行的刷新任务。
 
   ```SQL
   CANCEL REFRESH MATERIALIZED VIEW mv1;
@@ -356,12 +355,13 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
 - **通过 TRACE 诊断改写失败原因**
 
   StarRocks 提供了 TRACE 命令来诊断物化视图无法改写的原因：
-  - `TRACE LOGS MV <query>` : 3.2 之后版本提供，分析详细的改写过程和无法改写的原因
-  - `TRACE REASON MV <query>`: 3.2.8 之后版本提供，提供简练的无法改写原因
-  
+
+  - `TRACE LOGS MV <query>` : v3.2 之后版本提供，用于分析详细的改写过程和改写失败的原因。
+  - `TRACE REASON MV <query>`: v3.2.8 之后版本提供，提供精简的改写失败原因。
+
   示例：
   ```SQL
-  MySQL root@127.1:(none)> trace reason mv select sum(c1) from `glue_ice`.`iceberg_test`.`ice_test3`
+  MySQL > TRACE REASON MV SELECT sum(c1) FROM `glue_ice`.`iceberg_test`.`ice_test3`
   +----------------------------------------------------------------------------------------------------------------------+
   | Explain String                                                                                                       |
   +----------------------------------------------------------------------------------------------------------------------+
