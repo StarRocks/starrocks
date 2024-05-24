@@ -159,4 +159,16 @@ TEST_F(StatusTest, update) {
     ASSERT_TRUE(st.is_not_found());
 }
 
+TEST_F(StatusTest, test_clone) {
+    Status st = Status::NotFound("abc");
+    ASSERT_TRUE(st.is_not_found());
+    ASSERT_EQ("abc", st.message());
+    Status st1 = st.clone_and_append("def");
+    ASSERT_TRUE(st1.is_not_found());
+    ASSERT_EQ("abc: def", st1.message());
+    Status st2 = st.clone_and_prepend("def");
+    ASSERT_TRUE(st2.is_not_found());
+    ASSERT_EQ("def: abc", st2.message());
+}
+
 } // namespace starrocks
