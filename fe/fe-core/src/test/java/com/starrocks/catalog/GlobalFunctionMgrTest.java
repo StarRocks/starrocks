@@ -34,47 +34,53 @@ public class GlobalFunctionMgrTest {
     @Before
     public void setUp() {
         globalFunctionMgr = new GlobalFunctionMgr();
-    }
-
-    @Test
-    public void testAddAndDropFunction() throws UserException {
-        Type[] argTypes = new Type[2];
-        argTypes[0] = Type.INT;
-        argTypes[1] = Type.INT;
-        FunctionName name = new FunctionName(null, "addIntInt");
-        name.setAsGlobalFunction();
-        Function f = new Function(name, argTypes, Type.INT, false);
-
-        // add global udf function.
-        {
-            globalFunctionMgr.replayAddFunction(f);
-            List<Function> functions = globalFunctionMgr.getFunctions();
-            Assert.assertEquals(functions.size(), 1);
-            Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
-        }
-        // drop global udf function ok.
-        {
-            FunctionSearchDesc desc = new FunctionSearchDesc(name, argTypes, false);
-            globalFunctionMgr.replayDropFunction(desc);
-            List<Function> functions = globalFunctionMgr.getFunctions();
-            Assert.assertEquals(functions.size(), 0);
-        }
-    }
-
-    @Test
-    public void testCreateGlobalUdfGivenUdfAlreadyExists() throws UserException {
-        Type[] argTypes = new Type[2];
-        argTypes[0] = Type.INT;
-        argTypes[1] = Type.INT;
-        FunctionName name = new FunctionName(null, "addIntInt");
-        name.setAsGlobalFunction();
-        Function f = new Function(name, argTypes, Type.INT, false);
         new MockUp<GlobalStateMgr>() {
             @Mock
             public EditLog getEditLog() {
                 return mock();
             }
         };
+    }
+
+    @Test
+    public void testReplayAddAndDropFunction() {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setAsGlobalFunction();
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // add global udf function.
+        globalFunctionMgr.replayAddFunction(f);
+        Assert.assertEquals(globalFunctionMgr.getFunctions().size(), 1);
+        Assert.assertTrue(globalFunctionMgr.getFunctions().get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+        // drop global udf function ok.
+        FunctionSearchDesc desc = new FunctionSearchDesc(name, argTypes, false);
+        globalFunctionMgr.replayDropFunction(desc);
+        Assert.assertEquals(globalFunctionMgr.getFunctions().size(), 0);
+    }
+
+    @Test
+    public void testUserAddFunction() throws UserException {
+        // User adds addIntInt UDF
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setAsGlobalFunction();
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+        globalFunctionMgr.userAddFunction(f, false);
+        // User adds addDoubleDouble UDF
+        FunctionName name2 = new FunctionName(null, "addDoubleDouble");
+        name2.setAsGlobalFunction();
+        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
+        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        globalFunctionMgr.userAddFunction(f2, false);
+    }
+
+    @Test
+    public void testUserAddFunctionGivenFunctionAlreadyExists() throws UserException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setAsGlobalFunction();
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
         globalFunctionMgr.userAddFunction(f, false);
@@ -84,19 +90,11 @@ public class GlobalFunctionMgrTest {
     }
 
     @Test
-    public void testCreateGlobalUdfGivenUdfAlreadyExistsAllowExisting() throws UserException {
-        Type[] argTypes = new Type[2];
-        argTypes[0] = Type.INT;
-        argTypes[1] = Type.INT;
+    public void testUserAddFunctionGivenUdfAlreadyExistsAndAllowExisting() throws UserException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
+        final Type[] argTypes = {Type.INT, Type.INT};
         Function f = new Function(name, argTypes, Type.INT, false);
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return mock();
-            }
-        };
 
         // Add the UDF for the first time
         globalFunctionMgr.userAddFunction(f, true);

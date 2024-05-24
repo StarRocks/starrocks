@@ -231,12 +231,27 @@ public class DatabaseTest {
     }
 
     @Test
-    public void testCreateDatabaseUdfGivenUdfAlreadyExists() throws UserException {
-        Type[] argTypes = new Type[2];
-        argTypes[0] = Type.INT;
-        argTypes[1] = Type.INT;
+    public void testAddFunction() throws UserException {
+        // Add addIntInt function to database
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+        db.addFunction(f, false);
+
+        // Add addDoubleDouble function to database
+        FunctionName name2 = new FunctionName(null, "addDoubleDouble");
+        name2.setDb(db.getCatalogName());
+        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
+        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        db.addFunction(f2, false);
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExists() throws UserException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
@@ -247,12 +262,10 @@ public class DatabaseTest {
     }
 
     @Test
-    public void testCreateGlobalUdfGivenUdfAlreadyExistsAllowExisting() throws UserException {
-        Type[] argTypes = new Type[2];
-        argTypes[0] = Type.INT;
-        argTypes[1] = Type.INT;
+    public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws UserException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
