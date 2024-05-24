@@ -21,11 +21,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.DebugUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
-import java.util.Objects;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -73,10 +73,11 @@ public class MaterializedViewMetricsRegistry {
 
     private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,
                                        MetricVisitor visitor, boolean minifyMetrics) {
-        if (Objects.isNull(entity.dbName) || Objects.isNull(entity.mvName)) {
+        if (!entity.initDbAndTableName()) {
             LOG.debug("Invalid materialized view metrics entity, mvId: {}", mvId);
             return;
         }
+
         for (Metric m : entity.getMetrics()) {
             // minify metrics if needed
             if (minifyMetrics) {
@@ -92,8 +93,8 @@ public class MaterializedViewMetricsRegistry {
                     continue;
                 }
             }
-            m.addLabel(new MetricLabel("db_name", entity.dbName))
-                    .addLabel(new MetricLabel("mv_name", entity.mvName))
+            m.addLabel(new MetricLabel("db_name", entity.dbNameOpt.get()))
+                    .addLabel(new MetricLabel("mv_name", entity.mvNameOpt.get()))
                     .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())));
             visitor.visit(m);
         }
@@ -120,7 +121,8 @@ public class MaterializedViewMetricsRegistry {
                 MaterializedViewMetricsEntity entity = (MaterializedViewMetricsEntity) mvEntity;
                 doCollectMetrics(mvId, entity, visitor, minifyMetrics);
             } catch (Exception e) {
-                LOG.warn("Failed to collect materialized view metrics for mvId: {}", entry.getKey(), e);
+                LOG.warn("Failed to collect materialized view metrics for mvId: {}", entry.getKey(),
+                        DebugUtil.getStackTrace(e));
             }
         }
     }
