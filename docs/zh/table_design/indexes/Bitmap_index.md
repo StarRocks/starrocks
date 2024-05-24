@@ -51,7 +51,7 @@ StarRocks 判断是否使用 Bitmap 索引的逻辑：因为一般情况下查�
 
 ### 优势
 
-- 能够快速定位 1 个值所在的数据行号，适用于点查或是小范围查询。
+- 能够快速定位查询的列值所在的数据行号，适用于点查或是小范围查询。
 - 适用于交并集运算（OR 和 AND 运算），可以优化多维查询。  
 
 ## 注意事项
@@ -76,36 +76,32 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
 - 建表时创建 Bitmap 索引。
 
     ```SQL
-    CREATE TABLE d0.table_hash
-    (
-        k1 TINYINT,
-        k2 DECIMAL(10, 2) DEFAULT "10.5",
-        v1 CHAR(10) REPLACE,
-        v2 INT SUM,
-        INDEX index_name (column_name) [USING BITMAP] [COMMENT '']
-    )
-    ENGINE = olap
-    AGGREGATE KEY(k1, k2)
-    DISTRIBUTED BY HASH(k1)
-    PROPERTIES ("storage_type" = "column");
+    CREATE TABLE `lineorder_partial` (
+      `lo_orderkey` int(11) NOT NULL COMMENT "",
+      `lo_orderdate` int(11) NOT NULL COMMENT "",
+      `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
+      `lo_quantity` int(11) NOT NULL COMMENT "",
+      `lo_revenue` int(11) NOT NULL COMMENT "",
+       INDEX lo_orderdate_index (lo_orderdate) USING BITMAP
+    ) ENGINE=OLAP 
+    DUPLICATE KEY(`lo_orderkey`)
+    DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
     ```
 
-  - Bitmap 索引相关参数说明：
+   本示例中，创建了基于 `lo_orderdate` 列创建了名称为 `lo_orderdate_index` 的 Bitmap 索引。Bitmap 索引的命名要求参见[系统限制](../../reference/System_limit.md)。在同一张表中不能创建名称相同的 Bitmap 索引。
 
-    | 参数        | 必选 | 说明                                                         |
-    | ----------- | ---- | ------------------------------------------------------------ |
-    | index_name  | 是   | Bitmap 索引名称。命名要求参见系统限制。在同一张表中不能创建名称相同的 Bitmap 索引。 |
-    | column_name | 是   | 创建 Bitmap 索引的列名。您可以指定多个列名，即在建表时可同时为多个列创建 Bitmap 索引。 |
-    | COMMENT     | 否   | Bitmap 索引备注。                                            |
+   并且，支持为多个列创建 Bitmap 索引，并且多个 Bitmap 索引定义之间用英文逗号（,）隔开。
 
-    您可以指定多条 `INDEX index_name (column_name) [USING BITMAP] [COMMENT '']` 命令同时为多个列创建 Bitmap 索引，且多条命令之间用逗号（,）隔开。
+  :::note
 
-  - 关于建表的其他参数说明，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+  建表的其他参数说明，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+
+  :::
 
 - 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../../sql-reference/sql-statements/data-definition/CREATE_INDEX.md)。
 
     ```SQL
-    CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT ''];
+    CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
     ```
 
 ### 创建进度
@@ -249,9 +245,9 @@ SELECT count(1) FROM lineorder_without_index WHERE lo_shipmode="MAIL";
 
 **查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_shipmode` 列数据的 Page 全部读出来，再进行谓词过滤。
 
-总共耗时约 0.91 ms**，其中加载数据花了 0.47 ms**，低基数优化字典解码花了 0.31 ms，谓词过滤花了 0.23 ms。
+总共耗时约 0.91 ms，**其中加载数据花了 0.47 ms**，低基数优化字典解码花了 0.31 ms，谓词过滤花了 0.23 ms。
 
-```SQL
+```Bash
 PullRowNum: 20.566M (20566493) // 返回结果集的行数。
 CompressedBytesRead: 55.283 MB // 读取的总数据量。
 RawRowsRead: 143.999M (143999468) // 读取的数据行。因为没有 Bitmap 索引，这一列的数据全部读出来。
@@ -283,7 +279,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 
 总共耗时 2.7s，**其中加载数据和 Bitmap 索引花了 0.93s**，低基数优化字典解码花了 0.33s，使用 Bitmap 索引过滤数据花了 0.42s，ZoneMap 索引过滤数据花了 0.17s。
 
-```SQL
+```Bash
 PullRowNum: 20.566M (20566493) // 返回结果集的行数。
 CompressedBytesRead: 72.472 MB // 读取的总数据量。该列 Bitmap 索引总大小是 130M，具有 7 个唯一值，单个值的 Bitmap 索引大小为 18M，再加上 Page 数据（55M）= 73M。
 RawRowsRead: 20.566M (20566493) // 读取的数据行。实际只读了 2000 万行。
@@ -306,7 +302,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 
 **查询性能分析**：因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引，然而实际上该值大于 1/1000，因此查询没有使用 Bitmap 索引，查询效果等同于查询没有创建 Bitmap 索引的表。
 
-```SQL
+```Bash
 PullRowNum: 20.566M (20566493) // 返回结果集的行数。
 CompressedBytesRead: 55.283 MB // 读取的总数据量。
 RawRowsRead: 143.999M (143999468) // 读取的数据行。因为没有使用 Bitmap 索引，这一列的数据全部读出来。
@@ -325,14 +321,19 @@ IOTaskExecTime: 914.279ms // Scan 数据的总时间。
 **查询语句**：
 
 ```SQL
-SELECT count(1) FROM lineorder_without_index WHERE lo_shipmode="MAIL" AND lo_quantity=10 AND lo_discount=9 AND lo_tax=8;
+SELECT count(1) 
+FROM lineorder_without_index 
+WHERE lo_shipmode = "MAIL" 
+  AND lo_quantity = 10 
+  AND lo_discount = 9 
+  AND lo_tax = 8;
 ```
 
 **查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_shipmode` 、`lo_quantity`、`lo_discount` 和 `lo_tax` 这四列数据的 Page 全部读出来，再进行谓词过滤。
 
 总共耗时 1.76s，**其中加载数据（4 个列的数据）花了 1.6s**，谓词过滤花了 0.1s。
 
-```SQL
+```Bash
 PullRowNum: 4.092K (4092) // 返回结果集的行数。
 CompressedBytesRead: 305.346 MB // 读取的总数据量。读取了 4 列，总共 305M。
 RawRowsRead: 143.999M (143999468) // 读取的数据行。因为没有 Bitmap 索引，这 4 列的数据全部读出来。
@@ -361,9 +362,9 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL" AND lo_quanti
 
 **查询性能分析**：由于是基于多个低基数列的组合查询，Bitmap 索引效果较好，能够过滤掉一部分 Page，读取数据的时间明显减少。
 
-总共耗时 0.68s，**其中加载数据和 Bitmap 索引花了 0.54s，**Bitmap 索引过滤数据花了 0.14s。
+总共耗时 0.68s，**其中加载数据和 Bitmap 索引花了 0.54s**，Bitmap 索引过滤数据花了 0.14s。
 
-```SQL
+```Bash
 PullRowNum: 4.092K (4092) // 返回结果集的行数。
 CompressedBytesRead: 156.340 MB // 读取的总数据量。Bitmap 索引的过滤效果比较好，过滤掉了 2/3 数据。这 156M中，其中索引占 60M, 数据占 90M。
 ReadPagesNum: 11.325K (11325) // 读取的 Page 数量。Bitmap 索引的过滤效果比较好，过滤掉了 2/3 的 Page。
@@ -383,9 +384,9 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL" AND lo_quanti
 
 **查询性能分析**：因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引。实际上该值确实小于 1/1000，因此查询使用 Bitmap 索引，查询效果等同于强制使用 Bitmap 索引。
 
-总共耗时 0.67s，**其中加载数据和 Bitmap 索引花了 0.54s，**Bitmap 索引过滤数据花了 0.13s。
+总共耗时 0.67s，**其中加载数据和 Bitmap 索引花了 0.54s**，Bitmap 索引过滤数据花了 0.13s。
 
-```SQL
+```Bash
 PullRowNum: 4.092K (4092) // 返回结果集的行数。
 CompressedBytesRead: 154.430 MB // 读取的总数据量。
 ReadPagesNum: 11.209K (11209) // 读取的 Page 数量。
@@ -409,7 +410,7 @@ select count(1) from lineorder_without_index where lo_partkey=10000;
 
 总共耗时约 0.43 ms，**其中加载数据花了 0.39 ms**，谓词过滤花了 0.02 ms。
 
-```SQL
+```Bash
 PullRowNum: 255 // 返回结果集的行数。
 CompressedBytesRead: 344.532 MB // 读取的总数据量。
 RawRowsRead: 143.999M (143999468) // 读取的数据行。因为没有 Bitmap 索引，这一列的数据全部读出来。
@@ -438,9 +439,9 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 
 **查询性能分析**：由于查询的列是基数较高，因此 Bitmap 索引效果比较好，能够过滤掉一部分 Page，读取数据的时间明显减少。
 
-总共耗时 0.015s，**其中加载数据和 Bitmap 索引花了 0.009s，**Bitmap 索引过滤数据花了 0.003s。
+总共耗时 0.015s，**其中加载数据和 Bitmap 索引花了 0.009s**，Bitmap 索引过滤数据花了 0.003s。
 
-```SQL
+```Bash
 PullRowNum: 255 // 返回结果集的行数。
 CompressedBytesRead: 13.600 MB // 读取的总数据量。Bitmap 索引的过滤效果比较好，过滤掉了较多的数据。
 RawRowsRead: 255 // 读取的数据行。
@@ -461,9 +462,9 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 
 **查询性能分析**：因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引。实际上该值确实小于 1/1000，因此查询使用 Bitmap 索引，查询效果等同于强制使用 Bitmap 索引。
 
-总共耗时 0.014s，**其中加载数据和 Bitmap 索引花了 0.008s，**Bitmap 索引过滤数据花了 0.003s。
+总共耗时 0.014s，**其中加载数据和 Bitmap 索引花了 0.008s**，Bitmap 索引过滤数据花了 0.003s。
 
-```SQL
+```Bash
 PullRowNum: 255 // 返回结果集的行数。
 CompressedBytesRead: 13.600 MB // 读取的总数据量。Bitmap 索引的过滤效果比较好，过滤掉了较多的数据。
 RawRowsRead: 255 // 读取的数据行。
