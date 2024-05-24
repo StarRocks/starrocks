@@ -2660,32 +2660,39 @@ public class Config extends ConfigBase {
     /**
      * the keystore file path
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String ssl_keystore_location = "";
 
     /**
      * the password of keystore file
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String ssl_keystore_password = "";
 
     /**
      * the password of private key
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String ssl_key_password = "";
 
     /**
      * the truststore file path
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String ssl_truststore_location = "";
 
     /**
      * the password of truststore file
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String ssl_truststore_password = "";
+
+    /**
+     * Set to 0 to disable ssl cert auto update.
+     * Set to a positive integer to check and update the SSL cert regularly every ssl_cert_auto_update_interval_s seconds.
+     */
+    @ConfField(mutable = true)
+    public static int ssl_cert_auto_update_interval_s = 0;
 
     /**
      * True to disable all non-SSL connections except those from localhost.

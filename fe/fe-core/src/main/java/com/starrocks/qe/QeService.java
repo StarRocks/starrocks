@@ -34,22 +34,15 @@
 
 package com.starrocks.qe;
 
-import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlServer;
 import com.starrocks.mysql.nio.NMysqlServer;
+import com.starrocks.mysql.ssl.SSLContextLoader;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.security.KeyStore;
-import java.security.SecureRandom;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
 
 public class QeService {
     private static final Logger LOG = LogManager.getLogger(QeService.class);
@@ -57,14 +50,11 @@ public class QeService {
     private MysqlServer mysqlServer;
 
     public QeService(int port, boolean nioEnabled, ConnectScheduler scheduler) throws Exception {
-        SSLContext sslContext = null;
-        if (!Strings.isNullOrEmpty(Config.ssl_keystore_location)) {
-            sslContext = createSSLContext();
-        }
+        SSLContextLoader.load();
         if (nioEnabled) {
-            mysqlServer = new NMysqlServer(port, scheduler, sslContext);
+            mysqlServer = new NMysqlServer(port, scheduler);
         } else {
-            mysqlServer = new MysqlServer(port, scheduler, sslContext);
+            mysqlServer = new MysqlServer(port, scheduler);
         }
     }
 
@@ -73,57 +63,14 @@ public class QeService {
             LOG.error("mysql server start failed");
             System.exit(-1);
         }
-        LOG.info("QE service start.");
-    }
 
-
-    public MysqlServer getMysqlServer() {
-        return mysqlServer;
-    }
-
-    public void setMysqlServer(MysqlServer mysqlServer) {
-        this.mysqlServer = mysqlServer;
-    }
-
-    private SSLContext createSSLContext() throws Exception {
-        // TODO(yiming): refactor, replace this method with `SslUtils#createSSLContext()`
-        KeyStore keyStore = KeyStore.getInstance("JKS");
-        try (InputStream keyStoreIS = new FileInputStream(Config.ssl_keystore_location)) {
-            keyStore.load(keyStoreIS, Config.ssl_keystore_password.toCharArray());
-        }
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        kmf.init(keyStore, Config.ssl_key_password.toCharArray());
-
-        SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
-        TrustManager[] trustManagers = null;
-        if (!Strings.isNullOrEmpty(Config.ssl_truststore_location)) {
-            trustManagers = createTrustManagers(Config.ssl_truststore_location, Config.ssl_truststore_password);
-        }
-        sslContext.init(kmf.getKeyManagers(), trustManagers, new SecureRandom());
-        return sslContext;
-    }
-
-    /**
-     * Creates the trust managers required to initiate the {@link SSLContext}, using a JKS keystore as an input.
-     *
-     * @param filepath - the path to the JKS keystore.
-     * @param keystorePassword - the keystore's password.
-     * @return {@link TrustManager} array, that will be used to initiate the {@link SSLContext}.
-     * @throws Exception
-     */
-    private TrustManager[] createTrustManagers(String filepath, String keystorePassword) throws Exception {
-        KeyStore trustStore = KeyStore.getInstance("JKS");
-        InputStream trustStoreIS = new FileInputStream(filepath);
-        try {
-            trustStore.load(trustStoreIS, keystorePassword.toCharArray());
-        } finally {
-            if (trustStoreIS != null) {
-                trustStoreIS.close();
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            if (Config.ssl_cert_auto_update_interval_s != SSLContextLoader.getUsingAutoRefreshInterval()) {
+                SSLContextLoader.updateAutoRefreshInterval(Config.ssl_cert_auto_update_interval_s);
             }
-        }
-        TrustManagerFactory trustFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustFactory.init(trustStore);
-        return trustFactory.getTrustManagers();
+        });
+
+        LOG.info("QE service started.");
     }
 }
 
