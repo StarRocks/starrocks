@@ -176,7 +176,8 @@ void CompactionTask::delete_rowsets(const RowsetList& rowsets) {
     delete_files_async(std::move(file_paths));
 }
 
-StatusOr<RowsetPtr> CompactionTask::execute(const RowsetList& input_rowsets, const CancelFunc& cancel_func, ThreadPool* flush_pool) {
+StatusOr<RowsetPtr> CompactionTask::execute(const RowsetList& input_rowsets, const CancelFunc& cancel_func,
+                                            ThreadPool* flush_pool) {
     if (UNLIKELY(input_rowsets.empty())) {
         auto output_rowset = std::make_unique<RowsetMetadataPB>();
         output_rowset->set_num_rows(0);

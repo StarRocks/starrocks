@@ -57,7 +57,8 @@ static std::string to_string_param_name(const testing::TestParamInfo<CompactionP
     std::stringstream ss;
     ss << CompactionUtils::compaction_algorithm_to_string(info.param.algorithm) << "_"
        << info.param.vertical_compaction_max_columns_per_group << "_" << info.param.enable_persistent_index << "_"
-       << PersistentIndexTypePB_Name(info.param.persistent_index_type) << "_" << info.param.max_compaction_merge_way_count;
+       << PersistentIndexTypePB_Name(info.param.persistent_index_type) << "_"
+       << info.param.max_compaction_merge_way_count;
     return ss.str();
 }
 
