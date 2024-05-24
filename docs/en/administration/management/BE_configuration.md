@@ -2809,7 +2809,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: A boolean value to control whether to enable the late materialization v2 of Parquet reader to improve performance. `true` indicates enabling late materialization v2, and `false` indicates disabling it. In v3.3, only new version late materialization is reserved, and this configuration is deprecated.
+- Description: A boolean value to control whether to enable the late materialization v2 of Parquet reader to improve performance. `true` indicates enabling late materialization v2, and `false` indicates disabling it. In v3.3, only `parquet_late_materialization_enable` is used, and this variable is deprecated.
 - Introduced in: v3.2
 
 ##### parquet_page_index_enable
