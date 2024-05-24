@@ -27,11 +27,13 @@ ARG starlet_tag=v3.3-rc1
 ARG distro=ubuntu
 # Token to access artifacts in private github repositories.
 ARG GITHUB_TOKEN
+# the root directory to build the project
+ARG BUILD_ROOT=/build
 
 FROM starrocks/toolchains-${distro}:main-20231123 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
-WORKDIR /root
+WORKDIR /
 
 FROM base as builder_stage1
 # stage1: build thirdparty
@@ -39,22 +41,24 @@ ARG prebuild_maven
 ARG predownload_thirdparty
 ARG thirdparty_url
 ARG GITHUB_TOKEN
+ARG BUILD_ROOT
 
-COPY . ./starrocks
+COPY . $BUILD_ROOT
 RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
         wget --progress=dot:mega --tries=3 --read-timeout=60 --connect-timeout=15 --no-check-certificate ${thirdparty_url} -O thirdparty.tar ; \
-        mkdir -p starrocks/thirdparty/src && tar -xf thirdparty.tar -C starrocks/thirdparty/src ; \
+        mkdir -p ${BUILD_ROOT}/thirdparty/src && tar -xf thirdparty.tar -C ${BUILD_ROOT}/thirdparty/src ; \
     fi
-RUN mkdir -p $STARROCKS_THIRDPARTY/installed && cd starrocks/thirdparty && \
+RUN mkdir -p $STARROCKS_THIRDPARTY/installed && cd ${BUILD_ROOT}/thirdparty && \
      PARALLEL=`nproc` GH_TOKEN=${GITHUB_TOKEN} ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
 # create empty maven directories
 RUN mkdir -p /root/.m2 /root/.mvn
 
 
 FROM builder_stage1 as build_prebuild_mvn_true
+ARG BUILD_ROOT
 # set the maven settings and download the dependency jars
-RUN cp -a /root/starrocks/docker/dockerfiles/dev-env/mvn/* /root/.mvn/ ; \
-        export MAVEN_OPTS='-Dmaven.artifact.threads=128' ; cd /root/starrocks ; ./build.sh --fe || true ; \
+RUN cp -a ${BUILD_ROOT}/docker/dockerfiles/dev-env/mvn/* /root/.mvn/ ; \
+        export MAVEN_OPTS='-Dmaven.artifact.threads=128' ; cd ${BUILD_ROOT} ; ./build.sh --fe || true ; \
         cd java-extensions ; mvn package -DskipTests || true
 
 FROM builder_stage1 as build_prebuild_mvn_false
@@ -69,8 +73,9 @@ FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet-ubuntu
 FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
+ARG BUILD_ROOT
 # remove unnecessary and big starlet dependencies
-COPY --from=builder_stage1 /root/starrocks/docker/dockerfiles/dev-env/starlet_exclude.txt .
+COPY --from=builder_stage1 ${BUILD_ROOT}/docker/dockerfiles/dev-env/starlet_exclude.txt .
 RUN while read line; do \
         if [[ "$line" == \#* ]] ; then \
             continue ; \
