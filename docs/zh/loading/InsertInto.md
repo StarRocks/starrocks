@@ -301,7 +301,7 @@ Empty set (0.00 sec)
 ```
 
 :::note
-对于通过 PARTITION BY column 方式分区的表，INSERT OVERWRITE 支持通过指定分区键的值在目标表上创建不存在的分区。对于已有的分区，将正常进行覆盖写。
+对于使用列表达式分区方式（`PARTITION BY column`）的表，INSERT OVERWRITE 支持通过指定分区键的值在目标表上创建不存在的分区。对于已有的分区，将正常进行覆盖写。
 
 以下示例创建了分区表 `activity`，向其中导入新数据时自动创建了先前不存在的分区：
 
