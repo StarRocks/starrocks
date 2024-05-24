@@ -350,7 +350,7 @@ Default value: `true`.
 
 ### enable_gin_filter
 
-* **Description**:  Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
+* **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
 * **Default**: true
 * **Introduced in**: v3.3.0
 

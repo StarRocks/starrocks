@@ -346,7 +346,7 @@ SELECT /*+ SET_VAR
 
 ### enable_gin_filter
 
-* 描述：查询时候是否利用[全文倒排索引](../table_design/indexes/inverted_index.md)。
+* 描述：查询时是否使用[全文倒排索引](../table_design/indexes/inverted_index.md)。
 * 默认值：true
 * 引入版本：v3.3.0
 
