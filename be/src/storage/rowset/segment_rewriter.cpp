@@ -165,10 +165,18 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 // increment column, and rewrite the full segment file through SegmentWriter.
 Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path, const TabletSchemaCSPtr& tschema,
                                 starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
+<<<<<<< HEAD
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
                                 const starrocks::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
+=======
+                                const std::vector<ColumnId>& unmodified_column_ids,
+                                std::vector<std::unique_ptr<Column>>* unmodified_column_data,
+                                const starrocks::TxnLogPB_OpWrite& op_write, const starrocks::lake::Tablet* tablet) {
+    if (unmodified_column_ids.size() == 0) {
+        DCHECK_EQ(unmodified_column_data, nullptr);
+>>>>>>> a092277564 ([Enhancement] improve cloud native pk table memory cost when handle large ingestion (#45685))
     }
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
