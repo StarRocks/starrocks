@@ -22,6 +22,7 @@ set enable_sort_aggregate=true;
 
 ## Limits
 
+- StarRocks shared-data clusters do not support sorted streaming aggregate.
 - The keys in GROUP BY must have a sequence. For example, if the sort key is `k1, k2, k3`, then:
   - `GROUP BY k1`  and  `GROUP BY k1, k2` are allowed.
   - `GROUP BY k1, k3` does not follow the sort key sequence. Therefore, sorted streaming aggregate cannot take effect on such a clause.
