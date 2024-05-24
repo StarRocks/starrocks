@@ -162,3 +162,17 @@ Table: lineitem
  - __MAX_OF_BytesRead: 194.99 MB
  - __MIN_OF_BytesRead: 81.25 MB
 ```
+
+## Populate data cache
+
+StarRocks supports populating the data cache in synchronous or asynchronous mode.
+
+### Synchronous population (default)
+
+In synchronous population mode, all the remote data read by the current query is cached locally. Synchronous population is efficient, but may affect the efficiency of initial queries because the cache population operation is performed during data reading.
+
+### Asynchronous population (since v3.2.7)
+
+In asynchronous population mode, the system tries to cache the accessed data in the background, in order to minimize the impact on read performance. Asynchronous population can reduce the performance impact of cache population on initial reads, but the population efficiency is lower than synchronous population. Typically, a single query cannot guarantee that all the accessed data will be cached. Multiple attempts may be required to cache all the accessed data.
+
+The current system defaults to synchronous caching. Users can enable asynchronous cache population by modifying the following session variables:
