@@ -185,8 +185,8 @@ public class HiveMetastoreApiConverter {
     }
 
     public static MetastoreTable toMetastoreTable(Table table) {
-        return new MetastoreTable(table.getDbName(), table.getTableName(), table.getSd().getLocation(),
-                table.getCreateTime());
+        String tableLocation = toTableLocation(table.getSd(), table.getParameters());
+        return new MetastoreTable(table.getDbName(), table.getTableName(), tableLocation, table.getCreateTime());
     }
 
     public static Table toMetastoreApiTable(HiveTable table) {
