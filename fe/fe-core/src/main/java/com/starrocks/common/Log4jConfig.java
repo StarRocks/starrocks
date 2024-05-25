@@ -309,7 +309,7 @@ public class Log4jConfig extends XmlConfiguration {
         }
 
         String newXmlConfTemplate = APPENDER_TEMPLATE;
-        newXmlConfTemplate += System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1")
+        newXmlConfTemplate += (Config.sys_log_to_console || System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1"))
             ? CONSOLE_LOGGER_TEMPLATE : FILE_LOGGER_TEMPLATE;
         newXmlConfTemplate = newXmlConfTemplate.replaceAll("<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->",
                 sb.toString());
