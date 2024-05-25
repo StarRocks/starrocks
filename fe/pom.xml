@@ -546,6 +546,12 @@ under the License.
                 <groupId>io.trino.hive</groupId>
                 <artifactId>hive-apache</artifactId>
                 <version>${hive-apache.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.parquet</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
