@@ -176,6 +176,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_insert_ignore(bool insert_ignore) {
+        _insert_ignore = insert_ignore;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -191,6 +196,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+    bool _insert_ignore{false};
 };
 
 } // namespace starrocks::lake

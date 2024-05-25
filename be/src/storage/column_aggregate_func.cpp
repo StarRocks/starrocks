@@ -239,6 +239,211 @@ private:
     ValueColumnAggregatorPtr _child;
 };
 
+// FIRST
+template <typename ColumnType, typename StateType>
+class FirstAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
+public:
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
+        this->data() = data[row];
+    }
+
+    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+        aggregate_impl(start, src);
+    }
+
+    void append_data(Column* agg) override { down_cast<ColumnType*>(agg)->append(this->data()); }
+};
+
+template <>
+class FirstAggregator<BitmapColumn, BitmapValue> final : public ValueColumnAggregator<BitmapColumn, BitmapValue> {
+public:
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* data = down_cast<BitmapColumn*>(src.get());
+        this->data() = *(data->get_object(row));
+    }
+
+    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+        aggregate_impl(start, src);
+    }
+
+    void append_data(Column* agg) override {
+        auto* col = down_cast<BitmapColumn*>(agg);
+        auto& bitmap = const_cast<BitmapValue&>(this->data());
+        col->append(std::move(bitmap));
+    }
+};
+
+template <>
+class FirstAggregator<HyperLogLogColumn, HyperLogLog> final
+        : public ValueColumnAggregator<HyperLogLogColumn, HyperLogLog> {
+public:
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* data = down_cast<HyperLogLogColumn*>(src.get());
+        this->data() = *(data->get_object(row));
+    }
+
+    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+        aggregate_impl(start, src);
+    }
+
+    void append_data(Column* agg) override {
+        auto* col = down_cast<HyperLogLogColumn*>(agg);
+        auto& hll = const_cast<HyperLogLog&>(this->data());
+        col->append(std::move(hll));
+    }
+};
+
+template <>
+class FirstAggregator<PercentileColumn, PercentileValue> final
+        : public ValueColumnAggregator<PercentileColumn, PercentileValue> {
+public:
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* data = down_cast<PercentileColumn*>(src.get());
+        this->data() = *(data->get_object(row));
+    }
+
+    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+        aggregate_impl(start, src);
+    }
+
+    void append_data(Column* agg) override {
+        auto* col = down_cast<PercentileColumn*>(agg);
+        auto& per = const_cast<PercentileValue&>(this->data());
+        col->append(std::move(per));
+    }
+};
+
+template <>
+class FirstAggregator<JsonColumn, JsonValue> final : public ValueColumnAggregator<JsonColumn, JsonValue> {
+public:
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* data = down_cast<JsonColumn*>(src.get());
+        this->data() = *(data->get_object(row));
+    }
+
+    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+        aggregate_impl(start, src);
+    }
+
+    void append_data(Column* agg) override {
+        auto* col = down_cast<JsonColumn*>(agg);
+        auto& per = const_cast<JsonValue&>(this->data());
+        col->append(std::move(per));
+    }
+};
+
+template <>
+class FirstAggregator<BinaryColumn, SliceState> final : public ValueColumnAggregator<BinaryColumn, SliceState> {
+public:
+    void reset() override { this->data().reset(); }
+
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* col = down_cast<BinaryColumn*>(src.get());
+        Slice data = col->get_slice(row);
+        this->data().update(data);
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
+        auto* col = down_cast<BinaryColumn*>(src.get());
+        Slice data = col->get_slice(start);
+        this->data().update(data);
+    }
+
+    void append_data(Column* agg) override {
+        auto* col = down_cast<BinaryColumn*>(agg);
+        // NOTE: assume the storage pointed by |this->data().slice()| not destroyed.
+        col->append(this->data().slice());
+    }
+};
+
+// Array/Map/Struct
+template <typename ColumnType>
+class FirstAggregator<ColumnType, ColumnRefState> final : public ValueColumnAggregator<ColumnType, ColumnRefState> {
+public:
+    void reset() override { this->data().reset(); }
+
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        this->data().column = src;
+        this->data().row = row;
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(start, src); }
+
+    void append_data(Column* agg) override {
+        auto* col = down_cast<ColumnType*>(agg);
+        if (this->data().column) {
+            col->append(*this->data().column, this->data().row, 1);
+        } else {
+            col->append_default();
+        }
+    }
+
+    bool need_deep_copy() const override { return true; }
+};
+
+class FirstNullableColumnAggregator final : public ValueColumnAggregatorBase {
+public:
+    ~FirstNullableColumnAggregator() override = default;
+
+    explicit FirstNullableColumnAggregator(ValueColumnAggregatorPtr child) : _child(std::move(child)) {
+        _null_child = std::make_unique<ReplaceAggregator<NullColumn, uint8_t>>();
+    }
+
+    void update_source(const ColumnPtr& src) override {
+        _source_column = src;
+
+        auto* nullable = down_cast<NullableColumn*>(src.get());
+        _child->update_source(nullable->data_column());
+        _null_child->update_source(nullable->null_column());
+    }
+
+    void update_aggregate(Column* agg) override {
+        _aggregate_column = agg;
+
+        auto* n = down_cast<NullableColumn*>(agg);
+        _child->update_aggregate(n->data_column().get());
+        _null_child->update_aggregate(n->null_column().get());
+
+        reset();
+    }
+
+    void aggregate_values(int start, int nums, const uint32* aggregate_loops, bool previous_neq) override {
+        _child->aggregate_values(start, nums, aggregate_loops, previous_neq);
+        _null_child->aggregate_values(start, nums, aggregate_loops, previous_neq);
+    }
+
+    void finalize() override {
+        _child->finalize();
+        _null_child->finalize();
+
+        auto p = down_cast<NullableColumn*>(_aggregate_column);
+        p->set_has_null(SIMD::count_nonzero(p->null_column()->get_data()));
+        _aggregate_column = nullptr;
+    }
+
+    void reset() override {
+        _child->reset();
+        _null_child->reset();
+    }
+
+    void append_data(Column* agg) override {
+        LOG(FATAL) << "append_data is not implemented in FirstNullableColumnAggregator";
+    }
+
+    void aggregate_impl(int row, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_impl is not implemented in FirstNullableColumnAggregator";
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_batch_impl is not implemented in FirstNullableColumnAggregator";
+    }
+
+private:
+    ValueColumnAggregatorPtr _null_child;
+    ValueColumnAggregatorPtr _child;
+};
+
 class AggFuncBasedValueAggregator : public ValueColumnAggregatorBase {
 public:
     AggFuncBasedValueAggregator(const AggregateFunction* agg_func) : _agg_func(agg_func) {
@@ -325,6 +530,9 @@ private:
 #define CASE_REPLACE(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
     CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, ReplaceAggregator)
 
+#define CASE_FIRST(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
+    CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, FirstAggregator)
+
 ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggregateType method) {
     switch (method) {
     case STORAGE_AGGREGATE_REPLACE:
@@ -357,6 +565,38 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_OBJECT, BitmapColumn, BitmapValue)
             CASE_REPLACE(TYPE_PERCENTILE, PercentileColumn, PercentileValue)
             CASE_REPLACE(TYPE_JSON, JsonColumn, ColumnRefState)
+            CASE_DEFAULT_WARNING(type)
+        }
+    }
+    case STORAGE_AGGREGATE_FIRST: {
+        switch (type) {
+            CASE_FIRST(TYPE_TINYINT, Int8Column, int8_t)
+            CASE_FIRST(TYPE_SMALLINT, Int16Column, int16_t)
+            CASE_FIRST(TYPE_INT, Int32Column, int32_t)
+            CASE_FIRST(TYPE_BIGINT, Int64Column, int64_t)
+            CASE_FIRST(TYPE_LARGEINT, Int128Column, int128_t)
+            CASE_FIRST(TYPE_FLOAT, FloatColumn, float)
+            CASE_FIRST(TYPE_DOUBLE, DoubleColumn, double)
+            CASE_FIRST(TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
+            CASE_FIRST(TYPE_DECIMALV2, DecimalColumn, DecimalV2Value)
+            CASE_FIRST(TYPE_DECIMAL32, Decimal32Column, int32_t)
+            CASE_FIRST(TYPE_DECIMAL64, Decimal64Column, int64_t)
+            CASE_FIRST(TYPE_DECIMAL128, Decimal128Column, int128_t)
+            CASE_FIRST(TYPE_DATE_V1, DateColumn, DateValue)
+            CASE_FIRST(TYPE_DATE, DateColumn, DateValue)
+            CASE_FIRST(TYPE_DATETIME_V1, TimestampColumn, TimestampValue)
+            CASE_FIRST(TYPE_DATETIME, TimestampColumn, TimestampValue)
+            CASE_FIRST(TYPE_CHAR, BinaryColumn, SliceState)
+            CASE_FIRST(TYPE_VARCHAR, BinaryColumn, SliceState)
+            CASE_FIRST(TYPE_VARBINARY, BinaryColumn, SliceState)
+            CASE_FIRST(TYPE_BOOLEAN, BooleanColumn, uint8_t)
+            CASE_FIRST(TYPE_ARRAY, ArrayColumn, ColumnRefState)
+            CASE_FIRST(TYPE_MAP, MapColumn, ColumnRefState)
+            CASE_FIRST(TYPE_STRUCT, StructColumn, ColumnRefState)
+            CASE_FIRST(TYPE_HLL, HyperLogLogColumn, HyperLogLog)
+            CASE_FIRST(TYPE_OBJECT, BitmapColumn, BitmapValue)
+            CASE_FIRST(TYPE_PERCENTILE, PercentileColumn, PercentileValue)
+            CASE_FIRST(TYPE_JSON, JsonColumn, JsonValue)
             CASE_DEFAULT_WARNING(type)
         }
     }
@@ -411,6 +651,13 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(cons
         auto p = create_value_aggregator(type, method);
         if (field->is_nullable()) {
             return std::make_unique<ValueNullableColumnAggregator>(std::move(p));
+        } else {
+            return p;
+        }
+    }  else if (method == STORAGE_AGGREGATE_FIRST) {
+        auto p = create_value_aggregator(type, method);
+        if (field->is_nullable()) {
+            return std::make_unique<FirstNullableColumnAggregator>(std::move(p));
         } else {
             return p;
         }

@@ -120,6 +120,7 @@ message TxnLogPB {
         repeated string dels = 3;
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
+        optional bool insert_ignore = 100;
     }
 
     message OpCompaction {

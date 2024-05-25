@@ -104,6 +104,7 @@ Status RowsetWriter::init() {
     _rowset_meta_pb->set_rowset_type(BETA_ROWSET);
     _rowset_meta_pb->set_rowset_state(_context.rowset_state);
     _rowset_meta_pb->set_segments_overlap_pb(_context.segments_overlap);
+    _rowset_meta_pb->set_insert_ignore(_context.insert_ignore);
 
     if (_context.rowset_state == PREPARED || _context.rowset_state == COMMITTED) {
         _is_pending = true;

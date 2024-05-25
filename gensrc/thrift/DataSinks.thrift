@@ -225,10 +225,11 @@ struct TOlapTableSink {
     24: optional i32 auto_increment_slot_id
     25: optional Types.TPartialUpdateMode partial_update_mode
     26: optional string label
-    // enable colocated for sync mv 
-    27: optional bool enable_colocate_mv_index 
+    // enable colocated for sync mv
+    27: optional bool enable_colocate_mv_index
     28: optional i64 automatic_bucket_size
     29: optional bool write_txn_log
+    30: optional bool insert_ignore
 }
 
 struct TSchemaTableSink {

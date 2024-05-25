@@ -1949,7 +1949,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
                     context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                     getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
-                    createPos(context));
+                    context.IGNORE() != null, createPos(context));
             stmt.setHintNodes(hintMap.get(context));
             return stmt;
         }

@@ -180,6 +180,11 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_insert_ignore(bool insert_ignore) {
+        _insert_ignore = insert_ignore;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -194,6 +199,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
+    bool _insert_ignore{false};
 };
 
 } // namespace starrocks::lake

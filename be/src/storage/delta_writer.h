@@ -67,6 +67,7 @@ struct DeltaWriterOptions {
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
     POlapTableSchemaParam ptable_schema_param;
     int64_t immutable_tablet_size = 0;
+    bool insert_ignore;
 };
 
 enum State {

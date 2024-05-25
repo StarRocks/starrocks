@@ -194,6 +194,7 @@ message PTabletWriterOpenRequest {
     optional int64 immutable_tablet_size = 33 [default = 0];
     optional PLoadChannelProfileConfig load_channel_profile_config = 34;
     optional LakeTabletParams lake_tablet_params = 35;
+    optional bool insert_ignore = 36;
 };
 
 message PTabletWriterOpenResult {

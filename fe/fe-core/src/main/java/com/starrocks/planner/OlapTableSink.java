@@ -141,6 +141,7 @@ public class OlapTableSink extends DataSink {
     private TPartialUpdateMode partialUpdateMode;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     private long automaticBucketSize = 0;
+    private boolean isInsertIgnore = false;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -164,6 +165,7 @@ public class OlapTableSink extends DataSink {
             }
         }
         this.partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+
     }
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
@@ -172,6 +174,16 @@ public class OlapTableSink extends DataSink {
         this(dstTable, tupleDescriptor, partitionIds, writeQuorum, enableReplicatedStorage,
                 nullExprInAutoIncrement, enableAutomaticPartition);
         this.warehouseId = warehouseId;
+    }
+
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
+                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
+                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition, long warehouseId,
+                         boolean isInsertIgnore) {
+        this(dstTable, tupleDescriptor, partitionIds, writeQuorum, enableReplicatedStorage,
+                nullExprInAutoIncrement, enableAutomaticPartition);
+        this.warehouseId = warehouseId;
+        this.isInsertIgnore = isInsertIgnore;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -197,6 +209,7 @@ public class OlapTableSink extends DataSink {
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
+        tSink.setInsert_ignore(isInsertIgnore);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {

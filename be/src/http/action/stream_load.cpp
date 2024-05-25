@@ -600,7 +600,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     } else if (!http_req->header(HTTP_COMPRESSION).empty()) {
         request.__set_payload_compression_type(http_req->header(HTTP_COMPRESSION));
     }
-
+    if (!http_req->header(HTTP_INSERT_IGNORE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_INSERT_IGNORE), "false")) {
+            request.__set_insert_ignore(false);
+        } else if (boost::iequals(http_req->header(HTTP_INSERT_IGNORE), "true")) {
+            request.__set_insert_ignore(true);
+        } else {
+            return Status::InvalidArgument("Invalid insert ignore flag format. Must be bool type");
+        }
+    }
     // plan this load
     int64_t stream_load_put_start_time = MonotonicNanos();
     RETURN_IF_ERROR(stream_load_put_internal(request, rpc_timeout_ms, &ctx->put_result));

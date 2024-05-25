@@ -88,6 +88,7 @@ public class StreamLoadInfo {
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
+    private boolean isInsertIgnore = false;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -254,6 +255,10 @@ public class StreamLoadInfo {
 
     public long getLogRejectedRecordNum() {
         return logRejectedRecordNum;
+    }
+
+    public boolean isInsertIgnore() {
+        return isInsertIgnore;
     }
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
@@ -466,6 +471,9 @@ public class StreamLoadInfo {
             if (payloadCompressionType == null) {
                 throw new UserException("unsupported compression type: " + request.getPayload_compression_type());
             }
+        }
+        if (request.isSetInsert_ignore()) {
+            isInsertIgnore = request.isInsert_ignore();
         }
     }
 

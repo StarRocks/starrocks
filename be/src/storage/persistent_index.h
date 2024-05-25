@@ -21,6 +21,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
+#include "storage/olap_common.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
@@ -197,7 +198,8 @@ public:
     // |num_found|: add the number of keys found to this argument
     // |idxes|: the target indexes of keys
     virtual Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
-                          size_t* num_found, const std::vector<size_t>& idxes) = 0;
+                          size_t* num_found, const std::vector<size_t>& idxes,
+                          const InsertPolicy& type = InsertPolicy::UPSERT) = 0;
 
     // batch upsert
     // |keys|: key array as raw buffer
@@ -206,7 +208,8 @@ public:
     // |num_found|: add the number of keys found(or already exist) to this argument
     // |idxes|: the target indexes of keys
     virtual Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                          const std::vector<size_t>& idxes) = 0;
+                          const std::vector<size_t>& idxes,
+                          const InsertPolicy& type = InsertPolicy::UPSERT) = 0;
 
     // batch insert
     // |keys|: key array as raw buffer
@@ -326,7 +329,8 @@ public:
     // |num_found|: add the number of keys found to this argument
     // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, size_t* num_found,
-                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size);
+                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size,
+                  const InsertPolicy& type = InsertPolicy::UPSERT);
 
     // batch upsert
     // |n|: size of key/value array
@@ -335,7 +339,8 @@ public:
     // |num_found|: add the number of keys found(or already exist) to this argument
     // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, size_t* num_found,
-                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size);
+                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size,
+                  const InsertPolicy& type = InsertPolicy::UPSERT);
 
     // batch insert
     // |n|: size of key/value array
@@ -713,8 +718,9 @@ public:
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
+    // |type|: upsert or ignore
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* stat = nullptr, const InsertPolicy& type = InsertPolicy::UPSERT);
 
     // batch replace without return old values
     // |n|: size of key/value array

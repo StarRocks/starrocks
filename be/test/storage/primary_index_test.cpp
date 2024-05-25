@@ -183,6 +183,36 @@ void test_integral_pk() {
     for (auto i = 0; i < deletes[3].size(); i++) {
         CHECK_EQ(i * 2 + 1, deletes[3][i]);
     }
+
+    // ignore all the even numbers in range [0, 2 * kSegmentSize)
+    for (int i = 0; i < kSegmentSize; i++) {
+        pk_data[i] = i * 2;
+    }
+    deletes.clear();
+    pk_index->upsert(5, 0, *pk_col, &deletes, InsertDuplicatePolicy::IGNORE);
+    CHECK_EQ(1, deletes.size());
+
+    CHECK(deletes.find(5) != deletes.end());
+    CHECK_EQ(kSegmentSize, deletes[5].size());
+    // Mark all the keys in segment 5 to be ignored.
+    for (auto i = 0; i < deletes[5].size(); i++) {
+        CHECK_EQ(i, deletes[5][i]);
+    }
+
+    // ignore half of the numbers in range [2 * kSegmentSize, 3 * kSegmentSize)
+    for (int i = 0; i < kSegmentSize; i++) {
+        pk_data[i] = kSegmentSize * 2 + i;
+    }
+    deletes.clear();
+    pk_index->upsert(6, 0, *pk_col, &deletes, InsertDuplicatePolicy::IGNORE);
+    CHECK_EQ(1, deletes.size());
+
+    CHECK(deletes.find(6) != deletes.end());
+    CHECK_EQ(kSegmentSize / 2, deletes[6].size());
+    // Mark half of keys in segment 6 to be ignored.
+    for (auto i = 0; i < deletes[6].size(); i++) {
+        CHECK_EQ(i * 2, deletes[6][i]);
+    }
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_tinyint) {
@@ -343,6 +373,38 @@ void test_binary_pk(int key_size) {
     for (auto i = 0; i < deletes[3].size(); i++) {
         CHECK_EQ(i * 2 + 1, deletes[3][i]);
     }
+
+    // ignore all the even numbers in range [0, 2 * kSegmentSize)
+    pk_col->resize(0);
+    for (int i = 0; i < kSegmentSize; i++) {
+        pk_col->append(strings::Substitute("binary_pk_$0", i * 2));
+    }
+    deletes.clear();
+    pk_index->upsert(5, 0, *pk_col, &deletes, InsertDuplicatePolicy::IGNORE);
+    CHECK_EQ(1, deletes.size());
+
+    CHECK(deletes.find(5) != deletes.end());
+    CHECK_EQ(kSegmentSize, deletes[5].size());
+    // Mark all the keys in segment 5 to be ignored.
+    for (auto i = 0; i < deletes[5].size(); i++) {
+        CHECK_EQ(i, deletes[5][i]);
+    }
+
+    // ignore half of the numbers in range [2 * kSegmentSize, 3 * kSegmentSize)
+    pk_col->resize(0);
+    for (int i = 0; i < kSegmentSize; i++) {
+        pk_col->append(strings::Substitute("binary_pk_$0", kSegmentSize * 2 + i));
+    }
+    deletes.clear();
+    pk_index->upsert(6, 0, *pk_col, &deletes, InsertDuplicatePolicy::IGNORE);
+    CHECK_EQ(1, deletes.size());
+
+    CHECK(deletes.find(6) != deletes.end());
+    CHECK_EQ(kSegmentSize / 2, deletes[6].size());
+    // Mark half of keys in segment 6 to be ignored.
+    for (auto i = 0; i < deletes[6].size(); i++) {
+        CHECK_EQ(i * 2, deletes[6][i]);
+    }
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_varchar1) {
@@ -401,6 +463,11 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
             CHECK_EQ(rssid, 2);
         }
     }
+    // upsert ignore
+    deletes.clear();
+    pk_index->upsert(2, 0, *pk_column, &deletes, InsertDuplicatePolicy::IGNORE);
+    ASSERT_EQ(deletes.size(), 1);
+    ASSERT_EQ(deletes[2].size(), kSegmentSize);
 
     deletes.clear();
     pk_index->erase(*pk_column, &deletes);

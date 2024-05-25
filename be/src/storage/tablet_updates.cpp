@@ -1262,6 +1262,10 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     }
     EditVersion latest_applied_version;
     st = get_latest_applied_version(&latest_applied_version);
+    InsertPolicy index_type = InsertPolicy::UPSERT;
+    if (rowset->rowset_meta()->get_meta_pb_without_schema().insert_ignore()) {
+        index_type = InsertPolicy::IGNORE;
+    }
 
     int64_t full_row_size = 0;
     int64_t full_rowset_size = 0;
@@ -1289,7 +1293,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                     return;
                 }
                 st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major_number(), upserts, index,
-                                tablet_id, &new_deletes, apply_tschema);
+                                tablet_id, &new_deletes, apply_tschema, index_type);
                 if (!st.ok()) {
                     std::string msg =
                             strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
@@ -1369,7 +1373,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         return;
                     }
                     st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major_number(),
-                                    upserts, index, tablet_id, &new_deletes, apply_tschema);
+                                    upserts, index, tablet_id, &new_deletes, apply_tschema, index_type);
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
                                 "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
@@ -1701,7 +1705,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
-                                 DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema) {
+                                 DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema, const InsertPolicy& index_type) {
     if (condition_column >= 0) {
         auto tablet_column = tablet_schema->column(condition_column);
         std::vector<uint32_t> read_column_ids;
@@ -1770,7 +1774,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
         std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
         MonotonicStopWatch watch;
         watch.start();
-        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get()));
+        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get(), index_type));
         VLOG(2) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
                 << iostat->print_str();
     }
@@ -4230,6 +4234,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
         writer_context.schema_change_sorting = true;
         writer_context.gtid = src_rowset->rowset_meta()->gtid();
+        writer_context.insert_ignore = false;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);

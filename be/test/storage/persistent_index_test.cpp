@@ -143,10 +143,44 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes)
+                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
+
+    // test ignore
+    vector<Key> ignore_keys(N, 0);
+    vector<Slice> ignore_key_slices;
+    vector<IndexValue> ignore_values(ignore_keys.size());
+    ignore_values.reserve(N);
+    expect_exists = 0;
+    expect_not_found = 0;
+    idxes.clear();
+    for (int i = 0; i < N; i++) {
+        ignore_keys[i] = N + i;
+        if ((N + i) % 2 == 0) {
+            expect_exists++;
+        } else {
+            expect_not_found++;
+        }
+        ignore_key_slices.emplace_back((uint8_t*)(&ignore_keys[i]), sizeof(Key));
+        ignore_values[i] = i * 4;
+        idxes.emplace_back(i);
+    }
+    vector<IndexValue> ignore_old_values(ignore_keys.size());
+    KeysInfo ignore_not_found;
+    size_t ignore_num_found = 0;
+    ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
+                            &ignore_num_found, idxes, InsertDuplicatePolicy::IGNORE)
+                        .ok());
+    ASSERT_EQ(ignore_num_found, expect_exists);
+    ASSERT_EQ(ignore_not_found.size(), expect_not_found);
+    ASSERT_EQ(ignore_old_values.size(), N);
+    for (int i = 0; i < N ; i++) {
+        if (i % 2 == 0) {
+            ASSERT_EQ(ignore_old_values[i].get_value(), i * 4);
+        }
+    }
 }
 
 TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
@@ -238,10 +272,45 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes)
+                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
+
+
+    // test ignore
+    vector<Key> ignore_keys(N);
+    vector<Slice> ignore_key_slices;
+    vector<IndexValue> ignore_values(ignore_keys.size());
+    ignore_values.reserve(N);
+    expect_exists = 0;
+    expect_not_found = 0;
+    idxes.clear();
+    for (int i = 0; i < N; i++) {
+        ignore_keys[i] = "test_varlen_" + std::to_string(N + i);
+        if ((N + i) % 2 == 0) {
+            expect_exists++;
+        } else {
+            expect_not_found++;
+        }
+        ignore_key_slices.emplace_back(ignore_keys[i]);
+        ignore_values[i] = i * 4;
+        idxes.emplace_back(i);
+    }
+    vector<IndexValue> ignore_old_values(ignore_keys.size());
+    KeysInfo ignore_not_found;
+    size_t ignore_num_found = 0;
+    ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
+                            &ignore_num_found, idxes, InsertDuplicatePolicy::IGNORE)
+                        .ok());
+    ASSERT_EQ(ignore_num_found, expect_exists);
+    ASSERT_EQ(ignore_not_found.size(), expect_not_found);
+    ASSERT_EQ(ignore_old_values.size(), N);
+    for (int i = 0; i < N ; i++) {
+        if (i % 2 == 0) {
+            ASSERT_EQ(ignore_old_values[i].get_value(), i * 4);
+        }
+    }
 }
 
 static std::string gen_random_string_of_random_length(size_t floor, size_t ceil) {
@@ -331,6 +400,39 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index) {
     // N+2 not found
     ASSERT_EQ(erase_not_found.size(), 1);
 
+    // test ignore the erase keys
+    vector<Key> ignore_keys(N);
+    vector<Slice> ignore_key_slices;
+    vector<IndexValue> ignore_values(ignore_keys.size());
+    ignore_key_slices.reserve(N);
+    idxes.clear();
+    for (int i = 0; i < N; i++) {
+        ignore_keys[i] = keys[i];
+        ignore_key_slices.emplace_back(ignore_keys[i]);
+        ignore_values[i] = i * 4;
+        idxes.emplace_back(i);
+    }
+    vector<IndexValue> ignore_old_values(ignore_keys.size());
+    KeysInfo ignore_not_found;
+    size_t ignore_num_found = 0;
+    ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
+                            &ignore_num_found, idxes, InsertDuplicatePolicy::IGNORE)
+                        .ok());
+    ASSERT_EQ(ignore_num_found, N / 2);
+    ASSERT_EQ(ignore_not_found.size(), 0);
+    for (int i = 0; i < N / 2; i++) {
+        ASSERT_EQ(ignore_old_values[i].get_value(), IndexValue(NullIndexValue).get_value());
+    }
+    // erase [0, N/2) again for upsert
+    idxes.clear();
+    num = 0;
+    for (int i = 0; i < N / 2; i++) {
+        idxes.emplace_back(num++);
+    }
+    erase_old_values.clear();
+    erase_num_found = 0;
+    ASSERT_TRUE(idx->erase(erase_key_slices.data(), erase_old_values.data(), &erase_not_found, &erase_num_found, idxes).ok());
+
     // test upsert
     vector<Key> upsert_keys(N);
     vector<Slice> upsert_key_slices;
@@ -361,7 +463,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes)
+                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
@@ -445,13 +547,13 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         // flush l0 first
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(1, 0), N));
-        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), InsertDuplicatePolicy::UPSERT));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
         //std::vector<IndexValue> old_values(second_keys.size());
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
-        ASSERT_OK(index.upsert(second_n, second_key_slices.data(), second_values.data(), old_values.data()));
+        ASSERT_OK(index.upsert(second_n, second_key_slices.data(), second_values.data(), old_values.data(), InsertDuplicatePolicy::UPSERT));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -504,7 +606,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
-                                    old_values.data())
+                                    old_values.data(), InsertDuplicatePolicy::UPSERT)
                             .ok());
         ASSERT_TRUE(new_index.commit(&index_meta).ok());
         ASSERT_TRUE(new_index.on_commited().ok());
@@ -573,7 +675,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(i + 1, 0), one_time_num));
         ASSERT_OK(index.upsert(one_time_num, key_slices.data() + one_time_num * i, values.data() + one_time_num * i,
-                               old_values.data() + one_time_num * i));
+                               old_values.data() + one_time_num * i, InsertDuplicatePolicy::UPSERT));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         ASSERT_TRUE(index_meta.l0_meta().wals().empty());
@@ -584,7 +686,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(i + 1, 0), one_time_num));
         ASSERT_OK(index.upsert(one_time_num, key_slices.data() + one_time_num * i, values.data() + one_time_num * i,
-                               old_values.data() + one_time_num * i));
+                               old_values.data() + one_time_num * i, InsertDuplicatePolicy::UPSERT));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         ASSERT_TRUE(index_meta.l0_meta().snapshot().dumped_shard_idxes().empty());
@@ -597,7 +699,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(i + 1, 0), one_time_num));
         ASSERT_OK(index.upsert(one_time_num, key_slices.data() + loaded_num, values.data() + loaded_num,
-                               old_values.data() + loaded_num));
+                               old_values.data() + loaded_num, InsertDuplicatePolicy::UPSERT));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         ASSERT_TRUE(index_meta.l0_meta().wals().empty());
@@ -867,7 +969,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
 
         std::vector<IndexValue> old_values(NUM_SNAPSHOT, IndexValue(NullIndexValue));
         ASSERT_OK(index.prepare(EditVersion(2, 0), NUM_SNAPSHOT));
-        ASSERT_OK(index.upsert(NUM_SNAPSHOT, snapshot_key_slices.data(), snapshot_values.data(), old_values.data()));
+        ASSERT_OK(index.upsert(NUM_SNAPSHOT, snapshot_key_slices.data(), snapshot_values.data(), old_values.data(), InsertDuplicatePolicy::UPSERT));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -885,7 +987,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
         config::l0_l1_merge_ratio = 1;
         std::vector<IndexValue> wal_old_values(NUM_WAL, IndexValue(NullIndexValue));
         ASSERT_OK(index.prepare(EditVersion(3, 0), NUM_WAL));
-        ASSERT_OK(index.upsert(NUM_WAL, wal_key_slices.data(), wal_values.data(), wal_old_values.data()));
+        ASSERT_OK(index.upsert(NUM_WAL, wal_key_slices.data(), wal_values.data(), wal_old_values.data(), InsertDuplicatePolicy::UPSERT));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -971,7 +1073,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
 
         std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(2, 0), keys.size()).ok());
-        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
+        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data(), InsertDuplicatePolicy::UPSERT).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
 
@@ -1013,7 +1115,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
-                                    old_values.data())
+                                    old_values.data(), InsertDuplicatePolicy::UPSERT)
                             .ok());
         ASSERT_TRUE(new_index.commit(&index_meta).ok());
         ASSERT_TRUE(new_index.on_commited().ok());
@@ -1097,7 +1199,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
 
         std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(2, 0), keys.size()).ok());
-        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
+        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data(), InsertDuplicatePolicy::UPSERT).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
 
@@ -1139,7 +1241,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
-                                    old_values.data())
+                                    old_values.data(), InsertDuplicatePolicy::UPSERT)
                             .ok());
         ASSERT_TRUE(new_index.commit(&index_meta).ok());
         ASSERT_TRUE(new_index.on_commited().ok());
@@ -1805,7 +1907,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
                 values.emplace_back(i * j);
             }
             std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
-            ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+            ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), InsertDuplicatePolicy::UPSERT));
             std::vector<IndexValue> get_values(N);
             ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
             for (int j = 0; j < N; j++) {

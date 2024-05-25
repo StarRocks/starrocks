@@ -342,7 +342,20 @@ public class InsertAnalyzer {
                 throw unsupportedException(msg);
             }
         }
-
+        if (insertStmt.isIgnore()) {
+            if (!(table instanceof OlapTable)) {
+                throw unsupportedException("Only support insert ignore for olap table");
+            }
+            if (((OlapTable) table).getState() != NORMAL) {
+                String msg =
+                        String.format("table state is %s, please wait to insert util table state is normal",
+                                ((OlapTable) table).getState());
+                throw unsupportedException(msg);
+            }
+            if (((OlapTable) table).getKeysType() != KeysType.PRIMARY_KEYS) {
+                throw unsupportedException("Only support insert ignore for primary key olap table");
+            }
+        }
         if (!table.supportInsert()) {
             if (table.isIcebergTable() || table.isHiveTable()) {
                 throw unsupportedException(String.format("Only support insert into %s table with parquet file format",

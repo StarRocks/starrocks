@@ -175,6 +175,8 @@ message RowsetMetaPB {
     optional uint32 max_compact_input_rowset_id = 61;
     // global transaction id
     optional int64 gtid = 62;
+    // insert ignore or upsert
+    optional bool insert_ignore = 63;
 }
 
 enum DataFileType {

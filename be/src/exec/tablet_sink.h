@@ -249,6 +249,9 @@ private:
     // bucket size for automatic bucket
     int64_t _automatic_bucket_size = 0;
     std::set<int64_t> _immutable_partition_ids;
+
+    // insert ignore
+    bool _insert_ignore = false;
     RuntimeState* _state = nullptr;
 
     PLoadChannelProfileConfig _load_channel_profile_config;
