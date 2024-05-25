@@ -366,7 +366,8 @@ public class ConnectProcessor {
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
-                .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
+                .setClientIp(StringUtils.defaultIfEmpty(
+                        ctx.getMysqlChannel().getRemoteHostPortString(), "127.0.0.1:000"))
                 .setUser(ctx.getQualifiedUser())
                 .setAuthorizedUser(
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
