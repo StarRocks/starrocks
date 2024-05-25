@@ -17,10 +17,6 @@
 
 package com.starrocks.sql;
 
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.qe.ConnectContext;
@@ -36,6 +32,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
 public class ShortCircuitPlanner {
 
     public static final long MAX_RETURN_ROWS = 2048;
@@ -45,11 +45,6 @@ public class ShortCircuitPlanner {
         private boolean isPoint;
 
         public ShortCircuitContext(boolean isPoint) {
-            this.isPoint = isPoint;
-        }
-
-        public ShortCircuitContext(long maxReturnRows, boolean isPoint) {
-            this.maxReturnRows = maxReturnRows;
             this.isPoint = isPoint;
         }
 
@@ -84,7 +79,7 @@ public class ShortCircuitPlanner {
             return root;
         }
         boolean supportShortCircuit = root.getOp().accept(new LogicalPlanChecker(), root, null);
-        if (supportShortCircuit) {
+        if (supportShortCircuit && OperatorType.LOGICAL_LIMIT.equals(root.getOp().getOpType())) {
             root = root.getInputs().get(0);
         }
         root.setShortCircuit(supportShortCircuit);
@@ -174,13 +169,9 @@ public class ShortCircuitPlanner {
 
         @Override
         public Boolean visitLogicalLimit(OptExpression optExpression, Void context) {
-            if (optExpression.getOp().getOpType().equals(OperatorType.LOGICAL_LIMIT) &&
-                    optExpression.getInputs().size() == 1) {
-                LogicalLimitOperator logicalLimitOperator = (LogicalLimitOperator) optExpression.getOp();
-                shortCircuitContext.setMaxReturnRows(logicalLimitOperator.getLimit());
-                return visitChild(optExpression, context);
-            }
-            return false;
+            LogicalLimitOperator logicalLimitOperator = (LogicalLimitOperator) optExpression.getOp();
+            shortCircuitContext.setMaxReturnRows(logicalLimitOperator.getLimit());
+            return visitChild(optExpression, context);
         }
 
         @Override
@@ -205,7 +196,8 @@ public class ShortCircuitPlanner {
                     if (filter.getInPredicateLiterals() != null) {
                         cardinality *= filter.getInPredicateLiterals().size();
                         // TODO(limit operator place fe)
-                        if (cardinality > MAX_RETURN_ROWS || (shortCircuitContext.getMaxReturnRows() != 0 && cardinality != 1)) {
+                        if (cardinality > MAX_RETURN_ROWS ||
+                                (shortCircuitContext.getMaxReturnRows() != 0 && cardinality != 1)) {
                             return false;
                         }
                     } else if (!filter.isPoint()) {

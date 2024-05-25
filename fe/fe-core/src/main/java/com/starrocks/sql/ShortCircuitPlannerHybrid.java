@@ -17,9 +17,6 @@
 
 package com.starrocks.sql;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -29,6 +26,9 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class ShortCircuitPlannerHybrid {
 
