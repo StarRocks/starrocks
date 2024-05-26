@@ -178,7 +178,7 @@ private:
             return size;
         }
 
-        const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
+        const static int64_t BATCH_SIZE = 0;
 
         std::function<MemTracker*()> _loader;
 

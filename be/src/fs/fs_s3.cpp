@@ -472,12 +472,12 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
     }
     auto client = new_s3client(uri, _options);
     std::unique_ptr<io::OutputStream> output_stream;
-    if (opts.direct_write == false) {
-        output_stream = std::make_unique<io::S3OutputStream>(std::move(client), uri.bucket(), uri.key(),
-                                                                        config::experimental_s3_max_single_part_size,
-                                                                        config::experimental_s3_min_upload_part_size);
-    } else {
+    if (opts.direct_write) {
         output_stream = std::make_unique<io::DirectS3OutputStream>(std::move(client), uri.bucket(), uri.key());
+    } else {
+        output_stream = std::make_unique<io::S3OutputStream>(std::move(client), uri.bucket(), uri.key(),
+                                                             config::experimental_s3_max_single_part_size,
+                                                             config::experimental_s3_min_upload_part_size);
     }
 
     return std::make_unique<OutputStreamAdapter>(std::move(output_stream), fname);
