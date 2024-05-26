@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -354,6 +355,15 @@ public class MetadataMgr {
                 }
             }
             return connectorMetadata.get().createTable(stmt);
+        }
+    }
+
+    public void createView(CreateViewStmt stmt) throws DdlException {
+        String catalogName = stmt.getCatalog();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().createView(stmt);
         }
     }
 
