@@ -205,6 +205,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -242,6 +243,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -250,6 +252,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
+    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
 
     SyncPoint::GetInstance()->ClearAllCallBacks();
     SyncPoint::GetInstance()->DisableProcessing();

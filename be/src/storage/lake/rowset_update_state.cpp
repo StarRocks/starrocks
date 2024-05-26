@@ -322,7 +322,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
     _auto_increment_partial_update_states[segment_id].write_column->append_selective(*read_column[0], idxes.data(), 0,
                                                                                      idxes.size());
-
+    _memory_usage += _auto_increment_partial_update_states[segment_id].write_column->memory_usage();
     /*
         * Suppose we have auto increment ids for the rows which are not exist in the previous version.
         * The ids are allocated by system for partial update in this case. It is impossible that the ids
@@ -352,6 +352,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     if (delete_idxes.size() != 0) {
         _auto_increment_delete_pks[segment_id]->append_selective(*_upserts[segment_id], delete_idxes.data(), 0,
                                                                  delete_idxes.size());
+        _memory_usage += _auto_increment_delete_pks[segment_id]->memory_usage();
     }
     return Status::OK();
 }
@@ -388,6 +389,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         _partial_update_states[segment_id].write_columns[col_idx]->append_selective(*read_columns[col_idx],
                                                                                     idxes.data(), 0, idxes.size());
+        _memory_usage += _partial_update_states[segment_id].write_columns[col_idx]->memory_usage();
     }
     TRACE_COUNTER_INCREMENT("partial_upt_total_rows", total_rows);
     TRACE_COUNTER_INCREMENT("partial_upt_default_rows", num_default);
@@ -686,9 +688,14 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
 }
 
 void RowsetUpdateState::release_segment(uint32_t segment_id) {
+    _memory_usage -= _upserts[segment_id] ? _upserts[segment_id]->memory_usage() : 0;
     _upserts[segment_id].reset();
+    _memory_usage -= _partial_update_states[segment_id].memory_usage();
     _partial_update_states[segment_id].reset();
+    _memory_usage -= _auto_increment_partial_update_states[segment_id].memory_usage();
     _auto_increment_partial_update_states[segment_id].reset();
+    _memory_usage -=
+            _auto_increment_delete_pks[segment_id] ? _auto_increment_delete_pks[segment_id]->memory_usage() : 0;
     _auto_increment_delete_pks[segment_id].reset();
 }
 
@@ -719,12 +726,15 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
         return Status::InternalError("column deserialization failed");
     }
+    col->raw_data();
+    _memory_usage += col->memory_usage();
     _deletes[del_id] = std::move(col);
     TRACE("end read $0-th deletes files", del_id);
     return Status::OK();
 }
 
 void RowsetUpdateState::release_delete(uint32_t del_id) {
+    _memory_usage -= _deletes[del_id]->memory_usage();
     _deletes[del_id].reset();
 }
 

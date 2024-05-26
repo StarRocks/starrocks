@@ -915,6 +915,7 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
              segment_id++) {
             st = state.load_segment(segment_id, params, metadata_ptr->version(), false /* resolve conflict*/,
                                     true /* need lock */);
+            _update_state_cache.update_object_size(state_entry, state.memory_usage());
             if (!st.ok()) {
                 break;
             }
