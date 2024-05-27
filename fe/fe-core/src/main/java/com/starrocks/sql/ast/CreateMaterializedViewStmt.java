@@ -295,11 +295,15 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
 
         if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
-            throw new SemanticException("Materialized view query statement only support select");
+            throw new SemanticException("Materialized view query statement only supports a single query blocks");
         }
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
         if (tables.size() != 1) {
+<<<<<<< HEAD
             throw new SemanticException("The materialized view only support one table in from clause.");
+=======
+            throw new UnsupportedMVException("The materialized view only supports one table in from clause.");
+>>>>>>> 4a6e86cee4 ([BugFix] correlation in plan should not be null (#46226))
         }
         Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
         Table table = entry.getValue();
