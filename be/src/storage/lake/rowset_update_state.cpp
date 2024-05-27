@@ -734,7 +734,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
 }
 
 void RowsetUpdateState::release_delete(uint32_t del_id) {
-    _memory_usage -= _deletes[del_id]->memory_usage();
+    _memory_usage -= _deletes[del_id] ? _deletes[del_id]->memory_usage() : 0;
     _deletes[del_id].reset();
 }
 
