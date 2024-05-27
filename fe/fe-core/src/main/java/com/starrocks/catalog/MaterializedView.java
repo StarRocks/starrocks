@@ -634,7 +634,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         if (partitionRefTableExprs.get(0).getType() == Type.INVALID) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            partitionRefTableExprs.get(0).setType(expressionRangePartitionInfo.getPartitionExprs().get(0).getType());
+            Type partitionColType = expressionRangePartitionInfo.getPartitionColumns().get(0).getType();
+            partitionRefTableExprs.get(0).setType(partitionColType);
         }
         return partitionRefTableExprs.get(0);
     }
@@ -1595,30 +1596,46 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
+        // only range partition need to recover partitionRefTableExprs
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        Type partitionColType = expressionRangePartitionInfo.getPartitionColumns().get(0).getType();
+
+        // for single ref base table, we need to recover partitionRefTableExprs
         partitionRefTableExprs = new ArrayList<>();
         if (serializedPartitionRefTableExprs != null) {
             for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
                 if (expressionSql != null) {
-                    partitionRefTableExprs.add(
-                            SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+                    Expr partitionExpr = SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT);
+                    if (partitionExpr.getType() == Type.INVALID) {
+                        partitionExpr.setType(partitionColType);
+                    }
+                    partitionRefTableExprs.add(partitionExpr);
                 }
             }
         }
+
+        // for multi ref base tables, we need to recover partitionExprMaps
         partitionExprMaps = Maps.newHashMap();
         if (serializedPartitionExprMaps != null) {
             for (Map.Entry<GsonUtils.ExpressionSerializedObject, GsonUtils.ExpressionSerializedObject> entry :
                     serializedPartitionExprMaps.entrySet()) {
                 if (entry.getKey() != null && entry.getValue() != null) {
-                    partitionExprMaps.put(
-                            SqlParser.parseSqlToExpr(entry.getKey().expressionSql, SqlModeHelper.MODE_DEFAULT),
-                            (SlotRef) SqlParser.parseSqlToExpr(entry.getValue().expressionSql, SqlModeHelper.MODE_DEFAULT)
-                    );
+                    Expr partitionExpr = SqlParser.parseSqlToExpr(entry.getKey().expressionSql, SqlModeHelper.MODE_DEFAULT);
+                    if (partitionExpr.getType() == Type.INVALID) {
+                        partitionExpr.setType(partitionColType);
+                    }
+                    SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
+                    partitionExprMaps.put(partitionExpr, partitionSlotRef);
                 }
             }
         } else if (!partitionRefTableExprs.isEmpty()) {
             // for compatibility
             Expr partitionExpr = partitionRefTableExprs.get(0);
-            partitionExprMaps.put(partitionExpr, getMvPartitionSlotRef(partitionExpr));
+            SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
+            partitionExprMaps.put(partitionExpr, partitionSlotRef);
         }
     }
 

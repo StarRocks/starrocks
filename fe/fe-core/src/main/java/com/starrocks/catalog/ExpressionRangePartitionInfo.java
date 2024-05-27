@@ -35,6 +35,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
@@ -116,7 +117,17 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             //  and partition by expr tables will use ExpressionRangePartitionInfoV2
             if (partitionNameColumnMap.containsKey(slotRef.getColumnName())) {
                 Column partitionColumn = partitionNameColumnMap.get(slotRef.getColumnName());
-                slotRef.setType(partitionColumn.getType());
+                if (slotRef.getType() == Type.INVALID) {
+                    if (expr instanceof FunctionCallExpr) {
+                        if (MvUtils.isStr2Date(expr)) {
+                            slotRef.setType(Type.STRING);
+                        } else {
+                            slotRef.setType(partitionColumn.getType());
+                        }
+                    } else {
+                        slotRef.setType(partitionColumn.getType());
+                    }
+                }
                 slotRef.setNullable(partitionColumn.isAllowNull());
                 try {
                     PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
