@@ -44,7 +44,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 - 确保 StarRocks 所有 FE 机器都能够访问 Ranger。您可以在 FE 节点的机器上执行以下语句来判断:
 
   ```SQL
-  telnet <ranger-ip> <ranger-host>
+  telnet <ranger-ip> <ranger-port>
   ```
 
   如果显示 `Connected to <ip>`，则表示连接成功。
