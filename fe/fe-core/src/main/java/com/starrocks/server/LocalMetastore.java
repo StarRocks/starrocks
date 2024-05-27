@@ -2298,6 +2298,8 @@ public class LocalMetastore implements ConnectorMetadata {
             table.onReload();
         } catch (Throwable e) {
             LOG.error("replay create table failed: {}", table, e);
+            // Rethrow, we should not eat the exception when replaying editlog.
+            throw e;
         } finally {
             db.writeUnlock();
         }
