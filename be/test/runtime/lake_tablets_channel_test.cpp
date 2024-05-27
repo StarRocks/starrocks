@@ -815,12 +815,7 @@ public:
 
 TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
     auto num_sender = GetParam().num_sender;
-    auto open_request = _open_request;
     auto fail_tablet = GetParam().fail_tablet;
-    open_request.set_num_senders(num_sender);
-    open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
-
-    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     constexpr int kChunkSize = 1024;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -838,6 +833,16 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
         SyncPoint::GetInstance()->ClearCallBack("AsyncDeltaWriter:enter_finish");
         SyncPoint::GetInstance()->DisableProcessing();
     });
+
+    auto open_request = _open_request;
+    open_request.set_sender_id(0);
+    open_request.set_num_senders(num_sender);
+    open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
+
+    auto open_response = PTabletWriterOpenResult{};
+
+    ASSERT_OK(_tablets_channel->open(open_request, &open_response, _schema_param, false));
+    ASSERT_EQ(0, open_response.status().status_code());
 
     auto sender_task = [&](int sender_id) {
         PTabletWriterAddChunkRequest add_chunk_request;
@@ -874,7 +879,8 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
         LOG(INFO) << "sender_id=" << sender_id << " #finished_tablets=" << finish_response.tablet_vec_size();
 
         if (sender_id == 0 && fail_tablet == 0) {
-            ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code());
+            ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code())
+                    << finish_response.status().error_msgs(0);
             ASSERT_TRUE(finish_response.has_lake_tablet_data());
             ASSERT_EQ(4, finish_response.lake_tablet_data().txn_logs_size());
             auto metacache = _tablet_manager->metacache();

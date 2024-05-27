@@ -20,6 +20,10 @@ create table ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} (
 -- result:
 []
 -- !result
+set new_planner_optimize_timeout=10000;
+-- result:
+[]
+-- !result
 insert into ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} values ("a", 1),("a", 2);
 -- result:
 []
@@ -35,6 +39,10 @@ set enable_iceberg_column_statistics=true;
 set enable_profile=true;
 -- result:
 []
+-- !result
+function: assert_trace_times_contains("select a.col_str from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} a join ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} b on a.col_str = b.col_str where a.col_int = 1 and b.col_int = 2;","prepareTablesNum[2]")
+-- result:
+None
 -- !result
 function: assert_explain_costs_contains("select a.col_str from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} a join ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} b on a.col_str = b.col_str where a.col_int = 1 and b.col_int = 2;","ESTIMATE")
 -- result:

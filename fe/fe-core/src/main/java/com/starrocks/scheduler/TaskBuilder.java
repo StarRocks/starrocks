@@ -15,7 +15,6 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
@@ -24,7 +23,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
 import com.starrocks.qe.ConnectContext;
@@ -38,9 +36,7 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.commons.collections.MapUtils;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -102,25 +98,12 @@ public class TaskBuilder {
      */
     private static void handleSpecialTaskProperties(Task task) {
         Map<String, String> properties = task.getProperties();
-        if (MapUtils.isEmpty(properties)) {
-            return;
-        }
-
-        List<String> toRemove = Lists.newArrayList();
-        Map<String, String> toAdd = Maps.newHashMap();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            // warehouse: translate the warehouse into warehouse_id, in case it changed after renaming
-            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE)) {
+            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
                 Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getValue());
                 Preconditions.checkArgument(wa != null, "warehouse not exists: " + entry.getValue());
-
-                toRemove.add(entry.getKey());
-                toAdd.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID, String.valueOf(wa.getId()));
             }
         }
-
-        toRemove.forEach(properties::remove);
-        properties.putAll(toAdd);
     }
 
     public static String getAnalyzeMVStmt(String tableName) {
@@ -163,10 +146,6 @@ public class TaskBuilder {
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
-        // alter mv set warehouse
-        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
-                String.valueOf(materializedView.getWarehouseId()));
-
         task.setProperties(taskProperties);
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));

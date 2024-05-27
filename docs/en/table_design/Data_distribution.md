@@ -192,7 +192,7 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 
 > **NOTICE**
 >
-> Since v3.1,  StarRocks's [shared-data mode](../deployment/shared_data/shared_data.mdx) supports the time function expression and does not support the column expression.
+> Since v3.1,  StarRocks's shared-data mode supports the time function expression and does not support the column expression.
 
 Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy-to-use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or enum values.
 
@@ -930,7 +930,7 @@ After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-s
 
 > **NOTICE**
 >
-> StarRocks's [shared-data mode](../deployment/shared_data/shared_data.mdx) currently does not support this feature.
+> StarRocks's shared-data mode currently does not support this feature.
 
 As query patterns and data volume evolve in business scenarios, the configurations specified at table creation, such as the bucketing method, the number of buckets, and the sort key, may no longer be suitable for the new business scenario and even may cause query performance to decrease. At this point, you can use `ALTER TABLE` to modify the bucketing method, the number of buckets, and the sort key to optimize data distribution. For example:
 

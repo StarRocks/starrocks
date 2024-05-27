@@ -17,13 +17,13 @@
 
 package com.starrocks.fs.hdfs;
 
-import com.amazonaws.util.AwsHostNameUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -44,6 +44,8 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import software.amazon.awssdk.awscore.util.AwsHostNameUtils;
+import software.amazon.awssdk.regions.Region;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -52,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,7 +67,13 @@ class ConfigurationWrap extends Configuration {
 
     public String parseRegionFromEndpoint(TObjectStoreType tObjectStoreType, String endPoint) {
         if (tObjectStoreType == TObjectStoreType.S3) {
-            return AwsHostNameUtils.parseRegionFromAwsPartitionPattern(endPoint);
+            Optional<Region> region = AwsHostNameUtils.parseSigningRegion(endPoint, null);
+            if (region.isPresent()) {
+                return region.get().toString();
+            } else {
+                // default region
+                return CloudConfigurationConstants.DEFAULT_AWS_REGION;
+            }
         } else if (tObjectStoreType == TObjectStoreType.OSS) {
             String[] hostSplit = endPoint.split("\\.");
             String regionId = hostSplit[0];

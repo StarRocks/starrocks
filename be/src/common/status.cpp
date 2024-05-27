@@ -307,16 +307,14 @@ Status Status::clone_and_prepend(std::string_view msg) const {
     if (ok()) {
         return *this;
     }
-    auto msg2 = message();
-    return {code(), fmt::format("{}: {}", msg, msg2)};
+    return {code(), fmt::format("{}: {}", msg, message())};
 }
 
 Status Status::clone_and_append(std::string_view msg) const {
     if (ok()) {
         return *this;
     }
-    auto msg2 = message();
-    return {code(), fmt::format("{}: {}", msg, msg2)};
+    return {code(), fmt::format("{}: {}", message(), msg)};
 }
 
 Status Status::clone_and_append_context(const char* filename, int line, const char* expr) const {

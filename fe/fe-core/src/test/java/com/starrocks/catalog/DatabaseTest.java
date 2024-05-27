@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -93,6 +94,10 @@ public class DatabaseTest {
                 globalStateMgr.getNodeMgr();
                 minTimes = 0;
                 result = nodeMgr;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = new LockManager();
             }
         };
     }

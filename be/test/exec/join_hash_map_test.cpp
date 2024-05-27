@@ -19,6 +19,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 class JoinHashMapTest : public ::testing::Test {
@@ -36,6 +37,7 @@ protected:
     void TearDown() override {}
 
     HashTableParam create_table_param(TJoinOp::type join_type, size_t output_col_cnt);
+    HashTableParam create_table_param_int(TJoinOp::type join_type, size_t output_col_cnt);
     static ColumnPtr create_int32_column(uint32_t row_count, uint32_t start_value);
     ColumnPtr create_binary_column(uint32_t row_count, uint32_t start_value);
     static ColumnPtr create_int32_nullable_column(uint32_t row_count, uint32_t start_value);
@@ -46,7 +48,7 @@ protected:
     static void check_int32_nullable_column(const Column& column, uint32_t row_count, uint32_t start_value);
     ChunkPtr create_int32_probe_chunk(uint32_t count, uint32_t start_value, bool nullable);
     ChunkPtr create_binary_probe_chunk(uint32_t count, uint32_t start_value, bool nullable);
-    ChunkPtr create_int32_build_chunk(uint32_t count, bool nullable);
+    ChunkPtr create_int32_build_chunk(uint32_t count, uint32_t start_value, bool nullable);
     ChunkPtr create_binary_build_chunk(uint32_t count, bool nullable);
     static TSlotDescriptor create_slot_descriptor(const std::string& column_name, LogicalType column_type,
                                                   int32_t column_pos, bool nullable);
@@ -131,6 +133,8 @@ protected:
     TypeDescriptor _int_type;
     TypeDescriptor _tinyint_type;
     TypeDescriptor _varchar_type;
+    std::shared_ptr<RowDescriptor> _probe_desc;
+    std::shared_ptr<RowDescriptor> _build_desc;
 };
 
 void JoinHashMapTest::check_probe_output_slot_ids(const JoinHashTableItems& table_items,
@@ -213,6 +217,33 @@ HashTableParam JoinHashMapTest::create_table_param(TJoinOp::type join_type, size
         param.probe_output_slots.emplace(i);
         param.build_output_slots.emplace(i);
     }
+    return param;
+}
+
+HashTableParam JoinHashMapTest::create_table_param_int(TJoinOp::type join_type, size_t output_col_cnt) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, output_col_cnt);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, output_col_cnt);
+    _probe_desc = create_probe_desc(&row_desc_builder);
+    _build_desc = create_build_desc(&row_desc_builder);
+
+    HashTableParam param;
+    param.with_other_conjunct = false;
+    param.mor_reader_mode = false;
+    param.join_type = join_type;
+    param.search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTime");
+    param.output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTime");
+    param.output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTime");
+    for (size_t i = 0; i < output_col_cnt; i++) {
+        param.probe_output_slots.emplace(i);
+        param.build_output_slots.emplace(i);
+    }
+    param.build_row_desc = _build_desc.get();
+    param.probe_row_desc = _probe_desc.get();
+    param.probe_output_slots = {1};
+    param.build_output_slots = {4};
+    param.predicate_slots = {2, 5};
+    param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
     return param;
 }
 
@@ -635,6 +666,7 @@ void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint
 }
 
 void JoinHashMapTest::check_int32_column(const Column& column, uint32_t row_count, uint32_t start_value) {
+    ASSERT_EQ(column.size(), row_count);
     const auto& int_32_column = reinterpret_cast<const Int32Column&>(column);
     const auto& data = int_32_column.get_data();
 
@@ -732,16 +764,16 @@ ChunkPtr JoinHashMapTest::create_binary_probe_chunk(uint32_t count, uint32_t sta
     return chunk;
 }
 
-ChunkPtr JoinHashMapTest::create_int32_build_chunk(uint32_t count, bool nullable) {
+ChunkPtr JoinHashMapTest::create_int32_build_chunk(uint32_t count, uint32_t start_value, bool nullable) {
     auto chunk = std::make_shared<Chunk>();
     if (!nullable) {
-        chunk->append_column(create_int32_column(count, 0), 3);
-        chunk->append_column(create_int32_column(count, 10), 4);
-        chunk->append_column(create_int32_column(count, 20), 5);
+        chunk->append_column(create_int32_column(count, start_value), 3);
+        chunk->append_column(create_int32_column(count, start_value + 10), 4);
+        chunk->append_column(create_int32_column(count, start_value + 20), 5);
     } else {
-        chunk->append_column(create_int32_nullable_column(count, 0), 3);
-        chunk->append_column(create_int32_nullable_column(count, 10), 4);
-        chunk->append_column(create_int32_nullable_column(count, 20), 5);
+        chunk->append_column(create_int32_nullable_column(count, start_value), 3);
+        chunk->append_column(create_int32_nullable_column(count, start_value + 10), 4);
+        chunk->append_column(create_int32_nullable_column(count, start_value + 20), 5);
     }
     return chunk;
 }
@@ -963,7 +995,7 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
 
     auto chunk = std::make_shared<Chunk>();
-    join_hash_map->_probe_null_output(&chunk, 2);
+    join_hash_map->_probe_null_output<false>(&chunk, 2);
 
     ASSERT_EQ(chunk->num_columns(), 3);
 
@@ -1862,7 +1894,7 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     JoinHashTable hash_table;
     hash_table.create(param);
 
-    auto build_chunk = create_int32_build_chunk(10, false);
+    auto build_chunk = create_int32_build_chunk(10, 0, false);
     auto probe_chunk = create_int32_probe_chunk(5, 1, false);
     Columns probe_key_columns;
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
@@ -1913,7 +1945,7 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     JoinHashTable hash_table;
     hash_table.create(param);
 
-    auto build_chunk = create_int32_build_chunk(10, true);
+    auto build_chunk = create_int32_build_chunk(10, 0, true);
     auto probe_chunk = create_int32_probe_chunk(5, 1, true);
     Columns probe_key_columns;
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
@@ -1966,7 +1998,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     JoinHashTable hash_table;
     hash_table.create(param);
 
-    auto build_chunk = create_int32_build_chunk(10, false);
+    auto build_chunk = create_int32_build_chunk(10, 0, false);
     auto probe_chunk = create_int32_probe_chunk(5, 1, false);
     Columns probe_key_columns;
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
@@ -2285,7 +2317,7 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyFilter) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2311,7 +2343,7 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyFilter) {
     check_probe_index_column(*probe_index_col, {0, 1, 2, 3, 4});
 
     ASSERT_EQ(result_chunk->filter({1, 0, 1, 0, 1}, true), 3);
-    ht._empty->lazy_output(_runtime_state.get(), &probe_chunk, &result_chunk);
+    ASSERT_TRUE(ht.lazy_output<false>(_runtime_state.get(), &probe_chunk, &result_chunk).ok());
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 3);
 
@@ -2341,7 +2373,7 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2367,7 +2399,7 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
     check_probe_index_column(*probe_index_col, {0, 1, 2, 3, 4});
 
     ASSERT_EQ(result_chunk->filter({1, 1, 1, 1, 1}, true), 5);
-    ht._empty->lazy_output(_runtime_state.get(), &probe_chunk, &result_chunk);
+    ASSERT_TRUE(ht.lazy_output<false>(_runtime_state.get(), &probe_chunk, &result_chunk).ok());
     ASSERT_EQ(result_chunk->num_columns(), 4);
     ASSERT_EQ(result_chunk->num_rows(), 5);
 
@@ -2382,6 +2414,254 @@ TEST_F(JoinHashMapTest, EmptyHashMapTestLazyOutputAll) {
         ASSERT_TRUE(c4->get(i).is_null());
         ASSERT_TRUE(c5->get(i).is_null());
     }
+}
+
+// NOLINTNEXTLINE
+//
+// build table
+// 0, 10, 20
+// 1, 11, 21
+// 2, 12, 22
+// 3, 13, 23
+// 4, 14, 24
+//
+// probe table
+// 0, 10, 20
+// 1, 11, 21
+// 2, 12, 22
+// 3, 13, 23
+// 4, 14, 24
+TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputAll) {
+    size_t num_probe_rows = 5;
+    size_t num_build_rows = 5;
+    bool eos = false;
+    ColumnPtr c1, c2, c4, c5, probe_index_col, build_index_col;
+
+    // prepare data
+    auto build_chunk = create_int32_build_chunk(num_build_rows, 0, false);
+    Columns build_key_columns{build_chunk->columns()[0]};
+    auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+
+    // create param
+    auto param = create_table_param_int(TJoinOp::INNER_JOIN, 3);
+    param.enable_late_materialization = true;
+
+    // create hash table
+    JoinHashTable ht;
+    ht.create(param);
+
+    // append build chunk
+    ht.append_chunk(build_chunk, build_key_columns);
+    ASSERT_OK(ht.build(_runtime_state.get()));
+
+    // probe
+    ASSERT_OK(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+    ASSERT_EQ(result_chunk->num_columns(), 4);
+    c2 = result_chunk->get_column_by_slot_id(2);
+    c5 = result_chunk->get_column_by_slot_id(5);
+    probe_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    build_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    ASSERT_EQ(c2->debug_string(), "[20, 21, 22, 23, 24]");
+    ASSERT_EQ(c5->debug_string(), "[20, 21, 22, 23, 24]");
+    ASSERT_EQ(probe_index_col->debug_string(), "[0, 1, 2, 3, 4]");
+    ASSERT_EQ(build_index_col->debug_string(), "[1, 2, 3, 4, 5]");
+
+    // filter
+    ASSERT_EQ(result_chunk->filter({1, 1, 1, 1, 1}, true), 5);
+
+    // lazy output
+    ASSERT_OK(ht.lazy_output<false>(_runtime_state.get(), &probe_chunk, &result_chunk));
+    ASSERT_EQ(result_chunk->num_columns(), 4);
+    ASSERT_EQ(result_chunk->num_rows(), 5);
+
+    c1 = result_chunk->get_column_by_slot_id(1);
+    c2 = result_chunk->get_column_by_slot_id(2);
+    c4 = result_chunk->get_column_by_slot_id(4);
+    c5 = result_chunk->get_column_by_slot_id(5);
+
+    ASSERT_EQ(c1->debug_string(), "[10, 11, 12, 13, 14]");
+    ASSERT_EQ(c2->debug_string(), "[20, 21, 22, 23, 24]");
+    ASSERT_EQ(c4->debug_string(), "[10, 11, 12, 13, 14]");
+    ASSERT_EQ(c5->debug_string(), "[20, 21, 22, 23, 24]");
+}
+
+// NOLINTNEXTLINE
+//
+// build table
+// 0, 10, 20
+// 1, 11, 21
+// 2, 12, 22
+// 3, 13, 23
+// 4, 14, 24
+//
+// probe table
+// 0, 10, 20
+// 1, 11, 21
+// 2, 12, 22
+// 3, 13, 23
+// 4, 14, 24
+TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPart) {
+    size_t num_probe_rows = 4;
+    size_t num_build_rows = 5;
+    bool eos = false;
+    ColumnPtr c1, c2, c4, c5, probe_index_col, build_index_col;
+
+    // prepare data
+    auto build_chunk = create_int32_build_chunk(num_build_rows, 0, false);
+    Columns key_columns{build_chunk->columns()[0]};
+    auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+
+    // create param
+    auto param = create_table_param_int(TJoinOp::INNER_JOIN, 3);
+    param.enable_late_materialization = true;
+
+    // create hash table
+    JoinHashTable ht;
+    ht.create(param);
+
+    // append build chunk
+    ht.append_chunk(build_chunk, key_columns);
+
+    // build hash table
+    ASSERT_TRUE(ht.build(_runtime_state.get()).ok());
+
+    // probe
+    ASSERT_OK(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+    ASSERT_EQ(result_chunk->num_columns(), 4);
+    c2 = result_chunk->get_column_by_slot_id(2);
+    c5 = result_chunk->get_column_by_slot_id(5);
+    probe_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    build_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    ASSERT_EQ(c2->debug_string(), "[20, 21, 22, 23]");
+    ASSERT_EQ(c5->debug_string(), "[20, 21, 22, 23]");
+    ASSERT_EQ(probe_index_col->debug_string(), "[0, 1, 2, 3]");
+    ASSERT_EQ(build_index_col->debug_string(), "[1, 2, 3, 4]");
+
+    // filter
+    ASSERT_EQ(result_chunk->filter({1, 0, 1, 0}, true), 2);
+
+    // lazy output
+    ASSERT_TRUE(ht.lazy_output<false>(_runtime_state.get(), &probe_chunk, &result_chunk).ok());
+
+    ASSERT_EQ(result_chunk->num_columns(), 4);
+    ASSERT_EQ(result_chunk->num_rows(), 2);
+    c1 = result_chunk->get_column_by_slot_id(1);
+    c2 = result_chunk->get_column_by_slot_id(2);
+    c4 = result_chunk->get_column_by_slot_id(4);
+    c5 = result_chunk->get_column_by_slot_id(5);
+    ASSERT_EQ(c1->debug_string(), "[10, 12]");
+    ASSERT_EQ(c2->debug_string(), "[20, 22]");
+    ASSERT_EQ(c4->debug_string(), "[10, 12]");
+    ASSERT_EQ(c5->debug_string(), "[20, 22]");
+}
+
+// NOLINTNEXTLINE
+//
+// build table
+// 1, 11, 21
+// 2, 12, 22
+// 3, 13, 23
+// 4, 14, 24
+// 5, 15, 25
+//
+// probe table
+// 0, 10, 20
+// 1, 11, 21
+// 2, 12, 22
+// 3, 13, 23
+TEST_F(JoinHashMapTest, NormalHashMapTestLazyOutputPartRemain) {
+    size_t num_probe_rows = 4;
+    size_t num_build_rows = 5;
+    bool eos = false;
+    ColumnPtr c1, c2, c4, c5, probe_index_col, build_index_col;
+
+    // prepare data
+    ChunkPtr build_chunk = create_int32_build_chunk(num_build_rows, 1, false);
+    Columns build_key_columns = {build_chunk->columns()[0]};
+    ChunkPtr probe_chunk = create_int32_probe_chunk(num_probe_rows, 0, false);
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    Columns probe_key_columns = {probe_chunk->columns()[0]};
+
+    // create param
+    auto param = create_table_param_int(TJoinOp::RIGHT_OUTER_JOIN, 3);
+    param.enable_late_materialization = true;
+
+    // create hash table
+    JoinHashTable ht;
+    ht.create(param);
+
+    // append build chunk
+    ht.append_chunk(build_chunk, build_key_columns);
+
+    // build hash table
+    ASSERT_OK(ht.build(_runtime_state.get()));
+
+    // probe
+    ASSERT_OK(ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+    ASSERT_EQ(result_chunk->num_columns(), 4);
+    ASSERT_EQ(result_chunk->num_rows(), 3);
+    c2 = result_chunk->get_column_by_slot_id(2);
+    c5 = result_chunk->get_column_by_slot_id(5);
+    probe_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    build_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    ASSERT_EQ(c2->debug_string(), "[21, 22, 23]");
+    ASSERT_EQ(c5->debug_string(), "[21, 22, 23]");
+    ASSERT_EQ(probe_index_col->debug_string(), "[1, 2, 3]");
+    ASSERT_EQ(build_index_col->debug_string(), "[1, 2, 3]");
+
+    // filter
+    ASSERT_EQ(result_chunk->filter({1, 0, 1}, true), 2);
+
+    // lazy output
+    ASSERT_OK(ht.lazy_output<false>(_runtime_state.get(), &probe_chunk, &result_chunk));
+    ASSERT_EQ(result_chunk->num_columns(), 4);
+    ASSERT_EQ(result_chunk->num_rows(), 2);
+
+    c1 = result_chunk->get_column_by_slot_id(1);
+    c2 = result_chunk->get_column_by_slot_id(2);
+    c4 = result_chunk->get_column_by_slot_id(4);
+    c5 = result_chunk->get_column_by_slot_id(5);
+    ASSERT_EQ(c1->debug_string(), "[11, 13]");
+    ASSERT_EQ(c2->debug_string(), "[21, 23]");
+    ASSERT_EQ(c4->debug_string(), "[11, 13]");
+    ASSERT_EQ(c5->debug_string(), "[21, 23]");
+
+    // probe remain
+    result_chunk = std::make_shared<Chunk>();
+    ASSERT_OK(ht.probe_remain(_runtime_state.get(), &result_chunk, &eos));
+
+    ASSERT_EQ(result_chunk->num_columns(), 3);
+    ASSERT_EQ(result_chunk->num_rows(), 2);
+    c2 = result_chunk->get_column_by_slot_id(2);
+    c5 = result_chunk->get_column_by_slot_id(5);
+    build_index_col = result_chunk->get_column_by_slot_id(Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+    ASSERT_EQ(c2->debug_string(), "[NULL, NULL]");
+    ASSERT_EQ(c5->debug_string(), "[24, 25]");
+    ASSERT_EQ(build_index_col->debug_string(), "[4, 5]");
+
+    // filter
+    ASSERT_EQ(result_chunk->filter({1, 0}, true), 1);
+
+    // lazy output
+    ASSERT_OK(ht.lazy_output<true>(_runtime_state.get(), &probe_chunk, &result_chunk));
+
+    ASSERT_EQ(result_chunk->num_columns(), 4);
+    ASSERT_EQ(result_chunk->num_rows(), 1);
+    c1 = result_chunk->get_column_by_slot_id(1);
+    c2 = result_chunk->get_column_by_slot_id(2);
+    c4 = result_chunk->get_column_by_slot_id(4);
+    c5 = result_chunk->get_column_by_slot_id(5);
+    ASSERT_EQ(c1->debug_string(), "[NULL]");
+    ASSERT_EQ(c2->debug_string(), "[NULL]");
+    ASSERT_EQ(c4->debug_string(), "[14]");
+    ASSERT_EQ(c5->debug_string(), "[24]");
 }
 
 // NOLINTNEXTLINE
@@ -2438,7 +2718,7 @@ TEST_F(JoinHashMapTest, TestOutputSlotsEmpty) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = false;
+    param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
 
@@ -2466,7 +2746,7 @@ TEST_F(JoinHashMapTest, TestOutputSlotsNormal) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = false;
+    param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2497,7 +2777,7 @@ TEST_F(JoinHashMapTest, TestLazyOutputSlotsEmpty) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
 
@@ -2525,7 +2805,7 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsEmpty) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2556,7 +2836,7 @@ TEST_F(JoinHashMapTest, TestLazyPredicateSlotsNormal) {
 
     HashTableParam param;
     param.mor_reader_mode = false;
-    param.enable_lazy_materialize = true;
+    param.enable_late_materialization = true;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};
@@ -2587,7 +2867,7 @@ TEST_F(JoinHashMapTest, TestMorRead) {
 
     HashTableParam param;
     param.mor_reader_mode = true;
-    param.enable_lazy_materialize = false;
+    param.enable_late_materialization = false;
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.probe_output_slots = {1};

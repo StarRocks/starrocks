@@ -44,13 +44,14 @@ using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
-    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder)
-            : _update_mgr(update_mgr), _pk_builder(pk_builder) {}
+    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder, bool fill_cache)
+            : _update_mgr(update_mgr), _pk_builder(pk_builder), _fill_cache(fill_cache) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
 
 private:
     UpdateManager* _update_mgr = nullptr;
     const MetaFileBuilder* _pk_builder = nullptr;
+    bool _fill_cache = false;
 };
 
 class PersistentIndexBlockCache {
@@ -68,6 +69,22 @@ private:
     std::unique_ptr<MemTracker> _mem_tracker;
 };
 
+// This is a converter between rowset segment id and segment file info. We need this converter
+// because we store rowset segment id instead of real file info in PrimaryKey Index value to save memory,
+// and this converter can help us to find segment file info that we want.
+class RssidFileInfoContainer {
+public:
+    void add_rssid_to_file(const TabletMetadata& metadata);
+    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_id,
+                           const std::map<int, FileInfo>& replace_segments);
+
+    const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
+
+private:
+    // From rowset segment id to segment file
+    std::unordered_map<uint32_t, FileInfo> _rssid_to_file_info;
+};
+
 class UpdateManager {
 public:
     UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker);
@@ -83,24 +100,22 @@ public:
                                       int64_t base_version);
 
     // get rowids from primary index by each upserts
-    Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
+    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
                                    std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
-    Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
-                                   std::vector<std::vector<uint64_t>>* rss_rowids, bool need_lock);
+    Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const ColumnUniquePtr& upsert,
+                                   std::vector<uint64_t>* rss_rowids, bool need_lock);
 
     // get column data by rssid and rowids
-    Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                             const TabletSchemaCSPtr& tablet_schema, std::vector<uint32_t>& column_ids,
-                             bool with_default, bool include_op_write,
-                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+    Status get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
+                             bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
-    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
+    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder, bool fill_cache,
                        DelVectorPtr* pdelvec);
 
     // get delvec from tablet meta file
-    Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec);
+    Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache, DelVector* delvec);
     // set delvec cache
     Status set_cached_del_vec(const std::vector<std::pair<TabletSegmentId, DelVectorPtr>>& cache_delvec_updates,
                               int64_t version);
@@ -157,7 +172,7 @@ public:
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
@@ -184,20 +199,21 @@ public:
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 
+    Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
+
 private:
     // print memory tracker state
     void _print_memory_stats();
-    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
-                      PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const ColumnUniquePtr& upsert, PrimaryIndex& index,
+                      DeletesMap* new_deletes);
 
-    Status _do_update_with_condition(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                                     const TabletSchemaCSPtr& tablet_schema, uint32_t rowset_id, int32_t upsert_idx,
-                                     int32_t condition_column, const std::vector<ColumnUniquePtr>& upserts,
-                                     PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
+    Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
+                                     int32_t condition_column, const ColumnUniquePtr& upsert, PrimaryIndex& index,
+                                     DeletesMap* new_deletes);
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
-    Status _handle_index_op(Tablet* tablet, int64_t base_version, bool need_lock,
+    Status _handle_index_op(int64_t tablet_id, int64_t base_version, bool need_lock,
                             const std::function<void(LakePrimaryIndex&)>& op);
 
     std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }

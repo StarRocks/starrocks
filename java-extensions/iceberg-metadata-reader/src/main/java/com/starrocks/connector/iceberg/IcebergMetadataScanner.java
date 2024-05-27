@@ -121,8 +121,6 @@ public class IcebergMetadataScanner extends ConnectorScanner {
         this.manifestBean = params.get("split_info");
         this.loadColumnStats = Boolean.parseBoolean(params.get("load_column_stats"));
         this.classLoader = this.getClass().getClassLoader();
-        System.setProperty("software.amazon.awssdk.http.service.impl",
-                "software.amazon.awssdk.http.urlconnection.UrlConnectionSdkHttpService");
     }
 
     @Override

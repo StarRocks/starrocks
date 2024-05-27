@@ -96,10 +96,10 @@ public:
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                       Column* dst) override;
 
-    virtual Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
+    Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                                   Column* column) override {
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                           Column* column) override {
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 

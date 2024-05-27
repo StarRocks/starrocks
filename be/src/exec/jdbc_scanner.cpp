@@ -339,28 +339,13 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
                                 slot_desc->col_name()));
         }
         return TYPE_VARCHAR;
-    } else if (java_class == "oracle.sql.TIMESTAMP") {
-        if (type != TYPE_DATETIME) {
+    } else if (java_class == "oracle.sql.TIMESTAMP" || java_class == "oracle.sql.TIMESTAMPLTZ" ||
+               java_class == "oracle.sql.TIMESTAMPTZ") {
+        if (type != TYPE_VARCHAR) {
             return Status::NotSupported(
-                    fmt::format("Type mismatches on column[{}], JDBC result type is oracle Timestamp, please set the "
-                                "type to datetime",
-                                slot_desc->col_name()));
-        }
-        return TYPE_VARCHAR;
-    } else if (java_class == "oracle.sql.TIMESTAMPLTZ") {
-        if (type != TYPE_DATETIME) {
-            return Status::NotSupported(
-                    fmt::format("Type mismatches on column[{}], JDBC result type is oracle Timestamp ltz, please set "
-                                "the type to datetime",
-                                slot_desc->col_name()));
-        }
-        return TYPE_VARCHAR;
-    } else if (java_class == "oracle.sql.TIMESTAMPTZ") {
-        if (type != TYPE_DATETIME) {
-            return Status::NotSupported(
-                    fmt::format("Type mismatches on column[{}], JDBC result type is oracle Timestamp tz, please set "
-                                "the type to datetime",
-                                slot_desc->col_name()));
+                    fmt::format("Type mismatches on column[{}], JDBC result type is {}, please set the "
+                                "type to varchar",
+                                slot_desc->col_name(), java_class));
         }
         return TYPE_VARCHAR;
     } else {

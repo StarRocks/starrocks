@@ -216,15 +216,16 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
         RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, _tablet_id, &index_meta));
         RETURN_IF_ERROR(PrimaryIndex::commit(&index_meta));
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, _tablet_id, index_meta));
+        RETURN_IF_ERROR(on_commited());
+        set_local_pk_index_write_amp_score(PersistentIndex::major_compaction_score(index_meta));
         // Call `on_commited` here, which will be safe to remove old files.
         // Because if version publishing fails after `on_commited`, index will be rebuild.
-        return on_commited();
+        return Status::OK();
     }
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            lake_persistent_index->commit(builder);
-            return Status::OK();
+            return lake_persistent_index->commit(builder);
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
         }
@@ -258,6 +259,27 @@ Status LakePrimaryIndex::major_compact(const TabletMetadata& metadata, TxnLogPB*
                                      PersistentIndexTypePB_Name(metadata.persistent_index_type()));
     }
     return Status::OK();
+}
+
+double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
+    if (!_enable_persistent_index) {
+        return 0.0;
+    }
+    auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
+    if (local_persistent_index != nullptr) {
+        return local_persistent_index->get_write_amp_score();
+    }
+    return 0.0;
+}
+
+void LakePrimaryIndex::set_local_pk_index_write_amp_score(double score) {
+    if (!_enable_persistent_index) {
+        return;
+    }
+    auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
+    if (local_persistent_index != nullptr) {
+        local_persistent_index->set_write_amp_score(score);
+    }
 }
 
 } // namespace starrocks::lake

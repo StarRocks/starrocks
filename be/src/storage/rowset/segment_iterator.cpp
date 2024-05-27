@@ -45,6 +45,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
+#include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/common.h"
@@ -257,8 +258,6 @@ private:
     // check field use low_cardinality global dict optimization
     bool _can_using_global_dict(const FieldPtr& field) const;
 
-    Status _init_bitmap_index_iterators();
-
     Status _apply_bitmap_index();
 
     Status _apply_del_vector();
@@ -297,7 +296,7 @@ private:
     RawColumnIterators _column_iterators;
     std::vector<int> _io_coalesce_column_index;
     ColumnDecoders _column_decoders;
-    std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
+    BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
     std::map<ColumnId, ColumnOrPredicate> _del_predicates;
 
@@ -312,7 +311,6 @@ private:
     SparseRange<> _scan_range;
     SparseRangeIterator<> _range_iter;
 
-    ColumnPredicateMap _cid_to_predicates;
     PredicateTree _non_expr_pred_tree;
     PredicateTree _expr_pred_tree;
 
@@ -344,7 +342,6 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
-    bool _has_bitmap_index = false;
     bool _has_inverted_index = false;
 
     std::vector<InvertedIndexIterator*> _inverted_index_iterators;
@@ -359,9 +356,8 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
+          _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()) {
-    _cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
-
     // For small segment file (the number of rows is less than chunk_size),
     // the segment iterator will reserve a large amount of memory,
     // especially when there are many columns, many small files, many versions,
@@ -482,6 +478,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 auto iter = _del_predicates.find(cid);
                 del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
                 SparseRange<> r;
+
                 RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r,
                                                                                    CompoundNodeType::AND));
                 size_t prev_size = _scan_range.span_size();
@@ -1416,7 +1413,7 @@ inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
     if (_opts.pred_tree.contains_column(field->id())) {
         return _predicate_need_rewrite[field->id()];
     } else {
-        return (_has_bitmap_index || !_opts.pred_tree.empty()) &&
+        return (_bitmap_index_evaluator.has_bitmap_index() || !_opts.pred_tree.empty()) &&
                _column_iterators[field->id()]->all_page_dict_encoded();
     }
 }
@@ -1590,7 +1587,7 @@ Status SegmentIterator::_init_context() {
 
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
-    if (_predicate_columns == 0 ||
+    if (_predicate_columns == 0 || _opts.pred_tree.empty() ||
         (_predicate_columns >= _schema.num_fields() && _predicate_column_access_paths.empty())) {
         // non or all field has predicate, disable late materialization.
         RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
@@ -1637,11 +1634,11 @@ Status SegmentIterator::_init_global_dict_decoder() {
 }
 
 Status SegmentIterator::_rewrite_predicates() {
-    //
-    ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
-                                     _scan_range);
-    RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
-    _cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
+    {
+        ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
+                                         _scan_range);
+        RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
+    }
 
     // for each delete predicate,
     // If the global dictionary optimization is enabled for the column,
@@ -1785,40 +1782,6 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
     return Status::OK();
 }
 
-Status SegmentIterator::_init_bitmap_index_iterators() {
-    RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
-
-    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
-    _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
-    std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
-    for (auto& field : _schema.fields()) {
-        cid_2_ucid[field->id()] = field->uid();
-    }
-    for (const auto& pair : _cid_to_predicates) {
-        ColumnId cid = pair.first;
-        if (_bitmap_index_iterators[cid] == nullptr) {
-            ColumnUID ucid = cid_2_ucid[cid];
-            // the column's index in this segment file
-            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
-            if (segment_ptr == nullptr) {
-                // find segment from delta column group failed, using main segment
-                segment_ptr = _segment;
-            }
-
-            IndexReadOptions opts;
-            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
-            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
-            opts.lake_io_opts = _opts.lake_io_opts;
-            opts.read_file = _column_files[cid].get();
-            opts.stats = _opts.stats;
-
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &_bitmap_index_iterators[cid]));
-            _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
-        }
-    }
-    return Status::OK();
-}
-
 static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
                                              const std::unordered_set<const ColumnPredicate*>& erased_preds) {
     PredicateAndNode new_root;
@@ -1837,96 +1800,50 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
 // filter rows by evaluating column predicates using bitmap indexes.
 // upon return, predicates that have been evaluated by bitmap indexes will be removed.
 Status SegmentIterator::_apply_bitmap_index() {
+    RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
+    DCHECK_EQ(_predicate_columns, _opts.pred_tree.num_columns());
 
-    RETURN_IF_ERROR(_init_bitmap_index_iterators());
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
 
-    RETURN_IF(!_has_bitmap_index, Status::OK());
-    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
-
-    // ---------------------------------------------------------
-    // Seek bitmap index.
-    //  - Seek to the position of predicate's operand within
-    //    bitmap index dictionary.
-    // ---------------------------------------------------------
-    std::vector<ColumnId> bitmap_columns;
-    std::vector<SparseRange<>> bitmap_ranges;
-    std::vector<bool> has_is_null_predicate;
-    std::unordered_set<const ColumnPredicate*> erased_preds;
-
-    size_t mul_selected = 1;
-    size_t mul_cardinality = 1;
-    for (auto& [cid, pred_list] : _cid_to_predicates) {
-        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[cid];
-        if (bitmap_iter == nullptr) {
-            continue;
+        std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+        for (auto& field : _schema.fields()) {
+            cid_2_ucid[field->id()] = field->uid();
         }
-        size_t cardinality = bitmap_iter->bitmap_nums();
-        SparseRange<> selected(0, cardinality);
-        bool has_is_null = false;
-        for (const ColumnPredicate* pred : pred_list) {
-            SparseRange<> r;
-            Status st = pred->seek_bitmap_dictionary(bitmap_iter, &r);
-            if (st.ok()) {
-                selected &= r;
-                erased_preds.emplace(pred);
-                has_is_null |= (pred->type() == PredicateType::kIsNull);
-            } else if (!st.is_cancelled()) {
-                return st;
+
+        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
+                                                      this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            const ColumnUID ucid = cid_2_ucid[cid];
+            // the column's index in this segment file
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
             }
-        }
-        if (selected.empty()) {
-            _opts.stats->rows_bitmap_index_filtered += _scan_range.span_size();
-            _scan_range.clear();
-            return Status::OK();
-        }
-        if (selected.span_size() < cardinality) {
-            bitmap_columns.emplace_back(cid);
-            bitmap_ranges.emplace_back(selected);
-            has_is_null_predicate.emplace_back(has_is_null);
-            mul_selected *= selected.span_size();
-            mul_cardinality *= cardinality;
-        }
+
+            IndexReadOptions opts;
+            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
+            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
+            opts.lake_io_opts = _opts.lake_io_opts;
+            opts.read_file = _column_files[cid].get();
+            opts.stats = _opts.stats;
+
+            BitmapIndexIterator* bitmap_iter = nullptr;
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &bitmap_iter));
+            return bitmap_iter;
+        }));
+
+        RETURN_IF(!_bitmap_index_evaluator.has_bitmap_index(), Status::OK());
     }
 
-    // ---------------------------------------------------------
-    // Estimate the selectivity of the bitmap index.
-    // ---------------------------------------------------------
-    if (bitmap_columns.empty() || (mul_selected * 1000 > mul_cardinality * config::bitmap_max_filter_ratio)) {
-        return Status::OK();
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
+        const auto input_rows = _scan_range.span_size();
+        RETURN_IF_ERROR(_bitmap_index_evaluator.evaluate(_scan_range, _opts.pred_tree));
+        _opts.stats->rows_bitmap_index_filtered += input_rows - _scan_range.span_size();
     }
 
-    // ---------------------------------------------------------
-    // Retrieve the bitmap of each field.
-    // ---------------------------------------------------------
-    Roaring row_bitmap = range2roaring(_scan_range);
-    size_t input_rows = row_bitmap.cardinality();
-    DCHECK_EQ(input_rows, _scan_range.span_size());
-
-    for (size_t i = 0; i < bitmap_columns.size(); i++) {
-        Roaring roaring;
-        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[bitmap_columns[i]];
-        if (bitmap_iter->has_null_bitmap() && !has_is_null_predicate[i]) {
-            Roaring null_bitmap;
-            RETURN_IF_ERROR(bitmap_iter->read_null_bitmap(&null_bitmap));
-            row_bitmap -= null_bitmap;
-        }
-        RETURN_IF_ERROR(bitmap_iter->read_union_bitmap(bitmap_ranges[i], &roaring));
-        row_bitmap &= roaring;
-    }
-
-    DCHECK_LE(row_bitmap.cardinality(), _scan_range.span_size());
-    if (row_bitmap.cardinality() < _scan_range.span_size()) {
-        _scan_range = roaring2range(row_bitmap);
-    }
-
-    // ---------------------------------------------------------
-    // Erase predicates that hit bitmap index.
-    // ---------------------------------------------------------
-    erase_column_pred_from_pred_tree(_opts.pred_tree, erased_preds);
-    _cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
-
-    _opts.stats->rows_bitmap_index_filtered += (input_rows - _scan_range.span_size());
     return Status::OK();
 }
 
@@ -1950,7 +1867,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
     for (auto& field : _schema.fields()) {
         cid_2_ucid[field->id()] = field->uid();
     }
-    for (const auto& pair : _cid_to_predicates) {
+    for (const auto& pair : _opts.pred_tree.get_immediate_column_predicate_map()) {
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
@@ -1964,6 +1881,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
 
 Status SegmentIterator::_apply_inverted_index() {
     RETURN_IF(_scan_range.empty(), Status::OK());
+    RETURN_IF(!_opts.enable_gin_filter, Status::OK());
 
     RETURN_IF_ERROR(_init_inverted_index_iterators());
     RETURN_IF(!_has_inverted_index, Status::OK());
@@ -1972,13 +1890,14 @@ Status SegmentIterator::_apply_inverted_index() {
     roaring::Roaring row_bitmap = range2roaring(_scan_range);
     size_t input_rows = row_bitmap.cardinality();
     std::unordered_set<const ColumnPredicate*> erased_preds;
+    std::unordered_set<ColumnId> erased_pred_col_ids;
 
     std::unordered_map<ColumnId, ColumnId> cid_2_fid;
     for (int i = 0; i < _schema.num_fields(); i++) {
         cid_2_fid.emplace(_schema.field(i)->id(), i);
     }
 
-    for (auto& [cid, pred_list] : _cid_to_predicates) {
+    for (const auto& [cid, pred_list] : _opts.pred_tree.get_immediate_column_predicate_map()) {
         InvertedIndexIterator* inverted_iter = _inverted_index_iterators[cid];
         if (inverted_iter == nullptr) {
             continue;
@@ -1992,6 +1911,7 @@ Status SegmentIterator::_apply_inverted_index() {
                 Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
                 if (res.ok()) {
                     erased_preds.emplace(pred);
+                    erased_pred_col_ids.emplace(cid);
                 }
             }
         }
@@ -2004,16 +1924,15 @@ Status SegmentIterator::_apply_inverted_index() {
     // ---------------------------------------------------------
     if (!erased_preds.empty()) {
         erase_column_pred_from_pred_tree(_opts.pred_tree, erased_preds);
+        const auto& new_cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
 
-        auto new_cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
-        for (const auto& [cid, _] : _cid_to_predicates) {
+        for (const auto& cid : erased_pred_col_ids) {
             if (!new_cid_to_predicates.contains(cid)) {
                 // predicate for pred->column_id() has been total erased by
                 // inverted index filtering.These columns may can be pruned.
                 _prune_cols_candidate_by_inverted_index.insert(cid);
             }
         }
-        _cid_to_predicates = std::move(new_cid_to_predicates);
     }
 
     _opts.stats->rows_gin_filtered += input_rows - _scan_range.span_size();
@@ -2236,9 +2155,7 @@ void SegmentIterator::close() {
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
 
-    for (auto* iter : _bitmap_index_iterators) {
-        delete iter;
-    }
+    _bitmap_index_evaluator.close();
 
     for (auto* iter : _inverted_index_iterators) {
         if (iter != nullptr) {

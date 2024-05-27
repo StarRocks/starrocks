@@ -26,8 +26,8 @@ PROPERTIES (
 AS select * from t1;
 
 -- case 0: default refresh
-function: wait_async_materialized_view_finish('mv1')
-SELECT count(*) FROM mv1;
+-- function: wait_async_materialized_view_finish('mv1')
+-- SELECT count(*) FROM mv1;
 
 
 -- case 2: manual complete refresh

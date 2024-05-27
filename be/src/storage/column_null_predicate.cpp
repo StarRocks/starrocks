@@ -68,6 +68,8 @@ public:
         return min.is_null();
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         if (iter->has_null_bitmap()) {
@@ -97,6 +99,8 @@ public:
         *output = this;
         return Status::OK();
     }
+
+    std::string debug_string() const override { return strings::Substitute("(ColumnId($0) IS NULL)", _column_id); }
 };
 
 class ColumnNotNullPredicate : public ColumnPredicate {
@@ -147,6 +151,8 @@ public:
         return !max.is_null();
     }
 
+    bool support_bitmap_filter() const override { return false; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not null predicate not support bitmap index");
     }
@@ -168,6 +174,8 @@ public:
         *output = this;
         return Status::OK();
     }
+
+    std::string debug_string() const override { return strings::Substitute("(ColumnId($0) IS NOT NULL)", _column_id); }
 };
 
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type_info, ColumnId id, bool is_null) {

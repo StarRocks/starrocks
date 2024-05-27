@@ -143,7 +143,7 @@ public class CatalogMgr {
             }
         } catch (StarRocksConnectorException e) {
             LOG.error("connector create failed. catalog [{}] ", catalogName, e);
-            throw new DdlException(String.format("connector create failed {}", e.getMessage()));
+            throw new DdlException(String.format("connector create failed {%s}", e.getMessage()));
         } finally {
             writeUnLock();
         }

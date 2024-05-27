@@ -533,6 +533,13 @@ public class DefaultCoordinator extends Coordinator {
             if (!jobSpec.isEnablePipeline()) {
                 jobSpec.getQueryOptions().setEnable_profile(true);
             }
+            if (jobSpec.isBrokerLoad() && jobSpec.getQueryOptions().getBig_query_profile_threshold() == 0) {
+                jobSpec.getQueryOptions().setBig_query_profile_threshold(Config.default_big_load_profile_threshold_second * 1000);
+            }
+            // runtime load profile does not need to report too frequently
+            if (jobSpec.getQueryOptions().getRuntime_profile_report_interval() < 30) {
+                jobSpec.getQueryOptions().setRuntime_profile_report_interval(30);
+            }
             List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
             GlobalStateMgr.getCurrentState().getLoadMgr().initJobProgress(
                     jobSpec.getLoadJobId(), jobSpec.getQueryId(), executionDAG.getInstanceIds(), relatedBackendIds);
@@ -1135,6 +1142,14 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public boolean isProfileAlreadyReported() {
         return this.queryProfile.isProfileAlreadyReported();
+    }
+
+    @Override
+    public String getWarehouseName() {
+        if (connectContext == null) {
+            return "";
+        }
+        return connectContext.getSessionVariable().getWarehouseName();
     }
 
     private void execShortCircuit() {
