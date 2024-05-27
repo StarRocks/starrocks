@@ -72,8 +72,6 @@ public:
     // Precondition: the last method called must have been `prepare()`.
     Status open(const TabletReaderParams& read_params);
 
-    const char* type() const override { return "TabletReader"; }
-
     void close() override;
 
     const OlapReaderStatistics& stats() const { return _stats; }

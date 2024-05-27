@@ -39,8 +39,6 @@ public:
 
     virtual ~ChunkIterator() = default;
 
-    virtual const char* type() const { return "Unknown"; }
-
     // Fetch records from |this| iterator into |chunk|.
     //
     // REQUIRES: |chunk| is not null and is empty. the type of each column in |chunk| must

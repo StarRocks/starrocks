@@ -39,8 +39,6 @@ public:
 
     void close() override;
 
-    const char* type() const override { return "UnionIterator"; }
-
     size_t merged_rows() const override { return _merged_rows; }
 
     [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {

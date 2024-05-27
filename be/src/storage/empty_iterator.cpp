@@ -20,8 +20,6 @@ class EmptyIterator final : public ChunkIterator {
 public:
     explicit EmptyIterator(Schema schema, int chunk_size) : ChunkIterator(std::move(schema), chunk_size) {}
 
-    const char* type() const override { return "EmptyIterator"; }
-
     void close() override {}
 
 protected:

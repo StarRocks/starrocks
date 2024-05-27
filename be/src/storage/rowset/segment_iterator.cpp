@@ -108,8 +108,6 @@ public:
 
     void close() override;
 
-    const char* type() const override { return "SegmentIterator"; }
-
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
