@@ -389,7 +389,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         root = addOrderByLimit(root, setOperationRelation);
-        return new LogicalPlan(root, outputColumns, null);
+        return new LogicalPlan(root, outputColumns, List.of());
     }
 
     private OptExprBuilder addOrderByLimit(OptExprBuilder root, QueryRelation relation) {
@@ -455,7 +455,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder valuesOpt = new OptExprBuilder(new LogicalValuesOperator(valuesOutputColumns, values),
                 Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), valuesOutputColumns));
-        return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
+        return new LogicalPlan(valuesOpt, valuesOutputColumns, List.of());
     }
 
     private DistributionSpec getTableDistributionSpec(TableRelation node,
@@ -624,7 +624,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 new LogicalProjectOperator(outputVariables.stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
-        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, null);
+        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, List.of());
     }
 
     @Override
@@ -646,7 +646,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
                 new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
 
-        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), null);
+        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), List.of());
     }
 
     @Override
@@ -690,7 +690,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
             OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), newOutputColumns));
-            return new LogicalPlan(scanBuilder, newOutputColumns, null);
+            return new LogicalPlan(scanBuilder, newOutputColumns, List.of());
         }
     }
 
@@ -777,7 +777,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     .setNeedOutputRightChildColumns(true).build();
             return new LogicalPlan(
                     new OptExprBuilder(root, Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
-                            expressionMapping), expressionMapping.getFieldMappings(), null);
+                            expressionMapping), expressionMapping.getFieldMappings(), List.of());
         }
 
         LogicalPlan leftPlan = visit(node.getLeft());
@@ -818,7 +818,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalProjectOperator(expressionMapping.getFieldMappings().stream().distinct()
                             .collect(Collectors.toMap(Function.identity(), Function.identity())));
             return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                    expressionMapping.getFieldMappings(), null);
+                    expressionMapping.getFieldMappings(), List.of());
         }
 
         ExpressionMapping outputExpressionMapping;
@@ -864,7 +864,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 new LogicalProjectOperator(outputExpressionMapping.getFieldMappings().stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
         return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                outputExpressionMapping.getFieldMappings(), null);
+                outputExpressionMapping.getFieldMappings(), List.of());
     }
 
     @Override
@@ -905,7 +905,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         Operator root = new LogicalTableFunctionOperator(outputColumns, node.getTableFunction(), projectMap);
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
-                null, null);
+                null, List.of());
     }
 
     @Override
@@ -917,6 +917,33 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return plan;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public LogicalPlan visitPivotRelation(PivotRelation node, ExpressionMapping context) {
+        LogicalPlan queryPlan = visit(node.getQuery());
+
+        // aggregate
+        List<Expr> groupKeys = node.getGroupByKeys();
+        List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap);
+        OptExprBuilder builder = queryTransformer.aggregate(
+                queryPlan.getRootBuilder(), groupKeys, aggFunctions, null, ImmutableList.of());
+
+        // output
+        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) builder.getRoot().getOp();
+        List<ColumnRefOperator> output = new ArrayList<>(aggregationOperator.getGroupingKeys());
+        for (Expr agg : aggFunctions) {
+            ColumnRefOperator ref = builder.getExpressionMapping().get(agg);
+            output.add(ref);
+        }
+
+        ExpressionMapping mapping = new ExpressionMapping(node.getScope(), output);
+        builder.setExpressionMapping(mapping);
+        return new LogicalPlan(builder, output, List.of());
+    }
+
+>>>>>>> 4a6e86cee4 ([BugFix] correlation in plan should not be null (#46226))
     /**
      * The process is as follows:
      * Step1. Parse each conjunct of joinOnPredicate(Expr), and transforming to ScalarOperator.
