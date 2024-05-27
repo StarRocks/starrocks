@@ -664,6 +664,13 @@ under the License.
                 <version>${hadoop.version}</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-aliyun</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
             <dependency>
                 <groupId>com.qcloud.cos</groupId>

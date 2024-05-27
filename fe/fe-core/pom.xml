@@ -640,6 +640,12 @@ under the License.
             <artifactId>hadoop-aws</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aliyun</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
         <dependency>
             <groupId>com.qcloud.cos</groupId>
