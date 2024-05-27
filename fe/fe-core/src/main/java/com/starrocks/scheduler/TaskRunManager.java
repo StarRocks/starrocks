@@ -147,20 +147,24 @@ public class TaskRunManager implements MemoryTrackable {
                 LOG.warn("failed to offer task: {}", taskRun);
                 return false;
             }
-        } finally {
-            // NOTE: If isReplay is true, we don't need to update the status of the old TaskRun because follower FE cannot
+
+            // if it 's not replay, update the status of the old TaskRun to MERGED in FOLLOWER/LEADER.
+            // if it is replay, no need to update the status of the old TaskRun because follower FE cannot
             // update edit log.
             if (!isReplay && !mergedTaskRuns.isEmpty()) {
+                // TODO: support batch update to reduce the number of edit logs.
                 for (TaskRun oldTaskRun : mergedTaskRuns) {
-                    // TODO: support batch update to reduce the number of edit logs.
                     oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                    oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
+                    // update the state of the old TaskRun to MERGED in FOLLOWER
                     TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
                             oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
                     GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                    // update the state of the old TaskRun to MERGED in LEADER
+                    oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
                     taskRunScheduler.removePendingTaskRun(oldTaskRun);
                 }
             }
+        } finally {
             taskRunUnlock();
         }
         return true;
