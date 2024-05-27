@@ -3254,11 +3254,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### starlet_use_star_cache
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。
+- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。从 3.2.3 版本起，该参数默认值变为 `true`。
 - 引入版本：v3.1
 
 <!--
