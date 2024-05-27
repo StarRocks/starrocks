@@ -49,7 +49,7 @@ static std::string make_column_count_not_matched_error_message(int expected_coun
                                                                CSVParseOptions& parse_options) {
     std::stringstream error_msg;
     error_msg << "Target column count: " << expected_count
-              << " doesn't match value column count in file: " << actual_count << ". "
+              << " doesn't match source value column count: " << actual_count << ". "
               << "Column separator: " << string_2_asc(parse_options.column_delimiter) << ", "
               << "Row delimiter: " << string_2_asc(parse_options.row_delimiter);
     return error_msg.str();
