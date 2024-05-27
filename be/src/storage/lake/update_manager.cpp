@@ -854,12 +854,36 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& state = state_entry->value();
-    _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
     auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
     // skip preload if memory limit exceed
+<<<<<<< HEAD
     if (metadata_ptr != nullptr && !_update_state_mem_tracker->any_limit_exceeded()) {
         auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false, true);
+=======
+    if (metadata_ptr != nullptr && segments_size > 0 && !_update_state_mem_tracker->any_limit_exceeded()) {
+        auto tablet_schema = std::make_shared<TabletSchema>(metadata_ptr->schema());
+        RssidFileInfoContainer rssid_fileinfo_container;
+        rssid_fileinfo_container.add_rssid_to_file(*metadata_ptr);
+        RowsetUpdateStateParams params{
+                .op_write = txnlog.op_write(),
+                .tablet_schema = tablet_schema,
+                .metadata = *metadata_ptr,
+                .tablet = tablet,
+                .container = rssid_fileinfo_container,
+        };
+        state.init(params);
+        auto st = Status::OK();
+        for (uint32_t segment_id = 0; segment_id < segments_size && !_update_state_mem_tracker->any_limit_exceeded();
+             segment_id++) {
+            st = state.load_segment(segment_id, params, metadata_ptr->version(), false /* resolve conflict*/,
+                                    true /* need lock */);
+            _update_state_cache.update_object_size(state_entry, state.memory_usage());
+            if (!st.ok()) {
+                break;
+            }
+        }
+>>>>>>> 4a22718cd2 ([BugFix] fix memory statistic when lake pk preload update state (#46266))
         if (!st.ok()) {
             _update_state_cache.remove(state_entry);
             if (!st.is_uninitialized() && !st.is_cancelled()) {
