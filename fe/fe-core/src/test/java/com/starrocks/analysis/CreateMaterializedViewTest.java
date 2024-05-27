@@ -1355,7 +1355,11 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals("Materialized view query statement only support select", e.getMessage());
+=======
+            Assert.assertTrue(e.getMessage().contains("Materialized view query statement only supports a single query blocks"));
+>>>>>>> 4a6e86cee4 ([BugFix] correlation in plan should not be null (#46226))
         }
     }
 

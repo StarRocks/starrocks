@@ -209,6 +209,7 @@ public class MaterializedViewAnalyzer {
             // check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation) &&
                     !(queryStatement.getQueryRelation() instanceof SetOperationRelation)) {
+<<<<<<< HEAD
                 throw new SemanticException("Materialized view query statement only support select or set operation");
             }
 
@@ -216,6 +217,11 @@ public class MaterializedViewAnalyzer {
                     SelectRelationCollector.collectBaseRelations(queryStatement.getQueryRelation());
             if (CollectionUtils.isEmpty(selectRelations)) {
                 throw new SemanticException("Materialized view query statement must contain at least one select");
+=======
+                throw new SemanticException("Materialized view query statement only supports a single query block or " +
+                        "multiple query blocks in set operations",
+                        queryStatement.getQueryRelation().getPos());
+>>>>>>> 4a6e86cee4 ([BugFix] correlation in plan should not be null (#46226))
             }
 
             // analyze query statement, can check whether tables and columns exist in catalog

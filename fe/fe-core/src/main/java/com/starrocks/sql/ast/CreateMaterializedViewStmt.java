@@ -288,6 +288,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         new OldMVAnalyzerVisitor().visit(stmt, session);
     }
 
+<<<<<<< HEAD
     public static class OldMVAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         @Override
         public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement,
@@ -300,6 +301,83 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 com.starrocks.sql.analyzer.Analyzer.analyze(statement.getQueryStatement(), context);
             } finally {
                 context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
+=======
+        long originSelectLimit = context.getSessionVariable().getSqlSelectLimit();
+        try {
+            // ignore limit in creating mv
+            context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+            Analyzer.analyze(queryStatement, context);
+        } finally {
+            context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
+        }
+
+        boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);
+        if (hasTemporaryTable) {
+            throw new SemanticException(("Materialized view can't base on temporary table"));
+        }
+
+        // forbid explain query
+        if (queryStatement.isExplain()) {
+            throw new IllegalArgumentException("Creating materialized view does not support explain query");
+        }
+
+        if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
+            throw new SemanticException("Materialized view query statement only supports a single query blocks");
+        }
+
+        Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+        if (tables.size() != 1) {
+            throw new UnsupportedMVException("The materialized view only supports one table in from clause.");
+        }
+        Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
+        Table table = entry.getValue();
+
+        // SyncMV doesn't support mv's database is different from table's db.
+        if (mvTableName != null && !Strings.isNullOrEmpty(mvTableName.getDb()) &&
+                !mvTableName.getDb().equalsIgnoreCase(entry.getKey().getDb())) {
+            throw new UnsupportedMVException(
+                    String.format("Creating materialized view does not support: MV's db %s is different " +
+                            "from table's db %s", mvTableName.getDb(), entry.getKey().getDb()));
+        }
+
+        if (table instanceof View) {
+            // Only in order to make the error message keep compatibility
+            throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
+        } else if (!(table instanceof OlapTable)) {
+            throw new UnsupportedMVException("The materialized view only support olap table.");
+        }
+
+        TableName tableName = entry.getKey();
+        setBaseIndexName(table.getName());
+        setDBName(tableName.getDb());
+
+        SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
+        if (!(selectRelation.getRelation() instanceof TableRelation)) {
+            throw new UnsupportedMVException("Materialized view query statement only support direct query from table.");
+        }
+        int beginIndexOfAggregation = genColumnAndSetIntoStmt(table, selectRelation);
+        if (selectRelation.isDistinct() || selectRelation.hasAggregation()) {
+            setMvKeysType(KeysType.AGG_KEYS);
+        }
+        if (selectRelation.hasWhereClause()) {
+            whereClause = selectRelation.getWhereClause();
+        }
+        if (selectRelation.hasHavingClause()) {
+            throw new UnsupportedMVException("The having clause is not supported in add materialized view clause, expr:"
+                    + selectRelation.getHavingClause().toSql());
+        }
+        analyzeOrderByClause(selectRelation, beginIndexOfAggregation);
+        if (selectRelation.hasLimit()) {
+            throw new UnsupportedMVException("The limit clause is not supported in add materialized view clause, expr:"
+                    + " limit " + selectRelation.getLimit());
+        }
+        final String countPrefix = MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.COUNT + "_";
+        for (MVColumnItem mvColumnItem : getMVColumnItemList()) {
+            if (!isReplay && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
+                throw new UnsupportedMVException(
+                        String.format("Invalid data type of materialized key column '%s': '%s'",
+                                mvColumnItem.getName(), mvColumnItem.getType()));
+>>>>>>> 4a6e86cee4 ([BugFix] correlation in plan should not be null (#46226))
             }
 
             // forbid explain query
