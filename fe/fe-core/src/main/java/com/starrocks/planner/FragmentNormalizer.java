@@ -231,9 +231,8 @@ public class FragmentNormalizer {
     public ByteBuffer normalizeExpr(Expr expr) {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
-        //TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
-        TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
         try {
+            TSerializer ser = new TSerializer(new TSimpleJSONProtocol.Factory());
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);

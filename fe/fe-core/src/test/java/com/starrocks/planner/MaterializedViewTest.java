@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.api.client.util.Lists;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
@@ -27,7 +28,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.apache.parquet.Strings;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;

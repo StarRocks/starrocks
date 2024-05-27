@@ -29,6 +29,7 @@ import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TJSONProtocol;
+import org.apache.thrift.transport.TTransportException;
 
 // used to compatible with our older thrift protocol
 public class AttachmentRequest {
@@ -37,7 +38,7 @@ public class AttachmentRequest {
     @Ignore
     protected byte[] serializedResult;
 
-    public static TSerializer getSerializer(String protocol) {
+    public static TSerializer getSerializer(String protocol) throws TTransportException {
         TSerializer serializer;
         if (StringUtils.equalsIgnoreCase(protocol, "compact")) {
             serializer = new TSerializer(TCompactProtocol::new);

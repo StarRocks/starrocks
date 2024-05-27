@@ -157,10 +157,10 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.apache.thrift.transport.layered.TFramedTransport;
 
 import javax.security.auth.login.LoginException;
 import java.io.IOException;
@@ -571,7 +571,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                                     + "Continuing without it.", e);
                         }
                     }
-                } catch (MetaException e) {
+                } catch (MetaException | TTransportException e) {
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }

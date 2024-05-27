@@ -156,8 +156,8 @@ public class FragmentInstanceExecState {
     }
 
     public void serializeRequest() {
-        TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
         try {
+            TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
             serializedRequest = serializer.serialize(requestToDeploy);
         } catch (TException ignore) {
             // throw exception means serializedRequest will be empty, and then we will treat it as not serialized
