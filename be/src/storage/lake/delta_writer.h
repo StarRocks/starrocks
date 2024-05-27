@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 
@@ -181,8 +182,7 @@ public:
         return *this;
     }
 
-StatusOr<DeltaWriterPtr>
-build();
+    StatusOr<DeltaWriterPtr> build();
 
 private:
     TabletManager* _tablet_mgr{nullptr};
@@ -197,7 +197,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
-    InsertMode _insert_mode = InsertMode::UPSERT;
+    InsertMode _insert_mode = InsertMode::UPSERT_MODE;
 };
 
 } // namespace starrocks::lake

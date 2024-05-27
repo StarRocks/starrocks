@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 
@@ -180,12 +181,8 @@ public:
         return *this;
     }
 
-    AsyncDeltaWriterBuilder& set_insert_mode(TInsertMode insert_mode) {
-        if (insert_mode == TInsertMode::type::UPSERT_MODE) {
-            _insert_mode = InsertMode::UPSERT_MODE;
-        } else if (insert_mode == TInsertMode::type::IGNORE_MODE) {
-            _insert_mode = InsertMode::IGNORE_MODE;
-        }
+    AsyncDeltaWriterBuilder& set_insert_mode(InsertMode insert_mode) {
+        _insert_mode = insert_mode;
         return *this;
     }
 
