@@ -149,6 +149,8 @@ SELECT * FROM table1;
 
 #### Load JSON data
 
+Since v3.2.7, Stream Load supports compressing JSON data during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. For the syntax, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+
 ##### Prepare datasets
 
 In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
