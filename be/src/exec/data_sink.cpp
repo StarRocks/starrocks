@@ -399,9 +399,9 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 
         prev_operators.emplace_back(op);
         context->add_pipeline(std::move(prev_operators));
-//    } else if (typeid(*this) == typeid(starrocks::IcebergTableSink)) {
-//        auto* iceberg_table_sink = down_cast<starrocks::IcebergTableSink*>(this);
-//        RETURN_IF_ERROR(iceberg_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+    } else if (typeid(*this) == typeid(starrocks::IcebergTableSink)) {
+        auto* iceberg_table_sink = down_cast<starrocks::IcebergTableSink*>(this);
+        RETURN_IF_ERROR(iceberg_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(starrocks::HiveTableSink)) {
         auto* hive_table_sink = down_cast<starrocks::HiveTableSink*>(this);
         RETURN_IF_ERROR(hive_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
