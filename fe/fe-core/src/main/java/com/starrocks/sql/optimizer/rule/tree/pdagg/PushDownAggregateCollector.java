@@ -163,7 +163,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         // origin predicate, we just do check in collect phase
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
             CallOperator aggFn = entry.getValue();
-            if (aggFn.getUsedColumns().isEmpty()) {
+            if (aggFn.getChildren().isEmpty()) {
                 continue;
             }
             ScalarOperator aggInput = aggFn.getChild(0);
