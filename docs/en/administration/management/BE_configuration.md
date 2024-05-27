@@ -3178,7 +3178,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### starlet_use_star_cache
 
+<<<<<<< HEAD
 - Default: false
+=======
+- Default: false in v3.1 and true from v3.2.3
+>>>>>>> a805a47077 ([Doc]: Update BE_configuration.md (#44863))
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
