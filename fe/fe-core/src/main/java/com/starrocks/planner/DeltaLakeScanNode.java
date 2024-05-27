@@ -147,9 +147,6 @@ public class DeltaLakeScanNode extends ScanNode {
     public void setupScanRangeLocations(DescriptorTable descTbl) throws AnalysisException {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
             setupScanRangeLocationsImpl(descTbl);
-        } catch (Exception e) {
-            LOG.error("Failed to get delta lake scan files", e);
-            throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
         }
     }
 
