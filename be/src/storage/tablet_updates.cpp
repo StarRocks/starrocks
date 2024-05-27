@@ -1766,9 +1766,19 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
+<<<<<<< HEAD
     // already committed, so we can ignore timeout error here
     std::unique_lock<std::mutex> ul(_lock);
     _wait_for_version(version, 120000, ul);
+=======
+    {
+        // already committed, so we can ignore timeout error here
+        std::unique_lock<std::mutex> ul(_lock);
+        RETURN_IF_ERROR(_wait_for_version(version, 120000, ul));
+    }
+    // Release metadata memory after rowsets have been compacted.
+    Rowset::close_rowsets(input_rowsets);
+>>>>>>> 0471705863 ([Enhancement] release metadata memory after rowsets have been compacted in pk table (#46067))
     return Status::OK();
 }
 
