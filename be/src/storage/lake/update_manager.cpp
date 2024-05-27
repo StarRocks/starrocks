@@ -206,10 +206,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         new_deletes[rowset_id + segment_id] = {};
     }
-    InsertMode insert_mode = InsertMode::UPSERT_MODE;
-    if (op_write.insert_mode()) {
-        insert_mode = InsertMode::IGNORE_MODE;
-    }
+    InsertMode insert_mode = op_write.has_insert_mode() ? op_write.insert_mode() : InsertMode::UPSERT_MODE;
     // 2. Handle segment one by one to save memory usage.
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         RETURN_IF_ERROR(state.load_segment(segment_id, params, base_version, true /*reslove conflict*/,
