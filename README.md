@@ -21,7 +21,7 @@
     <img src="https://img.shields.io/badge/Visit%20StarRocks-Website-green" alt="Website">
   </a>
   </a>
-   <a href="https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg">
+   <a href="https://try.starrocks.com/join-starrocks-on-slack">
     <img src="https://img.shields.io/badge/Join-Slack-ff69b4" alt="Slack">
   </a>
   </a>
@@ -65,6 +65,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
    </a>
 </p>
 
+
 StarRocks’s streamlined architecture is mainly composed of two modules: Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data.
 
 <br>
@@ -80,8 +81,8 @@ StarRocks’s streamlined architecture is mainly composed of two modules: Fronte
 | [Blogs](https://starrocks.io/blog) | StarRocks deep dive and user stories.  |
 
 ### ❓ Get support  
-[<img align="right" width="150" src="https://firstcontributions.github.io/assets/Readme/join-slack-team.png">](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)
--  [Slack community: ](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)join technical discussions, ask questions, and meet other users!
+[<img align="right" width="150" src="https://firstcontributions.github.io/assets/Readme/join-slack-team.png">](https://try.starrocks.com/join-starrocks-on-slack)
+-  [Slack community: ](https://try.starrocks.com/join-starrocks-on-slack) join technical discussions, ask questions, and meet other users!
 -  [YouTube channel:](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured) subscribe to the latest video tutorials and webcasts.
 -  [GitHub issues:](https://github.com/StarRocks/starrocks/issues) report an issue with StarRocks.
 
