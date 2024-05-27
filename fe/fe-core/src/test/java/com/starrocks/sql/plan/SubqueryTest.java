@@ -1903,7 +1903,7 @@ public class SubqueryTest extends PlanTestBase {
     }
 
     @Test
-    public void testComplexCorrelationPredicateNotInSubquery2() throws Exception {
+    public void testComplexCorrelationPredicateNotInSubquery2() {
         String sql = "select v2 not in (select v5 from t1 where t0.v1 = t1.v4 + t0.v1) from t0";
         Assert.assertThrows("IN subquery not supported the correlation predicate of the" +
                         " WHERE clause that used multiple outer-table columns at the same time.\n", SemanticException.class,
@@ -1938,5 +1938,22 @@ public class SubqueryTest extends PlanTestBase {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
         }
+    }
+
+    @Test
+    public void testUnionRelationSubquery() throws Exception {
+        String sql = "select * from t0 where v2 = 1 and v1 not in (select v4 from t1 union all select v7 from t2);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "7:HASH JOIN\n" +
+                "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 10: v4");
+
+        sql = "select * from t0 where v2 = 1 and v1 not in ((select v4 from t1 union all select v7 from t2));";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "7:HASH JOIN\n" +
+                "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 10: v4");
     }
 }
