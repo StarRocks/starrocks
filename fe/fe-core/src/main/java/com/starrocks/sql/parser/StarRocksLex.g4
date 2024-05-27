@@ -586,3 +586,7 @@ DOTDOTDOT: '...';
 WS
     : [ \r\n\t\u3000]+ -> channel(HIDDEN)
     ;
+
+FUNCTION_CONTENT
+    : BEGIN .* END
+    ;

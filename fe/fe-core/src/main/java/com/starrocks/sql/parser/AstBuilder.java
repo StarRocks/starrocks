@@ -739,7 +739,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                     properties,
                     extProperties,
-                    context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                    context.comment() == null ? null :
+                            ((StringLiteral) visit(context.comment().string())).getStringValue(),
                     context.rollupDesc() == null ?
                             null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
                     context.orderByDesc() == null ? null :
@@ -871,7 +872,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             if (functionName.equals(FunctionSet.FROM_UNIXTIME) || functionName.equals(FunctionSet.FROM_UNIXTIME_MS)) {
                 if (hasCast || paramsExpr.size() > 1) {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
                 }
             }
         }
@@ -2941,7 +2943,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
         String forUser = null;
         if (context.FOR() != null) {
-            forUser =  ((StringLiteral) visit(context.string())).getValue();
+            forUser = ((StringLiteral) visit(context.string())).getValue();
         }
         boolean isShowFull = context.FULL() != null;
         return new ShowProcesslistStmt(isShowFull, forUser, createPos(context));
@@ -3323,7 +3325,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 null,
                 null,
                 createPos(ctx));
-
 
         // create queryStatement based on queryRelation
         QueryStatement queryStatement = new QueryStatement(queryRelation);
@@ -5170,10 +5171,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionName = qualifiedName.toString();
 
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
-        TypeDef intermediateType = null;
-        if (context.intermediateType != null) {
-            intermediateType = new TypeDef(getType(context.intermediateType), createPos(context.intermediateType));
-        }
 
         Map<String, String> properties = null;
         if (context.properties() != null) {
@@ -5182,6 +5179,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             for (Property property : propertyList) {
                 properties.put(property.getKey(), property.getValue());
             }
+        }
+        String inlineContent = null;
+        if (context.content != null) {
+            String text = context.content.getText();
+            inlineContent = text.substring(5, text.length() - 3);
         }
 
         FunctionName fnName = FunctionName.createFnName(functionName);
@@ -5193,7 +5195,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new CreateFunctionStmt(functionType, fnName,
-                getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
+                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------
