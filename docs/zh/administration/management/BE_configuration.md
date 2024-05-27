@@ -3251,7 +3251,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### starlet_use_star_cache
 
-- 默认值：true
+- 默认值：false（v3.1）true（v3.2.3 起）
 - 类型：Boolean
 - 单位：-
 - 是否动态：是

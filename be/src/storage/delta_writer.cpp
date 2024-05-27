@@ -622,7 +622,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
         if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(i).has_column_param() &&
             ptable_schema_param.indexes(i).column_param().columns_desc_size() != 0 &&
             ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
-            ptable_schema_param.version() > ori_tablet_schema->schema_version()) {
+            ptable_schema_param.version() != ori_tablet_schema->schema_version()) {
             new_schema->copy_from(ori_tablet_schema);
             RETURN_IF_ERROR(new_schema->build_current_tablet_schema(
                     ptable_schema_param.indexes(i).schema_id(), ptable_schema_param.version(),
@@ -630,7 +630,8 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
         }
     }
     if (new_schema->schema_version() > ori_tablet_schema->schema_version()) {
-        _tablet_schema = _tablet->update_max_version_schema(new_schema);
+        _tablet->update_max_version_schema(new_schema);
+        _tablet_schema = new_schema;
     } else {
         _tablet_schema = ori_tablet_schema;
     }

@@ -931,7 +931,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } catch (InterruptedException e) {
             LOG.warn(e);
         }
-
     }
 
     @Override

@@ -61,6 +61,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class PropertyAnalyzerTest {
 
@@ -332,5 +333,17 @@ public class PropertyAnalyzerTest {
                         "it from the statement", () -> {
                     PropertyAnalyzer.analyzeVersionInfo(properties);
                 });
+    }
+
+    @Test
+    public void testSingleLocationLabel() throws AnalysisException {
+        String[] testLocs = {"*", "a:*", "bcd_123:*", "123bcd_:val_123", "invalidFormat",
+                ":", "aa_123:*", "*:123", "a:b,c:d", "a: b", "  a  :  b  ", "   ", "a:b*"};
+        Boolean[] analyzeSuccess = {true, true, true, true, false, false, true, false, false, true, true, false, false};
+        int i = 0;
+        for (String loc : testLocs) {
+            String regex = PropertyAnalyzer.SINGLE_LOCATION_LABEL_REGEX;
+            Assert.assertEquals(Pattern.compile(regex).matcher(loc).matches(), analyzeSuccess[i++]);
+        }
     }
 }

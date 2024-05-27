@@ -346,6 +346,12 @@ public enum ErrorCode {
      */
 
     /**
+     * 5400 - 5499: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5400, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated"),
+
+    /**
      * 5600 - 5699: DML operation failure
      */
     ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
