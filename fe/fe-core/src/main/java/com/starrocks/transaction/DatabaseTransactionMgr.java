@@ -762,6 +762,20 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public List<TransactionState> getPrepareTxnList() {
+        readLock();
+        try {
+            // only send task to prepare transaction
+            return idToRunningTransactionState.values().stream()
+                    .filter(transactionState -> (transactionState.getTransactionStatus() ==
+                            TransactionStatus.PREPARE))
+                    .sorted(Comparator.comparing(TransactionState::getCommitTime))
+                    .collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+    }
+
     public List<TransactionState> getCommittedTxnList() {
         readLock();
         try {

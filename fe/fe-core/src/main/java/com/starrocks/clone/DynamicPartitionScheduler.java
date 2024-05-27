@@ -350,7 +350,9 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 RangeUtils.checkRangeIntersect(reservePartitionKeyRange, checkDropPartitionKey);
                 if (checkDropPartitionKey.upperEndpoint().compareTo(reservePartitionKeyRange.lowerEndpoint()) <= 0) {
                     String dropPartitionName = olapTable.getPartition(checkDropPartitionId).getName();
-                    dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName, false, true));
+                    boolean isExistPrepareTxns = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+                            existPrepareTxns(db.getId(), olapTable.getId(), checkDropPartitionId);
+                    dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName, false, !isExistPrepareTxns));
                 }
             } catch (DdlException e) {
                 break;

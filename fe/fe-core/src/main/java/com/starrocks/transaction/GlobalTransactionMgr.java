@@ -514,6 +514,19 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return transactionStateList;
     }
 
+    public boolean existPrepareTxns(Long dbId, Long tableId, Long partitionId) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (tableId == null && partitionId == null) {
+            return !dbTransactionMgr.getPrepareTxnList().isEmpty();
+        }
+        for (TransactionState transactionState : dbTransactionMgr.getPrepareTxnList()) {
+            if (transactionState.getTableIdList().contains(tableId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean existCommittedTxns(Long dbId, Long tableId, Long partitionId) {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         if (tableId == null && partitionId == null) {
