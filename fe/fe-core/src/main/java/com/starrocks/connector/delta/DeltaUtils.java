@@ -19,6 +19,13 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> 29f4831e83 ([Enhancement] Add time tracer for delta lake (#46284))
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -33,6 +40,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class DeltaUtils {
@@ -42,9 +50,24 @@ public class DeltaUtils {
                                                        Configuration configuration, long createTime) {
         DeltaLog deltaLog = DeltaLog.forTable(configuration, path);
 
+<<<<<<< HEAD
         if (!deltaLog.tableExists()) {
             throw new IllegalArgumentException(String.format("Delta log not exist for %s.%s.%s",
                     catalog, dbName, tblName));
+=======
+        Table deltaTable = null;
+        SnapshotImpl snapshot = null;
+
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
+            deltaTable = Table.forPath(deltaEngine, path);
+            snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaEngine);
+        } catch (TableNotFoundException e) {
+            LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());
+            throw new SemanticException("Failed to find Delta table for " + catalog + "." + dbName + "." + tblName);
+        } catch (Exception e) {
+            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}", catalog, dbName, tblName, e.getMessage());
+            throw new SemanticException("Failed to get latest snapshot for " + catalog + "." + dbName + "." + tblName);
+>>>>>>> 29f4831e83 ([Enhancement] Add time tracer for delta lake (#46284))
         }
 
         Metadata metadata = deltaLog.snapshot().getMetadata();

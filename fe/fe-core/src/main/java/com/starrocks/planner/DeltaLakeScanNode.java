@@ -25,7 +25,15 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.connector.Connector;
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.CatalogConnector;
+>>>>>>> 29f4831e83 ([Enhancement] Add time tracer for delta lake (#46284))
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
@@ -60,6 +68,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class DeltaLakeScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
@@ -131,6 +141,7 @@ public class DeltaLakeScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws AnalysisException {
+<<<<<<< HEAD
         DeltaLog deltaLog = deltaLakeTable.getDeltaLog();
         if (!deltaLog.tableExists()) {
             return;
@@ -139,6 +150,20 @@ public class DeltaLakeScanNode extends ScanNode {
         Snapshot snapshot = deltaLog.snapshot();
         preProcessConjuncts(snapshot.getMetadata().getSchema());
         List<String> partitionColumnNames = snapshot.getMetadata().getPartitionColumns();
+=======
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
+            setupScanRangeLocationsImpl(descTbl);
+        }
+    }
+
+    public void setupScanRangeLocationsImpl(DescriptorTable descTbl) throws AnalysisException {
+        Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
+        DeltaUtils.checkTableFeatureSupported(((SnapshotImpl) deltaLakeTable.getDeltaSnapshot()).getProtocol(),
+                deltaMetadata);
+
+        preProcessConjuncts(deltaMetadata.getSchema());
+        List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
+>>>>>>> 29f4831e83 ([Enhancement] Add time tracer for delta lake (#46284))
         // PartitionKey -> partition id
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
