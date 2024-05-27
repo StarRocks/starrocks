@@ -21,6 +21,8 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -42,6 +44,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class DeltaUtils {
@@ -74,7 +77,8 @@ public class DeltaUtils {
 
         Table deltaTable = null;
         SnapshotImpl snapshot = null;
-        try {
+
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
             deltaTable = Table.forPath(deltaEngine, path);
             snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaEngine);
         } catch (TableNotFoundException e) {
