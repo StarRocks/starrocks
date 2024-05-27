@@ -923,8 +923,8 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
-    56: optional string payload_compression_type
-    57: optional bool insert_ignore
+    56: optional string payload_compression_type 
+    57: optional Types.TInsertMode insert_mode
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse

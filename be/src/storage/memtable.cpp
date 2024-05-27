@@ -41,7 +41,7 @@ static const string LOAD_OP_COLUMN = "__op";
 
 Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
                                 const std::vector<SlotDescriptor*>* slot_descs,
-                                const bool insert_ignore) {
+                                const InsertMode insert_mode) {
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         const auto& last_column = tablet_schema->columns().back();
         // remove last __row column if exists, because it's not used in memtable
@@ -61,7 +61,7 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
             op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
             schema.append(op_column);
         }
-        if (insert_ignore) {
+        if (insert_mode == InsertMode::IGNORE) {
             for (auto& name : schema.field_names()) {
                 FieldPtr f = schema.get_field_by_name(name);
                 if (f->aggregate_method() == STORAGE_AGGREGATE_REPLACE) {

@@ -55,7 +55,7 @@ public:
                           uint32_t idx_end) = 0;
     // batch upsert a range [idx_begin, idx_end) of keys
     virtual void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                        DeletesMap* deletes, const InsertPolicy& type) = 0;
+                        DeletesMap* deletes, const InsertMode& mode) = 0;
 
     // replace values, return error if not exist. replace a range [indexes[idx_begin], indexes[idx_end-1]]
     virtual Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& indexes,
@@ -160,14 +160,14 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes, const InsertPolicy& type) override {
+                DeletesMap* deletes, const InsertMode& mode) override {
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
             if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             RowIdPack4 v(base + i);
-            if (type == InsertPolicy::IGNORE && _map.contains(keys[i])) {
+            if (type == InsertMode::IGNORE && _map.contains(keys[i])) {
                 (*deletes)[rssid].push_back(i);
             } else {
                 auto p = _map.insert({keys[i], v});
@@ -367,7 +367,7 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes, const InsertPolicy& type) override {
+                DeletesMap* deletes, const InsertMode& mode) override {
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -382,7 +382,7 @@ public:
             for (uint32_t i = idx_begin; i < idx_end; i++) {
                 uint64_t v = base + i;
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                if (type == InsertPolicy::IGNORE && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
+                if (type == InsertMode::IGNORE && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
                     (*deletes)[rssid].push_back(i);
                 } else {
                     auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
@@ -406,7 +406,7 @@ public:
             }
         } else {
             for (uint32_t i = idx_begin; i < idx_end; i++) {
-                if (type == InsertPolicy::IGNORE && _map.contains(FixSlice<S>(keys[i]))) {
+                if (type == InsertMode::IGNORE && _map.contains(FixSlice<S>(keys[i]))) {
                     (*deletes)[rssid].push_back(i);
                 } else {
                     uint64_t v = base + i;
@@ -648,11 +648,11 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes, const InsertPolicy& type) override {
+                DeletesMap* deletes, const InsertMode& mode) override {
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
-            if (type == InsertPolicy::IGNORE && _map.contains(keys[i].to_string())) {
+            if (type == InsertMode::IGNORE && _map.contains(keys[i].to_string())) {
                 (*deletes)[rssid].push_back(i);
             } else {
                 uint64_t v = base + i;
@@ -875,7 +875,7 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes, const InsertPolicy& type) override {
+                DeletesMap* deletes, const InsertMode& mode) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
@@ -1314,7 +1314,7 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
 
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                    uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
-                                                   IOStat* stat, const InsertPolicy& type) {
+                                                   IOStat* stat, const InsertMode& mode) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
@@ -1328,14 +1328,14 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
                                               reinterpret_cast<IndexValue*>(old_values.data()), stat, type));
     for (size_t i = 0; i < n; i++) {
         unsigned long old = old_values[i];
-        if ((old != NullIndexValue) && type == InsertPolicy::UPSERT && (old >> 32) == rssid) {
+        if ((old != NullIndexValue) && type == InsertMode::UPSERT && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
             st = Status::InternalError("found duplicate in upsert data");
         }
         if (old != NullIndexValue) {
-            if (type == InsertPolicy::UPSERT) {
+            if (type == InsertMode::UPSERT) {
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-            } else if (type == InsertPolicy::IGNORE) {
+            } else if (type == InsertMode::IGNORE) {
                 (*deletes)[rssid].push_back(rowid_start + idx_begin + i);
             }
         }
@@ -1419,7 +1419,7 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes,
-                            IOStat* stat, const InsertPolicy& type) {
+                            IOStat* stat, const InsertMode& mode) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
@@ -1431,7 +1431,7 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                            uint32_t idx_end, DeletesMap* deletes, const InsertPolicy& type) {
+                            uint32_t idx_end, DeletesMap* deletes, const InsertMode& mode) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {

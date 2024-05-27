@@ -581,3 +581,8 @@ struct TSnapshotInfo {
     2: optional string snapshot_path
     3: optional bool incremental_snapshot
 }
+
+enum TInsertMode {
+    UPSERT_MODE = 0;
+    IGNORE_MODE = 1;
+}

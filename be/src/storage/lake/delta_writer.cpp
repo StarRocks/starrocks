@@ -74,7 +74,7 @@ public:
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                              const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                             MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id, bool insert_ignore)
+                             MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id, InsertMode insert_mode)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -87,7 +87,7 @@ public:
               _immutable_tablet_size(immutable_tablet_size),
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
-              _insert_ignore(insert_ignore) {}
+              _insert_mode(insert_mode) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -191,7 +191,7 @@ private:
 
     int64_t _last_write_ts = 0;
 
-    bool _insert_ignore;
+    InsertMode _insert_mode = InsertMode::UPSERT;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -231,7 +231,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
-        _write_schema_for_mem_table = MemTable::convert_schema(_write_schema, _slots, _insert_ignore);
+        _write_schema_for_mem_table = MemTable::convert_schema(_write_schema, _slots, _insert_mode);
 
         DCHECK_LE(_write_schema->num_columns(), _tablet_schema->num_columns());
         DCHECK_GE(_write_schema_for_mem_table.num_fields(), _write_schema->num_columns());
@@ -444,7 +444,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
-    op_write->set_insert_ignore(_insert_ignore);
+    op_write->set_insert_mode(_insert_mode);
 
     const auto is_partial_update = (_write_schema->num_columns() < _tablet_schema->num_columns());
 
@@ -734,7 +734,7 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     }
     auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
-                                    _max_buffer_size, _schema_id, _insert_ignore);
+                                    _max_buffer_size, _schema_id, _insert_mode);
     return std::make_unique<DeltaWriter>(impl);
 }
 

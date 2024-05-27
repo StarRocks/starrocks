@@ -30,7 +30,7 @@ enum StorageAggregateType {
     // Replace if and only if added value is not null
     STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL = 8,
     STORAGE_AGGREGATE_PERCENTILE_UNION = 9,
-    // used in insert ignore case to keep fist value.
+    // used in insert ignore mode to keep fist value.
     STORAGE_AGGREGATE_FIRST = 10
 };
 

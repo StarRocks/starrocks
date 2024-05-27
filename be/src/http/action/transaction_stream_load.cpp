@@ -436,11 +436,12 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     } else if (!http_req->header(HTTP_COMPRESSION).empty()) {
         request.__set_payload_compression_type(http_req->header(HTTP_COMPRESSION));
     }
-
-    if (http_req->header(HTTP_INSERT_IGNORE) == "true") {
-        request.__set_insert_ignore(true);
-    } else {
-        request.__set_insert_ignore(false);
+    if (!http_req->header(HTTP_INSERT_MODE).empty()) {
+        if (http_req->header(HTTP_INSERT_MODE) == "upsert") {
+            request.__set_insert_mode(TInsertMode::type::UPSERT_MODE);
+        } else if (http_req->header(HTTP_INSERT_MODE) == "ignore") {
+            request.__set_insert_mode(TInsertMode::type::IGNORE_MODE);
+        }
     }
     return Status::OK();
 }

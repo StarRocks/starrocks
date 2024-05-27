@@ -122,8 +122,8 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     if (table_sink.__isset.automatic_bucket_size) {
         _automatic_bucket_size = table_sink.automatic_bucket_size;
     }
-    if (table_sink.__isset.insert_ignore) {
-      _insert_ignore = table_sink.insert_ignore;
+    if (table_sink.__isset.insert_mode) {
+      _insert_mode = table_sink.insert_mode;
     }
 
     _schema = std::make_shared<OlapTableSchemaParam>();

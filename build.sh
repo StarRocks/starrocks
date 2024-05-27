@@ -18,7 +18,7 @@
 
 ##############################################################
 # This script is used to compile StarRocks
-# Usage:
+# Usage: 
 #    sh build.sh --help
 # Eg:
 #    sh build.sh                                      build all
@@ -40,7 +40,7 @@ MACHINE_TYPE=$(uname -m)
 export STARROCKS_HOME=${ROOT}
 
 if [ -z $BUILD_TYPE ]; then
-    export BUILD_TYPE=Debug
+    export BUILD_TYPE=Release
 fi
 
 cd $STARROCKS_HOME
@@ -368,7 +368,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
                   -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
-                  -DCMAKE_EXE_LINKER_FLAGS=-B/home/huangzhaowei.416/mold \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \

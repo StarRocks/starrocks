@@ -80,7 +80,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  IOStat* stat = nullptr, const InsertPolicy& type = InsertPolicy::UPSERT) override;
+                  IOStat* stat = nullptr, const InsertMode& mode = InsertMode::UPSERT) override;
 
     // batch erase
     // |n|: size of key/value array

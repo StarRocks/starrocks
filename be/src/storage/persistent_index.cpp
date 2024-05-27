@@ -794,13 +794,13 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
-                  size_t* num_found, const std::vector<size_t>& idxes, const InsertPolicy& type) override {
+                  size_t* num_found, const std::vector<size_t>& idxes, const InsertMode& mode) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            if (type == InsertPolicy::IGNORE) {
+            if (type == InsertMode::IGNORE) {
                 auto it = _map.find(key, hash);
                 if (it != _map.end() && it->second.get_value() != NullIndexValue) {
                     old_values[idx] = value;
@@ -822,13 +822,13 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                  const std::vector<size_t>& idxes, const InsertPolicy& type) override {
+                  const std::vector<size_t>& idxes, const InsertMode& mode) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            if (type == InsertPolicy::IGNORE) {
+            if (type == InsertMode::IGNORE) {
                 auto it = _map.find(key, hash);
                 if (it != _map.end() && it->second.get_value() != NullIndexValue) {
                     nfound++;
@@ -1109,7 +1109,7 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
-                  size_t* num_found, const std::vector<size_t>& idxes, const InsertPolicy& type) override {
+                  size_t* num_found, const std::vector<size_t>& idxes, const InsertMode& mode) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1119,7 +1119,7 @@ public:
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
-            if (type == InsertPolicy::IGNORE) {
+            if (type == InsertMode::IGNORE) {
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
@@ -1148,7 +1148,7 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                  const std::vector<size_t>& idxes, const InsertPolicy& type) override {
+                  const std::vector<size_t>& idxes, const InsertMode& mode) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1158,7 +1158,7 @@ public:
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
-            if (type == InsertPolicy::IGNORE) {
+            if (type == InsertMode::IGNORE) {
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
@@ -1708,7 +1708,7 @@ Status ShardByLengthMutableIndex::get(size_t n, const Slice* keys, IndexValue* v
 
 Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                          size_t* num_found, std::map<size_t, KeysInfo>& not_founds_by_key_size,
-                                         const InsertPolicy& type) {
+                                         const InsertMode& mode) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
@@ -1743,7 +1743,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
 }
 
 Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, size_t* num_found,
-                                         std::map<size_t, KeysInfo>& not_founds_by_key_size, const InsertPolicy& type) {
+                                         std::map<size_t, KeysInfo>& not_founds_by_key_size, const InsertMode& mode) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
@@ -3808,7 +3808,7 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
 }
 
 Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                               IOStat* stat, const InsertPolicy& type) {
+                               IOStat* stat, const InsertMode& mode) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     MonotonicStopWatch watch;

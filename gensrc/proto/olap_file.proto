@@ -107,6 +107,14 @@ message RowsetTxnMetaPB {
     optional int32 auto_increment_partial_update_column_uid = 7;
 }
 
+// when primary key is duplicated, if the InsertMode is
+//     1. upsert, the newer record will replace the old record.
+//     2. ignore, it will keep the old record and ignore the newer one.
+enum InsertMode {
+    UPSERT = 0;
+    IGNORE = 1;
+}
+
 message RowsetMetaPB {
     required int64 deprecated_rowset_id = 1;
     optional int64 partition_id = 2;
@@ -175,8 +183,8 @@ message RowsetMetaPB {
     optional uint32 max_compact_input_rowset_id = 61;
     // global transaction id
     optional int64 gtid = 62;
-    // insert ignore or upsert
-    optional bool insert_ignore = 63;
+    // insert mode
+    optional InsertMode insert_mode = 63 [default = UPSERT];
 }
 
 enum DataFileType {

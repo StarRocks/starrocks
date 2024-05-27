@@ -343,7 +343,7 @@ Status DeltaWriter::_init() {
     writer_context.segments_overlap = OVERLAPPING;
     writer_context.global_dicts = _opt.global_dicts;
     writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
-    writer_context.insert_ignore = _opt.insert_ignore;
+    writer_context.insert_mode = _opt.insert_mode;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
@@ -644,7 +644,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
 
 void DeltaWriter::_reset_mem_table() {
     if (!_schema_initialized) {
-        _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots, _opt.insert_ignore);
+        _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots, _opt.insert_mode);
         _schema_initialized = true;
     }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
