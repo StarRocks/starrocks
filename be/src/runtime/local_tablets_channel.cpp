@@ -144,7 +144,9 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 }
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                                    PTabletWriterAddBatchResult* response) {
+                                    PTabletWriterAddBatchResult* response, bool* close_channel_ptr) {
+    bool& close_channel = *close_channel_ptr;
+    close_channel = false;
     MonotonicStopWatch watch;
     watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
@@ -279,8 +281,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // _channel_row_idx_start_points no longer used, release it to free memory.
     context->_channel_row_idx_start_points.reset();
-
-    bool close_channel = false;
 
     // NOTE: Must close sender *AFTER* the write requests submitted, otherwise a delta writer commit request may
     // be executed ahead of the write requests submitted by other senders.
@@ -434,9 +434,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // remove tablets channel and load channel after all things done
     if (close_channel) {
-        // LoadChannel can't get this tablets channel, and call update_profile()
-        // after removing it, so update the profile before remove
-        update_profile();
         _load_channel->remove_tablets_channel(_index_id);
     }
 }
@@ -965,6 +962,7 @@ void LocalTabletsChannel::update_profile() {
         return;
     }
     DeferOp defer([this]() { _is_updating_profile.store(false); });
+    _profile->inc_version();
     COUNTER_UPDATE(_profile_update_counter, 1);
     SCOPED_TIMER(_profile_update_timer);
 
@@ -1020,7 +1018,6 @@ void LocalTabletsChannel::update_profile() {
 }
 
 #define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
-
 #define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
 
 void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {

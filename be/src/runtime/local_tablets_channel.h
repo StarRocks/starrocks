@@ -49,8 +49,8 @@ public:
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
-    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response) override;
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   bool* close_channel_ptr) override;
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;

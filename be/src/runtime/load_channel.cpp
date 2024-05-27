@@ -167,7 +167,14 @@ void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& r
         response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
         return;
     }
-    channel->add_chunk(chunk, request, response);
+    bool close_channel;
+    channel->add_chunk(chunk, request, response, &close_channel);
+    if (close_channel && _should_enable_profile()) {
+        // If close_channel is true, the channel has been removed from _tablets_channels
+        // in TabletsChannel::add_chunk, so there will be no chance to get the channel to
+        // update the profile later. So update the profile here
+        channel->update_profile();
+    }
 }
 
 void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
@@ -338,26 +345,30 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
     return Status::OK();
 }
 
-std::vector<int64_t> LoadChannel::_get_index_ids() {
-    std::vector<int64_t> index_ids;
+std::vector<std::shared_ptr<TabletsChannel>> LoadChannel::_get_all_channels() {
+    std::vector<std::shared_ptr<TabletsChannel>> channels;
     std::lock_guard l(_lock);
-    index_ids.reserve(_tablets_channels.size());
+    channels.reserve(_tablets_channels.size());
     for (auto& it : _tablets_channels) {
-        index_ids.push_back(it.first);
+        channels.push_back(it.second);
     }
-    return index_ids;
+    return channels;
+}
+
+bool LoadChannel::_should_enable_profile() {
+    if (_enable_profile) {
+        return true;
+    }
+    if (_big_query_profile_threshold_ns <= 0) {
+        return false;
+    }
+    int64_t query_run_duration = MonotonicNanos() - _create_time_ns;
+    return query_run_duration > _big_query_profile_threshold_ns;
 }
 
 void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print_profile) {
-    // report profile if enable profile or the query has run for a long time
-    if (!_enable_profile) {
-        if (_big_query_profile_threshold_ns <= 0) {
-            return;
-        }
-        int64_t query_run_duration = MonotonicNanos() - _create_time_ns;
-        if (query_run_duration <= _big_query_profile_threshold_ns) {
-            return;
-        }
+    if (!_should_enable_profile()) {
+        return;
     }
 
     bool expect = false;
@@ -386,12 +397,9 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     SCOPED_TIMER(_profile_report_timer);
 
     COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
-    auto index_ids = _get_index_ids();
-    for (auto index_id : index_ids) {
-        auto channel = get_tablets_channel(index_id);
-        if (channel != nullptr) {
-            channel->update_profile();
-        }
+    auto channels = _get_all_channels();
+    for (auto& channel : channels) {
+        channel->update_profile();
     }
     _profile->inc_version();
 
