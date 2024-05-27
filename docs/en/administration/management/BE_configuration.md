@@ -3310,7 +3310,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### starlet_use_star_cache
 
-- Default: true (since v3.2.3)
+- Default: `false` in v3.1 and `true` since v3.2.3
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
