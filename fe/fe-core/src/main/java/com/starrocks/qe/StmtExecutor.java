@@ -220,7 +220,7 @@ public class StmtExecutor {
     private Coordinator coord = null;
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
-    private final boolean isProxy;
+    private boolean isProxy;
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
@@ -250,6 +250,10 @@ public class StmtExecutor {
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
+    }
+
+    public void setProxy() {
+        isProxy = true;
     }
 
     public Coordinator getCoordinator() {
