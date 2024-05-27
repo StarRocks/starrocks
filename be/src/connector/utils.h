@@ -14,24 +14,21 @@
 
 #pragma once
 
+#include <future>
+#include <queue>
 #include <string>
 #include <vector>
-#include <queue>
-#include <future>
 
 #include "common/statusor.h"
-#include "connector_chunk_sink.h"
 #include "exprs/expr_context.h"
 #include "fmt/format.h"
 #include "formats/column_evaluator.h"
 #include "formats/parquet/parquet_file_writer.h"
+#include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/types.h"
-#include "formats/utils.h"
 
 namespace starrocks::connector {
-
-class LocationProvider;
 
 class HiveUtils {
 public:

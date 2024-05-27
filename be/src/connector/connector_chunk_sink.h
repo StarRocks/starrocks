@@ -16,49 +16,64 @@
 
 #include <fmt/format.h>
 
-#include <boost/thread/future.hpp>
-#include <future>
-
 #include "column/chunk.h"
 #include "common/status.h"
+#include "connector/utils.h"
 #include "formats/file_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::connector {
 
-class IOStatusPoller;
+class AsyncFlushStreamPoller;
 class SinkOperatorMemoryManager;
 
 using Writer = formats::FileWriter;
 using Stream = io::AsyncFlushOutputStream;
 using WriterAndStream = std::pair<std::unique_ptr<Writer>, Stream*>;
-using CommitFunc = std::function<void(const formats::FileWriter::CommitResult& result)>;
+using CommitResult = formats::FileWriter::CommitResult;
+using CommitFunc = std::function<void(const CommitResult& result)>;
 
 class ConnectorChunkSink {
 public:
-    ConnectorChunkSink() = default;
+    ConnectorChunkSink(std::vector<std::string> partition_columns,
+                       std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
+                       std::unique_ptr<LocationProvider> location_provider,
+                       std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
+                       RuntimeState* state);
 
-    virtual ~ConnectorChunkSink() = default;
-
-    virtual Status init() = 0;
-
-    virtual Status add(ChunkPtr chunk) = 0;
-
-    virtual Status finish() = 0;
-
-    void set_io_poller(IOStatusPoller* poller) {
-        _io_poller = poller;
-    }
+    void set_io_poller(AsyncFlushStreamPoller* poller) { _io_poller = poller; }
 
     void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) {
         _op_mem_mgr = op_mem_mgr;
     }
 
+    virtual ~ConnectorChunkSink() = default;
+
+    Status init();
+
+    Status add(ChunkPtr chunk);
+
+    Status finish();
+
+    Status rollback();
+
 protected:
-    IOStatusPoller* _io_poller = nullptr;
+    virtual void callback_on_commit(const CommitResult& result) = 0;
+
+    AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
+
+    std::vector<std::string> _partition_column_names;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
+    std::unique_ptr<LocationProvider> _location_provider;
+    std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
+    int64_t _max_file_size;
+    RuntimeState* _state;
+    std::vector<std::function<void()>> _rollback_actions;
+
+    std::unordered_map<std::string, WriterAndStream> _writer_stream_pairs;
+    inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 };
 
 struct ConnectorChunkSinkContext {

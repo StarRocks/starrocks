@@ -12,11 +12,11 @@ namespace starrocks::connector {
 /// own a FIFO queue of `io::AsyncFlushOutputStream`
 /// client periodically poll the state of async io operations via `poll()`
 /// each `io::AsyncFlushOutputStream` will be destroyed once its async status is ready and fetched
-class IOStatusPoller {
+class AsyncFlushStreamPoller {
 public:
     using Stream = io::AsyncFlushOutputStream;
 
-    IOStatusPoller() = default;
+    AsyncFlushStreamPoller() = default;
 
     void enqueue(std::unique_ptr<Stream> stream) {
         auto async_status = stream->io_status();

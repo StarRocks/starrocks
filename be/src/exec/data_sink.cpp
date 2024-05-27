@@ -179,13 +179,13 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
 //        *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
 //        break;
 //    }
-//    case TDataSinkType::HIVE_TABLE_SINK: {
-//        if (!thrift_sink.__isset.hive_table_sink) {
-//            return Status::InternalError("Missing hive table sink");
-//        }
-//        *sink = std::make_unique<HiveTableSink>(state->obj_pool(), output_exprs);
-//        break;
-//    }
+    case TDataSinkType::HIVE_TABLE_SINK: {
+        if (!thrift_sink.__isset.hive_table_sink) {
+            return Status::InternalError("Missing hive table sink");
+        }
+        *sink = std::make_unique<HiveTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
     case TDataSinkType::TABLE_FUNCTION_TABLE_SINK: {
         if (!thrift_sink.__isset.table_function_table_sink) {
             return Status::InternalError("Missing table function table sink");
@@ -402,9 +402,9 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 //    } else if (typeid(*this) == typeid(starrocks::IcebergTableSink)) {
 //        auto* iceberg_table_sink = down_cast<starrocks::IcebergTableSink*>(this);
 //        RETURN_IF_ERROR(iceberg_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
-//    } else if (typeid(*this) == typeid(starrocks::HiveTableSink)) {
-//        auto* hive_table_sink = down_cast<starrocks::HiveTableSink*>(this);
-//        RETURN_IF_ERROR(hive_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+    } else if (typeid(*this) == typeid(starrocks::HiveTableSink)) {
+        auto* hive_table_sink = down_cast<starrocks::HiveTableSink*>(this);
+        RETURN_IF_ERROR(hive_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(starrocks::TableFunctionTableSink)) {
         auto* table_function_table_sink = down_cast<starrocks::TableFunctionTableSink*>(this);
         RETURN_IF_ERROR(table_function_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));

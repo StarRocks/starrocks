@@ -42,24 +42,8 @@ public:
 
     ~FileChunkSink() override = default;
 
-    Status init() override;
-
-    Status add(ChunkPtr chunk) override;
-
-    Status finish() override;
-
-    void callback_on_success(const formats::FileWriter::CommitResult& result);
-
 private:
-    const std::vector<std::string> _partition_column_names;
-    std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
-    std::unique_ptr<LocationProvider> _location_provider;
-    std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
-    const int64_t _max_file_size;
-    RuntimeState* _state;
-
-    std::unordered_map<std::string, WriterAndStream> _writer_stream_pairs;
-    inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
+    void callback_on_commit(const formats::FileWriter::CommitResult& result) override;
 };
 
 struct FileChunkSinkContext : public ConnectorChunkSinkContext {

@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "connector/hive_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -23,7 +24,6 @@
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
-#include "hive_chunk_sink.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -35,9 +35,9 @@ DataSourceProviderPtr HiveConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<HiveDataSourceProvider>(scan_node, plan_node);
 }
 
-//std::unique_ptr<ConnectorChunkSinkProvider> HiveConnector::create_data_sink_provider() const {
-//    return std::make_unique<HiveChunkSinkProvider>();
-//}
+std::unique_ptr<ConnectorChunkSinkProvider> HiveConnector::create_data_sink_provider() const {
+    return std::make_unique<HiveChunkSinkProvider>();
+}
 
 // ================================
 

@@ -14,7 +14,8 @@ class SinkOperatorMemoryManager {
 public:
     SinkOperatorMemoryManager() = default;
 
-    void init(std::unordered_map<std::string, WriterAndStream>* writer_stream_pairs, IOStatusPoller* io_poller, CommitFunc commit_func) {
+    void init(std::unordered_map<std::string, WriterAndStream>* writer_stream_pairs, AsyncFlushStreamPoller* io_poller,
+              CommitFunc commit_func) {
         _candidates = writer_stream_pairs;
         _commit_func = commit_func;
         _async_io_poller = io_poller;
@@ -61,7 +62,7 @@ public:
 private:
     std::unordered_map<std::string, WriterAndStream>* _candidates = nullptr; // owned by sink operator
     CommitFunc _commit_func;
-    IOStatusPoller* _async_io_poller = nullptr;
+    AsyncFlushStreamPoller* _async_io_poller = nullptr;
     std::atomic_int64_t _releasable_memory{0};
 };
 

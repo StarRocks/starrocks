@@ -66,7 +66,7 @@ public:
         int64_t max_size_{0};
     };
 
-    using SliceChunkPtr = std::shared_ptr<SliceChunk>;
+    using SliceChunkPtr = SliceChunk*;
     using Task = std::function<void()>;
 
     AsyncFlushOutputStream(std::unique_ptr<WritableFile> file, PriorityThreadPool* io_executor, RuntimeState* runtime_state) : _file(std::move(file)), _io_executor(io_executor), _runtime_state(runtime_state) {}
@@ -78,7 +78,7 @@ public:
         while (size > 0) {
             // append a new buffer if queue is empty or the last buffer is full
             if (_slice_chunk_queue.empty() || _slice_chunk_queue.back()->is_full()) {
-                _slice_chunk_queue.push_back(std::make_shared<SliceChunk>(BUFFER_MAX_SIZE));
+                _slice_chunk_queue.push_back(new SliceChunk(BUFFER_MAX_SIZE));
             }
             SliceChunkPtr& last_chunk = _slice_chunk_queue.back();
             int64_t appended_bytes = last_chunk->append(data, size);
@@ -94,16 +94,16 @@ public:
                 _slice_chunk_queue.pop_front();
                 _releasable_bytes.fetch_add(chunk->get_buffer()->capacity());
 
-                auto task = [this, chunk = std::move(chunk)]() mutable {
+                auto task = [this, chunk]() {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                     CurrentThread::current().set_query_id(_runtime_state->query_id());
                     CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
                     auto buffer = chunk->get_buffer();
-                    DeferOp op([this, capacity = buffer->capacity()] {
+                    DeferOp op([this, chunk, capacity = buffer->capacity()] {
                         _releasable_bytes.fetch_sub(capacity);
+                        delete chunk;
                     });
                     auto status = _file->append(Slice(buffer->data(), buffer->size()));
-                    chunk = nullptr;
                     {
                         std::scoped_lock lock(_mutex);
                         _io_status.update(status);
@@ -148,16 +148,16 @@ public:
             auto chunk = _slice_chunk_queue.front();
             _slice_chunk_queue.pop_front();
             _releasable_bytes.fetch_add(chunk->get_buffer()->capacity());
-            auto task = [&, chunk = std::move(chunk)]() mutable{
+            auto task = [&, chunk]() {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                 CurrentThread::current().set_query_id(_runtime_state->query_id());
                 CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
                 auto buffer = chunk->get_buffer();
-                DeferOp op([this, capacity = buffer->capacity()] {
+                DeferOp op([this, chunk, capacity = buffer->capacity()] {
                     _releasable_bytes.fetch_sub(capacity);
+                    delete chunk;
                 });
                 auto status = _file->append(Slice(buffer->data(), buffer->size()));
-                chunk = nullptr;
                 {
                     std::scoped_lock lock(_mutex);
                     _io_status.update(status);

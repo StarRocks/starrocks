@@ -35,75 +35,14 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
                              std::unique_ptr<LocationProvider> location_provider,
                              std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
                              RuntimeState* state)
-        : ConnectorChunkSink(),
-          _partition_column_names(std::move(partition_columns)),
-          _partition_column_evaluators(std::move(partition_column_evaluators)),
-          _location_provider(std::move(location_provider)),
-          _file_writer_factory(std::move(file_writer_factory)),
-          _max_file_size(max_file_size),
-          _state(state) {
-}
+        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                             std::move(location_provider), std::move(file_writer_factory), max_file_size, state) {}
 
-Status FileChunkSink::init() {
-    RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
-    RETURN_IF_ERROR(_file_writer_factory->init());
-    _op_mem_mgr->init(&_writer_stream_pairs, _io_poller, std::bind_front(&FileChunkSink::callback_on_success, this));
-    return Status::OK();
-}
-
-// requires that input chunk belongs to a single partition (see LocalKeyPartitionExchange)
-Status FileChunkSink::add(ChunkPtr chunk) {
-    std::string partition = DEFAULT_PARTITION;
-    bool partitioned = !_partition_column_names.empty();
-    if (partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name_nullable(_partition_column_names,
-                                                                            _partition_column_evaluators, chunk.get()));
+void FileChunkSink::callback_on_commit(const CommitResult& result) {
+    _rollback_actions.push_back(std::move(result.rollback_action));
+    if (result.io_status.ok()) {
+        _state->update_num_rows_load_sink(result.file_statistics.record_count);
     }
-
-    auto it = _writer_stream_pairs.find(partition);
-    if (it != _writer_stream_pairs.end()) {
-        Writer* writer = it->second.first.get();
-        if (writer->get_written_bytes() >= _max_file_size) {
-            callback_on_success(writer->commit());
-            _writer_stream_pairs.erase(it);
-            auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
-            ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->createAsync(path));
-            std::unique_ptr<Writer> new_writer =  std::move(new_writer_and_stream.writer);
-            std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
-            RETURN_IF_ERROR(new_writer->init());
-            RETURN_IF_ERROR(new_writer->write(chunk));
-            _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
-            _io_poller->enqueue(std::move(new_stream));
-        } else {
-            RETURN_IF_ERROR(writer->write(chunk));
-        }
-    } else {
-        auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
-        ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->createAsync(path));
-        std::unique_ptr<Writer> new_writer =  std::move(new_writer_and_stream.writer);
-        std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
-        RETURN_IF_ERROR(new_writer->init());
-        RETURN_IF_ERROR(new_writer->write(chunk));
-        _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
-        _io_poller->enqueue(std::move(new_stream));
-    }
-
-    return Status::OK();
-}
-
-Status FileChunkSink::finish() {
-    for (auto& [_, writer_and_stream] : _writer_stream_pairs) {
-        callback_on_success(writer_and_stream.first->commit());
-    }
-    return Status::OK();
-}
-
-void FileChunkSink::callback_on_success(const formats::FileWriter::CommitResult& result) {
-    if (!result.io_status.ok()) {
-        return;
-    }
-    LOG(INFO) << "sink num_rows = " << result.file_statistics.record_count;
-    _state->update_num_rows_load_sink(result.file_statistics.record_count);
 }
 
 StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(

@@ -25,7 +25,7 @@ namespace starrocks::pipeline {
 ConnectorSinkOperator::ConnectorSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                              int32_t driver_sequence,
                                              std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
-                                             std::unique_ptr<connector::IOStatusPoller> io_poller,
+                                             std::unique_ptr<connector::AsyncFlushStreamPoller> io_poller,
                                              std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
                                              connector::SinkOperatorMemoryManager* op_mem_mgr,
                                              FragmentContext* fragment_context)
@@ -108,7 +108,7 @@ Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
         int32_t id, std::unique_ptr<connector::ConnectorChunkSinkProvider> data_sink_provider,
         std::shared_ptr<connector::ConnectorChunkSinkContext> sink_context, FragmentContext* fragment_context)
-        : OperatorFactory(id, "connector sink operator", Operator::s_pseudo_plan_node_id_for_final_sink),
+        : OperatorFactory(id, "connector_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _data_sink_provider(std::move(data_sink_provider)),
           _sink_context(std::move(sink_context)),
           _fragment_context(fragment_context) {
@@ -118,7 +118,7 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto chunk_sink = _data_sink_provider->create_chunk_sink(_sink_context, driver_sequence).value();
-    auto io_poller = std::make_unique<connector::IOStatusPoller>();
+    auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
     chunk_sink->set_io_poller(io_poller.get());
     auto op_mem_mgr = _sink_mem_mgr->create_child_manager();
     chunk_sink->set_operator_mem_mgr(op_mem_mgr);
