@@ -34,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
 
 public final class MaterializedViewMetricsEntity implements IMaterializedViewMetricsEntity {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsEntity.class);
@@ -87,17 +88,32 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     // record the materialized view's refresh job duration only if it's refreshed successfully.
     public Histogram histRefreshJobDuration;
 
-    public final String dbName;
-    public final String mvName;
+    public Optional<String> dbNameOpt = Optional.empty();
+    public Optional<String> mvNameOpt = Optional.empty();
+
     public MaterializedViewMetricsEntity(MetricRegistry metricRegistry, MvId mvId) {
         this.metricRegistry = metricRegistry;
         this.mvId = mvId;
+        initMaterializedViewMetrics();
+        initDbAndTableName();
+    }
+
+    public boolean initDbAndTableName() {
+        if (dbNameOpt.isPresent() && mvNameOpt.isPresent()) {
+            return true;
+        }
+
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getDb(mvId.getDbId());
-        dbName = (db != null) ? db.getFullName() : "";
-        Table table = (db != null) ? db.getTable(mvId.getId()) : null;
-        mvName = (table != null) ? table.getName() : "";
-        initMaterializedViewMetrics();
+        if (db != null) {
+            dbNameOpt = Optional.of(db.getFullName());
+            Table table = db.getTable(mvId.getId());
+            if (table != null) {
+                mvNameOpt = Optional.of(table.getName());
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
