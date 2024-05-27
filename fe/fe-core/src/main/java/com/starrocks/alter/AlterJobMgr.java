@@ -620,7 +620,7 @@ public class AlterJobMgr {
             db.writeUnlock();
         }
 
-        // the following ops should done outside db lock. because it contain synchronized create operation
+        // the following ops should be done outside db lock. because it contains synchronized create operation
         if (needProcessOutsideDatabaseLock) {
             Preconditions.checkState(alterClauses.size() == 1);
             AlterClause alterClause = alterClauses.get(0);
