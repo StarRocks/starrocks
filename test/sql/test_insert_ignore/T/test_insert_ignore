@@ -1,0 +1,60 @@
+-- name: test_insert_ignore
+CREATE DATABASE IF NOT EXISTS insert_ignore;
+
+DROP TABLE IF EXISTS insert_ignore.column_insert_ignore;
+
+CREATE TABLE IF NOT EXISTS insert_ignore.column_insert_ignore (
+        k1 int,
+        v1 varchar(16),
+        v2 DATE NOT NULL COMMENT "YYYY-MM-DD",
+        v3 TINYINT COMMENT "range [-128, 127]"
+)
+PRIMARY KEY (k1)
+DISTRIBUTED BY HASH(`k1`)
+properties('replication_num' = '1');
+
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (1,'a', "2222-12-22", 33);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (2,'b', "2222-12-23", 34);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (3,'c', "2222-12-24", 35);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (4,'d', "2222-12-25", 36);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (5,'e', "2222-12-26", 37);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (6,'f', "2222-12-27", 38);
+
+select * from insert_ignore.column_insert_ignore order by k1;
+
+INSERT IGNORE INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (5,'f', "2222-12-26", 26),(6,'e', "2222-12-26", 27),(7,'h', "2222-12-27", 38),(8,'g', "2222-12-27", 39);
+
+select * from insert_ignore.column_insert_ignore order by k1;
+
+-- only first 9 was inserted, the second 9 was ignored
+INSERT IGNORE INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (9,'a', "2222-12-22", 33), (9,'b', "2222-12-23", 34);
+
+select * from insert_ignore.column_insert_ignore where k1=9 order by k1;
+
+DROP TABLE IF EXISTS insert_ignore.column_insert_ignore;
+
+CREATE TABLE IF NOT EXISTS insert_ignore.column_insert_ignore (
+        k1 int,
+        v1 varchar(16),
+        v2 DATE NOT NULL COMMENT "YYYY-MM-DD",
+        v3 TINYINT COMMENT "range [-128, 127]"
+)
+PRIMARY KEY (k1)
+DISTRIBUTED BY HASH(`k1`)
+properties('replication_num' = '1', 'enable_persistent_index' = 'true');
+
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (1,'a', "2222-12-22", 33);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (2,'b', "2222-12-23", 34);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (3,'c', "2222-12-24", 35);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (4,'d', "2222-12-25", 36);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (5,'e', "2222-12-26", 37);
+INSERT INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (6,'f', "2222-12-27", 38);
+
+select * from insert_ignore.column_insert_ignore order by k1;
+
+INSERT IGNORE INTO insert_ignore.column_insert_ignore(k1, v1, v2, v3) VALUES (5,'f', "2222-12-26", 26),(6,'e', "2222-12-26", 27),(7,'h', "2222-12-27", 38),(8,'g', "2222-12-27", 39);
+
+select * from insert_ignore.column_insert_ignore order by k1;
+
+DROP TABLE IF EXISTS insert_ignore.column_insert_ignore;
+
