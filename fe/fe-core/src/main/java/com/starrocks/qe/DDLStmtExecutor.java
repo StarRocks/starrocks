@@ -643,7 +643,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().createView(stmt);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().createView(stmt);
             });
             return null;
         }

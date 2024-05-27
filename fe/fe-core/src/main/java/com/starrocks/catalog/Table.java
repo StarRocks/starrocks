@@ -116,16 +116,21 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         TABLE_FUNCTION,
         @SerializedName("PAIMON")
         PAIMON,
-        @SerializedName("HIVE_VIEW")
-        HIVE_VIEW,
         @SerializedName("ODPS")
         ODPS,
         @SerializedName("BLACKHOLE")
         BLACKHOLE,
         @SerializedName("KUDU")
         KUDU,
+<<<<<<< HEAD
         @SerializedName("METADATA")
         METADATA;
+=======
+        @SerializedName("HIVE_VIEW")
+        HIVE_VIEW,
+        @SerializedName("ICEBERG_VIEW")
+        ICEBERG_VIEW;
+>>>>>>> 92d883094e ([Feature] support iceberg view based on rest catalog (#46071))
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -303,8 +308,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.HIVE_VIEW;
     }
 
+    public boolean isIcebergView() {
+        return type == TableType.ICEBERG_VIEW;
+    }
+
     public boolean isView() {
-        return isOlapView() || isHiveView();
+        return isOlapView() || isConnectorView();
+    }
+
+    public boolean isConnectorView() {
+        return isHiveView() || isIcebergView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -843,6 +856,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return !type.equals(TableType.MATERIALIZED_VIEW) &&
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
                 !type.equals(TableType.VIEW) &&
-                !type.equals(TableType.HIVE_VIEW);
+                !isConnectorView();
     }
 }

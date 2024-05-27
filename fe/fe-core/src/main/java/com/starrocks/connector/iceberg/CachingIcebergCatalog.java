@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.mysql.MysqlCommand;
@@ -40,6 +41,7 @@ import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
+import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
@@ -176,6 +178,19 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
         delegate.renameTable(dbName, tblName, newTblName);
         invalidateCache(new IcebergTableName(dbName, tblName));
+    }
+
+    @Override
+    public boolean createView(ConnectorViewDefinition connectorViewDefinition, boolean replace) {
+        return delegate.createView(connectorViewDefinition, replace);
+    }
+
+    public boolean dropView(String dbName, String viewName) {
+        return delegate.dropView(dbName, viewName);
+    }
+
+    public View getView(String dbName, String viewName) {
+        return delegate.getView(dbName, viewName);
     }
 
     @Override
