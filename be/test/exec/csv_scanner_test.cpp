@@ -1055,7 +1055,11 @@ TEST_P(CSVScannerTest, test_column_count_inconsistent) {
     std::string line;
     line.resize(1024);
     rfile.getline(line.data(), line.size());
+<<<<<<< HEAD
     auto found = line.find("Value count does not match column count. Expect 4, but got 5");
+=======
+    auto found = line.find("Target column count: 4 doesn't match source value column count: 5");
+>>>>>>> 148f382412 ([Enhancement] Improve column mismatch error message when loading csv files (#46095))
     ASSERT_TRUE(found != std::string::npos);
     rfile.close();
 

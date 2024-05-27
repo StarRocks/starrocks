@@ -39,6 +39,29 @@ std::string string_2_asc(const std::string& input) {
     return output;
 }
 
+<<<<<<< HEAD
+=======
+static std::string make_column_count_not_matched_error_message(int expected_count, int actual_count,
+                                                               CSVParseOptions& parse_options) {
+    std::stringstream error_msg;
+    error_msg << "Target column count: " << expected_count
+              << " doesn't match source value column count: " << actual_count << ". "
+              << "Column separator: " << string_2_asc(parse_options.column_delimiter) << ", "
+              << "Row delimiter: " << string_2_asc(parse_options.row_delimiter);
+    return error_msg.str();
+}
+
+static std::string make_value_type_not_matched_error_message(int field_pos, const Slice& field,
+                                                             const SlotDescriptor* slot) {
+    std::stringstream error_msg;
+    error_msg << "The field (name = " << slot->col_name() << ", pos = " << field_pos << ") is out of range. "
+              << "Type: " << slot->type().debug_string() << ", Value: " << field.to_string();
+    return error_msg.str();
+}
+
+static constexpr int REPORT_ERROR_MAX_NUMBER = 50;
+
+>>>>>>> 148f382412 ([Enhancement] Improve column mismatch error message when loading csv files (#46095))
 const std::string& CSVScanner::ScannerCSVReader::filename() {
     return _file->filename();
 }
