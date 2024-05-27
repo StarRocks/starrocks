@@ -46,13 +46,13 @@
 #endif
 #include <zlib.h>
 
+#include "boost/container_hash/hash.hpp"
 #include "gen_cpp/Types_types.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
 #include "util/cpu_info.h"
 #include "util/int96.h"
 #include "util/murmur_hash3.h"
-#include "boost/container_hash/hash.hpp"
 
 namespace starrocks {
 

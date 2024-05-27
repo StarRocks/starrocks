@@ -14,13 +14,13 @@
 
 #include "io/direct_s3_output_stream.h"
 
+#include <aws/core/utils/stream/PreallocatedStreamBuf.h>
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/CompleteMultipartUploadRequest.h>
 #include <aws/s3/model/CreateMultipartUploadRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/model/UploadPartRequest.h>
 #include <fmt/format.h>
-#include <aws/core/utils/stream/PreallocatedStreamBuf.h>
 
 #include "common/logging.h"
 
@@ -34,10 +34,9 @@ public:
               std::iostream(this) {}
 };
 
-DirectS3OutputStream::DirectS3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object)
-        : _client(std::move(client)),
-          _bucket(std::move(bucket)),
-          _object(std::move(object)) {
+DirectS3OutputStream::DirectS3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket,
+                                           std::string object)
+        : _client(std::move(client)), _bucket(std::move(bucket)), _object(std::move(object)) {
     DCHECK(_client != nullptr);
 }
 

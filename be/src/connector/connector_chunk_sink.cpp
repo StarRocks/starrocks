@@ -87,11 +87,10 @@ Status ConnectorChunkSink::finish() {
     return Status::OK();
 }
 
-Status ConnectorChunkSink::rollback() {
+void ConnectorChunkSink::rollback() {
     for (auto& action : _rollback_actions) {
         action();
     }
-    return Status::OK();
 }
 
 } // namespace starrocks::connector

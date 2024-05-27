@@ -19,11 +19,11 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
 #include "runtime/current_thread.h"
 #include "util/debug_util.h"
-#include "formats/orc/orc_memory_pool.h"
 
 namespace starrocks::formats {
 
@@ -503,7 +503,7 @@ Status ORCFileWriterFactory::init() {
 }
 
 StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write=true}, path));
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
@@ -515,18 +515,19 @@ StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::st
                                            rollback_action, _executors, _runtime_state);
 }
 
-StatusOr<WriterAndStream> ORCFileWriterFactory::createAsync(const string &path) const {
+StatusOr<WriterAndStream> ORCFileWriterFactory::createAsync(const string& path) const {
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
     auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
     auto types = ColumnEvaluator::types(_column_evaluators);
-    auto async_output_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
+    auto async_output_stream =
+            std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto orc_output_stream = std::make_shared<AsyncOrcOutputStream>(async_output_stream.get());
     auto writer = std::make_unique<ORCFileWriter>(path, orc_output_stream, _column_names, types,
-                                                      std::move(column_evaluators), _compression_type, _parsed_options,
-                                                      rollback_action, _executors, _runtime_state);
+                                                  std::move(column_evaluators), _compression_type, _parsed_options,
+                                                  rollback_action, _executors, _runtime_state);
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),

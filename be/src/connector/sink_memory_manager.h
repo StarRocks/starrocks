@@ -1,10 +1,10 @@
 #pragma once
 
-#include "common/config.h"
-#include "runtime/mem_tracker.h"
-#include "formats/file_writer.h"
-#include "connector/connector_chunk_sink.h"
 #include "async_io_poller.h"
+#include "common/config.h"
+#include "connector/connector_chunk_sink.h"
+#include "formats/file_writer.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks::connector {
 
@@ -21,9 +21,7 @@ public:
         _async_io_poller = io_poller;
     }
 
-    bool has_victim() {
-        return !_candidates->empty();
-    }
+    bool has_victim() { return !_candidates->empty(); }
 
     bool kill_victim() {
         if (_candidates->empty()) {
@@ -34,7 +32,8 @@ public:
         std::string partition;
         WriterAndStream* victim = nullptr;
         for (auto& [key, writer_and_stream] : *_candidates) {
-            if (victim == nullptr || victim->first->get_written_bytes() <= writer_and_stream.first->get_written_bytes()) {
+            if (victim == nullptr ||
+                victim->first->get_written_bytes() <= writer_and_stream.first->get_written_bytes()) {
                 partition = key;
                 victim = &writer_and_stream;
             }
@@ -55,9 +54,7 @@ public:
     }
 
     // thread-safe
-    int64_t releasable_memory() {
-        return _releasable_memory.load();
-    }
+    int64_t releasable_memory() { return _releasable_memory.load(); }
 
 private:
     std::unordered_map<std::string, WriterAndStream>* _candidates = nullptr; // owned by sink operator
@@ -65,7 +62,6 @@ private:
     AsyncFlushStreamPoller* _async_io_poller = nullptr;
     std::atomic_int64_t _releasable_memory{0};
 };
-
 
 /// 1. manage all sink operators in a query
 /// 2. calculates releasable memory across all
@@ -98,15 +94,15 @@ public:
         if (_mem_tracker == nullptr || !_mem_tracker->has_limit()) {
             return true;
         }
-        LOG_EVERY_SECOND(INFO) << "query pool consumption: " << _mem_tracker->consumption() << " releasable_memory: " << _total_releasable_memory();
+        LOG_EVERY_SECOND(INFO) << "query pool consumption: " << _mem_tracker->consumption()
+                               << " releasable_memory: " << _total_releasable_memory();
 
-        auto available_memory = [this]() {
-            return _mem_tracker->limit() - _mem_tracker->consumption();
-        };
+        auto available_memory = [this]() { return _mem_tracker->limit() - _mem_tracker->consumption(); };
 
         if (available_memory() <= _low_watermark_bytes) {
             // trigger early close
-            while (child_manager->has_victim() && available_memory() + _total_releasable_memory() < _high_watermark_bytes) {
+            while (child_manager->has_victim() &&
+                   available_memory() + _total_releasable_memory() < _high_watermark_bytes) {
                 bool found = child_manager->kill_victim();
                 DCHECK(found);
                 child_manager->update_releasable_memory();
@@ -127,9 +123,7 @@ public:
 private:
     int64_t _total_releasable_memory() {
         int64_t total = 0;
-        std::for_each(_children.begin(), _children.end(), [&](auto& child) {
-            total += child->releasable_memory();
-        });
+        std::for_each(_children.begin(), _children.end(), [&](auto& child) { total += child->releasable_memory(); });
         return total;
     }
 
@@ -145,5 +139,4 @@ private:
     std::vector<std::unique_ptr<SinkOperatorMemoryManager>> _children; // size of dop
 };
 
-} // starrocks::connector
-
+} // namespace starrocks::connector

@@ -14,17 +14,17 @@
 
 #pragma once
 
+#include <future>
+#include <queue>
 #include <string>
 #include <vector>
-#include <queue>
-#include <future>
 
 #include "common/statusor.h"
+#include "fs/fs.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/raw_container.h"
-#include "fs/fs.h"
 
 namespace starrocks::io {
 
@@ -49,17 +49,11 @@ public:
             return to_write_bytes;
         }
 
-        bool is_full() {
-            return buffer_.size() == max_size_;
-        }
+        bool is_full() { return buffer_.size() == max_size_; }
 
-        bool is_empty() {
-            return buffer_.empty();
-        }
+        bool is_empty() { return buffer_.empty(); }
 
-        Buffer* get_buffer() {
-            return &buffer_;
-        }
+        Buffer* get_buffer() { return &buffer_; }
 
     private:
         Buffer buffer_;
@@ -69,12 +63,14 @@ public:
     using SliceChunkPtr = SliceChunk*;
     using Task = std::function<void()>;
 
-    AsyncFlushOutputStream(std::unique_ptr<WritableFile> file, PriorityThreadPool* io_executor, RuntimeState* runtime_state) : _file(std::move(file)), _io_executor(io_executor), _runtime_state(runtime_state) {}
+    AsyncFlushOutputStream(std::unique_ptr<WritableFile> file, PriorityThreadPool* io_executor,
+                           RuntimeState* runtime_state)
+            : _file(std::move(file)), _io_executor(io_executor), _runtime_state(runtime_state) {}
 
     Status write(const uint8_t* data, int64_t size) {
         _total_size += size;
         DCHECK(_slice_chunk_queue.empty() || (_slice_chunk_queue.size() == 1 && !_slice_chunk_queue.front()->is_full()))
-            << "empty or at most one not full buffer";
+                << "empty or at most one not full buffer";
         while (size > 0) {
             // append a new buffer if queue is empty or the last buffer is full
             if (_slice_chunk_queue.empty() || _slice_chunk_queue.back()->is_full()) {
@@ -126,22 +122,16 @@ public:
         return Status::OK();
     }
 
-    const std::string& filename() const {
-        return _file->filename();
-    }
+    const std::string& filename() const { return _file->filename(); }
 
-    int64_t tell() const {
-        return _total_size;
-    }
+    int64_t tell() const { return _total_size; }
 
-    int64_t releasable_memory() const {
-        return _releasable_bytes.load();
-    }
+    int64_t releasable_memory() const { return _releasable_bytes.load(); }
 
     // called exactly once
     Status close() {
         DCHECK(_slice_chunk_queue.empty() || (_slice_chunk_queue.size() == 1 && !_slice_chunk_queue.front()->is_full()))
-                        << "empty or at most one not full buffer";
+                << "empty or at most one not full buffer";
 
         std::vector<Task> to_enqueue_tasks;
         if (!_slice_chunk_queue.empty() || !_slice_chunk_queue.front()->is_empty()) {
@@ -192,15 +182,11 @@ public:
     }
 
     // called exactly once
-    std::future<Status> io_status() {
-        return _promise.get_future();
-    };
+    std::future<Status> io_status() { return _promise.get_future(); };
 
     void enqueue_tasks_and_maybe_submit_task(std::vector<Task> tasks) {
         std::scoped_lock lock(_mutex);
-        std::for_each(tasks.begin(), tasks.end(), [&](auto& task) {
-            _task_queue.push(task);
-        });
+        std::for_each(tasks.begin(), tasks.end(), [&](auto& task) { _task_queue.push(task); });
 
         if (_has_in_flight_io) {
             return;

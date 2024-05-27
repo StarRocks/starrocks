@@ -18,11 +18,11 @@
 #include <unordered_map>
 
 #include "column/chunk.h"
+#include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
-#include "util/runtime_profile.h"
-#include "connector/utils.h"
 #include "gutil/hash/hash.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
@@ -269,8 +269,7 @@ KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMe
                                              std::vector<ExprContext*> partition_expr_ctxs, const size_t num_sinks)
         : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
           _source(source),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
-}
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
 
 Status KeyPartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));

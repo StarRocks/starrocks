@@ -78,7 +78,7 @@ public:
 
     StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const override;
 
-    StatusOr<WriterAndStream> createAsync(const std::string &path) const override;
+    StatusOr<WriterAndStream> createAsync(const std::string& path) const override;
 
 private:
     std::shared_ptr<FileSystem> _fs;

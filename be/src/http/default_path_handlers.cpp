@@ -220,7 +220,8 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     if (mem_tracker != nullptr) {
         (*output) << "<pre>"
                   << "Mem Limit: " << PrettyPrinter::print(mem_tracker->limit(), TUnit::BYTES, true) << std::endl
-                  << "Mem Consumption: " << PrettyPrinter::print(mem_tracker->consumption(), TUnit::BYTES, true) << std::endl
+                  << "Mem Consumption: " << PrettyPrinter::print(mem_tracker->consumption(), TUnit::BYTES, true)
+                  << std::endl
                   << "</pre>";
     } else {
         (*output) << "<pre>"

@@ -42,9 +42,7 @@ public:
         return Status::NotSupported("DirectS3OutputStream::write_aliased");
     };
 
-    Status skip(int64_t count) override {
-        return Status::NotSupported("DirectS3OutputStream::skip");
-    }
+    Status skip(int64_t count) override { return Status::NotSupported("DirectS3OutputStream::skip"); }
 
     StatusOr<Buffer> get_direct_buffer() override {
         return Status::NotSupported("DirectS3OutputStream::get_direct_buffer");

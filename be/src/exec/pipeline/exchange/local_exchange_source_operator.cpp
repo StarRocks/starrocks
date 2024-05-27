@@ -53,7 +53,8 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
     return Status::OK();
 }
 
-Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::string>& partition_key, std::unique_ptr<Chunk> chunk) {
+Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::string>& partition_key,
+                                              std::unique_ptr<Chunk> chunk) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return Status::OK();
@@ -228,9 +229,8 @@ int64_t LocalExchangeSourceOperator::_key_partition_max_rows() const {
 }
 
 LocalExchangeSourceOperator::PartialChunks& LocalExchangeSourceOperator::_max_row_partition_chunks() {
-    auto max_it = std::max_element(_partition_key2partial_chunks.begin(), _partition_key2partial_chunks.end(), [](auto& lhs, auto& rhs) {
-        return lhs.second.num_rows < rhs.second.num_rows;
-    });
+    auto max_it = std::max_element(_partition_key2partial_chunks.begin(), _partition_key2partial_chunks.end(),
+                                   [](auto& lhs, auto& rhs) { return lhs.second.num_rows < rhs.second.num_rows; });
 
     return max_it->second;
 }

@@ -53,10 +53,10 @@
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
+#include "io/async_flush_output_stream.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/priority_thread_pool.hpp"
-#include "io/async_flush_output_stream.h"
 #include "util/runtime_profile.h"
 
 namespace parquet {

@@ -1309,8 +1309,7 @@ CONF_mInt64(jit_lru_cache_size, "0");
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
-  
-  
+
 // Set to true to enable socket_keepalive option in brpc
 CONF_mBool(brpc_socket_keepalive, "false");
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
@@ -1319,6 +1318,5 @@ CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 CONF_mInt64(connector_sink_mem_high_watermark_percent, "30");
 CONF_mInt64(connector_sink_mem_low_watermark_percent, "20");
 CONF_mInt64(connector_sink_mem_min_watermark_percent, "10");
-
 
 } // namespace starrocks::config

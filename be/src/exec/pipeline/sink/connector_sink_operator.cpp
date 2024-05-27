@@ -16,9 +16,9 @@
 
 #include <utility>
 
+#include "connector/async_io_poller.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
-#include "connector/async_io_poller.h"
 
 namespace starrocks::pipeline {
 
@@ -46,7 +46,7 @@ Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 
 void ConnectorSinkOperator::close(RuntimeState* state) {
     if (_is_cancelled) {
-        // TODO: add rollback interface for chunk sink and invoke here
+        _connector_chunk_sink->rollback();
     }
 #ifndef BE_TEST
     Operator::close(state);
@@ -123,7 +123,8 @@ OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, 
     auto op_mem_mgr = _sink_mem_mgr->create_child_manager();
     chunk_sink->set_operator_mem_mgr(op_mem_mgr);
     return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,
-                                                   driver_sequence, std::move(chunk_sink), std::move(io_poller), _sink_mem_mgr, op_mem_mgr, _fragment_context);
+                                                   driver_sequence, std::move(chunk_sink), std::move(io_poller),
+                                                   _sink_mem_mgr, op_mem_mgr, _fragment_context);
 }
 
 } // namespace starrocks::pipeline

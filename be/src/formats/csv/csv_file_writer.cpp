@@ -148,19 +148,19 @@ StatusOr<std::shared_ptr<FileWriter>> CSVFileWriterFactory::create(const std::st
                                            rollback_action, _executors, _runtime_state);
 }
 
-
-StatusOr<WriterAndStream> CSVFileWriterFactory::createAsync(const std::string &path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write=true}, path));
+StatusOr<WriterAndStream> CSVFileWriterFactory::createAsync(const std::string& path) const {
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
     auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
     auto types = ColumnEvaluator::types(_column_evaluators);
-    auto async_output_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
+    auto async_output_stream =
+            std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto csv_output_stream = std::make_shared<csv::AsyncOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
     auto writer = std::make_unique<CSVFileWriter>(path, csv_output_stream, _column_names, types,
-                                                      std::move(column_evaluators), _compression_type, _parsed_options,
-                                                      rollback_action, _executors, _runtime_state);
+                                                  std::move(column_evaluators), _compression_type, _parsed_options,
+                                                  rollback_action, _executors, _runtime_state);
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),

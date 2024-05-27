@@ -1,9 +1,11 @@
-#include <queue>
-#include <future>
 #include <arrow/status.h>
+
+#include <future>
+#include <queue>
+
 #include "common/status.h"
-#include "io/async_flush_output_stream.h"
 #include "formats/utils.h"
+#include "io/async_flush_output_stream.h"
 
 #pragma once
 
@@ -21,8 +23,8 @@ public:
     void enqueue(std::unique_ptr<Stream> stream) {
         auto async_status = stream->io_status();
         _queue.push_back({
-            .stream = std::move(stream),
-            .async_status = std::move(async_status),
+                .stream = std::move(stream),
+                .async_status = std::move(async_status),
         });
     }
 
@@ -62,4 +64,3 @@ private:
 };
 
 } // namespace starrocks::connector
-

@@ -36,11 +36,11 @@
 #include "fs/output_stream_adapter.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
+#include "io/direct_s3_output_stream.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
 #include "util/hdfs_util.h"
 #include "util/random.h"
-#include "io/direct_s3_output_stream.h"
 
 namespace starrocks {
 

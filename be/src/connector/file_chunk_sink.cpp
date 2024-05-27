@@ -17,6 +17,8 @@
 #include <future>
 
 #include "column/datum.h"
+#include "connector/async_io_poller.h"
+#include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
@@ -25,8 +27,6 @@
 #include "formats/utils.h"
 #include "util/url_coding.h"
 #include "utils.h"
-#include "connector/sink_memory_manager.h"
-#include "connector/async_io_poller.h"
 
 namespace starrocks::connector {
 

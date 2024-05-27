@@ -44,9 +44,7 @@ public:
 
     void set_io_poller(AsyncFlushStreamPoller* poller) { _io_poller = poller; }
 
-    void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) {
-        _op_mem_mgr = op_mem_mgr;
-    }
+    void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
 
     virtual ~ConnectorChunkSink() = default;
 
@@ -56,7 +54,7 @@ public:
 
     Status finish();
 
-    Status rollback();
+    void rollback();
 
 protected:
     virtual void callback_on_commit(const CommitResult& result) = 0;
