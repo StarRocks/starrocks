@@ -630,7 +630,8 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
         }
     }
     if (new_schema->schema_version() > ori_tablet_schema->schema_version()) {
-        _tablet_schema = _tablet->update_max_version_schema(new_schema);
+        _tablet->update_max_version_schema(new_schema);
+        _tablet_schema = new_schema;
     } else {
         _tablet_schema = ori_tablet_schema;
     }
