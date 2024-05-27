@@ -93,6 +93,7 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TInsertMode;
 import com.starrocks.thrift.TOlapTableColumnParam;
 import com.starrocks.thrift.TOlapTableIndexSchema;
 import com.starrocks.thrift.TOlapTableIndexTablets;
@@ -141,7 +142,7 @@ public class OlapTableSink extends DataSink {
     private TPartialUpdateMode partialUpdateMode;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     private long automaticBucketSize = 0;
-    private boolean isInsertIgnore = false;
+    private TInsertMode insertMode = TInsertMode.UPSERT_MODE;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -165,7 +166,6 @@ public class OlapTableSink extends DataSink {
             }
         }
         this.partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
-
     }
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
@@ -179,11 +179,11 @@ public class OlapTableSink extends DataSink {
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
                          boolean nullExprInAutoIncrement, boolean enableAutomaticPartition, long warehouseId,
-                         boolean isInsertIgnore) {
+                         TInsertMode insertMode) {
         this(dstTable, tupleDescriptor, partitionIds, writeQuorum, enableReplicatedStorage,
                 nullExprInAutoIncrement, enableAutomaticPartition);
         this.warehouseId = warehouseId;
-        this.isInsertIgnore = isInsertIgnore;
+        this.insertMode = insertMode;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -209,7 +209,7 @@ public class OlapTableSink extends DataSink {
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
-        tSink.setInsert_ignore(isInsertIgnore);
+        tSink.setInsert_mode(insertMode);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
