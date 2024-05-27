@@ -533,7 +533,9 @@
                                 "id": "administration/management/monitoring/Monitor_and_Alert"
                             },
                             "items": [
-                                "administration/management/monitoring/metrics"
+                                "administration/management/monitoring/metrics",
+                                "administration/management/monitoring/metrics-materialized_view",
+                                "administration/management/monitoring/metrics-shared-data"
                             ]
                         },
                         "administration/management/audit_loader",
@@ -1980,7 +1982,9 @@
                                 "id": "administration/management/monitoring/Monitor_and_Alert"
                             },
                             "items": [
-                                "administration/management/monitoring/metrics"
+                                "administration/management/monitoring/metrics",
+                                "administration/management/monitoring/metrics-materialized_view",
+                                "administration/management/monitoring/metrics-shared-data"
                             ]
                         },
                         "administration/management/audit_loader",
