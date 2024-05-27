@@ -321,6 +321,12 @@ This variable is introduced to solve compatibility issues.
 Default value: `true`.
 -->
 
+### enable_datacache_async_populate_mode
+
+* **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
+* **Default**: false
+* **Introduced in**: v3.2.7
+
 ### enable_connector_adaptive_io_tasks
 
 * **Description**: Whether to adaptively adjust the number of concurrent I/O tasks when querying external tables. Default value is `true`. If this feature is not enabled, you can manually set the number of concurrent I/O tasks using the variable `connector_io_tasks_per_scan_operator`.

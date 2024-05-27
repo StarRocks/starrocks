@@ -194,6 +194,12 @@ SELECT /*+ SET_VAR
 * 默认值：true
 * 引入版本：v3.1.11，v3.2.5
 
+### enable_datacache_async_populate_mode
+
+* 描述：是否使用异步方式进行 Data Cache 填充。系统默认使用同步方式进行填充，即在查询数据时同步填充进行缓存填充。
+* 默认值：false
+* 引入版本：v3.2.7
+
 ### query_including_mv_names
 
 * 描述：指定需要在查询执行过程中包含的异步物化视图的名称。您可以使用此变量来限制候选物化视图的数量，并提高优化器中的查询改写性能。此项优先于 `query_excluding_mv_names` 生效。
