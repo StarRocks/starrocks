@@ -301,7 +301,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
 
         if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
-            throw new SemanticException("Materialized view query statement only support select");
+            throw new SemanticException("Materialized view query statement only support a single query blocks");
         }
 
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
