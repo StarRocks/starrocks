@@ -1034,16 +1034,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by storage page cache.
 
-<<<<<<< HEAD
-#### column_partial_update_apply_total
-=======
 ### jit_cache_mem_bytes
 
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
 ### column_partial_update_apply_total
->>>>>>> 8122a03cdb ([Doc] Break Metrics into pages (#46231))
 
 - Unit: Count
 - Description: Total number of APPLY for partial updates by column (Column mode)
