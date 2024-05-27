@@ -30,8 +30,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "formats/file_writer.h"
-#include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
+#include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs.h"
@@ -71,8 +71,7 @@ FileWriter::CommitResult ParquetFileWriter::commit() {
     }
 
     if (auto status = _output_stream->Close(); !status.ok()) {
-        result.io_status.update(
-                Status::IOError(fmt::format("{}: {}", "close output stream error", status.message())));
+        result.io_status.update(Status::IOError(fmt::format("{}: {}", "close output stream error", status.message())));
     }
 
     if (result.io_status.ok()) {
@@ -454,7 +453,7 @@ Status ParquetFileWriterFactory::init() {
 }
 
 StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const std::string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write=true}, path));
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
@@ -466,21 +465,22 @@ StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const std
                                                rollback_action, _executors, _runtime_state);
 }
 
-StatusOr<WriterAndStream> ParquetFileWriterFactory::createAsync(const std::string &path) const {
+StatusOr<WriterAndStream> ParquetFileWriterFactory::createAsync(const std::string& path) const {
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
     auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
     auto types = ColumnEvaluator::types(_column_evaluators);
-    auto async_output_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
+    auto async_output_stream =
+            std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());
     auto writer = std::make_unique<ParquetFileWriter>(path, parquet_output_stream, _column_names, types,
-                                               std::move(column_evaluators), _compression_type, _parsed_options,
-                                               rollback_action, _executors, _runtime_state);
+                                                      std::move(column_evaluators), _compression_type, _parsed_options,
+                                                      rollback_action, _executors, _runtime_state);
     return WriterAndStream{
-        .writer = std::move(writer),
-        .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
+            .stream = std::move(async_output_stream),
     };
 }
 

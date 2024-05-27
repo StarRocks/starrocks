@@ -20,9 +20,9 @@
 #include "common/status.h"
 #include "formats/column_evaluator.h"
 #include "fs/fs.h"
+#include "io/async_flush_output_stream.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
-#include "io/async_flush_output_stream.h"
 
 namespace starrocks::formats {
 

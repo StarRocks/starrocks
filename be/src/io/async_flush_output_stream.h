@@ -134,7 +134,7 @@ public:
                 << "empty or at most one not full buffer";
 
         std::vector<Task> to_enqueue_tasks;
-        if (!_slice_chunk_queue.empty() || !_slice_chunk_queue.front()->is_empty()) {
+        if (!_slice_chunk_queue.empty() && !_slice_chunk_queue.front()->is_empty()) {
             auto chunk = _slice_chunk_queue.front();
             _slice_chunk_queue.pop_front();
             _releasable_bytes.fetch_add(chunk->get_buffer()->capacity());

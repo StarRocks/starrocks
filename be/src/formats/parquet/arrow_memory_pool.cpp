@@ -14,8 +14,8 @@
 
 #include "arrow_memory_pool.h"
 
-#include "glog/logging.h"
 #include "common/compiler_util.h"
+#include "glog/logging.h"
 
 namespace starrocks {
 
@@ -90,22 +90,16 @@ public:
 
     /// The number of bytes that were allocated and not yet free'd through
     /// this allocator.
-    int64_t bytes_allocated() const override {
-        return _bytes_allocated.load();
-    }
+    int64_t bytes_allocated() const override { return _bytes_allocated.load(); }
 
     /// Return peak memory allocation in this memory pool
     ///
     /// \return Maximum bytes allocated. If not known (or not implemented),
     /// returns -1
-    int64_t max_memory() const override {
-        return -1;
-    }
+    int64_t max_memory() const override { return -1; }
 
     /// The name of the backend used by this MemoryPool (e.g. "system" or "jemalloc").
-    std::string backend_name() const override {
-        return "starrocks";
-    }
+    std::string backend_name() const override { return "starrocks"; }
 
 private:
     ALIGN_CACHE_LINE std::atomic_int64_t _bytes_allocated{0};
