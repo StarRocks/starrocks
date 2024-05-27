@@ -893,7 +893,6 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& state = state_entry->value();
-    _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
     auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
     const int segments_size = txnlog.op_write().rowset().segments_size();
@@ -915,6 +914,7 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
              segment_id++) {
             st = state.load_segment(segment_id, params, metadata_ptr->version(), false /* resolve conflict*/,
                                     true /* need lock */);
+            _update_state_cache.update_object_size(state_entry, state.memory_usage());
             if (!st.ok()) {
                 break;
             }
