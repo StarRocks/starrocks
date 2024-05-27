@@ -258,7 +258,7 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - For the naming conventions of partitions, see [System limits](../../../reference/System_limit.md).
-- Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
@@ -329,7 +329,7 @@ Description
 
 You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
-- The partitioning column can be of a date or integer type.
+- Before v3.3.0, columns for the range partitioning only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME. Since v3.3.0, three specific time functions can be used as columns for the range partitioning. For detailed usage, see [Data distribution](../../../table_design/Data_distribution.md#manually-create-partitions).
 - If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
 For more information, see [Data distribution](../../../table_design/Data_distribution.md).
@@ -385,11 +385,9 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
 
 ### ORDER BY
 
-Since version 3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
+Since v3.0, Primary Key tables support defining sort keys using `ORDER BY`. Since v3.3, Duplicate Key tables, Aggregate tables, and Unique Key tables support defining sort keys using `ORDER BY`.
 
-> **NOTICE**
->
-> If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
+For more descriptions of sort keys, see [Sort keys and prefix indexes](../../../table_design/indexes/Prefix_index_sort_key.md).
 
 ### PROPERTIES
 
@@ -616,7 +614,7 @@ PROPERTIES (
 
 #### Create cloud-native tables for StarRocks Shared-data cluster
 
-To [use your StarRocks Shared-data cluster](../../../deployment/shared_data/shared_data.mdx), you must create cloud-native tables with the following properties:
+To use your StarRocks Shared-data cluster, you must create cloud-native tables with the following properties:
 
 ```SQL
 PROPERTIES (

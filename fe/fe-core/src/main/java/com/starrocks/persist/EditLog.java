@@ -95,7 +95,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -296,6 +295,11 @@ public class EditLog {
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartitionName());
                     globalStateMgr.getLocalMetastore().replayDropPartition(info);
+                    break;
+                }
+                case OperationType.OP_DROP_PARTITIONS: {
+                    DropPartitionsInfo info = (DropPartitionsInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDropPartitions(info);
                     break;
                 }
                 case OperationType.OP_MODIFY_PARTITION:
@@ -523,7 +527,7 @@ public class EditLog {
                 case OperationType.OP_BACKEND_STATE_CHANGE:
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
                     Backend be = (Backend) journal.getData();
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateBackendState(be);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
@@ -891,6 +895,9 @@ public class EditLog {
                         case SCHEMA_CHANGE:
                             globalStateMgr.getSchemaChangeHandler().replayRemoveAlterJobV2(log);
                             break;
+                        case OPTIMIZE:
+                            globalStateMgr.getSchemaChangeHandler().replayRemoveAlterJobV2(log);
+                            break;
                         default:
                             break;
                     }
@@ -1200,10 +1207,11 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
-                case OperationType.OP_RECOVER_PARTITION_VERSION:
+                case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
                     break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1233,11 +1241,10 @@ public class EditLog {
      */
     private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
         long startTimeNano = System.nanoTime();
-        // do not check whether global state mgr is leader in non shared-nothing mode,
+        // do not check whether global state mgr is leader when writing star mgr journal,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
-        Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
-                        GlobalStateMgr.getCurrentState().isLeader(),
+        Preconditions.checkState(op == OperationType.OP_STARMGR || GlobalStateMgr.getCurrentState().isLeader(),
                 "Current node is not leader, but " +
                         GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
@@ -1387,6 +1394,10 @@ public class EditLog {
 
     public void logDropPartition(DropPartitionInfo info) {
         logEdit(OperationType.OP_DROP_PARTITION, info);
+    }
+
+    public void logDropPartitions(DropPartitionsInfo info) {
+        logEdit(OperationType.OP_DROP_PARTITIONS, info);
     }
 
     public void logErasePartition(long partitionId) {

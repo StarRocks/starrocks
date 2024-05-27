@@ -23,8 +23,6 @@ StarRocks supports asynchronous materialized views from v2.4. The major differen
 
 ## Synchronous materialized view
 
-StarRocks shared-data clusters support synchronous materialized views from v3.3.0 onwards.
-
 ### Syntax
 
 ```SQL
@@ -274,12 +272,16 @@ Properties of the asynchronous materialized view. You can modify the properties 
     - If `mv_rewrite_staleness_second` is not specified, the materialized view can be used for query rewrite only when its data is consistent with the data in all base tables.
     - If `mv_rewrite_staleness_second` is specified, the materialized view can be used for query rewrite when its last refresh is within the staleness time interval.
   - `loose`: Enable automatic query rewrite directly, and no consistency check is required.
-- `storage_volume`: The name of the storage volume used to store the asynchronous materialized view you want to create if you are using a [shared-data cluster](../../../deployment/shared_data/shared_data.mdx). This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
+- `storage_volume`: The name of the storage volume used to store the asynchronous materialized view you want to create if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
 - `force_external_table_query_rewrite`: Whether to enable query rewrite for external catalog-based materialized views. This property is supported from v3.2. Valid values:
   - `true`: Enable query rewrite for external catalog-based materialized views.
   - `false` (Default value): Disable query rewrite for external catalog-based materialized views.
 
   Because strong data consistency is not guaranteed between base tables and external catalog-based materialized views, this feature is set to `false` by default. When this feature is enabled, the materialized view is used for query rewrite in accordance with the rule specified in `query_rewrite_consistency`.
+- `enable_query_rewrite`: Whether to use the materialized view for query rewrite. When there are many materialized views, query rewrite based on materialized views can impact the optimizer's time consumption. With this property, you can control whether the materialized view can be used for query rewrite. This feature is supported from v3.3.0 onwards. Valid values:
+  - `default` (Default): The system will not perform semantic checks on the materialized view, but only the SPJG-type materialized views can be used for query rewrite. Note that if the text-based query rewrite is enabled, non-SPJG-type materialized views can also be used for query rewrite.
+  - `true`: The system will perform semantic checks when creating or modifying the materialized view. If the materialized view is not eligible for query rewrite (that is, the definition of the materialized view is not an SPJG-type query), a failure will be returned.
+  - `false`: The materialized view will not be used for query rewrite.
 
 > **CAUTION**
 >

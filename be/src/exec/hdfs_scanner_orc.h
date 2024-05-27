@@ -39,6 +39,7 @@ public:
 
 private:
     StatusOr<size_t> _do_get_next(ChunkPtr* chunk);
+    StatusOr<size_t> _do_get_next_count(ChunkPtr* chunk);
 
     // it means if we can skip this file without reading.
     // Normally it happens when we peek file column statistics,

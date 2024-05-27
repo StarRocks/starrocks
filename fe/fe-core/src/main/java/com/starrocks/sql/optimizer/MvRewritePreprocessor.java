@@ -224,10 +224,13 @@ public class MvRewritePreprocessor {
     }
 
     public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
         // MV Rewrite will be used when cbo is enabled.
-        if (context.getOptimizerConfig().isRuleBased()) {
+        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
+                !sessionVariable.isEnableMaterializedViewRewrite()) {
             return;
         }
+
         try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
@@ -462,22 +465,21 @@ public class MvRewritePreprocessor {
 
     private List<MvWithPlanContext> getMVWithContext(MaterializedView mv) {
         if (!mv.isActive()) {
-            logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "inactive");
             return null;
         }
 
         List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
                 connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
         if (CollectionUtils.isEmpty(mvPlanContexts)) {
-            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
-                    mv.getName());
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan");
             return null;
         }
         List<MvWithPlanContext> mvWithPlanContexts = Lists.newArrayList();
         for (int i = 0; i < mvPlanContexts.size(); i++) {
             MvPlanContext mvPlanContext = mvPlanContexts.get(i);
             if (!mvPlanContext.isValidMvPlan()) {
-                logMVPrepare(connectContext, mv, "MV plan is not valid({}/{}): {}",
+                OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan {}/{}: {}",
                         i, mvPlanContexts.size(), mvPlanContext.getInvalidReason());
                 continue;
             }
@@ -493,7 +495,7 @@ public class MvRewritePreprocessor {
         if (mv.hasForeignKeyConstraints()) {
             return true;
         }
-        Set<Table> baseTables = mv.getBaseTableInfos().stream().map(x -> x.getTableChecked())
+        Set<Table> baseTables = mv.getBaseTableInfos().stream().map(x -> MvUtils.getTableChecked(x))
                 .filter(x -> !x.isView() && !x.isMaterializedView())
                 .collect(Collectors.toSet());
         Set<Table> extraTables =  baseTables.stream().filter(t -> !queryTables.contains(t)).collect(Collectors.toSet());
@@ -521,18 +523,19 @@ public class MvRewritePreprocessor {
                                                                 boolean force,
                                                                 Set<Table> queryTables) {
         if (!mv.isActive())  {
-            logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
             return Pair.create(false, "MV is not active");
         }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();
-            logMVPrepare(connectContext, mv, message);
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
             return Pair.create(false, message);
         }
         // if mv is a subset of query tables, it can be used for rewrite.
         if (CollectionUtils.isNotEmpty(queryTables) &&
                 !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
             return Pair.create(false, "MV contains extra tables besides FK-PK");
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
@@ -547,6 +550,7 @@ public class MvRewritePreprocessor {
                 String message = planContexts.stream()
                         .map(MvPlanContext::getInvalidReason)
                         .collect(Collectors.joining(";"));
+                OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
                 return Pair.create(false, "no valid plan: " + message);
             }
         }
@@ -732,8 +736,7 @@ public class MvRewritePreprocessor {
                 // mv's partitions to refresh
                 MvUpdateInfo mvUpdateInfo = getPartitionNamesToRefreshForMv(mv, true);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
-                    logMVPrepare(mv, "MV {} cannot be used for rewrite, " +
-                            "stale partitions {}", mv.getName(), mvUpdateInfo);
+                    OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;
                 }
                 Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
@@ -746,7 +749,7 @@ public class MvRewritePreprocessor {
                 ScalarOperator mvPartialPartitionPredicates =
                         mvPartialPartitionPredicate(mv, mvPlanContext, partitionNamesToRefresh);
                 if (mvPartialPartitionPredicates == null) {
-                    logMVPrepare(mv, "Get MV' partition compensate predicate failed: {}", mv.getName());
+                    OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "partition compensate fail");
                     continue;
                 }
                 logMVPrepare(mv, "MV compensate partition predicate: {}", mvPartialPartitionPredicates);
@@ -792,7 +795,7 @@ public class MvRewritePreprocessor {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    Optional<Table> baseTable = base.mayGetTable();
+                    Optional<Table> baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(base);
                     if (!baseTable.isPresent() || baseTable.get().isView()) {
                         continue;
                     }
@@ -809,10 +812,11 @@ public class MvRewritePreprocessor {
             StringBuilder sb = new StringBuilder();
             try {
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    if (!base.mayGetTable().isPresent()) {
+                    Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(base);
+                    if (!tableOptional.isPresent()) {
                         continue;
                     }
-                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(tableOptional.get()));
                     sb.append(String.format("base table %s version: %s; ", base, versionInfo));
                 }
             } catch (Exception e) {

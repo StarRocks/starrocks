@@ -27,7 +27,6 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -70,6 +69,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -87,6 +87,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -107,6 +108,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -330,9 +332,10 @@ public class MaterializedViewAnalyzer {
         /**
          * Retrieve all the tables from the input query statement and do normalization: if the query statement
          * contains views, retrieve the contained tables in the view recursively.
+         *
          * @param queryStatement : the input statement which need retrieve
          * @param context        : the session connect context
-         * @return               : Retrieve all the tables from the input query statement and do normalization.
+         * @return : Retrieve all the tables from the input query statement and do normalization.
          */
         private Map<TableName, Table> getNormalizedBaseTables(QueryStatement queryStatement, ConnectContext context) {
             Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
@@ -349,6 +352,7 @@ public class MaterializedViewAnalyzer {
         /**
          * Retrieve all the tables from the input query statement :
          * - if the query statement contains views, retrieve the contained tables in the view recursively.
+         *
          * @param queryStatement : the input statement which need retrieve
          * @param context        : the session connect context
          * @return
@@ -419,7 +423,7 @@ public class MaterializedViewAnalyzer {
 
         /**
          * when the materialized view's sort keys are not set by hand, choose the sort keys by iterating the columns
-         *  and find the satisfied columns as sort keys.
+         * and find the satisfied columns as sort keys.
          */
         List<String> chooseSortKeysByDefault(List<Column> mvColumns) {
             List<String> keyCols = Lists.newArrayList();
@@ -470,9 +474,10 @@ public class MaterializedViewAnalyzer {
 
         /**
          * NOTE: order or column names of the defined query may be changed when generating.
+         *
          * @param statement : creating materialized view statement
-         * @return          : Generate materialized view's columns and corresponding output expression index pair
-         *                      from creating materialized view statement.
+         * @return : Generate materialized view's columns and corresponding output expression index pair
+         * from creating materialized view statement.
          */
         private List<Pair<Column, Integer>> genMaterializedViewColumns(CreateMaterializedViewStatement statement) {
             List<String> columnNames = statement.getQueryStatement().getQueryRelation()
@@ -656,7 +661,7 @@ public class MaterializedViewAnalyzer {
                 // e.g. partition by date_trunc('month', dt)
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
                 String functionName = functionCallExpr.getFnName().getFunction();
-                if (!MaterializedViewPartitionFunctionChecker.FN_NAME_TO_PATTERN.containsKey(functionName)) {
+                if (!PartitionFunctionChecker.FN_NAME_TO_PATTERN.containsKey(functionName)) {
                     throw new SemanticException("Materialized view partition function " +
                             functionCallExpr.getFnName().getFunction() +
                             " is not supported yet.", functionCallExpr.getPos());
@@ -689,10 +694,11 @@ public class MaterializedViewAnalyzer {
 
         /**
          * Resolve the materialized view's partition expr's slot ref.
+         *
          * @param partitionColumnExpr : the materialized view's partition expr
          * @param connectContext      : connect context of the current session.
          * @param queryStatement      : the sub query statment that contains the partition column slot ref
-         * @return                    : return the resolved partition expr.
+         * @return : return the resolved partition expr.
          */
         private Expr resolvePartitionExpr(Expr partitionColumnExpr,
                                           ConnectContext connectContext,
@@ -734,8 +740,8 @@ public class MaterializedViewAnalyzer {
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
-                MaterializedViewPartitionFunctionChecker.CheckPartitionFunction checkPartitionFunction =
-                        MaterializedViewPartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
+                PartitionFunctionChecker.CheckPartitionFunction checkPartitionFunction =
+                        PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                 if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " is not support: " + expr.toSqlWithoutTbl(), functionCallExpr.getPos());
@@ -923,7 +929,11 @@ public class MaterializedViewAnalyzer {
             List<BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 if (table.isNativeTableOrMaterializedView()) {
-                    if (baseTableInfo.getTable().equals(table)) {
+                    Optional<Table> tableOptional = MvUtils.getTableWithIdentifier(baseTableInfo);
+                    if (tableOptional.isEmpty()) {
+                        continue;
+                    }
+                    if (tableOptional.get().equals(table)) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), table.getName()));
                         break;

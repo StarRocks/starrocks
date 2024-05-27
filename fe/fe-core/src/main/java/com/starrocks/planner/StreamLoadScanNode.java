@@ -53,8 +53,11 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.Config;
+import com.starrocks.common.CsvFormat;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -197,8 +200,9 @@ public class StreamLoadScanNode extends LoadScanNode {
             String sep = streamLoadInfo.getColumnSeparator().getColumnSeparator();
             byte[] setBytes = sep.getBytes(StandardCharsets.UTF_8);
             params.setColumn_separator(setBytes[0]);
-            if (setBytes.length > 50) {
-                throw new UserException("the column separator is limited to a maximum of 50 bytes");
+            if (setBytes.length > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH) {
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "column separator", 1,
+                        CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
             }
             if (setBytes.length > 1) {
                 params.setMulti_column_separator(sep);
@@ -210,8 +214,9 @@ public class StreamLoadScanNode extends LoadScanNode {
             String sep = streamLoadInfo.getRowDelimiter().getRowDelimiter();
             byte[] sepBytes = sep.getBytes(StandardCharsets.UTF_8);
             params.setRow_delimiter(sepBytes[0]);
-            if (sepBytes.length > 50) {
-                throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+            if (sepBytes.length > CsvFormat.MAX_ROW_DELIMITER_LENGTH) {
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "row delimiter",
+                        1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
             }
             if (sepBytes.length > 1) {
                 params.setMulti_row_delimiter(sep);
@@ -388,6 +393,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             rangeDesc.setStart_offset(0);
             rangeDesc.setSize(-1);
             rangeDesc.setNum_of_columns_from_file(paramCreateContext.tupleDescriptor.getSlots().size());
+            rangeDesc.setCompression_type(streamLoadInfo.getPayloadCompressionType());
             brokerScanRange.addToRanges(rangeDesc);
             brokerScanRange.setBroker_addresses(Lists.newArrayList());
             if (needAssignBE) {

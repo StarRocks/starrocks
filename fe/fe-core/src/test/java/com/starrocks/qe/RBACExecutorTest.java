@@ -26,6 +26,7 @@ import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -245,15 +246,16 @@ public class RBACExecutorTest {
 
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
-        new MockUp<CreateFunctionStmt>() {
+        new MockUp<PrivilegeStmtAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }
         };
 
-        new MockUp<PrivilegeStmtAnalyzer>() {
+        new MockUp<CreateFunctionAnalyzer>() {
             @Mock
-            public void analyze(ConnectContext context) throws AnalysisException {
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
             }
         };
 

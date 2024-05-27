@@ -26,10 +26,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public interface StatisticStorage {
-    default TableStatistic getTableStatistic(Long tableId, Long partitionId) {
-        return TableStatistic.unknown();
-    }
-
     // partitionId: TableStatistic
     default Map<Long, TableStatistic> getTableStatistics(Long tableId, Collection<Partition> partitions) {
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> TableStatistic.unknown()));

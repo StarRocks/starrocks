@@ -171,9 +171,10 @@ struct TBrokerRangeDesc {
     // columns parsed from file path should be after the columns read from file
     10: optional list<string> columns_from_path
     //  it's usefull when format_type == FORMAT_JSON
-    11: optional bool strip_outer_array;
-    12: optional string jsonpaths;
-    13: optional string json_root;
+    11: optional bool strip_outer_array
+    12: optional string jsonpaths
+    13: optional string json_root
+    14: optional Types.TCompressionType compression_type
 }
 
 enum TObjectStoreType {
@@ -541,6 +542,7 @@ struct TOlapScanNode {
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
   35: optional bool enable_prune_column_after_index_filter
+  36: optional bool enable_gin_filter
 }
 
 struct TJDBCScanNode {
@@ -655,6 +657,7 @@ struct THashJoinNode {
 
   // used in pipeline engine
   55: optional bool interpolate_passthrough = false
+  56: optional bool late_materialization = false
 }
 
 struct TMergeJoinNode {

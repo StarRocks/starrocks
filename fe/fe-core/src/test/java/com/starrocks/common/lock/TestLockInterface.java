@@ -30,6 +30,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class TestLockInterface {
@@ -38,12 +39,14 @@ public class TestLockInterface {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         Config.slow_lock_threshold_ms = 0;
         Config.lock_manager_enabled = true;
+        Config.lock_manager_enable_using_fine_granularity_lock = true;
         Config.lock_manager_enable_resolve_deadlock = true;
     }
 
     @After
     public void tearDown() {
         Config.lock_manager_enabled = false;
+        Config.lock_manager_enable_using_fine_granularity_lock = false;
         Config.lock_manager_enable_resolve_deadlock = false;
     }
 
@@ -214,6 +217,40 @@ public class TestLockInterface {
         };
 
         Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
+
+        Config.lock_manager_enabled = true;
+    }
+
+    @Test
+    public void testReentrantReadWriteTryLock() {
+        List<Database> dbs = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            dbs.add(new Database(i, "db" + i));
+        }
+        Locker locker = new Locker();
+        Config.lock_manager_enabled = false;
+
+        {
+            Assert.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+            Assert.assertTrue(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+            locker.unlockDatabases(dbs, LockType.WRITE);
+            locker.unlockDatabases(dbs, LockType.WRITE);
+        }
+
+        {
+            new MockUp<Locker>() {
+                @Mock
+                public boolean tryLockDatabase(Database database, LockType lockType, long timeout, TimeUnit unit) {
+                    if (database.getFullName().equalsIgnoreCase("db5")) {
+                        return false;
+                    }
+                    QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                    rwLock.exclusiveLock();
+                    return true;
+                }
+            };
+            Assert.assertFalse(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+        }
 
         Config.lock_manager_enabled = true;
     }

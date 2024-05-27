@@ -59,6 +59,57 @@ void ThriftRpcHelper::setup(ExecEnv* exec_env) {
     _s_exec_env = exec_env;
 }
 
+template <>
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<FrontendServiceClient>&)> callback,
+                                 ClientConnection<FrontendServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::protocol::TProtocolException& e) {
+        if (e.getType() == apache::thrift::protocol::TProtocolException::TProtocolExceptionType::INVALID_DATA) {
+            ss << "FE RPC response parsing failure, address=" << address << ".The FE may be busy, please retry later";
+        } else {
+            ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
+        }
+    } catch (apache::thrift::TException& e) {
+        ss << "FE RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
+template <>
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<BackendServiceClient>&)> callback,
+                                 ClientConnection<BackendServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << "BE/CN RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
+template <>
+Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback,
+                                 ClientConnection<TFileBrokerServiceClient>& client,
+                                 const TNetworkAddress& address) noexcept {
+    std::stringstream ss;
+    try {
+        callback(client);
+        return Status::OK();
+    } catch (apache::thrift::TException& e) {
+        ss << "Broker RPC failure, address=" << address << ", reason=" << e.what();
+    }
+
+    return Status::ThriftRpcError(ss.str());
+}
+
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms) {
@@ -69,27 +120,23 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         LOG(WARNING) << "Connect frontend failed, address=" << address << ", status=" << status.message();
         return status;
     }
-    try {
-        try {
-            callback(client);
-        } catch (apache::thrift::transport::TTransportException& e) {
-            status = client.reopen(timeout_ms);
-            if (!status.ok()) {
-                LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << status.message();
-                return status;
-            }
-            callback(client);
+
+    //  try 2 times.
+    for (int i = 0; i < 2; i++) {
+        status = rpc_impl(callback, client, address);
+        if (status.ok()) {
+            return Status::OK();
         }
-    } catch (apache::thrift::TException& e) {
-        std::stringstream ss;
-        ss << "call frontend service failed, address=" << address << ", reason=" << e.what();
-        LOG(WARNING) << ss.str();
-        SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms * 2));
-        // just reopen to disable this connection
-        (void)client.reopen(timeout_ms);
-        return Status::ThriftRpcError(ss.str());
+        LOG(WARNING) << status;
+        SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms));
+        // reopen failure will disable this connection to prevent it from being used again.
+        auto st = client.reopen(timeout_ms);
+        if (!st.ok()) {
+            LOG(WARNING) << "client reopen failed. address=" << address << ", status=" << st.message();
+            break;
+        }
     }
-    return Status::OK();
+    return status;
 }
 
 template Status ThriftRpcHelper::rpc<FrontendServiceClient>(

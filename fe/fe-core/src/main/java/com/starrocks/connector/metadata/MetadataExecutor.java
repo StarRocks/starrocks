@@ -33,17 +33,31 @@ public class MetadataExecutor {
         ConnectContext context = job.getContext();
         context.setThreadLocalInfo();
         String sql = job.getSql();
-        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, job.getSinkType());
+        ExecPlan execPlan;
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+            execPlan = StatementPlanner.plan(parsedStmt, context, job.getSinkType());
+        } catch (Exception e) {
+            context.getState().setError(e.getMessage());
+            return;
+        }
+
         this.executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
-        // TODO(stephen): add execution
+
+        LOG.info("Start to execute metadata collect job on {}.{}.{}", job.getCatalogName(), job.getDbName(), job.getTableName());
+        executor.executeStmtWithResultQueue(context, execPlan, job.getResultQueue());
     }
 
     public Coordinator getCoordinator() {
-        return executor.getCoordinator();
+        if (executor != null) {
+            return executor.getCoordinator();
+        } else {
+            return null;
+        }
     }
 
 }

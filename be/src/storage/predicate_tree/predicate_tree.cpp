@@ -20,6 +20,24 @@ namespace starrocks {
 // PredicateColumnNode
 // ------------------------------------------------------------------------------------
 
+Status PredicateColumnNode::evaluate(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection,
+                                     uint16_t from, uint16_t to) const {
+    return _col_pred->evaluate(chunk->get_column_by_id(_col_pred->column_id()).get(), selection, from, to);
+}
+Status PredicateColumnNode::evaluate_and(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection,
+                                         uint16_t from, uint16_t to) const {
+    return _col_pred->evaluate_and(chunk->get_column_by_id(_col_pred->column_id()).get(), selection, from, to);
+}
+Status PredicateColumnNode::evaluate_or(CompoundNodeContexts& contexts, const Chunk* chunk, uint8_t* selection,
+                                        uint16_t from, uint16_t to) const {
+    return _col_pred->evaluate_or(chunk->get_column_by_id(_col_pred->column_id()).get(), selection, from, to);
+}
+
+StatusOr<uint16_t> PredicateColumnNode::evaluate_branchless(const Chunk* chunk, uint16_t* sel,
+                                                            uint16_t sel_size) const {
+    return _col_pred->evaluate_branchless(chunk->get_column_by_id(_col_pred->column_id()).get(), sel, sel_size);
+}
+
 std::string PredicateColumnNode::debug_string() const {
     return strings::Substitute(R"({"pred":"$0"})", _col_pred->debug_string());
 }
@@ -62,6 +80,13 @@ PredicateTree PredicateTree::create(PredicateAndNode&& root) {
 
 PredicateTree::PredicateTree(PredicateAndNode&& root, uint32_t num_compound_nodes)
         : _root(std::move(root)), _compound_node_contexts(num_compound_nodes) {}
+
+Status PredicateTree::evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {
+    return _root.evaluate(_compound_node_contexts, chunk, selection, from, to);
+}
+Status PredicateTree::evaluate(const Chunk* chunk, uint8_t* selection) const {
+    return evaluate(chunk, selection, 0, chunk->num_rows());
+}
 
 template <CompoundNodeType Type>
 static void collect_column_ids(const PredicateCompoundNode<Type>& node, std::unordered_set<ColumnId>& column_ids) {
@@ -129,14 +154,8 @@ PredicateAndNode PredicateTree::release_root() {
     return std::move(_root);
 }
 
-ColumnPredicateMap PredicateTree::get_immediate_column_predicate_map() const {
-    ColumnPredicateMap col_pred_map;
-    for (const auto& [cid, col_children] : _root.col_children_map()) {
-        for (const auto& col_child : col_children) {
-            col_pred_map[cid].emplace_back(col_child.col_pred());
-        }
-    }
-    return col_pred_map;
+const ColumnPredicateMap& PredicateTree::get_immediate_column_predicate_map() const {
+    return _compound_node_contexts[0].cid_to_col_preds(_root);
 }
 
 } // namespace starrocks

@@ -35,8 +35,6 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
@@ -45,6 +43,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 
@@ -171,7 +171,7 @@ public class Index implements Writable {
     @Override
     public int hashCode() {
         return 31 * (Long.hashCode(indexId) + indexName.hashCode()
-                + columns.hashCode() + indexType.hashCode() +
+                + columns.hashCode() + ((indexType != null) ? indexType.hashCode() : 0) +
                 ((properties != null) ? properties.hashCode() : 0));
     }
 

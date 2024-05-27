@@ -300,6 +300,7 @@ void AsyncDeltaWriter::flush(Callback cb) {
 }
 
 void AsyncDeltaWriter::finish(DeltaWriterFinishMode mode, FinishCallback cb) {
+    TEST_SYNC_POINT_CALLBACK("AsyncDeltaWriter:enter_finish", this);
     _impl->finish(mode, std::move(cb));
 }
 

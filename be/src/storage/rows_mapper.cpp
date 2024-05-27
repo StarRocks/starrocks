@@ -33,6 +33,10 @@ Status RowsMapperBuilder::_init() {
 }
 
 Status RowsMapperBuilder::append(const std::vector<uint64_t>& rssid_rowids) {
+    if (rssid_rowids.empty()) {
+        // skip create rows mapper file when output rowset is empty.
+        return Status::OK();
+    }
     if (_wfile == nullptr) {
         RETURN_IF_ERROR(_init());
     }
@@ -131,6 +135,10 @@ StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_i
         return Status::NotFound(fmt::format("Not local disk found. tablet id: {}", tablet_id));
     }
     return data_dir->get_tmp_path() + "/" + fmt::format("{:016X}_{:016X}.crm", tablet_id, txn_id);
+}
+
+std::string local_rows_mapper_filename(Tablet* tablet, const std::string& rowset_id) {
+    return tablet->data_dir()->get_tmp_path() + "/" + fmt::format("{:016X}_{}.crm", tablet->tablet_id(), rowset_id);
 }
 
 } // namespace starrocks

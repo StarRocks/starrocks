@@ -1803,6 +1803,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：每个 Store 用以 Flush MemTable 的线程数。
 - 引入版本：-
 
+##### lake_flush_thread_num_per_store
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：在存算分离模式下，每个 Store 用以 Flush MemTable 的线程数。当该参数被设置为 `0` 时，系统使用 CPU 核数的两倍。
+当该参数被设置为小于 `0` 时，系统使用该参数的绝对值与 CPU 核数的乘积。
+- 引入版本：3.1.12, 3.2.7
+
 ##### max_runnings_transactions_per_txn_map
 
 - 默认值：100
@@ -1822,7 +1832,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
 ### 查询引擎
-
 
 ##### scanner_thread_pool_thread_num
 
@@ -2172,6 +2181,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：
 - 引入版本：-
 -->
+
+##### query_pool_spill_mem_limit_threshold
+
+- 默认值：1.0
+- 类型：Double
+- 单位：-
+- 是否动态：否
+- 描述：如果开启自动落盘功能, 当所有查询使用的内存超过 `query_pool memory limit * query_pool_spill_mem_limit_threshold` 时，系统触发中间结果落盘。
+- 引入版本：3.2.7
 
 ##### result_buffer_cancelled_interval_time
 
@@ -2729,38 +2747,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### parquet_late_materialization_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
+- 描述：是否使用延迟物化优化 Parquet 读性能。
 - 引入版本：-
--->
 
-<!--
+
 ##### parquet_late_materialization_v2_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
-- 引入版本：-
--->
+- 描述：是否使用 v2 版延迟物化优化 Parquet 读性能。v3.2 版本支持两个版本的 Parquet Reader 延迟物化，v3.3 版本仅保留 `parquet_late_materialization_enable` 延迟物化，并删除该变量。
+- 引入版本：v3.2
 
-<!--
 ##### parquet_page_index_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
-- 引入版本：-
--->
+- 描述：是否使用 Parquet Pageindex 信息优化读性能。
+- 引入版本：v3.3
 
 <!--
 ##### io_coalesce_read_max_buffer_size
@@ -2784,16 +2797,14 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
-<!--
 ##### io_coalesce_adaptive_lazy_active
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：根据谓词选择度，自适应决定是否将谓词列 IO 和非谓词列 IO 进行合并。
+- 引入版本：v3.2
 
 <!--
 ##### io_tasks_per_scan_operator
@@ -3137,6 +3148,51 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：指定 Query Cache 的大小。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
 - 引入版本：-
 
+##### enable_json_flat
+
+- 默认值：false
+- 类型：Boolean
+- 单位：
+- 是否动态：是
+- 描述：是否开启 Flat JSON 特性。开启后新导入的 JSON 数据会自动打平，提升 JSON 数据查询性能。
+- 引入版本：v3.3.0
+
+##### json_flat_null_factor
+
+- 默认值：0.3
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_sparsity_factor
+
+- 默认值：0.9
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_internal_column_min_limit
+
+- 默认值：5
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，JSON 内部字段数量限制，低于该数量的 JSON 不执行 Flat JSON 优化，默认为 5。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_column_max
+
+- 默认值：20
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，最多提取的子列数量，默认为 20。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
 ### 存算分离
 
 ##### starlet_port
@@ -3258,7 +3314,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。从 3.2.3 版本起，该参数默认值变为 `true`。
+- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
 - 引入版本：v3.1
 
 <!--

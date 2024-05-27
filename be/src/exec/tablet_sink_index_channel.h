@@ -48,6 +48,9 @@ namespace stream_load {
 class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
 
+template <typename T>
+void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf);
+
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
     // total execution time of a add_batch rpc

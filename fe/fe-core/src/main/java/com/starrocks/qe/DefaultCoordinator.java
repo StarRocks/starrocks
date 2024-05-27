@@ -52,6 +52,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlCommand;
@@ -105,7 +106,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -125,7 +125,7 @@ public class DefaultCoordinator extends Coordinator {
     /**
      * Protects all the fields below.
      */
-    private final Lock lock = new ReentrantLock();
+    private final Lock lock = new FairReentrantLock();
 
     /**
      * Overall status of the entire query.
@@ -467,6 +467,9 @@ public class DefaultCoordinator extends Coordinator {
     public void onFinished() {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         jobSpec.getSlotProvider().releaseSlot(slot);
+        // for async profile, if Be doesn't report profile in time, we upload the most complete profile
+        // into profile Manager here. IN other case, queryProfile.finishAllInstances just do nothing here
+        queryProfile.finishAllInstances(Status.OK);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -529,6 +532,13 @@ public class DefaultCoordinator extends Coordinator {
             // so we only set enable_profile to true when use non-pipeline engine.
             if (!jobSpec.isEnablePipeline()) {
                 jobSpec.getQueryOptions().setEnable_profile(true);
+            }
+            if (jobSpec.isBrokerLoad() && jobSpec.getQueryOptions().getBig_query_profile_threshold() == 0) {
+                jobSpec.getQueryOptions().setBig_query_profile_threshold(Config.default_big_load_profile_threshold_second * 1000);
+            }
+            // runtime load profile does not need to report too frequently
+            if (jobSpec.getQueryOptions().getRuntime_profile_report_interval() < 30) {
+                jobSpec.getQueryOptions().setRuntime_profile_report_interval(30);
             }
             List<Long> relatedBackendIds = coordinatorPreprocessor.getWorkerProvider().getSelectedWorkerIds();
             GlobalStateMgr.getCurrentState().getLoadMgr().initJobProgress(
@@ -1132,6 +1142,14 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public boolean isProfileAlreadyReported() {
         return this.queryProfile.isProfileAlreadyReported();
+    }
+
+    @Override
+    public String getWarehouseName() {
+        if (connectContext == null) {
+            return "";
+        }
+        return connectContext.getSessionVariable().getWarehouseName();
     }
 
     private void execShortCircuit() {

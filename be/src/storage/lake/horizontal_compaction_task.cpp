@@ -150,6 +150,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     int64_t total_num_rows = 0;
     int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
+    auto tablet_schema = _tablet.get_schema();
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
@@ -159,7 +160,8 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
-                const auto* column_reader = segment->column(i);
+                auto uid = tablet_schema->column(i).unique_id();
+                const auto* column_reader = segment->column_with_uid(uid);
                 if (column_reader == nullptr) {
                     continue;
                 }

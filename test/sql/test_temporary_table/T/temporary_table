@@ -59,6 +59,7 @@ insert into `t0` values (1,1),(2,2),(3,3);
 create temporary table `t1` as select * from `t0`;
 create temporary table `t1` as select * from `t0`;
 create temporary table if not exists `t1` as select * from `t0`;
+create temporary table `t2` as select /*+ SET_VAR(query_mem_limit=1)*/ * from `t0`;
 show create table `t1`;
 show tables;
 show temporary tables;
@@ -186,3 +187,12 @@ select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA
 drop temporary table `t`;
 
 select TABLE_CATALOG,TABLE_NAME,TABLE_TYPE,ENGINE,TABLE_ROWS,AVG_ROW_LENGTH,DATA_LENGTH,MAX_DATA_LENGTH,INDEX_LENGTH,DATA_FREE,AUTO_INCREMENT,TABLE_COMMENT from information_schema.temp_tables where `session`=(select session_id());
+
+
+-- name: test_create_analyze
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create analyze table t;

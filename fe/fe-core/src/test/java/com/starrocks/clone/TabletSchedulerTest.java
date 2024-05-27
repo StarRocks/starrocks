@@ -30,9 +30,11 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
@@ -67,7 +69,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.starrocks.catalog.KeysType.DUP_KEYS;
 
@@ -85,6 +86,7 @@ public class TabletSchedulerTest {
     TabletInvertedIndex tabletInvertedIndex;
     TabletSchedulerStat tabletSchedulerStat;
     FakeEditLog fakeEditLog;
+    LockManager lockManager;
 
     @Before
     public void setup() throws Exception {
@@ -92,6 +94,7 @@ public class TabletSchedulerTest {
         tabletInvertedIndex = new TabletInvertedIndex();
         tabletSchedulerStat = new TabletSchedulerStat();
         fakeEditLog = new FakeEditLog();
+        lockManager = new LockManager();
 
         new Expectations() {
             {
@@ -118,6 +121,10 @@ public class TabletSchedulerTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
             }
         };
 
@@ -190,7 +197,7 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
         Partition goodPartition = new Partition(6, "bueno", null, null);
-        Locker locker = new Locker();
+
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
@@ -208,6 +215,7 @@ public class TabletSchedulerTest {
 
         new Thread(() -> {
             for (int i = 0; i < 10; i++) {
+                Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
                     locker.lockDatabase(goodDB, LockType.READ);
@@ -258,7 +266,7 @@ public class TabletSchedulerTest {
         backendDisks1.put("/path11", td11);
         backendDisks1.put("/path12", td12);
         Backend be1 = new Backend(1, "192.168.0.1", 9030);
-        be1.setIsAlive(new AtomicBoolean(true));
+        be1.setAlive(true);
         be1.updateDisks(backendDisks1);
         systemInfoService.addBackend(be1);
 
@@ -271,7 +279,7 @@ public class TabletSchedulerTest {
         backendDisks2.put("/path22", td22);
         Backend be2 = new Backend(2, "192.168.0.2", 9030);
         be2.updateDisks(backendDisks2);
-        be2.setIsAlive(new AtomicBoolean(true));
+        be2.setAlive(true);
         systemInfoService.addBackend(be2);
 
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
@@ -396,7 +404,7 @@ public class TabletSchedulerTest {
                 .setShortKeyColumnCount((short) 1)
                 .setSchemaHash(-1)
                 .setStorageType(TStorageType.COLUMN)
-                .addColumn(new Column())
+                .addColumn(new Column("k1", Type.INT))
                 .build().toTabletSchema();
 
         CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()

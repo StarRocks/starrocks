@@ -68,8 +68,7 @@ public class TaskRunSchedulerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority) {
-        ExecuteOption executeOption = new ExecuteOption();
-        executeOption.setMergeRedundant(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
         executeOption.setSync(isSync);
         executeOption.setPriority(priority);
         return executeOption;
@@ -85,8 +84,10 @@ public class TaskRunSchedulerTest {
                 .setExecuteOption(executeOption)
                 .build();
         taskRun.setTaskId(taskId);
+        // submitTaskRun needs task run status is empty
         if (createTime >= 0) {
             taskRun.initStatus("1", createTime);
+            taskRun.getStatus().setPriority(executeOption.getPriority());
         }
         return taskRun;
     }
@@ -178,7 +179,7 @@ public class TaskRunSchedulerTest {
         for (int i = 0; i < 10; i++) {
             TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, false, 1), i);
             taskRuns.add(taskRun);
-            scheduler.addPendingTaskRun(taskRun);
+            Assert.assertTrue(scheduler.addPendingTaskRun(taskRun));
         }
 
         Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, 1));

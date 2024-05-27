@@ -426,8 +426,7 @@ public class CreateTableTest {
 
         ExceptionChecker
                 .expectThrowsWithMsg(AnalysisException.class,
-                        "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
-                                "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
+                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
                         () -> createTable(
                                 "create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
                                         + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
@@ -1056,9 +1055,9 @@ public class CreateTableTest {
         Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
 
         // ** test load from image(simulate restart)
-        localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
-        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+        LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        olapTable = (OlapTable) localMetastoreLeader.getDb("test")
                 .getTable("test_location_persist_t1");
         System.out.println(olapTable.getLocation());
         Assert.assertEquals(1, olapTable.getLocation().size());

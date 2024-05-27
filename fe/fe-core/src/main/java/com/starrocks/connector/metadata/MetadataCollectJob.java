@@ -18,6 +18,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -72,9 +73,9 @@ public abstract class MetadataCollectJob {
 
     protected abstract String buildCollectMetadataSQL();
 
-    public void init(ConnectContext originContext) {
+    public void init(SessionVariable sessionVariable) {
         this.sql = buildCollectMetadataSQL();
-        this.context = buildConnectContext(originContext);
+        this.context = buildConnectContext(sessionVariable);
     }
 
     protected String getCatalogName() {
@@ -109,12 +110,13 @@ public abstract class MetadataCollectJob {
         return sinkType;
     }
 
-    protected ConnectContext buildConnectContext(ConnectContext originContext) {
+    protected ConnectContext buildConnectContext(SessionVariable originSessionVariable) {
         ConnectContext context = new ConnectContext();
-        context.getSessionVariable().setEnableProfile(originContext.getSessionVariable().isEnableMetadataProfile());
+        context.getSessionVariable().setEnableProfile(originSessionVariable.isEnableMetadataProfile());
         context.getSessionVariable().setParallelExecInstanceNum(1);
-        context.getSessionVariable().setQueryTimeoutS(originContext.getSessionVariable().getMetadataCollectQueryTimeoutS());
+        context.getSessionVariable().setQueryTimeoutS(originSessionVariable.getMetadataCollectQueryTimeoutS());
         context.getSessionVariable().setEnablePipelineEngine(true);
+        context.getSessionVariable().setEnableIcebergColumnStatistics(originSessionVariable.enableIcebergColumnStatistics());
         context.setMetadataContext(true);
         context.setCurrentCatalog(catalogName);
         context.setDatabase(dbName);

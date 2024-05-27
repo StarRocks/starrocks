@@ -660,7 +660,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.pred_tree = options.pred_tree;
-    seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
+    seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
@@ -691,6 +691,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.enable_gin_filter = options.enable_gin_filter;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.

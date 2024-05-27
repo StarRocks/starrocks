@@ -25,12 +25,16 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -43,12 +47,14 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
-import io.delta.kernel.client.TableClient;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
+import io.delta.kernel.internal.SnapshotImpl;
+import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
@@ -57,14 +63,13 @@ import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-
-import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
 public class DeltaLakeScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
@@ -137,33 +142,47 @@ public class DeltaLakeScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws AnalysisException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
+        DeltaUtils.checkTableFeatureSupported(((SnapshotImpl) deltaLakeTable.getDeltaSnapshot()).getProtocol(),
+                deltaMetadata);
 
         preProcessConjuncts(deltaMetadata.getSchema());
         List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
         // PartitionKey -> partition id
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
-        TableClient tableClient = deltaLakeTable.getTableClient();
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(tableClient);
+        Engine deltaEngine = deltaLakeTable.getDeltaEngine();
+        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
         Scan scan = deltaLakePredicates.isPresent() ?
-                scanBuilder.withFilter(tableClient, deltaLakePredicates.get()).build() :
+                scanBuilder.withFilter(deltaEngine, deltaLakePredicates.get()).build() :
                 scanBuilder.build();
 
-        for (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(tableClient);
-             scanFilesAsBatches.hasNext(); ) {
-            FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
+        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
+            while (scanFilesAsBatches.hasNext()) {
+                FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
 
-            for (CloseableIterator<Row> rows = scanFileBatch.getRows(); rows.hasNext(); ) {
-                Row row = rows.next();
-                FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(row);
-                Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(row);
-                List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
-                        Collectors.toList());
-                PartitionKey partitionKey =
-                        PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
-                                deltaLakeTable.getType());
-                addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
+                try (CloseableIterator<Row> scanFileRows = scanFileBatch.getRows()) {
+                    while (scanFileRows.hasNext()) {
+                        Row scanFileRow = scanFileRows.next();
+                        DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
+                        if (dv != null) {
+                            ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
+                                    "Delta table feature [deletion vectors] is not supported");
+                        }
+                        FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(scanFileRow);
+                        Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(scanFileRow);
+                        List<String> partitionValues =
+                                partitionColumnNames.stream().map(partitionValueMap::get).collect(
+                                        Collectors.toList());
+                        PartitionKey partitionKey =
+                                PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
+                                        deltaLakeTable.getType());
+                        addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
+                    }
+                }
             }
+        } catch (IOException e) {
+            LOG.error("Failed to get delta lake scan files", e);
+            throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());
@@ -239,19 +258,8 @@ public class DeltaLakeScanNode extends ScanNode {
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
-        List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
-
-        output.append(prefix).append(
-                String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        partitionNames.size() == 0 ? 1 : partitionNames.size()));
+        output.append(prefix).append(String.format("cardinality=%s", cardinality));
         output.append("\n");
-
-        // TODO: support it in verbose
-        if (detailLevel != VERBOSE) {
-            output.append(prefix).append(String.format("cardinality=%s", cardinality));
-            output.append("\n");
-        }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
@@ -264,6 +272,14 @@ public class DeltaLakeScanNode extends ScanNode {
                             .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
+
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+
+            output.append(prefix).append(
+                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
+            output.append("\n");
         }
 
         return output.toString();

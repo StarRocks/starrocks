@@ -329,6 +329,7 @@ class DeleteFileIndex {
         private ExecutorService executorService = null;
         private ScanMetrics scanMetrics = ScanMetrics.noop();
         private Cache<String, Set<DeleteFile>> deleteFileCache;
+        private Set<Integer> identifierFieldIds = null;
         private Iterable<DeleteFile> cachedDeleteFiles = new ArrayList<>();
 
         Builder(FileIO io, Set<ManifestFile> deleteManifests) {
@@ -534,6 +535,7 @@ class DeleteFileIndex {
                                     .caseSensitive(caseSensitive)
                                     .scanMetrics(scanMetrics)
                                     .deleteFileCache(deleteFileCache)
+                                    .identifierFieldIds(identifierFieldIds)
                                     .liveEntries());
         }
     }

@@ -273,7 +273,7 @@ public class HiveMetastoreOperationsTest {
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Database 'db' location is not set",
+                "Failed to find location in database 'db'",
                 () -> hmsOps.getDefaultLocation("db", "table"));
 
         new MockUp<HiveWriteUtils>() {
@@ -364,7 +364,7 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
-        stmt.getColumns().addAll(columns);
+        stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
     }
@@ -401,7 +401,7 @@ public class HiveMetastoreOperationsTest {
                 new HashMap<>(),
                 "my table comment");
         List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
-        stmt.getColumns().addAll(columns);
+        stmt.setColumns(columns);
 
         CreateTableLikeStmt createTableLikeStmt = new CreateTableLikeStmt(
                 false,

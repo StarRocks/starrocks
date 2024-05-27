@@ -305,7 +305,7 @@ inline Status DeltaWriterImpl::flush() {
 // in a bthread.
 Status DeltaWriterImpl::open() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    _flush_token = StorageEngine::instance()->memtable_flush_executor()->create_flush_token();
+    _flush_token = StorageEngine::instance()->lake_memtable_flush_executor()->create_flush_token();
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
     }
@@ -523,7 +523,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
     auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
     Status st;
     if (metadata != nullptr) {
-        st = tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids, true);
+        st = tablet.update_mgr()->get_rowids_from_pkindex(tablet.id(), metadata->version(), upserts, &rss_rowids, true);
     }
 
     std::vector<uint8_t> filter;
@@ -687,10 +687,10 @@ ThreadPool* DeltaWriter::io_threads() {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return nullptr;
     }
-    if (UNLIKELY(StorageEngine::instance()->memtable_flush_executor() == nullptr)) {
+    if (UNLIKELY(StorageEngine::instance()->lake_memtable_flush_executor() == nullptr)) {
         return nullptr;
     }
-    return StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
+    return StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
 }
 
 StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {

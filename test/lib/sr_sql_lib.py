@@ -28,6 +28,7 @@ import configparser
 import datetime
 import json
 import logging
+import mysql.connector
 import os
 import re
 import subprocess
@@ -946,10 +947,10 @@ class StarrocksSQLApiLib(object):
 
         # get records
         query_sql = """
-        select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",") 
+        select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",")
         from (
             select * from %s.%s where version=\"%s\" and log_type="R" order by sequence
-        ) a 
+        ) a
         group by file, log_type, name;
         """ % (
             T_R_DB,
@@ -1078,6 +1079,7 @@ class StarrocksSQLApiLib(object):
 
     def wait_load_finish(self, label, time_out=300):
         times = 0
+        load_state = ""
         while times < time_out:
             result = self.execute_sql('show load where label = "' + label + '"', True)
             log.info('show load where label = "' + label + '"')
@@ -1087,13 +1089,13 @@ class StarrocksSQLApiLib(object):
                 log.info(load_state)
                 if load_state == "CANCELLED":
                     log.info(result)
-                    return False
+                    break
                 elif load_state == "FINISHED":
                     log.info(result)
-                    return True
+                    break
             time.sleep(1)
             times += 1
-        tools.assert_less(times, time_out, "load failed, timeout 300s")
+        tools.assert_true(load_state in ("FINISHED", "CANCELLED"), "wait load finish error, timeout 300s")
 
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
@@ -1615,6 +1617,33 @@ class StarrocksSQLApiLib(object):
 
         tools.assert_true(finished, "analyze timeout")
 
+    def wait_compaction_finish(self, table_name: str, expected_num_segments: int):
+        timeout = 300
+        scan_table_sql = f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false)*/ COUNT(1) FROM {table_name}"
+        fetch_segments_sql = r"""
+            with profile as (
+                select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
+            )
+            select regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1) as value 
+            from profile 
+            where line like "%- SegmentsReadCount%"
+        """
+
+        while timeout > 0:
+            res = self.execute_sql(scan_table_sql)
+            tools.assert_true(res["status"], f'Fail to execute scan_table_sql, error=[{res["msg"]}]')
+
+            res = self.execute_sql(fetch_segments_sql)
+            tools.assert_true(res["status"], f'Fail to execute fetch_segments_sql, error=[{res["msg"]}]')
+
+            if res["result"] == str(expected_num_segments):
+                break
+
+            time.sleep(1)
+            timeout -= 1
+        else:
+            tools.assert_true(False, "wait compaction timeout")
+
     def _get_backend_http_endpoints(self) -> List[Dict]:
         """Get the http host and port of all the backends.
 
@@ -1719,3 +1748,53 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
+
+    def assert_explain_costs_contains(self, query, *expects):
+        """
+        assert explain costs result contains expect string
+        """
+        sql = "explain costs %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_trace_values_contains(self, query, *expects):
+        """
+        assert trace values result contains expect string
+        """
+        sql = "trace values %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
+
+    def assert_prepare_execute(self, db, query, params=()):
+        conn = mysql.connector.connect(
+            host=self.mysql_host,
+            user=self.mysql_user,
+            password="",
+            port=self.mysql_port,
+            database=db
+        )
+        cursor = conn.cursor(prepared=True)
+
+        try:
+            if params:
+                cursor.execute(query, ['2'])
+            else:
+                cursor.execute(query)
+            cursor.fetchall()
+        except mysql.connector.Error as e:
+            tools.assert_true(1 == 0, e)
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def assert_trace_times_contains(self, query, *expects):
+        """
+        assert trace times result contains expect string
+        """
+        sql = "trace times %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))

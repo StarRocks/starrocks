@@ -22,14 +22,15 @@ Currently, the FILES() function supports the following data sources and file for
   - Microsoft Azure Blob Storage
 - **File formats:**
   - Parquet
-  - ORC (Currently not supported for unloading data)
+  - ORC
+  - CSV
 
 ## Syntax
 
 - **Data loading**:
 
   ```SQL
-  FILES( data_location , data_format [, StorageCredentialParams ] [, columns_from_path ] )
+  FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] )
   ```
 
 - **Data unloading**:
@@ -94,7 +95,79 @@ The URI used to access the files. You can specify a path or a file.
 
 ### data_format
 
-The format of the data file. Valid values: `parquet` and `orc`.
+The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
+
+You must set detailed options for specific data file formats.
+
+#### CSV
+
+Example for the CSV format:
+
+```SQL
+"format"="csv",
+"csv.column_separator"="\\t",
+"csv.enclose"='"',
+"csv.skip_header"="1",
+"csv.escape"="\\"
+```
+
+##### csv.column_separator
+
+Specifies the column separator used when the data file is in CSV format. If you do not specify this parameter, this parameter defaults to `\\t`, indicating tab. The column separator you specify using this parameter must be the same as the column separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality.
+
+Tasks that use Files() are submitted according to the MySQL protocol. StarRocks and MySQL both escape characters in the load requests. Therefore, if the column separator is an invisible character such as tab, you must add a backslash (`\`) preceding the column separator. For example, you must input `\\t` if the column separator is `\t`, and you must input `\\n` if the column separator is `\n`. Apache Hive™ files use `\x01` as their column separator, so you must input `\\x01` if the data file is from Hive.
+
+> **NOTE**
+>
+> - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+
+##### csv.enclose
+
+Specifies the character that is used to wrap the field values in the data file according to RFC4180 when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).
+
+All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.
+
+If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file.
+
+##### csv.skip_header
+
+Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.
+
+In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
+The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement.
+
+##### csv.escape
+
+Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.
+
+> **NOTE**
+>
+> The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.
+> Two examples are as follows:
+> - When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.
+> - Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.
+
+### schema_detect
+
+From v3.2 onwards, FILES() supports automatic schema detection and unionization of the same batch of data files. StarRocks first detects the schema of the data by sampling certain data rows of a random data file in the batch. Then, StarRocks unionizes the columns from all the data files in the batch.
+
+You can configure the sampling rule using the following parameters:
+
+- `auto_detect_sample_files`: the number of random data files to sample in each batch. Range: [0, + ∞]. Default: `1`.
+- `auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: [0, + ∞]. Default: `500`.
+
+After the sampling, StarRocks unionizes the columns from all the data files according to these rules:
+
+- For columns with different column names or indices, each column is identified as an individual column, and, eventually, the union of all individual columns is returned.
+- For columns with the same column name but different data types, they are identified as the same column but with a general data type on a relative fine granularity level. For example, if the column `col1` in file A is INT but DECIMAL in file B, DOUBLE is used in the returned column.
+- Generally, the STRING type can be used to unionize all data types.
+
+If StarRocks fails to unionize all the columns, it generates a schema error report that includes the error information and all the file schemas.
+
+> **CAUTION**
+>
+> All data files in a single batch must be of the same file format.
 
 ### StorageCredentialParams
 
@@ -165,30 +238,6 @@ From v3.2 onwards, StarRocks can extract the value of a key/value pair from the 
 ```
 
 Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
-
-<!--
-
-### schema_detect
-
-From v3.2 onwards, FILES() supports automatic schema detection and unionization of the same batch of data files. StarRocks first detects the schema of the data by sampling certain data rows of a random data file in the batch. Then, StarRocks unionizes the columns from all the data files in the batch.
-
-You can configure the sampling rule using the following parameters:
-
-- `schema_auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: [-1, 500]. If this parameter is set to `-1`, all data rows are scanned. 
-- `schema_auto_detect_sample_files`: the number of random data files to sample in each batch. Valid values: `1` (default) and `-1`. If this parameter is set to `-1`, all data files are scanned.
-
-After the sampling, StarRocks unionizes the columns from all the data files according to these rules:
-
-- For columns with different column names or indices, each column is identified as an individual column, and, eventually, the union of all individual columns is returned.
-- For columns with the same column name but different data types, they are identified as the same column but with a more general data type. For example, if the column `col1` in file A is INT but DECIMAL in file B, DOUBLE is used in the returned column. The STRING type can be used to unionize all data types.
-
-If StarRocks fails to unionize all the columns, it generates a schema error report that includes the error information and all the file schemas.
-
-> **CAUTION**
->
-> All data files in a single batch must be of the same file format.
-
--->
 
 ### unload_data_param
 

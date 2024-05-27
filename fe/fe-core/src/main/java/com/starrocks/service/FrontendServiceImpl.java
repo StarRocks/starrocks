@@ -48,6 +48,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -96,6 +97,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
@@ -699,51 +701,79 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+    private void filterAsynchronousMaterializedView(PatternMatcher matcher,
+                                                    UserIdentity currentUser,
+                                                    String dbName,
+                                                    MaterializedView mv,
+                                                    TGetTablesParams params,
+                                                    List<MaterializedView> result) {
+        // check table name
+        String mvName = params.table_name;
+        if (mvName != null && !mvName.equalsIgnoreCase(mv.getName())) {
+            return;
+        }
+
+        try {
+            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
+                    null, dbName, mv);
+        } catch (AccessDeniedException e) {
+            return;
+        }
+
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        if (!PatternMatcher.matchPattern(params.getPattern(), mv.getName(), matcher, caseSensitive)) {
+            return;
+        }
+        result.add(mv);
+    }
+
+    private void filterSynchronousMaterializedView(OlapTable olapTable, PatternMatcher matcher,
+                                                   TGetTablesParams params,
+                                                   List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
+        // synchronized materialized view metadata size should be greater than 1.
+        if (olapTable.getVisibleIndexMetas().size() <= 1) {
+            return;
+        }
+
+        // check table name
+        String mvName = params.table_name;
+        if (mvName != null && !mvName.equalsIgnoreCase(olapTable.getName())) {
+            return;
+        }
+
+        List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
+        long baseIdx = olapTable.getBaseIndexId();
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+        for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+            if (baseIdx == mvMeta.getIndexId()) {
+                continue;
+            }
+
+            if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+                    matcher, caseSensitive)) {
+                continue;
+            }
+            singleTableMVs.add(Pair.create(olapTable, mvMeta));
+        }
+    }
+
     private List<ShowMaterializedViewStatus> listMaterializedViews(long limit, PatternMatcher matcher,
                                                                    UserIdentity currentUser, TGetTablesParams params) {
         String dbName = params.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
-        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
             for (Table table : db.getTables()) {
                 if (table.isMaterializedView()) {
-                    MaterializedView mvTable = (MaterializedView) table;
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                null, dbName, mvTable);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    if (!PatternMatcher.matchPattern(params.getPattern(), mvTable.getName(), matcher, caseSensitive)) {
-                        continue;
-                    }
-
-                    materializedViews.add(mvTable);
+                    filterAsynchronousMaterializedView(matcher, currentUser, dbName,
+                            (MaterializedView) table, params, materializedViews);
                 } else if (table.getType() == Table.TableType.OLAP) {
-                    OlapTable olapTable = (OlapTable) table;
-                    // synchronized materialized view metadata size should be greater than 1.
-                    if (olapTable.getVisibleIndexMetas().size() <= 1) {
-                        continue;
-                    }
-                    List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
-                    long baseIdx = olapTable.getBaseIndexId();
-                    for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                        if (baseIdx == mvMeta.getIndexId()) {
-                            continue;
-                        }
-
-                        if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
-                                matcher, caseSensitive)) {
-                            continue;
-                        }
-
-                        singleTableMVs.add(Pair.create(olapTable, mvMeta));
-                    }
+                    filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
+                } else {
+                    // continue
                 }
 
                 // check limit
@@ -771,7 +801,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<Task> taskList = taskManager.showTasks(null);
+        List<Task> taskList = taskManager.filterTasks(params);
 
         for (Task task : taskList) {
             if (task.getDbName() == null) {
@@ -821,7 +851,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
-        List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
+        List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(null);
 
         for (TaskRunStatus status : taskRunList) {
             if (status.getDbName() == null) {
@@ -1264,11 +1294,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
-        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-        if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
-            warehouseName = request.getWarehouse();
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.isSetBackend_id()) {
+            SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        } else if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            // For backward, we keep this else branch. We should prioritize using the method to get the warehouse by backend.
+            String warehouseName = request.getWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            warehouseId = warehouse.getId();
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
 
         // just use default value of session variable
         // as there is no connectContext for sync stream load
@@ -1277,7 +1313,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TransactionResult resp = new TransactionResult();
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
             streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(),
-                    timeoutSecond * 1000, resp, false, warehouse.getId());
+                    timeoutSecond * 1000, resp, false, warehouseId);
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
                 throw new UserException(resp.msg);
@@ -1295,7 +1331,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond,
-                warehouse.getId());
+                warehouseId);
     }
 
     @Override
@@ -1994,6 +2030,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
 
+        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (request.isSetBackend_id()) {
+            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
+                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        }
+
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
             PhysicalPartition p = table.getPhysicalPartition(id);
@@ -2019,7 +2062,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             if (mutablePartitions.size() <= 1) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .addSubPartitions(db, olapTable.getName(), partition, 1);
+                        .addSubPartitions(db, olapTable, partition, 1, warehouseId);
             }
             p.setImmutable(true);
         }
@@ -2047,7 +2090,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     buildPartitions(olapTable, physicalPartition, partitions, tPartition);
-                    buildTablets(physicalPartition, tablets, olapTable);
+                    buildTablets(physicalPartition, tablets, olapTable, warehouseId);
                 }
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
@@ -2121,7 +2164,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
-                                     OlapTable olapTable) throws UserException {
+                                     OlapTable olapTable, long warehouseId) throws UserException {
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                 MaterializedIndex.IndexExtState.ALL)) {
@@ -2130,7 +2173,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     try {
                         // use default warehouse nodes
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                         tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
                     } catch (Exception exception) {
                         throw new UserException("Check if any backend is down or not. tablet_id: " + tablet.getId());
@@ -2257,7 +2300,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
+        TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
+        if (txnState == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
+
         try {
+            // creating partition names is ordered
+            for (String partitionName : creatingPartitionNames) {
+                txnState.lockCreatePartition(partitionName);
+            }
+
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
@@ -2266,7 +2324,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.ROLLUP,
                                     new TableName(db.getFullName(), olapTable.getName())),
-                                    "conflict with expression partition");
+                            "conflict with expression partition");
                 }
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -2275,11 +2333,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             new CancelAlterTableStmt(
                                     ShowAlterStmt.AlterType.COLUMN,
                                     new TableName(db.getFullName(), olapTable.getName())),
-                                    "conflict with expression partition");
+                            "conflict with expression partition");
                 }
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
+
             state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn(e);
@@ -2287,20 +2346,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
             return result;
+        } finally {
+            for (String partitionName : creatingPartitionNames) {
+                txnState.unlockCreatePartition(partitionName);
+            }
         }
 
         // build partition & tablets
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
-
-        TransactionState txnState =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
-        if (txnState == null) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
-            result.setStatus(errorStatus);
-            return result;
-        }
 
         if (txnState.getTransactionStatus().isFinalStatus()) {
             errorStatus.setError_msgs(Lists.newArrayList(
@@ -2358,7 +2412,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             // use default warehouse nodes
                             long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeId(
-                                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, cloudNativeTablet);
+                                    txnState.getWarehouseId(), cloudNativeTablet);
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
                                     Collections.singletonList(computeNodeId));
                             tablets.add(tabletLocation);
@@ -2402,7 +2456,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(txnState.getWarehouseId());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
         return result;
