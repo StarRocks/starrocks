@@ -52,7 +52,7 @@ public class DeltaLakeConnector implements Connector {
     }
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
-        IMetastore metastore = internalMgr.createMetastore();
+        IMetastore metastore = internalMgr.createDeltaLakeMetastore();
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
