@@ -44,7 +44,7 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 - All StarRocks FE machines have access to Apache Ranger. You can check this by running the following command on each FE machine:
 
    ```SQL
-   telnet <ranger-ip> <ranger-host>
+   telnet <ranger-ip> <ranger-port>
    ```
 
    If `Connected to <ip>` is displayed, the connection is successful.
