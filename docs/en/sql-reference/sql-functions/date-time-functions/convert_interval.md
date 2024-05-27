@@ -41,7 +41,7 @@ Returns a BIGINT value
 
 
 
-If the to_type is bigger than the interval type. For example, convert_interval(interval 1 second, day);, then it returns 0.
+If the to_type is bigger than the interval type. For example, convert_interval(interval 1 second, day);,  then it returns 0.
 
 
 
