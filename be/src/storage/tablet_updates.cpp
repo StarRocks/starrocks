@@ -1517,9 +1517,54 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
+<<<<<<< HEAD
     // already committed, so we can ignore timeout error here
     std::unique_lock<std::mutex> ul(_lock);
     _wait_for_version(version, 120000, ul);
+=======
+    {
+        // already committed, so we can ignore timeout error here
+        std::unique_lock<std::mutex> ul(_lock);
+        RETURN_IF_ERROR(_wait_for_version(version, 120000, ul));
+    }
+    // Release metadata memory after rowsets have been compacted.
+    Rowset::close_rowsets(input_rowsets);
+    return Status::OK();
+}
+
+// We need this function to detect the conflict between column mode partial update, and compaction,
+// E.g: if there are two rowsets(rowset-1, rowset-2) in tablet, current version is (2.0),
+// and rowset-1 has just been partial update in column mode. and apply in version(3.0).
+// But at the same time, compaction is happening, compact (rowset-1, rowset-2) into (rowset-3), but the start version is (2.0),
+// at last, we will commit this compaction in version (3.1). But this compaction will miss the partial update.
+// So we need `_check_conflict_with_partial_update` to detect this conflict and cancel this compaction.
+Status TabletUpdates::_check_conflict_with_partial_update(CompactionInfo* info) {
+    // check edit version info from latest to info->start_version
+    for (auto i = _edit_version_infos.rbegin(); i != _edit_version_infos.rend() && info->start_version < (*i)->version;
+         i++) {
+        // check if need to cancel this compaction
+        bool need_cancel = false;
+        if ((*i)->deltas.size() == 0) {
+            // meet full clone
+            need_cancel = false;
+        } else {
+            uint32_t rowset_id = (*i)->deltas[0];
+            RowsetSharedPtr rowset = get_rowset(rowset_id);
+            if (rowset->is_column_mode_partial_update()) {
+                need_cancel = true;
+            }
+        }
+
+        if (need_cancel) {
+            std::string msg = strings::Substitute(
+                    "compaction conflict with partial update failed, tabletid:$0 ver:$1-$2", _tablet.tablet_id(),
+                    info->start_version.major_number(), (*i)->version.major_number());
+            LOG(WARNING) << msg;
+            _compaction_state.reset();
+            return Status::Cancelled(msg);
+        }
+    }
+>>>>>>> 0471705863 ([Enhancement] release metadata memory after rowsets have been compacted in pk table (#46067))
     return Status::OK();
 }
 
