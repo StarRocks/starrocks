@@ -21,6 +21,7 @@ import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.connector.share.iceberg.IcebergMetricsBean;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TIcebergMetadata;
 import com.starrocks.thrift.TMetadataEntry;
 import com.starrocks.thrift.TResultBatch;
@@ -33,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransportException;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -110,7 +112,14 @@ public class MetadataParser {
 
         if (context.getState().isError()) {
             String collectErrorMsg = "Failed to execute metadata collection job. ";
-            String errMsgToClient = job.getMetadataJobCoord().getExecStatus().getErrorMsg();
+            Coordinator coord = job.getMetadataJobCoord();
+            String errMsgToClient;
+            if (coord == null) {
+                errMsgToClient = context.getState().getErrorMessage();
+            } else {
+                errMsgToClient = coord.getExecStatus().getErrorMsg();
+            }
+
             this.metadataCollectionException = new StarRocksConnectorException(collectErrorMsg + errMsgToClient);
             fileScanTaskQueue.clear();
             return;
@@ -143,7 +152,7 @@ public class MetadataParser {
         metrics.skippedDataFiles().increment(liveFilesCount - metrics.resultDataFiles().value());
     }
 
-    private List<FileScanTask> parse(TResultBatch resultBatch) {
+    private List<FileScanTask> parse(TResultBatch resultBatch) throws TTransportException {
         List<DataFile> dataFiles = buildIcebergDataFile(resultBatch);
         return dataFiles.stream().map(this::createFileScanTasks).collect(Collectors.toList());
     }
@@ -165,7 +174,7 @@ public class MetadataParser {
                 residuals);
     }
 
-    private List<DataFile> buildIcebergDataFile(TResultBatch resultBatch) {
+    private List<DataFile> buildIcebergDataFile(TResultBatch resultBatch) throws TTransportException {
         List<DataFile> dataFiles = new ArrayList<>();
         TDeserializer deserializer = new TDeserializer();
         for (ByteBuffer bb : resultBatch.rows) {
@@ -228,6 +237,9 @@ public class MetadataParser {
         // build equality field id
         int[] equalityFieldIds = thrift.isSetEquality_ids() ? ArrayUtil.toIntArray(thrift.getEquality_ids()) : null;
 
+        // build key metadata
+        ByteBuffer keyMetadata = thrift.isSetKey_metadata() ? ByteBuffer.wrap(thrift.getKey_metadata()) : null;
+
         BaseFile<?> baseFile;
         // TODO(stephen): add keyMetadata field
         if (content == FileContent.DATA) {
@@ -238,7 +250,7 @@ public class MetadataParser {
                     partitionData,
                     fileLength,
                     metrics,
-                    null,
+                    keyMetadata,
                     splitOffsets,
                     null);
         } else {
@@ -253,7 +265,7 @@ public class MetadataParser {
                     equalityFieldIds,
                     sortId,
                     splitOffsets,
-                    null
+                    keyMetadata
             );
         }
 

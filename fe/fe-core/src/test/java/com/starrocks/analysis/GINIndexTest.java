@@ -23,10 +23,7 @@ import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
-import com.starrocks.analysis.IndexDef.IndexType;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -52,6 +49,7 @@ public class GINIndexTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.enable_experimental_gin = true;
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE `test_index_tbl` (\n" +
                 "  `f1` int NOT NULL COMMENT \"\",\n" +

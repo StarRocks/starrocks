@@ -39,7 +39,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 :::
 
-### **column_definition**
+### column_definition
 
 语法：
 
@@ -143,7 +143,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 **AS generation_expr**：指定生成列和其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
 
-### **index_definition**
+### index_definition
 
 创建 bitmap 索引的语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md#创建索引)。
 
@@ -151,7 +151,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 ```
 
-### **ENGINE 类型**
+### ENGINE 类型
 
 默认为 `olap`，表示创建的是 StarRocks 内部表。
 
@@ -243,7 +243,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
     其中 `resource` 是 Hudi 资源的名称。`database` 是 Hudi 表所属的数据库名称。`table` Hudi 表名称。
 
-### **key_desc**
+### key_desc
 
 语法：
 
@@ -270,7 +270,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 如果后续想修改表的注释，可以使用 `ALTER TABLE <table_name> COMMENT = "new table comment"`（3.1 版本开始支持）。
 
-### **partition_desc**
+### partition_desc
 
 支持三种分区方式，[表达式分区](../../../table_design/expression_partitioning.md)（推荐）、[Range 分区](../../../table_design/Data_distribution.md#range-分区) 和 [List 分区](../../../table_design/list_partitioning.md)。
 
@@ -300,7 +300,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     使用指定的 key 列和指定的数值范围进行分区。
 
     - 分区名称的命名要求，参见[系统限制](../../../reference/System_limit.md)。
-    - 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
+    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
     - 分区为左闭右开区间，首个分区的左边界为最小值。
     - NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
     - 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
@@ -399,6 +399,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
             PARTITION p202102 VALUES [("20210201"), ("20210301")),
             PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
         )
+        ```
 
 - **批量创建分区**
 
@@ -423,7 +424,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     说明：
     用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
 
-    - 当前分区列仅支持日期类型和整数类型。
+    - 3.3.0 之前，仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。自 3.3.0 起，支持三个特定时间函数为 Range 分区列。具体使用方式，参见[数据分布](../../../table_design/Data_distribution.md#手动创建分区)。
     - 当分区列为日期类型时，需要指定 `INTERVAL` 关键字来表示日期间隔。目前日期间隔支持 hour (v3.0）、day、week、month、year，分区的命名规则同动态分区一样。
     - 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
     - 仅支持指定一列作为分区列。
@@ -448,7 +449,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
         )
         ```
 
-### **distribution_desc**
+### distribution_desc
 
 支持随机分桶（Random bucketing）和哈希分桶（Hash bucketing）。如果不指定分桶信息，则 StarRocks 默认使用随机分桶且自动设置分桶数量。
 
@@ -495,15 +496,13 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   - 分桶键指定后不支持修改。
   - 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
-### **ORDER BY**
+### ORDER BY
 
-自 3.0 版本起，主键表解耦了主键和排序键，排序键通过 `ORDER BY` 指定，可以为任意列的排列组合。
+自 3.0 版本起，主键表支持使用 `ORDER BY` 定义排序键，自 3.3 版本起，明细表、聚合表和更新表支持使用 `ORDER BY` 定义排序键。
 
-> **注意**
->
-> 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
+排序键的更多说明，请参见[排序键和前缀索引](../../../table_design/indexes/Prefix_index_sort_key.md)。
 
-### **PROPERTIES**
+### PROPERTIES
 
 #### 设置数据的初始存储介质、自动降冷时间和副本数
 

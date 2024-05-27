@@ -47,6 +47,9 @@ INSERT INTO t2 VALUES
   (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11");
 -- result:
 -- !result
+set enable_materialized_view_transparent_union_rewrite=false;
+-- result:
+-- !result
 set new_planner_optimize_timeout=10000;
 -- result:
 -- !result

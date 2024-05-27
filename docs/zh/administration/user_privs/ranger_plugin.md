@@ -44,7 +44,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 - 确保 StarRocks 所有 FE 机器都能够访问 Ranger。您可以在 FE 节点的机器上执行以下语句来判断:
 
   ```SQL
-  telnet <ranger-ip> <ranger-host>
+  telnet <ranger-ip> <ranger-port>
   ```
 
   如果显示 `Connected to <ip>`，则表示连接成功。
@@ -63,7 +63,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. 下载 [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) 和 [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
+2. 下载 [plugin-starrocks/target/ranger-starrocks-plugin-3.0.0-SNAPSHOT.jar](https://www.starrocks.io/download/community) 和 [mysql-connector-j.jar](https://dev.mysql.com/downloads/connector/j/)，并放入 `starrocks` 文件夹内。
 
 3. 重启 Ranger Admin。
 
@@ -84,17 +84,23 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ```
 
    :::note
-   如果您不需要开启 Ranger 的自动补全功能，即在上一步骤中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
+   如果不需要开启 Ranger 的自动补全功能，即在上一步中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
 
    ```JSON
    "implClass": "",
+   ```
+
+   如果需要开启 Ranger 的自动补全功能，即在上一步中安装了 ranger-starrocks-plugin，需要修改 .json 文件中的 `implClass` 为 `org.apache.ranger.services.starrocks.RangerServiceStarRocks`，即：
+
+   ```JSON
+   "implClass": "org.apache.ranger.services.starrocks.RangerServiceStarRocks",
    ```
 
    :::
 
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
-   ```SQL
+   ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json

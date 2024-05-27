@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.cache.Cache;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 
@@ -32,12 +33,20 @@ public class StarRocksIcebergTableScanContext {
     private boolean onlyReadCache;
     private int localParallelism;
     private long localPlanningMaxSlotSize;
+    private boolean enableCacheDataFileIdentifierColumnMetrics;
+    private ConnectContext connectContext;
 
     public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName, PlanMode planMode) {
+        this(catalogName, dbName, tableName, planMode, null);
+    }
+
+    public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName,
+                                            PlanMode planMode, ConnectContext connectContext) {
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
         this.planMode = planMode;
+        this.connectContext = connectContext;
     }
 
     public String getCatalogName() {
@@ -102,5 +111,17 @@ public class StarRocksIcebergTableScanContext {
 
     public void setLocalPlanningMaxSlotSize(long localPlanningMaxSlotSize) {
         this.localPlanningMaxSlotSize = localPlanningMaxSlotSize;
+    }
+
+    public boolean isEnableCacheDataFileIdentifierColumnMetrics() {
+        return enableCacheDataFileIdentifierColumnMetrics;
+    }
+
+    public void setEnableCacheDataFileIdentifierColumnMetrics(boolean enableCacheDataFileIdentifierColumnMetrics) {
+        this.enableCacheDataFileIdentifierColumnMetrics = enableCacheDataFileIdentifierColumnMetrics;
+    }
+
+    public ConnectContext getConnectContext() {
+        return connectContext;
     }
 }

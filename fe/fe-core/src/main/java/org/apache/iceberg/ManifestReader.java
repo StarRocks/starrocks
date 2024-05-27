@@ -27,6 +27,8 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.cache.Cache;
+import com.starrocks.connector.iceberg.DataFileWrapper;
+import com.starrocks.connector.iceberg.DeleteFileWrapper;
 import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.avro.AvroIterable;
 import org.apache.iceberg.exceptions.RuntimeIOException;
@@ -98,6 +100,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     private boolean dataFileCacheWithMetrics = false;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
+    private Set<Integer> identifierFieldIds = null;
 
     protected ManifestReader(
             InputFile file,
@@ -218,6 +221,11 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         return this;
     }
 
+    ManifestReader<F> identifierFieldIds(Set<Integer> identifierFieldIds) {
+        this.identifierFieldIds = identifierFieldIds;
+        return this;
+    }
+
     CloseableIterable<ManifestEntry<F>> entries() {
         return entries(false /* all entries */);
     }
@@ -252,6 +260,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         }
     }
 
+    // when the identifier field ids is null, it will copy all metrics.
     private CloseableIterable<ManifestEntry<F>> fillCacheIfNeeded(CloseableIterable<ManifestEntry<F>> entries) {
         if (dataFileCache != null && content == FileType.DATA_FILES) {
             entries = CloseableIterable.transform(entries,
@@ -259,7 +268,10 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                         Set<DataFile> dataFiles = dataFileCache.getIfPresent(file.location());
                         if (dataFiles != null && entry.isLive()) {
                             DataFile dataFile = (DataFile) entry.file();
-                            dataFiles.add(dataFileCacheWithMetrics ? dataFile : dataFile.copyWithoutStats());
+                            DataFile copiedDataFile = dataFileCacheWithMetrics ?
+                                    dataFile.copyWithStats(identifierFieldIds.isEmpty() ? null : identifierFieldIds) :
+                                    dataFile.copyWithoutStats();
+                            dataFiles.add(DataFileWrapper.wrap(copiedDataFile));
                         }
                         return entry;
                     });
@@ -270,7 +282,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                     entry -> {
                         Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(file.location());
                         if (deleteFiles != null && entry.isLive()) {
-                            deleteFiles.add((DeleteFile) entry.file().copy());
+                            deleteFiles.add(DeleteFileWrapper.wrap((DeleteFile) entry.file().copy()));
                         }
                         return entry;
                     });

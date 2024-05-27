@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.rpc.FrontendServiceProxy;
@@ -52,6 +53,9 @@ public class TemporaryTableCleaner extends FrontendDaemon  {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (FeConstants.runningUnitTest) {
+            return;
+        }
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         List<UUID> aliveSessions = new ArrayList<>();
 

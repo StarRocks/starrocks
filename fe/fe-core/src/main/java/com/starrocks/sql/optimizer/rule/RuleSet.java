@@ -147,6 +147,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
@@ -413,9 +414,9 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.ALL_MV_REWRITE, Stream.concat(
-                REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
-                REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
-                        .collect(Collectors.toList()));
+                        REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
+                        REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
+                .collect(Collectors.toList()));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_EMPTY_OPERATOR, ImmutableList.of(
                 PruneEmptyScanRule.OLAP_SCAN,
@@ -459,6 +460,9 @@ public class RuleSet {
                 new PushDownAggToMetaScanRule(),
                 new PushDownFlatJsonMetaToMetaScanRule(),
                 new RewriteSimpleAggToMetaScanRule(),
+                RewriteSimpleAggToHDFSScanRule.FILE_SCAN,
+                RewriteSimpleAggToHDFSScanRule.HIVE_SCAN,
+                RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN,
                 new MinMaxCountOptOnScanRule()
         ));
     }

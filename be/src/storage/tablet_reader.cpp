@@ -275,9 +275,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
     PredicateTree pred_tree_for_zone_map;
-    RETURN_IF_ERROR(
-            ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree, pred_tree_for_zone_map));
-    rs_opts.predicates_for_zone_map = pred_tree_for_zone_map.get_immediate_column_predicate_map();
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
@@ -298,10 +297,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
-    if (keys_type == AGG_KEYS || keys_type == UNIQUE_KEYS) {
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
         rs_opts.asc_hint = _is_asc_hint;
     }
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.enable_gin_filter = params.enable_gin_filter;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {

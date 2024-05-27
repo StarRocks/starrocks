@@ -198,12 +198,17 @@ public interface ConnectorMetadata {
         return Statistics.builder().build();
     }
 
-    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         return true;
     }
 
     default List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
         throw new StarRocksConnectorException("This connector doesn't support pruning partitions");
+    }
+
+    // return true if the connector has self info schema
+    default boolean hasSelfInfoSchema() {
+        return false;
     }
 
     /**

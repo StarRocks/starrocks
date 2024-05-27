@@ -188,11 +188,23 @@ SELECT /*+ SET_VAR
 * 类型：Int
 * 引入版本：v3.1.9, v3.2.5
 
+### cbo_prune_subfield
+
+* 描述：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
+* 默认值：false
+* 引入版本：v3.3.0
+
 ### enable_sync_materialized_view_rewrite
 
 * 描述：是否启用基于同步物化视图的查询改写。
 * 默认值：true
 * 引入版本：v3.1.11，v3.2.5
+
+### enable_datacache_async_populate_mode
+
+* 描述：是否使用异步方式进行 Data Cache 填充。系统默认使用同步方式进行填充，即在查询数据时同步填充进行缓存填充。
+* 默认值：false
+* 引入版本：v3.2.7
 
 ### query_including_mv_names
 
@@ -244,6 +256,12 @@ SELECT /*+ SET_VAR
 * 描述：是否启用物化视图 UNION 改写。如果此项设置为 true，则系统在物化视图的谓词不能满足查询的谓词时，会尝试使用 UNION ALL 来补偿谓词。
 * 默认值：true
 * 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
+
+### enable_materialized_view_plan_cache
+
+* 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是 `true`，即开启物化视图查询计划缓存。
+* 默认值：true
+* 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
 
 ### follower_query_forward_mode
 

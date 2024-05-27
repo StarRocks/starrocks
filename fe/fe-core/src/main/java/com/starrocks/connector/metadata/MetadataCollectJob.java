@@ -116,6 +116,7 @@ public abstract class MetadataCollectJob {
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS(originSessionVariable.getMetadataCollectQueryTimeoutS());
         context.getSessionVariable().setEnablePipelineEngine(true);
+        context.getSessionVariable().setEnableIcebergColumnStatistics(originSessionVariable.enableIcebergColumnStatistics());
         context.setMetadataContext(true);
         context.setCurrentCatalog(catalogName);
         context.setDatabase(dbName);

@@ -223,8 +223,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             beId = backend.getId();
         } else {
             ComputeNode computeNode = null;
-            // Compute node only reports resource usage.
-            if (request.isSetResource_usage()) {
+            // Compute node only reports resource usage or datacache metrics or tasks.
+            if (request.isSetResource_usage() || request.isSetDatacache_metrics() || request.isSetTasks()) {
                 computeNode =
                         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeWithBePort(host, bePort);
             }
@@ -877,10 +877,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         break DB_TRAVERSE;
                     } else if (diskInfo == null) {
                         LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
-                                tableId, backendId, replica.getPathHash());
+                                replica.getPathHash(), tabletId, backendId);
                     } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
                         LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
-                                tableId, backendId, replica.getPathHash());
+                                replica.getPathHash(), tabletId, backendId);
                     }
 
                     ReplicaState state = replica.getState();

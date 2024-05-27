@@ -49,6 +49,8 @@ public:
             const Schema& pkey_schema,
             const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) = 0;
 
+    virtual void set_write_amp_score(double score) = 0;
+
     size_t total_data_size() const { return _total_data_size; }
     size_t total_segments() const { return _total_segments; }
     size_t rowset_num() const { return _rowset_num; };
@@ -666,6 +668,7 @@ public:
     size_t key_size() const { return _key_size; }
 
     size_t size() const { return _size; }
+    size_t usage() const { return _usage; }
     virtual size_t memory_usage() const { return _memory_usage.load(); }
 
     EditVersion version() const { return _version; }
@@ -782,6 +785,18 @@ public:
         }
         return res;
     }
+
+    // not thread safe, just for unit test
+    std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
+        std::pair<int64_t, int64_t> res;
+        for (auto [_, stat] : _usage_and_size_by_key_length) {
+            res.first += stat.first;
+            res.second += stat.second;
+        }
+        return res;
+    }
+
+    void clear_kv_stat() { _usage_and_size_by_key_length.clear(); }
 
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 

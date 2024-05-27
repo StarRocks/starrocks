@@ -39,6 +39,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.Parameter;
@@ -238,6 +239,8 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 // second: Do handle function for statement.
 public class StmtExecutor {
     private static final Logger LOG = LogManager.getLogger(StmtExecutor.class);
+    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
+    private static final Gson GSON = new Gson();
 
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
@@ -472,10 +475,8 @@ public class StmtExecutor {
                 context.setExplainLevel(null);
             }
 
-            // execPlan is the output of new planner
+            // execPlan is the output of planner
             ExecPlan execPlan = null;
-            boolean execPlanBuildByNewPlanner = false;
-
             try (Timer ignored = Tracers.watchScope("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
@@ -525,7 +526,6 @@ public class StmtExecutor {
                             context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
                         }
                     }
-                    execPlanBuildByNewPlanner = true;
                 }
             } catch (SemanticException e) {
                 dumpException(e);
@@ -535,7 +535,7 @@ public class StmtExecutor {
                 if (e.getType().equals(ErrorType.USER_ERROR)) {
                     throw e;
                 } else {
-                    LOG.warn("New planner error: " + originStmt.originStmt, e);
+                    LOG.warn("Planner error: " + originStmt.originStmt, e);
                     throw e;
                 }
             }
@@ -588,7 +588,6 @@ public class StmtExecutor {
                                     new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
                         }
 
-                        Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
                         handleQueryStmt(retryContext.getExecPlan());
                         break;
                     } catch (Exception e) {
@@ -640,11 +639,7 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof SetCatalogStmt) {
                 handleSetCatalogStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
-                if (execPlanBuildByNewPlanner) {
-                    handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
-                } else {
-                    throw new AnalysisException("old planner does not support CTAS statement");
-                }
+                handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
             } else if (parsedStmt instanceof DmlStmt) {
                 handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt);
             } else if (parsedStmt instanceof DdlStmt) {
@@ -811,8 +806,10 @@ public class StmtExecutor {
 
     private void dropTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
         if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
-            DDLStmtExecutor.execute(new DropTemporaryTableStmt(
-                    true, stmt.getCreateTableStmt().getDbTbl(), true), context);
+            DropTemporaryTableStmt dropTemporaryTableStmt =
+                    new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getDbTbl(), true);
+            dropTemporaryTableStmt.setSessionId(context.getSessionId());
+            DDLStmtExecutor.execute(dropTemporaryTableStmt, context);
         } else {
             DDLStmtExecutor.execute(new DropTableStmt(
                     true, stmt.getCreateTableStmt().getDbTbl(), true), context);
@@ -830,7 +827,7 @@ public class StmtExecutor {
         // and for other cases the exception will throw and the rest of the code will not be executed.
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
-            ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
+            ExecPlan execPlan = StatementPlanner.plan(insertStmt, context);
             handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
             if (context.getState().getStateType() == MysqlStateType.ERR) {
                 dropTableCreatedByCTAS(createTableAsSelectStmt);
@@ -906,6 +903,21 @@ public class StmtExecutor {
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
+                String jsonString = GSON.toJson(queryDetail);
+                if (Config.enable_profile_log_compress) {
+                    byte[] jsonBytes;
+                    try {
+                        jsonBytes = CompressionUtils.gzipCompressString(jsonString);
+                        PROFILE_LOG.info(jsonBytes);
+                    } catch (IOException e) {
+                        LOG.warn("Compress queryDetail string failed, length: {}, reason: {}",
+                                jsonString.length(), e.getMessage());
+                    }
+                } else {
+                    PROFILE_LOG.info(jsonString);
+                }
+            }
         };
         return coord.tryProcessProfileAsync(task);
     }
@@ -1059,6 +1071,7 @@ public class StmtExecutor {
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan);
         } else {
+            boolean needSendResult = !isExplainAnalyze && !context.getSessionVariable().isEnableExecutionOnly();
             // send mysql result
             // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
             //    We will not send real query result to client. Instead, we only send OK to client with
@@ -1072,7 +1085,7 @@ public class StmtExecutor {
             do {
                 batch = coord.getNext();
                 // for outfile query, there will be only one empty batch send back with eos flag
-                if (batch.getBatch() != null && !isOutfileQuery && !isExplainAnalyze) {
+                if (batch.getBatch() != null && !isOutfileQuery && needSendResult) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
                     // so We need to send fields after first batch arrived
                     if (!isSendFields) {
@@ -1233,10 +1246,10 @@ public class StmtExecutor {
         if (analyzeStmt.isExternal()) {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
-                    new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
-                            db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
+                        new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
+                                db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
+                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties()),
                         analyzeStatus,
                         false);
             } else {
@@ -1608,6 +1621,8 @@ public class StmtExecutor {
                 explainString += Tracers.printTiming();
             } else if (parsedStmt.getTraceMode() == Tracers.Mode.LOGS) {
                 explainString += Tracers.printLogs();
+            } else if (parsedStmt.getTraceMode() == Tracers.Mode.REASON) {
+                explainString += Tracers.printReasons();
             } else {
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
             }
@@ -1747,8 +1762,7 @@ public class StmtExecutor {
         serializer.writeInt1(0);
         // warning_count
         serializer.writeInt2(0);
-        // metadata follows
-        serializer.writeInt1(1);
+
         context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
 
         if (numParams > 0) {
@@ -1759,6 +1773,8 @@ public class StmtExecutor {
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            // send EOF
+            serializer.reset();
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
             eofPacket.writeTo(serializer);
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
@@ -1770,6 +1786,8 @@ public class StmtExecutor {
                 serializer.writeField(field.getName(), field.getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            // send EOF
+            serializer.reset();
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
             eofPacket.writeTo(serializer);
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());

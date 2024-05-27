@@ -747,11 +747,12 @@ public class MetadataMgr {
         return null;
     }
 
-    public boolean prepareMetadata(String queryId, String catalogName, MetaPreparationItem item, Tracers tracers) {
+    public boolean prepareMetadata(String queryId, String catalogName, MetaPreparationItem item,
+                                   Tracers tracers, ConnectContext connectContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(Optional.of(queryId), catalogName);
         if (connectorMetadata.isPresent()) {
             try {
-                return connectorMetadata.get().prepareMetadata(item, tracers);
+                return connectorMetadata.get().prepareMetadata(item, tracers, connectContext);
             } catch (Exception e) {
                 LOG.error("prepare metadata failed on [{}]", item, e);
                 return true;

@@ -48,6 +48,7 @@ Release date: March 29, 2024
 ### New Features
 
 - Primary Key tables support Size-tiered Compaction. [#42474](https://github.com/StarRocks/starrocks/pull/42474)
+- Added a pattern-matching function `regexp_extract_all`. [#42178](https://github.com/StarRocks/starrocks/pull/42178)
 
 ### Behavior Changes
 
@@ -73,7 +74,6 @@ Release date: March 8, 2024
 ### New Features
 
 - Cloud-native Primary Key tables in shared-data clusters support Size-tiered Compaction to reduce write I/O amplification for the loading of a large number of small-sized files. [#41610](https://github.com/StarRocks/starrocks/pull/41610)
-- Added the function `regexp_extract_all`. [#42178](https://github.com/StarRocks/starrocks/pull/42178)
 - Added the view `information_schema.partitions_meta`, which records detailed metadata of partitions. [#41101](https://github.com/StarRocks/starrocks/pull/41101)
 - Added the view `sys.fe_memory_usage`, which records the memory usage for StarRocks. [#41083](https://github.com/StarRocks/starrocks/pull/41083)
 
@@ -116,7 +116,6 @@ Release date: February 5, 2024
 - StarRocks Community provides the StarRocks Cross-cluster Data Migration Tool, which supports migrating data from a shared-nothing cluster to either another shared-nothing cluster or a shared-data cluster.
 - Supports creating synchronous materialized views with the WHERE clause specified.
 - Added metrics that show memory usage of the data cache to MemTracker. [#39600](https://github.com/StarRocks/starrocks/pull/39600)
-- Added an array function, `array_unique_agg`.
 
 ### Parameter Change
 

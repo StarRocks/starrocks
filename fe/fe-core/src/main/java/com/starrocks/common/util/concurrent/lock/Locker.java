@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util.concurrent.lock;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
@@ -209,6 +210,33 @@ public class Locker {
     }
 
     /**
+     * Try to lock databases in ascending order of id.
+     * @return: true if all databases are locked successfully, false otherwise.
+     */
+    public boolean tryLockDatabases(List<Database> dbs, LockType lockType, long timeout, TimeUnit unit) {
+        if (dbs == null) {
+            return false;
+        }
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        List<Database> lockedDbs = Lists.newArrayList();
+        boolean isLockSuccess = false;
+        try {
+            for (Database db : dbs) {
+                if (!tryLockDatabase(db, lockType, timeout, unit)) {
+                    return false;
+                }
+                lockedDbs.add(db);
+            }
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                lockedDbs.stream().forEach(t -> unLockDatabase(t, lockType));
+            }
+        }
+        return isLockSuccess;
+    }
+
+    /**
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void unLockDatabase(Database database, LockType lockType) {
@@ -257,7 +285,7 @@ public class Locker {
     public void lockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
@@ -284,7 +312,7 @@ public class Locker {
                                                     long timeout, TimeUnit unit) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
@@ -330,7 +358,7 @@ public class Locker {
     public void unLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             if (lockType == LockType.WRITE) {
                 this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
             } else {

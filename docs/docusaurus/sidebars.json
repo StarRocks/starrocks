@@ -152,7 +152,9 @@
                     "items": [
                         "table_design/indexes/Prefix_index_sort_key",
                         "table_design/indexes/Bitmap_index",
-                        "table_design/indexes/Bloomfilter_index"
+                        "table_design/indexes/Bloomfilter_index",
+                        "table_design/indexes/Ngram_Bloom_Filter_Index",
+                        "table_design/indexes/inverted_index"
                     ]
                 },
                 "table_design/data_compression",
@@ -270,6 +272,7 @@
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
+                        "data_source/catalog/maxcompute_catalog",
                         "data_source/icebergtutorial",
                         "data_source/catalog/query_external_data"
                     ]
@@ -358,7 +361,8 @@
                     ]
                 },
                 "using_starrocks/sorted_aggregate",
-                "using_starrocks/query_acceleration_with_auto_increment"
+                "using_starrocks/query_acceleration_with_auto_increment",
+                "using_starrocks/Flat_json"
             ]
         },
         {
@@ -497,8 +501,7 @@
                     "label": "DBT",
                     "description": "Modeling and transformation with DBT",
                     "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
-                },
-                "integrations/hive_bitmap_udf"
+                }
             ]
         },
         {
@@ -530,7 +533,9 @@
                                 "id": "administration/management/monitoring/Monitor_and_Alert"
                             },
                             "items": [
-                                "administration/management/monitoring/metrics"
+                                "administration/management/monitoring/metrics",
+                                "administration/management/monitoring/metrics-materialized_view",
+                                "administration/management/monitoring/metrics-shared-data"
                             ]
                         },
                         "administration/management/audit_loader",
@@ -552,6 +557,7 @@
                                 "administration/management/resource_management/spill_to_disk",
                                 "administration/management/resource_management/Load_balance",
                                 "administration/management/resource_management/Replica",
+                                "administration/management/resource_management/be_label",
                                 "administration/management/resource_management/Blacklist",
                                 "administration/management/resource_management/filemanager"
                             ]
@@ -1036,6 +1042,7 @@
                     },
                     "items": [
                         "sql-reference/sql-functions/JAVA_UDF",
+                        "integrations/hive_bitmap_udf",
                         "sql-reference/sql-functions/Window_function",
                         "sql-reference/sql-functions/Lambda_expression",
                         {
@@ -1593,7 +1600,9 @@
                     "items": [
                         "table_design/indexes/Prefix_index_sort_key",
                         "table_design/indexes/Bitmap_index",
-                        "table_design/indexes/Bloomfilter_index"
+                        "table_design/indexes/Bloomfilter_index",
+                        "table_design/indexes/Ngram_Bloom_Filter_Index",
+                        "table_design/indexes/inverted_index"
                     ]
                 },
                 "table_design/data_compression",
@@ -1712,6 +1721,7 @@
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
+                        "data_source/catalog/maxcompute_catalog",
                         "data_source/icebergtutorial",
                         "data_source/catalog/query_external_data"
                     ]
@@ -1800,7 +1810,8 @@
                     ]
                 },
                 "using_starrocks/sorted_aggregate",
-                "using_starrocks/query_acceleration_with_auto_increment"
+                "using_starrocks/query_acceleration_with_auto_increment",
+                "using_starrocks/Flat_json"
             ]
         },
         {
@@ -1939,8 +1950,7 @@
                     "label": "DBT",
                     "description": "通过 DBT 实现数据建模与转换",
                     "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
-                },
-                "integrations/hive_bitmap_udf"
+                }
             ]
         },
         {
@@ -1972,7 +1982,9 @@
                                 "id": "administration/management/monitoring/Monitor_and_Alert"
                             },
                             "items": [
-                                "administration/management/monitoring/metrics"
+                                "administration/management/monitoring/metrics",
+                                "administration/management/monitoring/metrics-materialized_view",
+                                "administration/management/monitoring/metrics-shared-data"
                             ]
                         },
                         "administration/management/audit_loader",
@@ -1994,6 +2006,7 @@
                                 "administration/management/resource_management/spill_to_disk",
                                 "administration/management/resource_management/Load_balance",
                                 "administration/management/resource_management/Replica",
+                                "administration/management/resource_management/be_label",
                                 "administration/management/resource_management/Blacklist",
                                 "administration/management/resource_management/filemanager"
                             ]
@@ -2478,6 +2491,7 @@
                     },
                     "items": [
                         "sql-reference/sql-functions/JAVA_UDF",
+                        "integrations/hive_bitmap_udf",
                         "sql-reference/sql-functions/Window_function",
                         "sql-reference/sql-functions/Lambda_expression",
                         {

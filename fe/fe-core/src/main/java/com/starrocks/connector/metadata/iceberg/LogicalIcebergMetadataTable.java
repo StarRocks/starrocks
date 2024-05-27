@@ -64,6 +64,7 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                         .column("file_sequence_number", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("data_sequence_number", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("column_stats", ScalarType.createType(PrimitiveType.VARBINARY))
+                        .column("key_metadata", ScalarType.createType(PrimitiveType.VARBINARY))
                         .build(),
                 originDb,
                 originTable,

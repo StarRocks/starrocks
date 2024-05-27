@@ -46,6 +46,7 @@ displayed_sidebar: "Chinese"
 ### 新增特性
 
 - 主键表支持 Size-tiered Compaction。[#42474](https://github.com/StarRocks/starrocks/pull/42474)
+- 新增模糊/正则匹配函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
 
 ### 行为变更
 
@@ -71,7 +72,6 @@ displayed_sidebar: "Chinese"
 ### 新增特性
 
 - 存算分离集群中的云原生主键表支持 Size-tiered 模式 Compaction，以减轻导入较多小文件时 Compaction 的写放大问题。[#41610](https://github.com/StarRocks/starrocks/pull/41610)
-- 新增函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
 - 新增 `information_schema.partitions_meta` 视图，提供丰富的 PARTITION 元信息。[#41101](https://github.com/StarRocks/starrocks/pull/41101)
 - 新增 `sys.fe_memory_usage` 视图，提供 StarRocks 的内存使用信息。[#41083](https://github.com/StarRocks/starrocks/pull/41083)
 
@@ -114,7 +114,6 @@ displayed_sidebar: "Chinese"
 - 社区提供 StarRocks 数据迁移工具，支持将数据从存算一体集群迁移数据到存算一体集群或者存算分离集群。
 - 支持创建带有 WHERE 子句的同步物化视图。
 - MemTracker 中新增了 Data Cache 内存使用的相关指标。[#39600](https://github.com/StarRocks/starrocks/pull/39600)
-- 新增函数 `array_unique_agg`。
 
 ### 参数变更
 

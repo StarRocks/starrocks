@@ -39,7 +39,7 @@ public:
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
         size_t num_rows = static_cast<size_t>(range.span_size());
         if (_step > 1) {
             return Status::EndOfFile("");
@@ -54,17 +54,17 @@ public:
         }
 
         if (_type == tparquet::Type::type::INT32) {
-            _append_int32_column(dst, start, num_rows);
+            _append_int32_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::INT64) {
-            _append_int64_column(dst, start, num_rows);
+            _append_int64_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::INT96) {
-            _append_int96_column(dst, start, num_rows);
+            _append_int96_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::BYTE_ARRAY) {
-            _append_binary_column(dst, start, num_rows);
+            _append_binary_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::FLOAT) {
-            _append_float_column(dst, start, num_rows);
+            _append_float_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::DOUBLE) {
-            _append_double_column(dst, start, num_rows);
+            _append_double_column(dst.get(), start, num_rows);
         }
 
         _step++;
