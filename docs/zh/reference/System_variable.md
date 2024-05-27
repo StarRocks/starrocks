@@ -190,7 +190,7 @@ SELECT /*+ SET_VAR
 
 ### cbo_prune_subfield
 
-* 含义：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
+* 描述：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
 * 默认值：false
 * 引入版本：v3.3.0
 
@@ -199,6 +199,12 @@ SELECT /*+ SET_VAR
 * 描述：是否启用基于同步物化视图的查询改写。
 * 默认值：true
 * 引入版本：v3.1.11，v3.2.5
+
+### enable_datacache_async_populate_mode
+
+* 描述：是否使用异步方式进行 Data Cache 填充。系统默认使用同步方式进行填充，即在查询数据时同步填充进行缓存填充。
+* 默认值：false
+* 引入版本：v3.2.7
 
 ### query_including_mv_names
 
