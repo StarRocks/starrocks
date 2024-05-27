@@ -167,7 +167,7 @@ public:
             uint32_t prefetch_i = i + PREFETCHN;
             if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             RowIdPack4 v(base + i);
-            if (type == InsertMode::IGNORE && _map.contains(keys[i])) {
+            if (mode == InsertMode::IGNORE_MODE && _map.contains(keys[i])) {
                 (*deletes)[rssid].push_back(i);
             } else {
                 auto p = _map.insert({keys[i], v});
@@ -382,7 +382,7 @@ public:
             for (uint32_t i = idx_begin; i < idx_end; i++) {
                 uint64_t v = base + i;
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                if (type == InsertMode::IGNORE && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
+                if (mode == InsertMode::IGNORE_MODE && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
                     (*deletes)[rssid].push_back(i);
                 } else {
                     auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
@@ -406,7 +406,7 @@ public:
             }
         } else {
             for (uint32_t i = idx_begin; i < idx_end; i++) {
-                if (type == InsertMode::IGNORE && _map.contains(FixSlice<S>(keys[i]))) {
+                if (mode == InsertMode::IGNORE_MODE && _map.contains(FixSlice<S>(keys[i]))) {
                     (*deletes)[rssid].push_back(i);
                 } else {
                     uint64_t v = base + i;
@@ -652,7 +652,7 @@ public:
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
-            if (type == InsertMode::IGNORE && _map.contains(keys[i].to_string())) {
+            if (mode == InsertMode::IGNORE_MODE && _map.contains(keys[i].to_string())) {
                 (*deletes)[rssid].push_back(i);
             } else {
                 uint64_t v = base + i;
@@ -880,11 +880,11 @@ public:
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, deletes, type);
+                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, deletes, mode);
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes, type);
+            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes, mode);
         }
     }
 
@@ -1325,17 +1325,17 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values));
     RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
-                                              reinterpret_cast<IndexValue*>(old_values.data()), stat, type));
+                                              reinterpret_cast<IndexValue*>(old_values.data()), stat, mode));
     for (size_t i = 0; i < n; i++) {
         unsigned long old = old_values[i];
-        if ((old != NullIndexValue) && type == InsertMode::UPSERT && (old >> 32) == rssid) {
+        if ((old != NullIndexValue) && mode == InsertMode::UPSERT_MODE && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
             st = Status::InternalError("found duplicate in upsert data");
         }
         if (old != NullIndexValue) {
-            if (type == InsertMode::UPSERT) {
+            if (mode == InsertMode::UPSERT_MODE) {
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-            } else if (type == InsertMode::IGNORE) {
+            } else if (mode == InsertMode::IGNORE_MODE) {
                 (*deletes)[rssid].push_back(rowid_start + idx_begin + i);
             }
         }
@@ -1423,9 +1423,9 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat, type);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat, mode);
     } else {
-        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes, type);
+        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes, mode);
     }
     return st;
 }
@@ -1435,9 +1435,9 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr, type);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr, mode);
     } else {
-        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes, type);
+        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes, mode);
     }
     return st;
 }

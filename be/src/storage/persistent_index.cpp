@@ -800,7 +800,7 @@ public:
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            if (type == InsertMode::IGNORE) {
+            if (mode == InsertMode::IGNORE_MODE) {
                 auto it = _map.find(key, hash);
                 if (it != _map.end() && it->second.get_value() != NullIndexValue) {
                     old_values[idx] = value;
@@ -828,7 +828,7 @@ public:
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            if (type == InsertMode::IGNORE) {
+            if (mode == InsertMode::IGNORE_MODE) {
                 auto it = _map.find(key, hash);
                 if (it != _map.end() && it->second.get_value() != NullIndexValue) {
                     nfound++;
@@ -1119,7 +1119,7 @@ public:
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
-            if (type == InsertMode::IGNORE) {
+            if (mode == InsertMode::IGNORE_MODE) {
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
@@ -1158,7 +1158,7 @@ public:
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
-            if (type == InsertMode::IGNORE) {
+            if (mode == InsertMode::IGNORE_MODE) {
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
@@ -1716,7 +1716,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
         auto& keys_info = not_founds_by_key_size[_fixed_key_size];
         for (auto i = 0; i < shard_size; ++i) {
             RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, old_values, &keys_info, num_found,
-                                                              idxes_by_shard[i], type));
+                                                              idxes_by_shard[i], mode));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1735,7 +1735,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
             auto& not_found = not_founds_by_key_size[key_size];
             for (auto i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, old_values, &not_found, num_found,
-                                                                  idxes_by_shard[i], type));
+                                                                  idxes_by_shard[i], mode));
             }
         }
     }
@@ -1750,7 +1750,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
         const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
         auto& keys_info = not_founds_by_key_size[_fixed_key_size];
         for (size_t i = 0; i < shard_size; ++i) {
-            RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, &keys_info, num_found, idxes_by_shard[i], type));
+            RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, &keys_info, num_found, idxes_by_shard[i], mode));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1769,7 +1769,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
             auto& not_found = not_founds_by_key_size[key_size];
             for (size_t i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(
-                        _shards[shard_offset + i]->upsert(keys, values, &not_found, num_found, idxes_by_shard[i], type));
+                        _shards[shard_offset + i]->upsert(keys, values, &not_found, num_found, idxes_by_shard[i], mode));
             }
         }
     }
@@ -3813,7 +3813,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     size_t num_found = 0;
     MonotonicStopWatch watch;
     watch.start();
-    RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size, type));
+    RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size, mode));
     if (stat != nullptr) {
         stat->l0_write_cost += watch.elapsed_time();
         watch.reset();

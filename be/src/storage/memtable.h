@@ -66,7 +66,7 @@ public:
 
     static Schema convert_schema(const TabletSchemaCSPtr& tablet_schema,
                                  const std::vector<SlotDescriptor*>* slot_descs,
-                                 const InsertMode insert_mode = InsertMode::UPSERT);
+                                 const InsertMode insert_mode = InsertMode::UPSERT_MODE);
 
     ChunkPtr get_result_chunk() { return _result_chunk; }
 

@@ -180,8 +180,12 @@ public:
         return *this;
     }
 
-    AsyncDeltaWriterBuilder& set_insert_mode(InsertMode insert_mode) {
-        _insert_mode = insert_mode;
+    AsyncDeltaWriterBuilder& set_insert_mode(TInsertMode insert_mode) {
+        if (insert_mode == TInsertMode::type::UPSERT_MODE) {
+            _insert_mode = InsertMode::UPSERT_MODE;
+        } else if (insert_mode == TInsertMode::type::IGNORE_MODE) {
+            _insert_mode = InsertMode::IGNORE_MODE;
+        }
         return *this;
     }
 
@@ -199,7 +203,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
-    InsertMode _insert_mode = InsertMode::UPSERT;
+    InsertMode _insert_mode = InsertMode::UPSERT_MODE;
 };
 
 } // namespace starrocks::lake

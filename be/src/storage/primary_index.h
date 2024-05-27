@@ -66,10 +66,10 @@ public:
     //
     // [not thread-safe]
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr,
-                  const InsertMode& mode = InsertMode::UPSERT);
+                  const InsertMode& mode = InsertMode::UPSERT_MODE);
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                  DeletesMap* deletes, const InsertMode& mode = InsertMode::UPSERT);
+                  DeletesMap* deletes, const InsertMode& mode = InsertMode::UPSERT_MODE);
 
     // replace old values and insert when key not exist.
     // Used in compaction apply & publish.

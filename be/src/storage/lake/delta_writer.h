@@ -181,7 +181,8 @@ public:
         return *this;
     }
 
-    StatusOr<DeltaWriterPtr> build();
+StatusOr<DeltaWriterPtr>
+build();
 
 private:
     TabletManager* _tablet_mgr{nullptr};

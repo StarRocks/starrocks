@@ -33,7 +33,7 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
         const auto value = values[i];
-        if (type == InsertMode::IGNORE) {
+        if (mode == InsertMode::IGNORE_MODE) {
             auto it = _map.find(key);
             if (it != _map.end()) {
                 auto& index_value_vers = it->second;

@@ -61,7 +61,7 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
             op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
             schema.append(op_column);
         }
-        if (insert_mode == InsertMode::IGNORE) {
+        if (insert_mode == InsertMode::IGNORE_MODE) {
             for (auto& name : schema.field_names()) {
                 FieldPtr f = schema.get_field_by_name(name);
                 if (f->aggregate_method() == STORAGE_AGGREGATE_REPLACE) {

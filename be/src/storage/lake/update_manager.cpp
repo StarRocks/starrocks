@@ -206,9 +206,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         new_deletes[rowset_id + segment_id] = {};
     }
-    InsertMode insert_mode = InsertMode::UPSERT;
+    InsertMode insert_mode = InsertMode::UPSERT_MODE;
     if (op_write.insert_mode()) {
-        insert_mode = InsertMode::IGNORE;
+        insert_mode = InsertMode::IGNORE_MODE;
     }
     // 2. Handle segment one by one to save memory usage.
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
@@ -321,7 +321,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const C
                                  PrimaryIndex& index, DeletesMap* new_deletes,
                                  const InsertMode& mode) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
-    return index.upsert(rowset_id + upsert_idx, 0, *upsert, new_deletes, nullptr, insert_mode);
+    return index.upsert(rowset_id + upsert_idx, 0, *upsert, new_deletes, nullptr, mode);
 }
 
 Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,

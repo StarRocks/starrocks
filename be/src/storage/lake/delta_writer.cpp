@@ -191,7 +191,7 @@ private:
 
     int64_t _last_write_ts = 0;
 
-    InsertMode _insert_mode = InsertMode::UPSERT;
+    InsertMode _insert_mode = InsertMode::UPSERT_MODE;
 };
 
 bool DeltaWriterImpl::is_immutable() const {

@@ -199,7 +199,7 @@ public:
     // |idxes|: the target indexes of keys
     virtual Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
                           size_t* num_found, const std::vector<size_t>& idxes,
-                          const InsertMode& mode = InsertMode::UPSERT) = 0;
+                          const InsertMode& mode = InsertMode::UPSERT_MODE) = 0;
 
     // batch upsert
     // |keys|: key array as raw buffer
@@ -209,7 +209,7 @@ public:
     // |idxes|: the target indexes of keys
     virtual Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
                           const std::vector<size_t>& idxes,
-                          const InsertMode& mode = InsertMode::UPSERT) = 0;
+                          const InsertMode& mode = InsertMode::UPSERT_MODE) = 0;
 
     // batch insert
     // |keys|: key array as raw buffer
@@ -330,7 +330,7 @@ public:
     // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, size_t* num_found,
                   std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size,
-                  const InsertMode& mode = InsertMode::UPSERT);
+                  const InsertMode& mode = InsertMode::UPSERT_MODE);
 
     // batch upsert
     // |n|: size of key/value array
@@ -340,7 +340,7 @@ public:
     // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, size_t* num_found,
                   std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size,
-                  const InsertMode& mode = InsertMode::UPSERT);
+                  const InsertMode& mode = InsertMode::UPSERT_MODE);
 
     // batch insert
     // |n|: size of key/value array
@@ -720,7 +720,7 @@ public:
     // |stat|: used for collect statistic
     // |type|: upsert or ignore
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr, const InsertMode& mode = InsertMode::UPSERT);
+                          IOStat* stat = nullptr, const InsertMode& mode = InsertMode::UPSERT_MODE);
 
     // batch replace without return old values
     // |n|: size of key/value array

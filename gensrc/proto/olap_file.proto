@@ -111,8 +111,8 @@ message RowsetTxnMetaPB {
 //     1. upsert, the newer record will replace the old record.
 //     2. ignore, it will keep the old record and ignore the newer one.
 enum InsertMode {
-    UPSERT = 0;
-    IGNORE = 1;
+    UPSERT_MODE = 0;
+    IGNORE_MODE = 1;
 }
 
 message RowsetMetaPB {
@@ -184,7 +184,7 @@ message RowsetMetaPB {
     // global transaction id
     optional int64 gtid = 62;
     // insert mode
-    optional InsertMode insert_mode = 63 [default = UPSERT];
+    optional InsertMode insert_mode = 63 [default = UPSERT_MODE];
 }
 
 enum DataFileType {

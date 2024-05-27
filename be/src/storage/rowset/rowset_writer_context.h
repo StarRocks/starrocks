@@ -95,7 +95,7 @@ public:
     int64_t gtid = 0;
     // Is pk compaction output writer
     bool is_pk_compaction = false;
-    InsertMode insert_mode = InsertMode::UPSERT;
+    InsertMode insert_mode = InsertMode::UPSERT_MODE;
 };
 
 } // namespace starrocks

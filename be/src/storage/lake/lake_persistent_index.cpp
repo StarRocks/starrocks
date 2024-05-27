@@ -192,7 +192,7 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
                                    IOStat* stat, const InsertMode& mode) {
     std::set<KeyIndex> not_founds;
     size_t num_found;
-    RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number(), type));
+    RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number(), mode));
     KeyIndexSet& key_indexes = not_founds;
     KeyIndexSet found_key_indexes;
     RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));

@@ -121,7 +121,7 @@ message TxnLogPB {
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
         // insert mode
-        optional InsertMode insert_mode = 63 [default = UPSERT];
+        optional InsertMode insert_mode = 63 [default = UPSERT_MODE];
     }
 
     message OpCompaction {
