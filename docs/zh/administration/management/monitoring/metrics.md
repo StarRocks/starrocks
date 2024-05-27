@@ -1033,16 +1033,12 @@ displayed_sidebar: "Chinese"
 - 单位：Byte
 - 描述：Storage Page Cache 使用的内存。
 
-<<<<<<< HEAD
-#### column_partial_update_apply_total
-=======
 ### jit_cache_mem_bytes
 
 - 单位：Byte
 - 描述：jit 编译函数使用的内存。
 
 ### column_partial_update_apply_total
->>>>>>> 8122a03cdb ([Doc] Break Metrics into pages (#46231))
 
 - 单位：个
 - 描述：列的 Partial Update （列模式）的 APPLY 的总数。
