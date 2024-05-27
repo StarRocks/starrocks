@@ -96,6 +96,12 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     sink_ctx->compression_type = target_table.compression_type;
     sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
     sink_ctx->fragment_context = fragment_ctx;
+    if (target_table.__isset.csv_column_seperator) {
+        sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = target_table.csv_column_seperator;
+    }
+    if (target_table.__isset.csv_row_delimiter) {
+        sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = target_table.csv_row_delimiter;
+    }
 
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
     auto sink_provider = connector->create_data_sink_provider();

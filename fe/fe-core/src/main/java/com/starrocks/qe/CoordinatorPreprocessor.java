@@ -22,6 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.PlanFragment;
@@ -37,6 +38,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -73,12 +75,13 @@ public class CoordinatorPreprocessor {
     private final JobSpec jobSpec;
     private final ExecutionDAG executionDAG;
 
-    private final WorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
+    private final WorkerProvider.Factory workerProviderFactory;
     private WorkerProvider workerProvider;
 
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
     public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
+        workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         this.connectContext = Preconditions.checkNotNull(context);
@@ -88,7 +91,8 @@ public class CoordinatorPreprocessor {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(), jobSpec.getWarehouseId());
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
@@ -96,6 +100,7 @@ public class CoordinatorPreprocessor {
 
     @VisibleForTesting
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes, ConnectContext context) {
+        workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         this.connectContext = context;
@@ -106,7 +111,7 @@ public class CoordinatorPreprocessor {
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                jobSpec.getWarehouseId());
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -135,6 +140,14 @@ public class CoordinatorPreprocessor {
             queryGlobals.setTime_zone(timezone);
         }
         return queryGlobals;
+    }
+
+    private WorkerProvider.Factory newWorkerProviderFactory() {
+        if (RunMode.isSharedDataMode()) {
+            return new DefaultSharedDataWorkerProvider.Factory();
+        } else {
+            return new DefaultWorkerProvider.Factory();
+        }
     }
 
     public TUniqueId getQueryId() {
@@ -196,7 +209,7 @@ public class CoordinatorPreprocessor {
         workerProvider = workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                jobSpec.getWarehouseId());
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }

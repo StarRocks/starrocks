@@ -114,7 +114,8 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
             col_param->short_key_column_count = p_index.column_param().short_key_column_count();
             index->column_param = col_param;
         }
-        if (p_index.has_schema_id()) {
+        if (p_index.has_schema_id() && p_index.schema_id() > 0) {
+            //                         ^^^^^^^^^^^^^^^^^^^^^^^ Older version FE may incorrectly set the schema id to 0
             index->schema_id = p_index.schema_id();
         } else {
             index->schema_id = p_index.id();
@@ -520,6 +521,8 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         if (!_partitions_expr_ctxs.empty()) {
             for (size_t i = 0; i < partition_columns.size(); ++i) {
                 ASSIGN_OR_RETURN(partition_columns[i], _partitions_expr_ctxs[i]->evaluate(chunk));
+                partition_columns[i] = ColumnHelper::unfold_const_column(_partition_slot_descs[i]->type(), num_rows,
+                                                                         partition_columns[i]);
             }
         } else {
             for (size_t i = 0; i < partition_columns.size(); ++i) {

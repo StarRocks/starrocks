@@ -53,7 +53,6 @@ public:
               _is_nullable(is_nullable),
               _type_info(std::move(type_info)),
               _schema_length(schema_length),
-
               _pool(),
               _num_rows(num_rows) {}
 
@@ -75,9 +74,11 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
+    ordinal_t num_rows() const override { return _num_rows; }
+
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                    const ColumnPredicate* del_predicate,
-                                                    SparseRange<>* row_ranges) override;
+                                                    const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                    CompoundNodeType pred_relation) override;
 
     bool all_page_dict_encoded() const override { return false; }
 

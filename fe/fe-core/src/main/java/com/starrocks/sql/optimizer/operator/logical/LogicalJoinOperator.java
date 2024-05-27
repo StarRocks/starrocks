@@ -31,10 +31,13 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -202,6 +205,16 @@ public class LogicalJoinOperator extends LogicalOperator {
             }
         }
         return new RowOutputInfo(entryList);
+    }
+
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        DomainProperty leftDomainProperty = inputs.get(0).getDomainProperty();
+        DomainProperty rightDomainProperty = inputs.get(1).getDomainProperty();
+        return DomainProperty.mergeDomainProperty(List.of(leftDomainProperty, rightDomainProperty));
     }
 
     @Override

@@ -51,7 +51,6 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -93,8 +92,10 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.system.SystemInfoService;
@@ -134,6 +135,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -238,6 +240,10 @@ public class OlapTable extends Table {
     @SerializedName(value = "maxIndexId")
     protected long maxIndexId = -1;
 
+    // the id of the session that created this table, only used in temporary table
+    @SerializedName(value = "sessionId")
+    protected UUID sessionId = null;
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -313,7 +319,12 @@ public class OlapTable extends Table {
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
-        olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
+        Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        nameToColumn.putAll(this.nameToColumn);
+        olapTable.nameToColumn = nameToColumn;
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.putAll(this.idToColumn);
+        olapTable.idToColumn = idToColumn;
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
@@ -357,6 +368,7 @@ public class OlapTable extends Table {
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
         olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
+        olapTable.sessionId = this.sessionId;
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -428,7 +440,7 @@ public class OlapTable extends Table {
     public boolean dynamicPartitionExists() {
         return tableProperty != null
                 && tableProperty.getDynamicPartitionProperty() != null
-                && tableProperty.getDynamicPartitionProperty().isExist();
+                && tableProperty.getDynamicPartitionProperty().isExists();
     }
 
     public void setBaseIndexId(long baseIndexId) {
@@ -452,6 +464,11 @@ public class OlapTable extends Table {
             return Lists.newArrayList();
         }
         return indexes.getIndexes();
+    }
+
+    @Override
+    public boolean isTemporaryTable() {
+        return this.sessionId != null;
     }
 
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
@@ -573,20 +590,21 @@ public class OlapTable extends Table {
     // the order of columns in fullSchema is meaningless
     public void rebuildFullSchema() {
         List<Column> newFullSchema = new CopyOnWriteArrayList<>();
-        nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Set<String> addedColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
             newFullSchema.add(baseColumn);
-            nameToColumn.put(baseColumn.getName(), baseColumn);
+            addedColumnNames.add(baseColumn.getName());
         }
         for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
             for (Column column : indexMeta.getSchema()) {
-                if (!nameToColumn.containsKey(column.getName())) {
+                if (!addedColumnNames.contains(column.getName())) {
                     newFullSchema.add(column);
-                    nameToColumn.put(column.getName(), column);
+                    addedColumnNames.add(column.getName());
                 }
             }
         }
         fullSchema = newFullSchema;
+        updateSchemaIndex();
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
@@ -659,6 +677,11 @@ public class OlapTable extends Table {
         return Lists.newArrayList();
     }
 
+    @Override
+    public Column getColumn(ColumnId id) {
+        return idToColumn.get(id);
+    }
+
     // this is only for schema change.
     public void renameIndexForSchemaChange(String name, String newName) {
         long idxId = indexNameToId.remove(name);
@@ -670,6 +693,13 @@ public class OlapTable extends Table {
         for (Column column : columns) {
             column.setName(Column.removeNamePrefix(column.getName()));
         }
+    }
+
+    public void renameColumn(String oldName, String newName) {
+        Column column = this.nameToColumn.remove(oldName);
+        Preconditions.checkState(column != null, "column of name: " + oldName + " does not exist");
+        column.setName(newName);
+        this.nameToColumn.put(newName, column);
     }
 
     public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum,
@@ -1172,8 +1202,6 @@ public class OlapTable extends Table {
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
-
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
     }
 
     protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
@@ -2168,6 +2196,24 @@ public class OlapTable extends Table {
         return getSchemaByIndexId(baseIndexId);
     }
 
+    @Override
+    protected void updateSchemaIndex() {
+        Map<String, Column> newNameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<ColumnId, Column> newIdToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : this.fullSchema) {
+            newNameToColumn.put(column.getName(), column);
+            // For OlapTable: fullSchema contains columns from baseIndex
+            // and columns from shadow indexes (when doing schema changes).
+            // To avoid base columns being replaced by shadow columns,
+            // put the columns with the same ColumnId once.
+            if (!newIdToColumn.containsKey(column.getColumnId())) {
+                newIdToColumn.put(column.getColumnId(), column);
+            }
+        }
+        this.nameToColumn = newNameToColumn;
+        this.idToColumn = newIdToColumn;
+    }
+
     public List<Column> getBaseSchemaWithoutGeneratedColumn() {
         if (!hasGeneratedColumn()) {
             return getSchemaByIndexId(baseIndexId);
@@ -2802,7 +2848,6 @@ public class OlapTable extends Table {
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }
-        // property is set false by default
         return false;
     }
 
@@ -2813,6 +2858,14 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION,
                 Boolean.valueOf(useFastSchemaEvolution).toString());
         tableProperty.buildUseFastSchemaEvolution();
+    }
+
+    public void setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public UUID getSessionId() {
+        return sessionId;
     }
 
     @Override
@@ -2836,7 +2889,7 @@ public class OlapTable extends Table {
 
         DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), this);
 
-        if (Config.dynamic_partition_enable && getTableProperty().getDynamicPartitionProperty().getEnable()) {
+        if (Config.dynamic_partition_enable && getTableProperty().getDynamicPartitionProperty().isEnabled()) {
             new Thread(() -> {
                 try {
                     GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
@@ -2846,6 +2899,12 @@ public class OlapTable extends Table {
                             "the execution of dynamic partitioning", ex);
                 }
             }, "BackgroundDynamicPartitionThread").start();
+        }
+
+        if (isTemporaryTable()) {
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), name, id);
+            LOG.debug("add temporary table, name[{}] id[{}] session[{}]", name, id, sessionId);
         }
     }
 

@@ -49,6 +49,7 @@ include "MasterService.thrift"
 include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
+include "DataCache.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -354,6 +355,7 @@ struct TGetTablesParams {
 
   // If not set, match default_catalog
   22: optional string catalog_name
+  23: optional string table_name
 }
 
 struct TTableStatus {
@@ -476,6 +478,12 @@ struct TListMaterializedViewStatusResult {
 struct TGetTasksParams {
     1: optional string db
     2: optional Types.TUserIdentity current_user_ident
+    // task's name
+    3: optional string task_name
+    // task run's query_id
+    4: optional string query_id
+    // task's state
+    5: optional string state
 }
 
 struct TTaskInfo {
@@ -486,6 +494,7 @@ struct TTaskInfo {
     5: optional string definition
     6: optional i64 expire_time
     7: optional string properties
+    8: optional string catalog
 }
 
 struct TGetTaskInfoResult {
@@ -507,6 +516,8 @@ struct TTaskRunInfo {
 
     12: optional string extra_message
     13: optional string properties
+
+    14: optional string catalog
 }
 
 struct TGetTaskRunInfoResult {
@@ -719,6 +730,8 @@ struct TReportExecStatusParams {
   27: optional string rejected_record_path
 
   28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
+
+  29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
 }
 
 struct TAuditStatistics {
@@ -781,6 +794,7 @@ struct TMasterOpRequest {
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
+    35: optional string session_id
 }
 
 struct TColumnDefinition {
@@ -840,7 +854,10 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
-    101: optional string warehouse   // begin from 101, in case of conflict with other's change
+    
+    // begin from 101, in case of conflict with other's change
+    101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
+    102: optional i64 backend_id
 }
 
 struct TLoadTxnBeginResult {
@@ -906,8 +923,11 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
+    56: optional string payload_compression_type 
 
-    101: optional string warehouse   // begin from 101, in case of conflict with other's change
+    // begin from 101, in case of conflict with other's change
+    101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
+    102: optional i64 backend_id
 }
 
 struct TStreamLoadPutResult {
@@ -1346,6 +1366,9 @@ struct TImmutablePartitionRequest {
     2: optional i64 db_id
     3: optional i64 table_id
     4: optional list<i64> partition_ids
+
+    // begin from 101, in case of conflict with other's change
+    101: optional i64 backend_id
 }
 
 struct TImmutablePartitionResult {
@@ -1427,9 +1450,20 @@ struct TPartitionMetaInfo {
 
 struct TGetTablesInfoRequest {
     1: optional TAuthInfo auth_info
+    2: optional string table_name;
 }
 
 struct TGetTablesInfoResponse {
+    1: optional list<TTableInfo> tables_infos
+}
+
+struct TGetTemporaryTablesInfoRequest {
+    1: optional TAuthInfo auth_info
+    // only for no predicate and limit parameter is set
+    2: optional i64 limit
+}
+
+struct TGetTemporaryTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
@@ -1554,6 +1588,8 @@ struct TTableInfo {
     19: optional i64 checksum
     20: optional string create_options
     21: optional string table_comment
+    22: optional string session_id
+    23: optional i64 table_id
 }
 
 struct TAllocateAutoIncrementIdParam {
@@ -1720,6 +1756,31 @@ struct TTableReplicationResponse {
     1: optional Status.TStatus status
 }
 
+struct TReportLakeCompactionRequest {
+    1: optional i64 txn_id
+}
+
+struct TReportLakeCompactionResponse {
+    1: optional bool valid
+}
+
+struct TListSessionsOptions {
+    1: optional bool temporary_table_only;
+}
+
+struct TListSessionsRequest {
+    1: optional TListSessionsOptions options;
+}
+
+struct TSessionInfo {
+    1: optional string session_id;
+}
+
+struct TListSessionsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TSessionInfo> sessions;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1822,5 +1883,10 @@ service FrontendService {
     TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
+
+    TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
+
+    TListSessionsResponse listSessions(1: TListSessionsRequest request)
+    TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 }
 

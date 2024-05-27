@@ -56,11 +56,12 @@ public class MetaScanNode extends ScanNode {
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
-                        Map<Integer, String> columnIdToNames) {
+                        Map<Integer, String> columnIdToNames, long warehouseId) {
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
+        this.warehouseId = warehouseId;
     }
 
     public void computeRangeLocations() {

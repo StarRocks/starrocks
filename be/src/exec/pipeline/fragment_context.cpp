@@ -140,6 +140,9 @@ void FragmentContext::set_final_status(const Status& status) {
     Status* old_status = nullptr;
     if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
         _s_status = status;
+
+        _driver_token.reset();
+
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
             std::stringstream ss;
@@ -156,12 +159,13 @@ void FragmentContext::set_final_status(const Status& status) {
     }
 }
 
-void FragmentContext::set_exec_groups(ExecutionGroups&& exec_groups) {
+void FragmentContext::set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines) {
     for (auto& group : exec_groups) {
         if (!group->is_empty()) {
             _execution_groups.emplace_back(std::move(group));
         }
     }
+    _pipelines = std::move(pipelines);
 }
 
 Status FragmentContext::prepare_all_pipelines() {

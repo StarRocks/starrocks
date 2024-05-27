@@ -253,7 +253,7 @@ StarRocks 访问存储系统的认证配置。
   
     - 如果采用有 Broker 的导入，您需要确保至少部署了一组独立的 Broker，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
   
-    - 如果采用无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE 节点的 `{deploy}/conf` 目录下。
+    - 如果采用无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE（或 CN）节点的 `{deploy}/conf` 目录下。
 
   - 在单 HDFS 集群、并且配置了多 Kerberos 用户的场景下，只支持有 Broker 的导入。您需要确保至少部署了一组独立的 Broker，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
 
@@ -647,11 +647,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
   
   - 取值为 `0` 表示不记录过滤掉的数据行。
   - 取值为 `-1` 表示记录所有过滤掉的数据行。
-  - 取值为大于 0 的正整数（比如 `n`）表示每个 BE 节点上最多可以记录 `n` 条过滤掉的数据行。
+  - 取值为大于 0 的正整数（比如 `n`）表示每个 BE（或 CN）节点上最多可以记录 `n` 条过滤掉的数据行。
 
 - `load_mem_limit`
 
-  导入作业的内存限制，最大不超过 BE 的内存限制。单位：字节。默认内存限制为 2 GB。
+  导入作业的内存限制，最大不超过 BE（或 CN）的内存限制。单位：字节。默认内存限制为 2 GB。
 
 - `strict_mode`
 

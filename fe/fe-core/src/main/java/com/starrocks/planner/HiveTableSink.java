@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
@@ -103,7 +104,8 @@ public class HiveTableSink extends DataSink {
         tHiveTableSink.setStaging_dir(stagingDir);
         tHiveTableSink.setFile_format(fileFormat);
         tHiveTableSink.setIs_static_partition_sink(isStaticPartitionSink);
-        TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
+        Preconditions.checkState(CompressionUtils.getConnectorSinkCompressionType(compressionType).isPresent());
+        TCompressionType compression = CompressionUtils.getConnectorSinkCompressionType(compressionType).get();
         tHiveTableSink.setCompression_type(compression);
         tHiveTableSink.setTarget_max_file_size(targetMaxFileSize);
         textFileFormatDesc.ifPresent(fileFormatDesc -> tHiveTableSink.setText_file_desc(fileFormatDesc.toThrift()));

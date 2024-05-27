@@ -1,13 +1,14 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 5
 ---
 
 # Unified catalog
 
-Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi 和 Delta Lake 数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
+Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi、 Delta Lake 和 Apache Kudu 数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
 
-- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据进行加工建模，并导入至 StarRocks。
+- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi、Delta Lake 和 Kudu 数据源里的数据。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi、Delta Lake 和 Kudu 数据源里的数据进行加工建模，并导入至 StarRocks。
 - 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
 为保证正常访问融合数据源内的数据，StarRocks 集群必须能够访问融合数据源的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
@@ -26,7 +27,7 @@ Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Un
 
 ## 使用说明
 
-- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](../catalog/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md) 和 [Delta Lake catalog](../catalog/deltalake_catalog.md) 文档中“使用说明”部分。
+- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](../catalog/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md)、[Delta Lake catalog](../catalog/deltalake_catalog.md) 和 [Kudu catalog](../catalog/kudu_catalog.md) 文档中“使用说明”部分。
 
 - 部分操作只能用于特定的表格式。例如，[CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 和 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 当前只支持 Hive 和 Iceberg 表，[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 只支持 Hive 和 Hudi 表。
 
@@ -44,10 +45,10 @@ Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Un
 
 如果使用 HDFS 作为文件存储，则需要在 StarRocks 集群中做如下配置：
 
-- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE 使配置生效。如果不设置该用户名，则默认使用 FE 和 BE 进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
-- 查询数据时，StarRocks 集群的 FE 和 BE 会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
-  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
-  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
+- （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE **be/conf/hadoop_env.sh** 文件（或每个 CN 的 **cn/conf/hadoop_env.sh** 文件）最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE（或 CN）使配置生效。如果不设置该用户名，则默认使用 FE 和 BE（或 CN）进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
+- 查询数据时，StarRocks 集群的 FE 和 BE（或 CN）会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
+  - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
+  - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径（或每个 CN 的 **$CN_HOME/conf** 路径）下。
 
 > **注意**
 >
@@ -57,8 +58,8 @@ Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Un
 
 如果 HDFS 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
 
-- 在每个 FE 和 每个 BE 上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 krb5.conf 文件的路径，可以根据文件的实际路径进行修改。
+- 在每个 FE 和 每个 BE（或 CN）上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
+- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件（或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件）中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 krb5.conf 文件的路径，可以根据文件的实际路径进行修改。
 
 ## 创建 Unified Catalog
 
@@ -72,7 +73,8 @@ PROPERTIES
     "type" = "unified",
     MetastoreParams,
     StorageCredentialParams,
-    MetadataUpdateParams
+    MetadataUpdateParams,
+    KuduCatalogParams
 )
 ```
 
@@ -448,6 +450,16 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 | remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
+
+#### KuduCatalogParams
+
+指定 Kudu Catalog 连接的一组参数。此组参数为可选。
+
+| 参数                                   | 是否必须 | 说明                                                                                     |
+| -------------------------------------- | -------- |----------------------------------------------------------------------------------------|
+| kudu.master                 | 否       | 指定 `Kudu Master` 连接地址，默认为：`localhost:7051`。                                            |
+| kudu.schema-emulation.enabled               | 否       | 是否启用模拟 `schema` 功能，默认处于关闭状态（`false`），即所有表都属于 `default` `schema`。                       |
+| kudu.schema-emulation.prefix   | 否       | 仅在 `kudu.schema-emulation.enabled` = `true` 即启用模拟 `schema` 功能时，需设置匹配前缀，默认采用前缀空字符串：` `。 |
 
 ### 示例
 
@@ -841,9 +853,9 @@ DROP CATALOG unified_catalog_glue;
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## 从 Hive、Iceberg、Hudi 或 Delta Lake 导入数据
+## 从 Hive、Iceberg、Hudi、Delta Lake 或 Kudu 导入数据
 
-您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
+您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi、Delta Lake 或 Kudu 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
 
 例如，通过如下命令将 Hive 表 `hive_table` 的数据导入到 StarRocks 中 Unified Catalog `unified_catalog` 下数据库`test_database` 里的表 `test_table`：
 

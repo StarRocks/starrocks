@@ -167,8 +167,7 @@ public class RollupJobV2Test extends DDLTestBase {
         assertEquals(AlterJobV2.JobState.RUNNING, rollupJob.getJobState());
 
         int retryCount = 0;
-        int maxRetry = 5;
-        while (retryCount < maxRetry) {
+        while (!rollupJob.getJobState().isFinalState()) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             rollupJob.runRunningJob();
             if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {

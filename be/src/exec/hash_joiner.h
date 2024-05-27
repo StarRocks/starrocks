@@ -64,20 +64,17 @@ enum HashJoinPhase {
     EOS = 4,
 };
 struct HashJoinerParam {
-    HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, TPlanNodeId node_id,
-                    TPlanNodeType::type node_type, std::vector<bool> is_null_safes,
+    HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, std::vector<bool> is_null_safes,
                     std::vector<ExprContext*> build_expr_ctxs, std::vector<ExprContext*> probe_expr_ctxs,
                     std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
                     const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
-                    const RowDescriptor& row_descriptor, TPlanNodeType::type build_node_type,
-                    TPlanNodeType::type probe_node_type, bool build_conjunct_ctxs_is_empty,
-                    std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters, std::set<SlotId> build_output_slots,
-                    std::set<SlotId> probe_output_slots, const TJoinDistributionMode::type distribution_mode,
-                    bool mor_reader_mode)
+                    TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
+                    bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
+                    std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
+                    const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
+                    bool enable_late_materialization)
             : _pool(pool),
               _hash_join_node(hash_join_node),
-              _node_id(node_id),
-              _node_type(node_type),
               _is_null_safes(std::move(is_null_safes)),
               _build_expr_ctxs(std::move(build_expr_ctxs)),
               _probe_expr_ctxs(std::move(probe_expr_ctxs)),
@@ -85,7 +82,6 @@ struct HashJoinerParam {
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _build_row_descriptor(build_row_descriptor),
               _probe_row_descriptor(probe_row_descriptor),
-              _row_descriptor(row_descriptor),
               _build_node_type(build_node_type),
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
@@ -93,7 +89,8 @@ struct HashJoinerParam {
               _build_output_slots(std::move(build_output_slots)),
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
-              _mor_reader_mode(mor_reader_mode) {}
+              _mor_reader_mode(mor_reader_mode),
+              _enable_late_materialization(enable_late_materialization) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -101,8 +98,6 @@ struct HashJoinerParam {
 
     ObjectPool* _pool;
     const THashJoinNode& _hash_join_node;
-    TPlanNodeId _node_id;
-    TPlanNodeType::type _node_type;
     const std::vector<bool> _is_null_safes;
     const std::vector<ExprContext*> _build_expr_ctxs;
     const std::vector<ExprContext*> _probe_expr_ctxs;
@@ -110,7 +105,6 @@ struct HashJoinerParam {
     const std::vector<ExprContext*> _conjunct_ctxs;
     const RowDescriptor _build_row_descriptor;
     const RowDescriptor _probe_row_descriptor;
-    const RowDescriptor _row_descriptor;
     TPlanNodeType::type _build_node_type;
     TPlanNodeType::type _probe_node_type;
     bool _build_conjunct_ctxs_is_empty;
@@ -120,6 +114,7 @@ struct HashJoinerParam {
 
     const TJoinDistributionMode::type _distribution_mode;
     const bool _mor_reader_mode;
+    const bool _enable_late_materialization;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -279,7 +274,7 @@ public:
     HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
     HashJoinBuilder* new_builder(ObjectPool* pool) { return _hash_join_builder->clone_empty(pool); }
 
-    [[nodiscard]] Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
+    Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
         // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
         // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
@@ -294,6 +289,15 @@ public:
         }
 
         return Status::OK();
+    }
+
+    template <bool is_remain>
+    Status lazy_output_chunk(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* chunk, JoinHashTable& hash_table) {
+        if (_enable_late_materialization && (*chunk) && !(*chunk)->is_empty()) {
+            return hash_table.lazy_output<is_remain>(state, probe_chunk, chunk);
+        } else {
+            return Status::OK();
+        }
     }
 
     [[nodiscard]] Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
@@ -366,8 +370,6 @@ private:
         }
     }
 
-    [[nodiscard]] Status _build(RuntimeState* state);
-
     [[nodiscard]] StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
 
     [[nodiscard]] Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all,
@@ -394,7 +396,6 @@ private:
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;
-    bool _is_closed = false;
 
     const std::vector<bool>& _is_null_safes;
     // Equal conjuncts in Join On.
@@ -407,7 +408,6 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const RowDescriptor& _build_row_descriptor;
     const RowDescriptor& _probe_row_descriptor;
-    const RowDescriptor& _row_descriptor;
     const TPlanNodeType::type _build_node_type;
     const TPlanNodeType::type _probe_node_type;
     const bool _build_conjunct_ctxs_is_empty;
@@ -425,8 +425,8 @@ private:
     // in-filter constructed from string-typed key columns reference the memory of this column, and the in-filter's
     // lifetime can last beyond HashJoiner.
     Columns _string_key_columns;
-    size_t _probe_column_count = 0;
-    size_t _build_column_count = 0;
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
 
     // hash table doesn't have reserved data
     // bool _ht_has_remain = false;
@@ -452,6 +452,7 @@ private:
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
+    bool _enable_late_materialization = false;
 };
 
 } // namespace starrocks

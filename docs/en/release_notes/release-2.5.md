@@ -4,6 +4,25 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+## 2.5.21
+
+Release date: May 15, 2024
+
+### Improvements
+
+- Optimized the usage of database locks for materialized view refresh to prevent deadlock. [#42801](https://github.com/StarRocks/starrocks/pull/42801)
+- Both `s3a://` and `s3://` can be used to access data in AWS S3. [#42460](https://github.com/StarRocks/starrocks/pull/42460)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Schema change may cause issues in prefix index sorting, leading to incorrect results for queries based on prefix indexes. [#44941](https://github.com/StarRocks/starrocks/pull/44941)
+- After a Routine Load task is paused due to Kafka cluster abnormalities, the background still attempts to connect to this abnormal Kafka cluster, which prevents other Routine Load tasks  in this StarRocks cluster from consuming normal Kafka messages. [#45029](https://github.com/StarRocks/starrocks/pull/45029)
+- When querying views in `information_schema`, the database lock is held for an unexpectedly long time, which prolongs the overall query time. [#45392](https://github.com/StarRocks/starrocks/pull/45392)
+- Enabling Query Cache may cause BEs to crash if the SQL query contains a HAVING clause. This issue can be resolved by disabling Query Cache using `set enable_query_cache=false`. [#43823](https://github.com/StarRocks/starrocks/pull/43823)
+- When Query Cache is enabled, some queries may return an error message `All slotIds should be remapped`. [#42861](https://github.com/StarRocks/starrocks/pull/42861)
+
 ## 2.5.20
 
 Release date: March 22, 2024
@@ -35,7 +54,6 @@ Release date: February 8, 2024
 
 ### New features
 
-- Added a pattern-matching function: [regexp_extract_all](https://docs.starrocks.io/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/).
 - Added Bitmap value processing functions: serialize, deserialize, and serializeToString. [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
 
 ### Improvements

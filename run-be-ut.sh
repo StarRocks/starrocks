@@ -41,6 +41,7 @@ Usage: $0 <options>
      --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
      --enable-shared-data           enable to build with shared-data feature support
+     --without-starcache            build without starcache library
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      -j                             build parallel
 
@@ -85,6 +86,8 @@ OPTS=$(getopt \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
+  -l 'without-starcache' \
+  -l 'with-brpc-keepalive' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -106,6 +109,8 @@ HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
+WITH_STARCACHE=ON
+WITH_BRPC_KEEPALIVE=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -117,6 +122,8 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+        --without-starcache) WITH_STARCACHE=OFF; shift ;;
+        --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
@@ -174,6 +181,8 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
+            -DWITH_STARCACHE=${WITH_STARCACHE} \
+            -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
@@ -224,6 +233,9 @@ export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
 if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
     export HADOOP_CLASSPATH=${THIRDPARTY_HADOOP_HOME}/common/*:${THIRDPARTY_HADOOP_HOME}/common/lib/*:${THIRDPARTY_HADOOP_HOME}/hdfs/*:${THIRDPARTY_HADOOP_HOME}/hdfs/lib/*
+    # get rid of StackOverflowError on the process reaper thread, which has a small stack size.
+    # https://bugs.openjdk.org/browse/JDK-8153057
+    export LIBHDFS_OPTS="$LIBHDFS_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
 else
     # exclude HdfsFileSystemTest related test case if no hadoop env found
     echo "[INFO] Can't find available HADOOP common lib, disable HdfsFileSystemTest related test!"

@@ -53,6 +53,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -81,7 +82,8 @@ public class BackendsProcDir implements ProcDirInterface {
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
                 .add("StarletPort")
-                .add("WorkerId");
+                .add("WorkerId")
+                .add("WarehouseName");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
@@ -222,8 +224,8 @@ public class BackendsProcDir implements ProcDirInterface {
                 if (status != DataCacheMetrics.Status.DISABLED) {
                     backendInfo.add(String.format("Status: %s, DiskUsage: %s, MemUsage: %s",
                             dataCacheMetrics.get().getStatus(),
-                            dataCacheMetrics.get().getDiskUsage(),
-                            dataCacheMetrics.get().getMemUsage()));
+                            dataCacheMetrics.get().getDiskUsageStr(),
+                            dataCacheMetrics.get().getMemUsageStr()));
                 } else {
                     // DataCache is disabled
                     backendInfo.add(String.format("Status: %s", DataCacheMetrics.Status.DISABLED));
@@ -237,8 +239,10 @@ public class BackendsProcDir implements ProcDirInterface {
 
             if (RunMode.isSharedDataMode()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByNodeId(backendId);
                 backendInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(backend.getWarehouseId());
+                backendInfo.add(wh.getName());
             }
 
             comparableBackendInfos.add(backendInfo);

@@ -37,7 +37,7 @@ public enum MVTransparentState {
         return this == NO_COMPENSATE;
     }
 
-    public boolean isPrunedCompensate() {
+    public boolean isCompensate() {
         return this == COMPENSATE;
     }
 }

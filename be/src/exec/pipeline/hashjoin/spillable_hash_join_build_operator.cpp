@@ -68,6 +68,7 @@ bool SpillableHashJoinBuildOperator::need_input() const {
 }
 
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() { _join_builder->spill_channel()->set_finishing(); });
 
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL ||
@@ -168,7 +169,7 @@ Status SpillableHashJoinBuildOperator::append_hash_columns(const ChunkPtr& chunk
         ASSIGN_OR_RETURN(auto res, expr_ctx->evaluate(chunk.get()));
         res->fnv_hash(hash_values.data(), 0, num_rows);
     }
-    chunk->append_column(std::move(hash_column), -1);
+    chunk->append_column(std::move(hash_column), Chunk::HASH_JOIN_SPILL_HASH_SLOT_ID);
     return Status::OK();
 }
 
@@ -263,6 +264,7 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     //
     _spill_options->read_shared =
             _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::BROADCAST ||
+            _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::LOCAL_HASH_BUCKET ||
             state->fragment_ctx()->enable_adaptive_dop();
 
     const auto& param = _hash_joiner_factory->hash_join_param();

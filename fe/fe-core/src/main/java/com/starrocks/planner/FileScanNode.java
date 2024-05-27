@@ -60,7 +60,10 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
@@ -295,14 +298,16 @@ public class FileScanNode extends LoadScanNode {
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);
         if (column_separator.length != 1) {
-            if (column_separator.length > 50) {
-                throw new UserException("the column separator is limited to a maximum of 50 bytes");
+            if (column_separator.length > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH) {
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "column separator",
+                        1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
             }
             params.setMulti_column_separator(fileGroup.getColumnSeparator());
         }
         if (row_delimiter.length != 1) {
-            if (row_delimiter.length > 50) {
-                throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+            if (row_delimiter.length > CsvFormat.MAX_ROW_DELIMITER_LENGTH){
+                ErrorReport.reportUserException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH, "row delimiter",
+                        1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
             }
             params.setMulti_row_delimiter(fileGroup.getRowDelimiter());
         }
@@ -503,7 +508,18 @@ public class FileScanNode extends LoadScanNode {
         Preconditions.checkState(fileStatusesList.size() == fileGroups.size());
 
         if (isLoad() && filesAdded == 0) {
-            throw new UserException("No source file in this table(" + targetTable.getName() + ").");
+            // return at most 3 paths to users
+            int limit = 3;
+            List<String> allFilePaths =
+                    fileGroups.stream().map(BrokerFileGroup::getFilePaths).flatMap(List::stream).collect(Collectors.toList());
+            List<String> filePaths = Lists.newArrayList();
+            if (allFilePaths.size() > limit) {
+                filePaths.addAll(allFilePaths.subList(0, limit));
+                filePaths.add("...");
+            } else {
+                filePaths.addAll(allFilePaths);
+            }
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_FILES_FOUND, String.join(", ", filePaths));
         }
 
         for (List<TBrokerFileStatus> fileStatuses : fileStatusesList) {

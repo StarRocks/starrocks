@@ -73,7 +73,7 @@ AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
           _closed(false) {}
 
 AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                         ScannerCounter* counter, const std::string schema_text)
+                         ScannerCounter* counter, const std::string& schema_text)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _schema_text(schema_text),
@@ -271,6 +271,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
         size_t length = 0;
         auto* stream_file = down_cast<StreamLoadPipeInputStream*>(file->stream().get());
         {
+            ++_counter->file_read_count;
             SCOPED_RAW_TIMER(&_counter->file_read_ns);
             ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
         }
@@ -570,7 +571,7 @@ Status AvroScanner::_get_array_element(const avro_value_t* cur_value, size_t idx
     return Status::OK();
 }
 
-bool construct_path_from_str(std::string path_str, std::vector<AvroPath>& paths) {
+bool construct_path_from_str(const std::string& path_str, std::vector<AvroPath>& paths) {
     return false;
 }
 

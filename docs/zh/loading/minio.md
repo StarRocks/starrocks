@@ -16,7 +16,7 @@ StarRocks 支持通过以下方式从 MinIO 导入数据：
 
 一般情况下，建议您使用 INSERT+`FILES()`，更为方便易用。
 
-但是，INSERT+`FILES()` 当前只支持 Parquet 和 ORC 文件格式。因此，如果您需要导入其他格式（如 CSV）的数据、或者需要[在导入过程中执行 DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)，可以使用 Broker Load。
+但是，INSERT+`FILES()` 当前只支持 Parquet、ORC 和 CSV 文件格式。因此，如果您需要导入其他格式（如 JSON）的数据、或者需要[在导入过程中执行 DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)，可以使用 Broker Load。
 
 ## 准备工作
 
@@ -49,7 +49,7 @@ curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_ro
 
 ## 通过 INSERT+FILES() 导入
 
-该特性从 3.1 版本起支持。当前只支持 Parquet 和 ORC 文件格式。
+该特性从 3.1 版本起支持。当前只支持 Parquet、ORC 和 CSV（自 v3.3.0 起）文件格式。
 
 ### INSERT+FILES() 优势
 
@@ -431,8 +431,8 @@ AVG_ROW_LENGTH: 17
 ![Broker Load 原理图](../assets/broker_load_how-to-work_zh.png)
 
 1. 用户创建导入作业。
-2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE 执行。
-3. 各个 BE 从数据源拉取数据并把数据导入到 StarRocks 中。
+2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE（或 CN）执行。
+3. 各个 BE（或 CN）从数据源拉取数据并把数据导入到 StarRocks 中。
 
 ### 操作示例
 

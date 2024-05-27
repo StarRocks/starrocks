@@ -31,10 +31,14 @@
 
 namespace starrocks {
 
-struct HdfsOrcScannerSplitContext : public pipeline::ScanSplitContext {
-    size_t split_start = 0;
-    size_t split_end = 0;
+struct SplitContext : public HdfsSplitContext {
     std::shared_ptr<std::string> footer;
+
+    HdfsSplitContextPtr clone() override {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->footer = footer;
+        return ctx;
+    }
 };
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
@@ -95,12 +99,6 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     const auto* scan_range = _scanner_ctx.scan_range;
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
-
-    if (_scanner_ctx.split_context != nullptr) {
-        auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
-        scan_start = split_context->split_start;
-        scan_end = split_context->split_end;
-    }
 
     if (offset >= scan_start && offset < scan_end) {
         return false;
@@ -303,6 +301,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                                                  filter_ptr);
         if (!status.ok()) {
             LOG(WARNING) << "eval conjuncts fails: " << status.message();
+            _dict_filter_eval_cache.erase(slot_id);
             return false;
         }
 
@@ -343,14 +342,8 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
-    if (_scanner_ctx.split_context != nullptr) {
-        auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
-        scan_start = split_context->split_start;
-        scan_end = split_context->split_end;
-    }
-
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
-        auto stripeInfo = reader->getStripeInOrcFormat(idx);
+        const auto& stripeInfo = reader->getStripeInOrcFormat(idx);
         int64_t offset = stripeInfo.offset();
 
         if (offset >= scan_start && offset < scan_end) {
@@ -387,7 +380,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
                                           _scanner_ctx.case_sensitive, _scanner_ctx.orc_use_column_names);
-    _scanner_ctx.update_materialized_columns(known_column_names);
+    RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
@@ -427,6 +420,32 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     return Status::OK();
 }
 
+Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes) {
+    // we can split task if we enable split tasks feature and have >= 2 stripes.
+    // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
+    bool enable_split_tasks =
+            (_scanner_ctx.enable_split_tasks && stripes.size() >= 2) && (_scanner_ctx.split_context == nullptr);
+    if (!enable_split_tasks) return Status::OK();
+
+    auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
+    for (const auto& info : stripes) {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->footer = footer;
+        ctx->split_start = info.offset;
+        ctx->split_end = info.offset + info.length;
+        _scanner_ctx.split_tasks.emplace_back(std::move(ctx));
+    }
+    _scanner_ctx.merge_split_tasks();
+    // if only one split task, clear it, no need to do split work.
+    if (_scanner_ctx.split_tasks.size() <= 1) {
+        _scanner_ctx.split_tasks.clear();
+    }
+    VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
+                  << ", split_tasks.size = " << _scanner_ctx.split_tasks.size();
+
+    return Status::OK();
+}
+
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // create wrapped input stream.
     RETURN_IF_ERROR(open_random_access_file());
@@ -445,8 +464,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         errno = 0;
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
-        if (_split_context != nullptr) {
-            auto* split_context = down_cast<const HdfsOrcScannerSplitContext*>(_split_context);
+        if (_scanner_ctx.split_context != nullptr) {
+            auto* split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
             options.setSerializedFileTail(*(split_context->footer.get()));
         }
         reader = orc::createReader(std::move(_input_stream), options);
@@ -463,22 +482,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // select stripes to read and resolve columns aganist this orc file.
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
-
-    // we can split task if we enable split tasks feature and have >= 2 stripes.
-    // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
-    bool enable_split_tasks =
-            _scanner_params.enable_split_tasks && stripes.size() >= 2 && (_scanner_params.split_context == nullptr);
-    if (enable_split_tasks) {
-        auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
-        for (const auto& info : stripes) {
-            auto ctx = std::make_unique<HdfsOrcScannerSplitContext>();
-            ctx->footer = footer;
-            ctx->split_start = info.offset;
-            ctx->split_end = info.offset + info.length;
-            _split_tasks.emplace_back(std::move(ctx));
-        }
-        VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                      << ", size = " << stripes.size();
+    RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
+    if (_scanner_ctx.split_tasks.size() > 0) {
+        _scanner_ctx.has_split_tasks = true;
+        _should_skip_file = true;
         return Status::OK();
     }
 
@@ -529,17 +536,47 @@ void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     CHECK(chunk != nullptr);
-    if (_should_skip_file || _split_tasks.size() > 0) {
+    if (_should_skip_file) {
         return Status::EndOfFile("");
     }
 
-    ASSIGN_OR_RETURN(const size_t rows_read, _do_get_next(chunk));
+    size_t rows_read = 0;
+
+    if (_scanner_ctx.return_count_column) {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
+    } else {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
+    }
 
     DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     return Status::OK();
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
+    size_t read_num_values = 0;
+    Status st = Status::OK();
+    while (true) {
+        {
+            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+            orc::RowReader::ReadPosition position;
+            st = _orc_reader->read_next(&position);
+            if (!st.ok()) {
+                break;
+            }
+        }
+        read_num_values += _orc_reader->get_cvb_size();
+        if (!_need_skip_rowids.empty()) {
+            read_num_values -= _orc_reader->get_row_delete_number(_need_skip_rowids);
+        }
+    }
+
+    if (!st.is_end_of_file()) return st;
+    if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
+    _scanner_ctx.append_or_update_count_column_to_chunk(chunk, read_num_values);
+    return 1;
 }
 
 StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
@@ -585,7 +622,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
 
             // we need to append none existed column before do eval, just for count(*) optimization
-            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read);
+            RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
 
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;
@@ -661,17 +698,17 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
 }
 
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
+    // if we have split tasks, we don't need to update counter
+    // and we will update those counters in sub io tasks.
+    if (has_split_tasks()) {
+        return;
+    }
     const std::string orcProfileSectionPrefix = "ORC";
 
     RuntimeProfile* root_profile = profile->runtime_profile;
     ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
 
     do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
-
-    size_t total_stripe_size = 0;
-    for (const auto& v : _app_stats.orc_stripe_sizes) {
-        total_stripe_size += v;
-    }
 
     RuntimeProfile::Counter* total_stripe_size_counter = root_profile->add_child_counter(
             "TotalStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
@@ -683,8 +720,13 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
             "TotalTinyStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
             orcProfileSectionPrefix);
 
+    size_t total_stripe_size = 0;
+    for (const auto& v : _app_stats.orc_stripe_sizes) {
+        total_stripe_size += v;
+    }
     COUNTER_UPDATE(total_stripe_size_counter, total_stripe_size);
     COUNTER_UPDATE(total_stripe_number_counter, _app_stats.orc_stripe_sizes.size());
+
     COUNTER_UPDATE(total_tiny_stripe_size_counter, _app_stats.orc_total_tiny_stripe_size);
 
     RuntimeProfile::Counter* stripe_active_lazy_coalesce_together_counter = root_profile->add_child_counter(

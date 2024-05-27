@@ -39,9 +39,9 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.5.0</iceberg.version>
-        <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.7.0-incubating</paimon.version>
-        <staros.version>3.2-rc9</staros.version>
+        <delta-kernel.version>3.2.0</delta-kernel.version>
+        <staros.version>3.3-rc1</staros.version>
         <python>python</python>
     </properties>
 
@@ -136,6 +136,11 @@ under the License.
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.kudu</groupId>
+            <artifactId>kudu-client</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -300,28 +305,39 @@ under the License.
         </dependency>
 
         <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>bundle</artifactId>
-            <version>${awsv2.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>url-connection-client</artifactId>
-            <version>${awsv2.version}</version>
+            <groupId>de.javakaffee</groupId>
+            <artifactId>kryo-serializers</artifactId>
+            <version>0.45</version>
             <exclusions>
                 <exclusion>
-                    <artifactId>utils</artifactId>
-                    <groupId>software.amazon.awssdk</groupId>
+                    <groupId>com.esotericsoftware</groupId>
+                    <artifactId>kryo</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
 
         <dependency>
             <groupId>io.delta</groupId>
-            <artifactId>delta-standalone_2.12</artifactId>
-            <version>0.5.0</version>
+            <artifactId>delta-kernel-api</artifactId>
+            <version>${delta-kernel.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>io.delta</groupId>
+            <artifactId>delta-kernel-defaults</artifactId>
+            <version>${delta-kernel.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-runtime</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
 
         <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
         <dependency>
@@ -480,6 +496,10 @@ under the License.
                     <artifactId>hadoop-client</artifactId>
                 </exclusion>
                 <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-api</artifactId>
+                </exclusion>
+                <exclusion>
                     <artifactId>zookeeper</artifactId>
                     <groupId>org.apache.zookeeper</groupId>
                 </exclusion>
@@ -494,6 +514,10 @@ under the License.
                 <exclusion>
                     <artifactId>stream</artifactId>
                     <groupId>com.clearspring.analytics</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-runtime</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -600,6 +624,16 @@ under the License.
             </exclusions>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client-runtime</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -673,42 +707,6 @@ under the License.
                     <artifactId>*</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.apache.hbase</groupId>
-                    <artifactId>hbase-server</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase</groupId>
-                    <artifactId>hbase-hadoop-compat</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase</groupId>
-                    <artifactId>hbase-hadoop2-compat</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase</groupId>
-                    <artifactId>hbase-protocol-shaded</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase</groupId>
-                    <artifactId>hbase-protocol</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase.thirdparty</groupId>
-                    <artifactId>hbase-shaded-protobuf</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase.thirdparty</groupId>
-                    <artifactId>hbase-shaded-gson</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase.thirdparty</groupId>
-                    <artifactId>hbase-shaded-miscellaneous</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase.thirdparty</groupId>
-                    <artifactId>hbase-shaded-netty</artifactId>
-                </exclusion>
-                <exclusion>
                     <groupId>org.glassfish</groupId>
                     <artifactId>javax.el</artifactId>
                 </exclusion>
@@ -725,6 +723,34 @@ under the License.
                     <artifactId>javax.el</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-avro -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-avro</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-column -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-column</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-common -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-common</artifactId>
+            <scope>compile</scope>
         </dependency>
 
         <dependency>
@@ -793,6 +819,25 @@ under the License.
             <artifactId>postgresql</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->
+        <!-- we need clickhouse driver for jdbc connector -->
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc10</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.oracle.database.nls/orai18n -->
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
         <dependency>
             <groupId>com.mockrunner</groupId>
@@ -844,6 +889,12 @@ under the License.
             <groupId>org.apache.ranger</groupId>
             <artifactId>ranger-plugins-common</artifactId>
             <version>2.4.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.amazonaws</groupId>
+                    <artifactId>aws-java-sdk-bundle</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -982,7 +1033,8 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>
-                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar -Xmx4096m
+                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
+                        -Xmx4096m
                         -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
@@ -1010,6 +1062,12 @@ under the License.
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+                                    <arg value="${starrocks.home}/gensrc/proto/lake_types.proto"/>
+                                </exec>
+                                <exec executable="${java.home}/bin/java">
+                                    <arg value="-jar"/>
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/internal_service.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
@@ -1023,12 +1081,6 @@ under the License.
                                     <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/tablet_schema.proto"/>
-                                </exec>
-                                <exec executable="${java.home}/bin/java">
-                                    <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
-                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
-                                    <arg value="${starrocks.home}/gensrc/proto/lake_types.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>

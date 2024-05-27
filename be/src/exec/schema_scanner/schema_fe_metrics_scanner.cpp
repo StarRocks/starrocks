@@ -42,7 +42,7 @@ SchemaFeMetricsScanner::SchemaFeMetricsScanner()
 SchemaFeMetricsScanner::~SchemaFeMetricsScanner() = default;
 
 Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
-    for (TFrontend frontend : _param->frontends) {
+    for (const TFrontend& frontend : _param->frontends) {
         std::string metrics;
         std::string url = "http://" + frontend.ip + ":" + SimpleItoa(frontend.http_port) + "/metrics?type=json";
         auto timeout = state->query_options().query_timeout * 1000 / 2;

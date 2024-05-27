@@ -34,6 +34,7 @@
 #include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/json.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -270,7 +271,7 @@ TEST_F(FlatJsonColumnRWTest, tesArrayFlatJson) {
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
     ASSERT_EQ(2, read_json->get_flat_fields().size());
-    EXPECT_EQ("{a: , b: }", read_json->debug_item(0));
+    EXPECT_EQ("{a: NULL, b: NULL}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }
 
@@ -305,7 +306,7 @@ TEST_F(FlatJsonColumnRWTest, testEmptyObject) {
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
     ASSERT_EQ(2, read_json->get_flat_fields().size());
-    EXPECT_EQ("{a: , b: }", read_json->debug_item(0));
+    EXPECT_EQ("{a: NULL, b: NULL}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }
 

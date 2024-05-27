@@ -110,12 +110,13 @@ protected:
 
 struct PrimaryKeyParam {
     bool enable_persistent_index = false;
+    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
 };
 
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
                                                                int64_t new_version, int64_t txn_id) {
-    lake::PublishVersionRequest request;
-    lake::PublishVersionResponse response;
+    PublishVersionRequest request;
+    PublishVersionResponse response;
 
     request.add_tablet_ids(tablet_id);
     request.add_txn_ids(txn_id);
@@ -137,8 +138,8 @@ inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* ta
 inline StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr, int64_t tablet_id,
                                                       int64_t base_version, int64_t new_version,
                                                       std::vector<int64_t>& txn_ids) {
-    lake::PublishVersionRequest request;
-    lake::PublishVersionResponse response;
+    PublishVersionRequest request;
+    PublishVersionResponse response;
 
     request.add_tablet_ids(tablet_id);
     for (auto& txn_id : txn_ids) {
@@ -162,8 +163,8 @@ inline StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr,
 
 inline Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                               int64_t log_version) {
-    lake::PublishLogVersionRequest request;
-    lake::PublishLogVersionResponse response;
+    PublishLogVersionRequest request;
+    PublishLogVersionResponse response;
 
     request.add_tablet_ids(tablet_id);
     request.set_txn_id(txn_id);
@@ -195,7 +196,7 @@ inline StatusOr<TabletMetadataPtr> TestBase::batch_publish(int64_t tablet_id, in
 }
 
 inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type) {
-    auto metadata = std::make_shared<lake::TabletMetadata>();
+    auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(next_id());
     metadata->set_version(1);
     metadata->set_cumulative_point(0);
@@ -267,13 +268,11 @@ inline DescriptorTbl* create_table_desc(RuntimeState* runtime_state, const std::
 
 inline std::shared_ptr<TPlanNode> create_tplan_node_cloud() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;

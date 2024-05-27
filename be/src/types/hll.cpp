@@ -34,16 +34,13 @@
 
 #include "types/hll.h"
 
-#ifdef __x86_64__
-#include <immintrin.h>
-#endif
-
 #include <cmath>
 #include <map>
 
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/string_value.h"
+#include "simd/multi_version.h"
 #include "util/coding.h"
 #include "util/phmap/phmap.h"
 
@@ -172,6 +169,48 @@ void HyperLogLog::update(uint64_t hash_value) {
     }
 }
 
+MFV_AVX512(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m512i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m512i xa = _mm512_loadu_si512((const __m512i*)dest);
+        __m512i xb = _mm512_loadu_si512((const __m512i*)other);
+        _mm512_storeu_si512((__m512i*)dest, _mm512_max_epu8(xa, xb));
+    }
+})
+
+MFV_AVX2(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m256i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m256i xa = _mm256_loadu_si256((const __m256i*)dest);
+        __m256i xb = _mm256_loadu_si256((const __m256i*)other);
+        _mm256_storeu_si256((__m256i*)dest, _mm256_max_epu8(xa, xb));
+    }
+})
+
+MFV_SSE42(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m128i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m128i xa = _mm_loadu_si128((const __m128i*)dest);
+        __m128i xb = _mm_loadu_si128((const __m128i*)other);
+        _mm_storeu_si128((__m128i*)dest, _mm_max_epu8(xa, xb));
+    }
+})
+
+MFV_DEFAULT(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    for (int i = 0; i < HLL_REGISTERS_COUNT; i++) {
+        dest[i] = std::max(dest[i], other[i]);
+    }
+})
+
 void HyperLogLog::merge(const HyperLogLog& other) {
     // fast path
     if (other._type == HLL_DATA_EMPTY) {
@@ -212,7 +251,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             _convert_explicit_to_register();
-            _merge_registers(other._registers.data);
+            merge_registers_impl(_registers.data, other._registers.data);
             _type = HLL_DATA_FULL;
             break;
         default:
@@ -230,7 +269,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
             break;
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
-            _merge_registers(other._registers.data);
+            merge_registers_impl(_registers.data, other._registers.data);
             break;
         default:
             break;
@@ -562,23 +601,77 @@ void HyperLogLog::clear() {
     _hash_set.clear();
 }
 
-void HyperLogLog::_merge_registers(uint8_t* other_registers) {
-#ifdef __AVX2__
-    int loop = HLL_REGISTERS_COUNT / 32;
-    uint8_t* dst = _registers.data;
-    const uint8_t* src = other_registers;
-    for (int i = 0; i < loop; i++) {
-        __m256i xa = _mm256_loadu_si256((const __m256i*)dst);
-        __m256i xb = _mm256_loadu_si256((const __m256i*)src);
-        _mm256_storeu_si256((__m256i*)dst, _mm256_max_epu8(xa, xb));
-        src += 32;
-        dst += 32;
+DataSketchesHll::DataSketchesHll(const Slice& src) {
+    if (!deserialize(src)) {
+        LOG(WARNING) << "Failed to init DataSketchHll from slice, will be reset to 0.";
     }
-#else
-    for (int i = 0; i < HLL_REGISTERS_COUNT; i++) {
-        _registers.data[i] = std::max(_registers.data[i], other_registers[i]);
+}
+
+bool DataSketchesHll::is_valid(const Slice& slice) {
+    if (slice.size < 1) {
+        return false;
     }
-#endif
+
+    const uint8_t preInts = static_cast<const uint8_t*>((uint8_t*)slice.data)[0];
+    if (preInts == datasketches::hll_constants::HLL_PREINTS ||
+        preInts == datasketches::hll_constants::HASH_SET_PREINTS ||
+        preInts == datasketches::hll_constants::LIST_PREINTS) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+void DataSketchesHll::update(uint64_t hash_value) {
+    _sketch.update(hash_value);
+}
+
+void DataSketchesHll::merge(const DataSketchesHll& other) {
+    datasketches::hll_union u(MAX_HLL_LOG_K);
+    u.update(_sketch);
+    u.update(other._sketch);
+    _sketch = u.get_result(HLL_TGT_TYPE);
+}
+
+size_t DataSketchesHll::max_serialized_size() const {
+    return _sketch.get_max_updatable_serialization_bytes(HLL_LOG_K, HLL_TGT_TYPE);
+}
+
+size_t DataSketchesHll::serialize_size() const {
+    return _sketch.get_compact_serialization_bytes();
+}
+
+size_t DataSketchesHll::serialize(uint8_t* dst) const {
+    auto serialize_compact = _sketch.serialize_compact();
+    std::copy(serialize_compact.begin(), serialize_compact.end(), dst);
+    return _sketch.get_compact_serialization_bytes();
+}
+
+bool DataSketchesHll::deserialize(const Slice& slice) {
+    // can be called only when _sketch is empty
+    DCHECK(_sketch.is_empty());
+
+    // check if input length is valid
+    if (!is_valid(slice)) {
+        return false;
+    }
+
+    try {
+        _sketch = datasketches::hll_sketch::deserialize((uint8_t*)slice.data, slice.size);
+    } catch (std::logic_error& e) {
+        LOG(WARNING) << "DataSketchesHll deserialize error: " << e.what();
+        return false;
+    }
+
+    return true;
+}
+
+int64_t DataSketchesHll::estimate_cardinality() const {
+    return _sketch.get_estimate();
+}
+
+std::string DataSketchesHll::to_string() const {
+    return _sketch.to_string();
 }
 
 } // namespace starrocks

@@ -43,6 +43,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
@@ -182,6 +183,9 @@ public class RestoreJob extends AbstractJob {
     protected com.google.common.collect.Table<Long, Long, SnapshotInfo> snapshotInfos = HashBasedTable.create();
 
     protected Map<Long, Long> unfinishedSignatureToId = Maps.newConcurrentMap();
+
+    // store some remote table ids that is skipped to restore, eg: mv is active in local db
+    protected Set<Long> skipRestoreRemoteTableIds = Sets.newHashSet();
 
     private MvRestoreContext mvRestoreContext;
 
@@ -526,6 +530,7 @@ public class RestoreJob extends AbstractJob {
                             // eg: we restore mv's data (old version) but not restore associated version map which may
                             // cause wrong result if it can be used to rewrite.
                             LOG.warn("Skip to restore existed and active mv: {}", mv.getName());
+                            skipRestoreRemoteTableIds.add(remoteTbl.getId());
                             continue;
                         }
                     }
@@ -826,6 +831,7 @@ public class RestoreJob extends AbstractJob {
         unfinishedSignatureToId.clear();
         taskProgress.clear();
         taskErrMsg.clear();
+        skipRestoreRemoteTableIds.clear();
         Multimap<Long, Long> bePathsMap = HashMultimap.create();
         batchTask = new AgentBatchTask();
         Locker locker = new Locker();
@@ -1151,6 +1157,7 @@ public class RestoreJob extends AbstractJob {
         unfinishedSignatureToId.clear();
         taskProgress.clear();
         taskErrMsg.clear();
+        skipRestoreRemoteTableIds.clear();
         batchTask = new AgentBatchTask();
         for (long dbId : dbToSnapshotInfos.keySet()) {
             List<SnapshotInfo> infos = dbToSnapshotInfos.get(dbId);
@@ -1335,6 +1342,7 @@ public class RestoreJob extends AbstractJob {
         unfinishedSignatureToId.clear();
         taskProgress.clear();
         taskErrMsg.clear();
+        skipRestoreRemoteTableIds.clear();
 
         prepareAndSendDirMoveTasks();
 
@@ -1439,6 +1447,10 @@ public class RestoreJob extends AbstractJob {
             try {
                 for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                     Table tbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
+                    // skip to restore table ids
+                    if (skipRestoreRemoteTableIds.contains(tblInfo.id)) {
+                        continue;
+                    }
                     if (tbl == null) {
                         LOG.warn("skip post actions after restore success, table name does not existed: %s",
                                 tblInfo.name);
@@ -1662,6 +1674,9 @@ public class RestoreJob extends AbstractJob {
 
     private void setTableStateToNormal(Database db) {
         for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
+            if (skipRestoreRemoteTableIds.contains(tblInfo.id)) {
+                continue;
+            }
             Table tbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
             if (tbl == null) {
                 continue;

@@ -15,18 +15,16 @@
 #include "exec/tablet_sink_index_channel.h"
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
+#include "common/utils.h"
 #include "config.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
@@ -170,6 +168,11 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_txn_trace_parent(_parent->_txn_trace_parent);
     request.set_allocated_schema(_parent->_schema->to_protobuf());
     request.set_is_lake_tablet(_parent->_is_lake_table);
+    if (_parent->_is_lake_table) {
+        // If the OlapTableSink node is responsible for writing the txn log, then the tablet writer
+        // does not need to write the txn log again.
+        request.mutable_lake_tablet_params()->set_write_txn_log(!_parent->_write_txn_log);
+    }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
     request.set_write_quorum(_write_quorum_type);
@@ -542,6 +545,16 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
     return Status::OK();
 }
 
+template <typename T>
+void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf) {
+    butil::IOBuf tmp_iobuf;
+    butil::IOBufAsZeroCopyOutputStream wrapper(&tmp_iobuf);
+    proto_obj.SerializeToZeroCopyStream(&wrapper);
+    size_t request_size = tmp_iobuf.size();
+    iobuf->append(&request_size, sizeof(request_size));
+    iobuf->append(tmp_iobuf);
+}
+
 Status NodeChannel::_send_request(bool eos, bool finished) {
     if (eos || finished) {
         if (_request_queue.empty()) {
@@ -625,9 +638,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             if (!res.ok()) {
                 return res.status();
             }
-            res.value()->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                                  &_add_batch_closures[_current_request_index]->result,
-                                                  _add_batch_closures[_current_request_index]);
+            auto closure = _add_batch_closures[_current_request_index];
+            serialize_to_iobuf<PTabletWriterAddChunksRequest>(request, &closure->cntl.request_attachment());
+            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
@@ -645,9 +658,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             if (!res.ok()) {
                 return res.status();
             }
-            res.value()->tablet_writer_add_chunk(
-                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
-                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+            auto closure = _add_batch_closures[_current_request_index];
+            serialize_to_iobuf<PTabletWriterAddChunkRequest>(request.requests(0), &closure->cntl.request_attachment());
+            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunk(
@@ -751,6 +764,9 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         if (tablet_ids.size() < 128) {
             tablet_ids.emplace_back(commit_info.tabletId);
         }
+    }
+    for (auto& log : *(closure->result.mutable_lake_tablet_data()->mutable_txn_logs())) {
+        _txn_logs.emplace_back(std::move(log));
     }
 
     if (!tablet_ids.empty()) {

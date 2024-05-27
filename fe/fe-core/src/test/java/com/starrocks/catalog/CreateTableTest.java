@@ -39,6 +39,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
@@ -56,7 +57,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -325,6 +325,10 @@ public class CreateTableTest {
                         "    \"dynamic_partition.buckets\" = \"32\",\n" +
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table str2dateTable = db.getTable("partition_str2date");
+        Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(str2dateTable));
+
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("CREATE TABLE test.partition_from_unixtime (\n" +
                         "        create_time bigint,\n" +
@@ -345,6 +349,8 @@ public class CreateTableTest {
                         "    \"dynamic_partition.buckets\" = \"32\",\n" +
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
+        Table fromUnixtimeTable = db.getTable("partition_from_unixtime");
+        Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(fromUnixtimeTable));
     }
 
     @Test
@@ -420,8 +426,7 @@ public class CreateTableTest {
 
         ExceptionChecker
                 .expectThrowsWithMsg(AnalysisException.class,
-                        "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
-                                "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
+                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
                         () -> createTable(
                                 "create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
                                         + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
@@ -443,7 +448,7 @@ public class CreateTableTest {
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Generated Column "
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illegal expression type for Generated Column "
                         + "Column Type: INT, Expression Type: DOUBLE",
                 () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
@@ -1050,9 +1055,9 @@ public class CreateTableTest {
         Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
 
         // ** test load from image(simulate restart)
-        localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
-        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+        LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        olapTable = (OlapTable) localMetastoreLeader.getDb("test")
                 .getTable("test_location_persist_t1");
         System.out.println(olapTable.getLocation());
         Assert.assertEquals(1, olapTable.getLocation().size());
@@ -1376,32 +1381,6 @@ public class CreateTableTest {
         Assert.assertTrue(table.isBinlogEnabled());
         Assert.assertEquals(0, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
-    }
-
-    @Test
-    public void testTemporaryTable() throws Exception {
-        Config.enable_experimental_temporary_table = true;
-        createTable(
-                "CREATE TABLE test.base_tbl (\n" +
-                        "k1 INT,\n" +
-                        "k2 VARCHAR(20)\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(k1)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ")"
-        );
-
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
-                "create temporary table test.temp_table select * from test.base_tbl",
-                connectContext);
-        // String sql = stmt.toSql();
-        // Assert.assertEquals("hehe", sql);
-
-        // drop table
-        UtFrameUtils.parseStmtWithNewParser("drop temporary table test.base_tbl", connectContext);
     }
 
     @Test
@@ -1743,6 +1722,14 @@ public class CreateTableTest {
                                 ") DISTRIBUTED BY HASH(item_id1)\n" +
                                 "PROPERTIES(\"replication_num\" = \"1\");"
                 ));
+    }
+
+    @Test
+    public void testDropTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "cannot drop table in system database: information_schema",
+                () -> starRocksAssert.dropTable("information_schema.tables")
+        );
     }
 
     @Test

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 #include <utility>
 
 #include "column/vectorized_fwd.h"
@@ -55,7 +56,7 @@ public:
 
     static InputStreamPtr union_all(const InputStreamPtr& left, const InputStreamPtr& right);
     static InputStreamPtr union_all(std::vector<InputStreamPtr>& _streams);
-    static InputStreamPtr as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller);
+    static InputStreamPtr as_stream(const std::vector<ChunkPtr>& chunks, Spiller* spiller);
 
 private:
     std::atomic_bool _eof = false;
@@ -78,7 +79,10 @@ class BlockGroup {
 public:
     BlockGroup() = default;
 
-    void append(BlockPtr block) { _blocks.emplace_back(std::move(block)); }
+    void append(BlockPtr block) {
+        std::lock_guard guard(_mutex);
+        _blocks.emplace_back(std::move(block));
+    }
 
     StatusOr<InputStreamPtr> as_unordered_stream(const SerdePtr& serde, Spiller* spiller);
 
@@ -87,7 +91,10 @@ public:
 
     void clear() { _blocks.clear(); }
 
+    // TODO: support drop block inadvance
+
 private:
+    std::mutex _mutex;
     std::vector<BlockPtr> _blocks;
 };
 

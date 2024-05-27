@@ -16,25 +16,28 @@
 #include "formats/parquet/file_writer.h"
 
 #include <arrow/buffer.h>
-#include <arrow/io/file.h>
-#include <arrow/io/interfaces.h>
-#include <parquet/arrow/writer.h>
+#include <arrow/io/type_fwd.h>
+#include <arrow/util/string_builder.h>
+#include <fmt/core.h>
+#include <glog/logging.h>
+#include <parquet/exception.h>
+#include <parquet/metadata.h>
+#include <parquet/type_fwd.h>
 #include <runtime/current_thread.h>
 
-#include "column/array_column.h"
+#include <ostream>
+
 #include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/logging.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "runtime/exec_env.h"
+#include "exprs/expr_context.h"
+#include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::parquet {
 

@@ -285,6 +285,11 @@ struct TQueryOptions {
   130: optional bool enable_wait_dependent_event = false;
 
   131: optional bool orc_use_column_names = false;
+
+  132: optional bool enable_datacache_async_populate_mode;
+  133: optional bool enable_datacache_io_adaptor;
+
+  140: optional string catalog;
 }
 
 
@@ -374,6 +379,11 @@ struct TAdaptiveDopParam {
   2: optional i64 max_output_amplification_factor
 }
 
+struct TPredicateTreeParams {
+  1: optional bool enable_or
+  2: optional bool enable_show_in_profile
+}
+
 // ExecPlanFragment
 
 struct TExecPlanFragmentParams {
@@ -432,6 +442,9 @@ struct TExecPlanFragmentParams {
   57: optional bool is_stream_pipeline
 
   58: optional TAdaptiveDopParam adaptive_dop_param
+  59: optional i32 group_execution_scan_dop
+
+  60: optional TPredicateTreeParams pred_tree_params
 }
 
 struct TExecPlanFragmentResult {

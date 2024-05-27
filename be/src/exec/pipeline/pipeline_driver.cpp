@@ -48,7 +48,7 @@ PipelineDriver::~PipelineDriver() noexcept {
     check_operator_close_states("deleting pipeline drivers");
 }
 
-void PipelineDriver::check_operator_close_states(std::string func_name) {
+void PipelineDriver::check_operator_close_states(const std::string& func_name) {
     if (_driver_id == -1) { // in test cases
         return;
     }
@@ -508,11 +508,12 @@ void PipelineDriver::mark_precondition_not_ready() {
     }
 }
 
-void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
+void PipelineDriver::mark_precondition_ready() {
     for (auto& op : _operators) {
-        op->set_precondition_ready(runtime_state);
+        op->set_precondition_ready(_runtime_state);
         submit_operators();
     }
+    _precondition_prepared = true;
 }
 
 void PipelineDriver::start_timers() {

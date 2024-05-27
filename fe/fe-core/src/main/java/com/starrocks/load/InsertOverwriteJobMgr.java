@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
@@ -73,7 +74,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         ThreadFactory threadFactory = new DefaultThreadFactory("cancel-thread");
         this.cancelJobExecutorService = Executors.newSingleThreadExecutor(threadFactory);
         this.runningJobs = Lists.newArrayList();
-        this.lock = new ReentrantReadWriteLock();
+        this.lock = new FairReentrantReadWriteLock();
     }
 
     public void executeJob(ConnectContext context, StmtExecutor stmtExecutor, InsertOverwriteJob job) throws Exception {

@@ -27,8 +27,10 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.ShowExecutor;
@@ -43,6 +45,8 @@ import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -64,6 +68,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
@@ -453,8 +458,29 @@ public class MaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Assert.assertNotNull(db);
+        Table table = db.getTable("mv_to_rename");
+        Assert.assertNotNull(table);
+        // test partition related info
+        MaterializedView oldMv = (MaterializedView) table;
+        Map<Table, Column> partitionMap = oldMv.getRelatedPartitionTableAndColumn();
+        Table table1 = db.getTable("tbl1");
+        Assert.assertTrue(partitionMap.containsKey(table1));
+        List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
+        Assert.assertEquals(1, baseTableType.size());
+        Assert.assertEquals(table1.getType(), baseTableType.get(0));
+        connectContext.executeSql("refresh materialized view mv_to_rename with sync mode");
+        Optional<Long> maxTime = oldMv.maxBaseTableRefreshTimestamp();
+        Assert.assertTrue(maxTime.isPresent());
+        Pair<Table, Column> pair = oldMv.getDirectTableAndPartitionColumn();
+        Assert.assertEquals("tbl1", pair.first.getName());
+
         String alterSql = "alter materialized view mv_to_rename rename mv_new_name;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterSql);
+        StatementBase statement = SqlParser.parseSingleStatement(alterSql, connectContext.getSessionVariable().getSqlMode());
+
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_new_name"));
@@ -466,9 +492,11 @@ public class MaterializedViewTest {
         Assert.assertTrue(exprs.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) exprs.get(0);
         Assert.assertEquals("mv_new_name", slotRef.getTblNameWithoutAnalyzed().getTbl());
+        starRocksAssert.dropMaterializedView("mv_new_name");
 
         String alterSql2 = "alter materialized view mv_to_rename2 rename mv_new_name2;";
-        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, alterSql2);
+        statement = SqlParser.parseSingleStatement(alterSql2, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
         stmtExecutor2.execute();
         MaterializedView mv2 = ((MaterializedView) testDb.getTable("mv_new_name2"));
         Assert.assertNotNull(mv2);
@@ -481,6 +509,43 @@ public class MaterializedViewTest {
         Assert.assertTrue(rightChild instanceof SlotRef);
         SlotRef slotRef2 = (SlotRef) rightChild;
         Assert.assertEquals("mv_new_name2", slotRef2.getTblNameWithoutAnalyzed().getTbl());
+        starRocksAssert.dropMaterializedView("mv_new_name2");
+    }
+
+    @Test
+    public void testReplay() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("create materialized view mv_replay\n" +
+                        "PARTITION BY k1\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+        connectContext.executeSql("insert into test.tbl1 values('2022-02-01', 2, 3)");
+        connectContext.executeSql("insert into test.tbl1 values('2022-02-16', 3, 5)");
+        connectContext.executeSql("refresh materialized view mv_replay with sync mode");
+
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Assert.assertNotNull(db);
+        Table table = db.getTable("mv_replay");
+        MaterializedView mv = (MaterializedView) table;
+        AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(db.getId(), mv.getId(), null,
+                mv.getBaseTableInfos(), mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap());
+        mv.replayAlterMaterializedViewBaseTableInfos(log);
+
+        starRocksAssert.dropMaterializedView("mv_replay");
     }
 
     @Test
@@ -506,7 +571,8 @@ public class MaterializedViewTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
         String dropSql = "drop table tbl_drop;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, dropSql);
+        StatementBase statement = SqlParser.parseSingleStatement(dropSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertNotNull(mv);
         Assert.assertFalse(mv.isActive());
@@ -534,7 +600,8 @@ public class MaterializedViewTest {
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         String alterSql = "alter table tbl_to_rename rename new_tbl_name;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterSql);
+        StatementBase statement = SqlParser.parseSingleStatement(alterSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
         Assert.assertNotNull(mv);
@@ -595,7 +662,8 @@ public class MaterializedViewTest {
                         "\"replication_num\" = \"1\");");
         String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) as v1 " +
                 "from part_with_mv;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, createMvSql);
+        StatementBase statement = SqlParser.parseSingleStatement(createMvSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertTrue(Strings.isNullOrEmpty(connectContext.getState().getErrorMessage()));
     }
@@ -702,7 +770,8 @@ public class MaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "as select k2, sum(v1) as total from tbl_sync_mv group by k2;");
         String showSql = "show create materialized view sync_mv_to_check;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, showSql);
+        StatementBase statement = SqlParser.parseSingleStatement(showSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
     }

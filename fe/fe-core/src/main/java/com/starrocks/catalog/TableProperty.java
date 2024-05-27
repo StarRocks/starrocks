@@ -45,7 +45,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -61,6 +60,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -142,6 +142,39 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+    /**
+     * The value for transparent_mv_rewrite_mode variable
+     */
+    public enum MVTransparentRewriteMode {
+        FALSE, // default, mv acts as a normal table, only return the contained data no matter it's fresh or not
+        TRUE, // transparent, mv acts as transparent table of its defined query, its result is the same as its
+        // defined query.And it will redirect to its defined query if transparent rewrite failed or exceptions occurs.
+        TRANSPARENT_OR_ERROR, // try to transparent rewrite, and it will throw exception if transparent rewrite failed or
+        // exceptions occurs.
+        TRANSPARENT_OR_DEFAULT; // try to transparent rewrite, and it will use the original materialized view without partition
+        // compensated if transparent rewrite failed or exceptions occurs.
+
+        public boolean isEnable() {
+            return TRUE == this || TRANSPARENT_OR_ERROR == this || TRANSPARENT_OR_DEFAULT == this;
+        }
+
+        public static MVTransparentRewriteMode defaultValue() {
+            return FALSE;
+        }
+
+        public static MVTransparentRewriteMode parse(String str) {
+            if (StringUtils.isEmpty(str)) {
+                return FALSE;
+            }
+            return EnumUtils.getEnumIgnoreCase(MVTransparentRewriteMode.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on(",").join(MVTransparentRewriteMode.values());
+
+        }
+    }
+
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
@@ -182,6 +215,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
             QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
 
     private MVQueryRewriteSwitch mvQueryRewriteSwitch = MVQueryRewriteSwitch.DEFAULT;
+    private MVTransparentRewriteMode mvTransparentRewriteMode = MVTransparentRewriteMode.FALSE;
 
     private boolean isInMemory = false;
 
@@ -257,12 +291,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
-        if (FeConstants.runningUnitTest) {
-            // FIXME: remove this later.
-            // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
-            // task run will only refresh 1 partition and will produce wrong result.
-            partitionRefreshNumber = INVALID;
-        }
     }
 
     public TableProperty copy() {
@@ -348,6 +376,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvSortKeys();
         buildQueryRewrite();
         buildMVQueryRewriteSwitch();
+        buildMVTransparentRewriteMode();
         return this;
     }
 
@@ -453,6 +482,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public void putMvSortKeys() {
+        if (CollectionUtils.isNotEmpty(mvSortKeys)) {
+            String value = Joiner.on(",").join(mvSortKeys);
+            this.properties.put(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS, value);
+        }
+    }
+
     public static List<String> analyzeMvSortKeys(String value) {
         if (StringUtils.isEmpty(value)) {
             return Lists.newArrayList();
@@ -473,6 +509,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
             String valueList = MVQueryRewriteSwitch.valueList();
             throw new SemanticException(
                     PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE
+                            + " can only be " + valueList + " but got " + value);
+        }
+        return res;
+    }
+
+    public TableProperty buildMVTransparentRewriteMode() {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+        this.mvTransparentRewriteMode = MVTransparentRewriteMode.parse(value);
+        return this;
+    }
+
+    public static MVTransparentRewriteMode analyzeMVTransparentRewrite(String value) {
+        MVTransparentRewriteMode res = MVTransparentRewriteMode.parse(value);
+        if (res == null) {
+            String valueList = MVTransparentRewriteMode.valueList();
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE
                             + " can only be " + valueList + " but got " + value);
         }
         return res;
@@ -544,8 +597,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildCompressionType() {
-        compressionType = TCompressionType.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
-                TCompressionType.LZ4_FRAME.name()));
+        String compression = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
+                TCompressionType.LZ4_FRAME.name());
+        for (TCompressionType type : TCompressionType.values()) {
+            if (type.name().equalsIgnoreCase(compression)) {
+                compressionType = type;
+                return this;
+            }
+        }
+        compressionType = TCompressionType.LZ4_FRAME;
         return this;
     }
 
@@ -604,7 +664,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 return "UNKNOWN";
         }
     }
-
 
     public TableProperty buildConstraint() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
@@ -770,6 +829,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this.mvQueryRewriteSwitch;
     }
 
+    public void setMvTransparentRewriteMode(MVTransparentRewriteMode value) {
+        this.mvTransparentRewriteMode = value;
+    }
+
+    public MVTransparentRewriteMode getMvTransparentRewriteMode() {
+        return this.mvTransparentRewriteMode;
+    }
+
     public boolean isInMemory() {
         return isInMemory;
     }
@@ -886,7 +953,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildUseFastSchemaEvolution() {
         useFastSchemaEvolution = Boolean.parseBoolean(
-            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
         return this;
     }
 

@@ -4,13 +4,49 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
-## 3.1.10
+## 3.1.11
+
+发布日期：2024 年 4 月 28 日
+
+### 行为变更
+
+- 禁止删除系统数据库 `information_schema` 中的视图。[#43556](https://github.com/StarRocks/starrocks/pull/43556)
+- 主键表的排序键（由 ORDER BY 语句指定）中不再支持指定重复的列。[#43374](https://github.com/StarRocks/starrocks/pull/43374)
+
+### 功能优化
+
+- 支持读取 Iceberg 中 Equality Delete 的 Parquet 文件。[#42489](https://github.com/StarRocks/starrocks/pull/42489)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。[#44061](https://github.com/StarRocks/starrocks/pull/44061)
+- `str_to_map` 函数使用时可能会导致 BE crash。[#43930](https://github.com/StarRocks/starrocks/pull/43930)
+- 使用 Routine Load 导入数据时，执行 `show proc '/routine_loads'` 会卡住，是因为内部有死锁问题。[#44249](https://github.com/StarRocks/starrocks/pull/44249)
+- 主键表的 Persistent Index 在使用中可能会因为内部并发控制问题而导致 BE crash。[#43720](https://github.com/StarRocks/starrocks/pull/43720)
+- 通过 `leaderFE_IP:8030` 界面查到的 `pending_task_run_count` 数据错误，当前统计的是 Pending+Running 的总数，而不是 Pending 的任务数。同时，从 `followerFE_IP:8030` 查不到 `refresh_pending` 监控指标的信息。[#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- 查询 `information_schema.task_runs` 会频繁失败。[#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- 一些含有 CTE 的 SQL 查询时会报 `Invalid plan: PhysicalTopNOperator` 错误。[#44185](https://github.com/StarRocks/starrocks/pull/44185)
+
+## 3.1.10（已下线）
 
 发布日期：2024 年 3 月 29 日
+
+:::tip
+
+此版本因存在 Hive/Iceberg catalog 等外表权限相关问题已经下线。
+
+- 问题：查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。
+- 影响范围：对于不涉及 Hive/Iceberg catalog 等外表权限的查询，不受影响。
+- 临时解决方法：在对 Hive/Iceberg catalog 等外表进行重新授权后，查询可以恢复正常。但是 `SHOW GRANTS` 会出现重复的权限条目。后续在升级 3.1.11 后，通过 `REVOKE` 操作删除其中一条即可。
+
+:::
 
 ### 新增特性
 
 - 主键表支持 Size-tiered Compaction。[#42474](https://github.com/StarRocks/starrocks/pull/42474)
+- 新增模糊/正则匹配函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
 
 ### 行为变更
 
@@ -36,7 +72,6 @@ displayed_sidebar: "Chinese"
 ### 新增特性
 
 - 存算分离集群中的云原生主键表支持 Size-tiered 模式 Compaction，以减轻导入较多小文件时 Compaction 的写放大问题。[#41610](https://github.com/StarRocks/starrocks/pull/41610)
-- 新增函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
 - 新增 `information_schema.partitions_meta` 视图，提供丰富的 PARTITION 元信息。[#41101](https://github.com/StarRocks/starrocks/pull/41101)
 - 新增 `sys.fe_memory_usage` 视图，提供 StarRocks 的内存使用信息。[#41083](https://github.com/StarRocks/starrocks/pull/41083)
 
@@ -79,7 +114,6 @@ displayed_sidebar: "Chinese"
 - 社区提供 StarRocks 数据迁移工具，支持将数据从存算一体集群迁移数据到存算一体集群或者存算分离集群。
 - 支持创建带有 WHERE 子句的同步物化视图。
 - MemTracker 中新增了 Data Cache 内存使用的相关指标。[#39600](https://github.com/StarRocks/starrocks/pull/39600)
-- 新增函数 `array_unique_agg`。
 
 ### 参数变更
 

@@ -104,7 +104,8 @@ public class SRMetaBlockID {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+
+        if (!(o instanceof SRMetaBlockID)) {
             return false;
         }
         SRMetaBlockID that = (SRMetaBlockID) o;

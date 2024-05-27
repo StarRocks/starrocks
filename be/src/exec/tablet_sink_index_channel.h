@@ -41,11 +41,15 @@ namespace starrocks {
 
 class MemTracker;
 class TupleDescriptor;
+class TxnLogPB;
 
 namespace stream_load {
 
 class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
+
+template <typename T>
+void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf);
 
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
@@ -157,6 +161,7 @@ public:
     std::string print_load_info() const { return _load_info; }
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
+    std::vector<TxnLogPB>& txn_logs() { return _txn_logs; }
 
     bool is_incremental() const { return _is_incremental; }
 
@@ -220,6 +225,7 @@ private:
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
+    std::vector<TxnLogPB> _txn_logs;
     struct {
         std::unordered_set<std::string> invalid_dict_cache_column_set;
         std::unordered_map<std::string, int64_t> valid_dict_cache_column_set;

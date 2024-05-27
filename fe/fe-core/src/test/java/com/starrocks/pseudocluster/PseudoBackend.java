@@ -671,7 +671,7 @@ public class PseudoBackend {
                     String.format("alter (base:%d, new:%d version:%d) failed new tablet not found", task.base_tablet_id,
                             task.new_tablet_id, task.alter_version));
         }
-        if (newTablet.isRunning() == true) {
+        if (newTablet.isRunning()) {
             throw new Exception(
                     String.format("alter (base:%d, new:%d version:%d) failed new tablet is running", task.base_tablet_id,
                             task.new_tablet_id, task.alter_version));
@@ -914,9 +914,9 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
-            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
             try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
@@ -947,9 +947,9 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
-            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
             try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);

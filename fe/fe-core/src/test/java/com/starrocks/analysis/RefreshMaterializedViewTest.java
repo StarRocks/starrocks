@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -142,8 +144,12 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
         Partition p1 = table.getPartition("p1");
         Partition p2 = table.getPartition("p2");
         if (p2.getVisibleVersion() == 3) {
+            MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
+            Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+            Assert.assertTrue(!mvUpdateInfo.isValidRewrite());
             partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv1);
-            Assert.assertEquals(Sets.newHashSet("mv_to_refresh"), partitionsToRefresh1);
+            Assert.assertTrue(partitionsToRefresh1.isEmpty());
+
             partitionsToRefresh2 = getPartitionNamesToRefreshForMv(mv2);
             Assert.assertTrue(partitionsToRefresh2.contains("p2"));
         } else {
@@ -221,8 +227,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
     }
 
     private void checkToRefreshPartitionsEmpty(MaterializedView mv) {
-        Set<String> partitionsToRefresh = Sets.newHashSet();
-        Assert.assertTrue(mv.getPartitionNamesToRefreshForMv(partitionsToRefresh, true));
+        Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv);
         Assert.assertTrue(partitionsToRefresh.isEmpty());
     }
 
@@ -875,7 +880,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
             starRocksAssert.ddl("alter table mv_union_t4 add partition p20240325 values less than ('2024-03-25')");
             starRocksAssert.ddl("alter table mv_union_t1 add partition p20240326 values less than ('2024-03-26')");
 
-            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+            Exception e = Assert.assertThrows(DmlException.class, () ->
                     starRocksAssert.refreshMvPartition("refresh materialized view mv2"));
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }

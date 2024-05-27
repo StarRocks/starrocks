@@ -71,6 +71,7 @@ set(EXEC_FILES
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
+        ./exec/jni_scanner_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
         ./exec/json_scanner_test.cpp
@@ -113,6 +114,7 @@ set(EXEC_FILES
         ./exprs/is_null_predicate_test.cpp
         ./exprs/jit_func_cache_test.cpp
         ./exprs/json_functions_test.cpp
+        ./exprs/flat_json_functions_test.cpp
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
@@ -227,7 +229,7 @@ set(EXEC_FILES
         ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/vacuum_test.cpp
-        ./storage/lake/location_provider_test.cpp
+        ./storage/lake/starlet_location_provider_test.cpp
         ./storage/lake/rowset_test.cpp
         ./storage/lake/tablet_test.cpp
         ./storage/lake/lake_scan_node_test.cpp
@@ -272,6 +274,9 @@ set(EXEC_FILES
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/rowset/default_value_column_iterator_test.cpp
+        ./storage/rowset/column_iterator_decorator_test.cpp
+        ./storage/rowset/cast_column_iterator_test.cpp
+        ./storage/rowset/series_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
@@ -281,7 +286,7 @@ set(EXEC_FILES
         ./storage/tablet_index_test.cpp
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
-        ./storage/table_schema_test.cpp
+        ./storage/tablet_schema_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/tablet_updates_schema_change_test.cpp
         ./storage/update_manager_test.cpp
@@ -431,14 +436,19 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
+        ./storage/delta_writer_test.cpp
+        ./storage/rows_mapper_test.cpp
         ./storage/lake/persistent_index_memtable_test.cpp
         ./storage/lake/lake_persistent_index_test.cpp
         ./storage/lake/replication_txn_manager_test.cpp
-        ./storage/sstable/persistent_index_sstable_test.cpp
+        ./storage/lake/persistent_index_sstable_test.cpp
+        ./block_cache/datacache_utils_test.cpp
+        ./util/thrift_rpc_helper_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./block_cache/disk_space_monitor_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 

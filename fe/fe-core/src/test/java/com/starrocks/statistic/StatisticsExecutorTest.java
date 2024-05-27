@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
@@ -130,26 +131,22 @@ public class StatisticsExecutorTest extends PlanTestBase {
     }
 
     @Test
-    public void testQueryStatisticSync() {
+    public void testQueryStatisticSync() throws AnalysisException {
         String res;
         new MockUp<StatisticExecutor>() {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
                 Assert.assertEquals(
                         "SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
-                                "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as int(11))) as string), " +
-                                "cast(min(cast(min as int(11))) as string) " +
-                                "FROM external_column_statistics " +
+                                "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as string)) as string), " +
+                                "cast(min(cast(min as string)) as string) FROM external_column_statistics " +
                                 "WHERE table_uuid = \"hive0.partitioned_db.t1.0\" " +
-                                "and column_name = \"c1\" " +
-                                "GROUP BY table_uuid, column_name UNION ALL " +
+                                "and column_name in (\"c2\") GROUP BY table_uuid, column_name UNION ALL " +
                                 "SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
-                                "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as varchar(1073741824))) as string), " +
-                                "cast(min(cast(min as varchar(1073741824))) as string) " +
-                                "FROM external_column_statistics " +
-                                "WHERE table_uuid = \"hive0.partitioned_db.t1.0\"" +
-                                " and column_name = \"c2\" " +
-                                "GROUP BY table_uuid, column_name", sql);
+                                "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint)) as string), " +
+                                "cast(min(cast(min as bigint)) as string) " +
+                                "FROM external_column_statistics WHERE table_uuid = \"hive0.partitioned_db.t1.0\"" +
+                                " and column_name in (\"c1\") GROUP BY table_uuid, column_name", sql);
                 return Lists.newArrayList();
             }
         };
@@ -196,7 +193,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         };
         String sql = "analyze table hive0.partitioned_db.t1 update histogram on c1";
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
-        StmtExecutor executor = new StmtExecutor(connectContext, sql);
+        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
         AnalyzeStatus pendingStatus = new ExternalAnalyzeStatus(1, "", "", "",
                 "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
@@ -210,7 +207,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         sql = "analyze table hive0.partitioned_db.t1";
         stmt = (AnalyzeStmt) analyzeSuccess(sql);
-        executor = new StmtExecutor(connectContext, sql);
+        executor = new StmtExecutor(connectContext, stmt);
         pendingStatus = new ExternalAnalyzeStatus(1, "", "", "",
                 "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);

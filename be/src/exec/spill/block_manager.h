@@ -45,6 +45,8 @@ public:
     bool is_remote() const { return _is_remote; }
     void set_is_remote(bool is_remote) { _is_remote = is_remote; }
 
+    virtual bool preallocate(size_t write_size) = 0;
+
 protected:
     size_t _size{};
     bool _is_remote = false;

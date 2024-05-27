@@ -23,8 +23,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public abstract class Operator {
@@ -53,6 +55,7 @@ public abstract class Operator {
     // or self reference of groups
     protected long salt = 0;
 
+    protected int opRuleMask = 0;
     // Like LogicalJoinOperator#transformMask, add a mask to avoid one operator's dead-loop in one transform rule.
     // eg: MV's UNION-ALL RULE:
     //                 UNION                         UNION
@@ -60,13 +63,18 @@ public abstract class Operator {
     //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
     //                                       /      \
     //                                  EXTRA-OP    MV-SCAN
+    // Operator's rule mask: operator that has been union rewrite and no needs to rewrite again.
     public static final int OP_UNION_ALL_BIT = 1 << 0;
-    protected int opRuleMask = 0;
+    // Operator's rule mask: operator that has been push down rewrite and no needs to rewrite again.
+    public static final int OP_PUSH_DOWN_BIT = 1 << 1;
+    public static final int OP_TRANSPARENT_MV_BIT = 1 << 2;
 
     // an operator logically equivalent to 'this' operator
     // used by view based mv rewrite
     // eg: LogicalViewScanOperator is logically equivalent to the operator build from the view
     protected Operator equivalentOp;
+
+    protected DomainProperty domainProperty;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -181,8 +189,24 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
+    public DomainProperty getDomainProperty(List<OptExpression> inputs) {
+        if (domainProperty == null) {
+            domainProperty = deriveDomainProperty(inputs);
+        }
+
+        if (projection != null) {
+            domainProperty = domainProperty.projectDomainProperty(projection.getColumnRefMap());
+        }
+
+        return domainProperty;
+    }
+
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         throw new UnsupportedOperationException();
+    }
+
+    protected DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        return new DomainProperty(Map.of());
     }
 
     protected RowOutputInfo projectInputRow(RowOutputInfo inputRow) {

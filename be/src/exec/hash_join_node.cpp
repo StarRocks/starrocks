@@ -14,6 +14,7 @@
 
 #include "exec/hash_join_node.h"
 
+#include <glog/logging.h>
 #include <runtime/runtime_state.h>
 
 #include <memory>
@@ -141,6 +142,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.output_columns) {
         _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
     }
+    if (tnode.hash_join_node.__isset.late_materialization) {
+        _enable_late_materialization = tnode.hash_join_node.late_materialization;
+    }
     return Status::OK();
 }
 
@@ -180,8 +184,8 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _init_hash_table_param(&param);
     _ht.create(param);
 
-    _probe_column_count = _ht.get_probe_column_count();
-    _build_column_count = _ht.get_build_column_count();
+    _output_probe_column_count = _ht.get_output_probe_column_count();
+    _output_build_column_count = _ht.get_output_build_column_count();
 
     return Status::OK();
 }
@@ -189,7 +193,6 @@ Status HashJoinNode::prepare(RuntimeState* state) {
 void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
-    param->row_desc = &_row_descriptor;
     param->build_row_desc = &child(1)->row_desc();
     param->probe_row_desc = &child(0)->row_desc();
     param->search_ht_timer = _search_ht_timer;
@@ -197,6 +200,7 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->output_probe_column_timer = _output_probe_column_timer;
     param->build_output_slots = _output_slots;
     param->probe_output_slots = _output_slots;
+    param->enable_late_materialization = _enable_late_materialization;
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -463,10 +467,10 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
-    HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
+    HashJoinerParam param(pool, _hash_join_node, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
-                          _row_descriptor, child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(),
-                          _build_runtime_filters, _output_slots, _output_slots, _distribution_mode, false);
+                          child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
+                          _output_slots, _output_slots, _distribution_mode, false, _enable_late_materialization);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // Create a shared RefCountedRuntimeFilterCollector
@@ -537,6 +541,8 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
             DCHECK(!runtime_filter_build_desc->has_remote_targets());
             runtime_filter_build_desc->set_num_colocate_partition(num_right_partitions);
         }
+        size_t num_left_partition = context->source_operator(lhs_operators)->degree_of_parallelism();
+        DCHECK_EQ(num_left_partition, num_right_partitions);
         context->fragment_context()->runtime_filter_hub()->add_holder(_id, num_right_partitions);
     } else {
         context->fragment_context()->runtime_filter_hub()->add_holder(_id);
@@ -877,7 +883,7 @@ Status HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
-        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
+        return _process_outer_join_with_other_conjunct(chunk, _output_probe_column_count, _output_build_column_count);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:
@@ -994,6 +1000,29 @@ Status HashJoinNode::_create_implicit_local_join_runtime_filters(RuntimeState* s
     child(0)->push_down_join_runtime_filter(state, &(child(0)->runtime_filter_collector()));
 
     return Status::OK();
+}
+
+bool HashJoinNode::can_generate_global_runtime_filter() const {
+    return std::any_of(_build_runtime_filters.begin(), _build_runtime_filters.end(),
+                       [](const RuntimeFilterBuildDescriptor* rf) { return rf->has_remote_targets(); });
+}
+
+void HashJoinNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
+    if (collector->empty()) return;
+    if (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN ||
+        _join_type == TJoinOp::RIGHT_SEMI_JOIN) {
+        ExecNode::push_down_join_runtime_filter(state, collector);
+        return;
+    }
+    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
+}
+
+TJoinDistributionMode::type HashJoinNode::distribution_mode() const {
+    return _distribution_mode;
+}
+
+const std::list<RuntimeFilterBuildDescriptor*>& HashJoinNode::build_runtime_filters() const {
+    return _build_runtime_filters;
 }
 
 } // namespace starrocks

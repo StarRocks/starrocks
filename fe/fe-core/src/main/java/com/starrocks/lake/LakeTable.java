@@ -35,6 +35,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -188,7 +189,8 @@ public class LakeTable extends OlapTable {
         List<Long> shardIds = null;
         try {
             // Ignore the parameter replicationNum
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, properties);
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, null, properties,
+                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
@@ -256,5 +258,10 @@ public class LakeTable extends OlapTable {
         if (getMaxColUniqueId() <= 0) {
             setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
         }
+    }
+
+    @Override
+    public boolean getUseFastSchemaEvolution() {
+        return !hasRowStorageType() && Config.enable_fast_schema_evolution_in_share_data_mode;
     }
 }

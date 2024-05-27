@@ -63,14 +63,14 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _conjunct_ctxs(param._conjunct_ctxs),
           _build_row_descriptor(param._build_row_descriptor),
           _probe_row_descriptor(param._probe_row_descriptor),
-          _row_descriptor(param._row_descriptor),
           _build_node_type(param._build_node_type),
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
           _build_output_slots(param._build_output_slots),
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
-          _mor_reader_mode(param._mor_reader_mode) {
+          _mor_reader_mode(param._mor_reader_mode),
+          _enable_late_materialization(param._enable_late_materialization) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -107,8 +107,8 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     _hash_join_builder->create(hash_table_param());
     auto& ht = _hash_join_builder->hash_table();
 
-    _probe_column_count = ht.get_probe_column_count();
-    _build_column_count = ht.get_build_column_count();
+    _output_probe_column_count = ht.get_output_probe_column_count();
+    _output_build_column_count = ht.get_output_build_column_count();
 
     return Status::OK();
 }
@@ -137,12 +137,12 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
-    param->row_desc = &_row_descriptor;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
     param->mor_reader_mode = _mor_reader_mode;
+    param->enable_late_materialization = _enable_late_materialization;
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -175,9 +175,7 @@ Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
     }
 
     update_build_rows(chunk->num_rows());
-    RETURN_IF_ERROR(_hash_join_builder->append_chunk(chunk));
-
-    return Status::OK();
+    return _hash_join_builder->append_chunk(chunk);
 }
 
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
@@ -321,8 +319,8 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
 
     // _hash_table_build_rows is root truth, it used to by _short_circuit_break().
     _hash_table_build_rows = src_join_builder->_hash_table_build_rows;
-    _probe_column_count = src_join_builder->_probe_column_count;
-    _build_column_count = src_join_builder->_build_column_count;
+    _output_probe_column_count = src_join_builder->_output_probe_column_count;
+    _output_build_column_count = src_join_builder->_output_build_column_count;
 
     _has_referenced_hash_table = true;
 
@@ -486,7 +484,8 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
-        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count, hash_table);
+        return _process_outer_join_with_other_conjunct(chunk, _output_probe_column_count, _output_build_column_count,
+                                                       hash_table);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:

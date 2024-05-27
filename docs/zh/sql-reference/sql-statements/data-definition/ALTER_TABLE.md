@@ -35,19 +35,22 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
-- rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
-- comment: 修改表的注释。**从 3.1 版本开始支持。** 当前还不支持修改列注释。
+- rename: 修改表名，rollup index 名称，修改 partition 名称。
+- comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
-- column: 增加列，删除列，调整列顺序，修改列类型。
+- column: 增加列，删除列，调整列顺序，修改列类型。*
 - rollup index: 创建或删除 rollup index。
 - bitmap index: 修改 bitmap index。
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
 
-:::note
+## 使用限制和注意事项
 
 - partition、column 和 rollup index <!--是否包含compaction，bucket和column/rollupindex可以在一起吗-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
+- 当前还不支持修改列名。
+- 当前还不支持修改列注释。
+- 每张表仅支持一个进行中的 Schema Change 操作。不能对同一张表同时执行两条 Schema Change 命令。
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](../data-manipulation/SHOW_ALTER.md)。
 - rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
 
@@ -410,26 +413,11 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
     - FLOAT 转换成 DOUBLE。
     - INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
 
-6. 不支持从 NULL 转为 NOT NULL。
+#### 修改排序键
 
-#### 对指定 index 的列进行重新排序
+自 3.0 版本起，支持修改主键表的排序键。自 3.3 版本起，支持修改明细表、聚合表和更新表的排序键。
 
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-ORDER BY (column_name1, column_name2, ...)
-[FROM rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
-```
-
-注意：
-
-- index 中的所有列都要写出来。
-- value 列在 key 列之后。
-
-#### 修改主键表中组成排序键的列
-<!--支持版本-->
+明细表和主键表中排序键可以为任意列的排序组合，聚合表和更新表中排序键必须包含所有 key 列，但是列的顺序无需与 key 列保持一致。
 
 语法：
 
@@ -441,9 +429,9 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
-示例：
+示例：修改主键表中的排序键
 
-假设原表为主键表，排序键与主键耦合  `dt,order_id`。
+假设原表为主键表，排序键与主键耦合 `dt,order_id`。
 
 ```SQL
 create table orders (
@@ -620,6 +608,8 @@ StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，�
 - 用户通过 HTTP 接口指定 Tablet 来执行 Compaction。
 
 3.1 版本之后，增加了一个 SQL 接口，用户可以通过执行 SQL 命令来手动进行 Compaction，可以指定表、单个或多个分区进行 Compaction。
+
+存算分离集群自 v3.3.0 起支持该功能。
 
 语法：
 

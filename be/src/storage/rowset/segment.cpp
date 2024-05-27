@@ -47,6 +47,8 @@
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/rowset/cast_column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
@@ -261,30 +263,46 @@ bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_option
     return st.ok() && dcgs.size() == 0;
 }
 
-StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
-    DCHECK(read_options.stats != nullptr);
-    // trying to prune the current segment by segment-level zone map
-    for (const auto& pair : read_options.predicates_for_zone_map) {
-        ColumnId column_id = pair.first;
+struct SegmentZoneMapPruner {
+    bool operator()(const PredicateColumnNode& node) const {
+        const auto* col_pred = node.col_pred();
+        const ColumnId column_id = col_pred->column_id();
         const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
-                                                               : _tablet_schema->column(column_id);
-        auto column_unique_id = tablet_column.unique_id();
-        if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
-            continue;
-        }
-        if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
-            // skip segment zonemap filter when this segment has column files link to it.
-            if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
-                if (read_options.is_first_split_of_segment) {
-                    read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
-                }
-                return Status::EndOfFile(
-                        strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
-            } else {
-                break;
-            }
+                                                               : parent->_tablet_schema->column(column_id);
+        const auto column_unique_id = tablet_column.unique_id();
+
+        if (const auto it = parent->_column_readers.find(column_unique_id); it == parent->_column_readers.end()) {
+            return false;
+        } else {
+            return it->second->has_zone_map() && !it->second->segment_zone_map_filter({col_pred}) &&
+                   (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options));
         }
     }
+    bool operator()(const PredicateAndNode& node) const {
+        return std::any_of(node.children().begin(), node.children().end(),
+                           [this](const auto& child) { return child.visit(*this); });
+    }
+    bool operator()(const PredicateOrNode& node) const {
+        return !node.empty() && std::all_of(node.children().begin(), node.children().end(),
+                                            [this](const auto& child) { return child.visit(*this); });
+    }
+
+    Segment* parent;
+    const SegmentReadOptions& read_options;
+};
+
+StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
+    DCHECK(read_options.stats != nullptr);
+
+    const auto pruned = config::enable_index_segment_level_zonemap_filter &&
+                        read_options.pred_tree_for_zone_map.visit(SegmentZoneMapPruner{this, read_options});
+    if (pruned) {
+        if (read_options.is_first_split_of_segment) {
+            read_options.stats->segment_stats_filtered += num_rows();
+        }
+        return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
+    }
+
     return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 
@@ -392,7 +410,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
-        return _column_readers.at(id)->new_iterator(path);
+        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path));
+        if (_column_readers[id]->column_type() == column.type()) {
+            return source_iter;
+        } else {
+            auto nullable = _column_readers[id]->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(_column_readers[id]->column_type());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
+                                                                 column.scale());
+            return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+        }
     } else if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
@@ -467,4 +494,12 @@ size_t Segment::mem_usage() const {
     }
     return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
 }
+
+StatusOr<int64_t> Segment::get_data_size() const {
+    if (_segment_file_info.size.has_value()) {
+        return _segment_file_info.size.value();
+    }
+    return _fs->get_file_size(_segment_file_info.path);
+}
+
 } // namespace starrocks

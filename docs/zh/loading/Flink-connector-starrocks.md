@@ -235,6 +235,10 @@ DISTRIBUTED BY HASH(id);
     ./bin/start-cluster.sh
     ```
 
+#### 网络配置
+
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+
 ### 使用 Flink SQL 写入数据
 
 - 运行以下命令以启动 Flink SQL 客户端。
@@ -268,7 +272,7 @@ DISTRIBUTED BY HASH(id);
 
 根据 input records 的类型，编写对应 Flink DataStream 作业，例如 input records 为 CSV 格式的 Java `String`、JSON 格式的 Java `String` 或自定义的 Java 对象。
 
-- 如果 input records 为 CSV 格式的 `String`，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见 [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCsvRecords.java)。
+- 如果 input records 为 CSV 格式的 `String`，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见 [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/cd8086cfedc64d5181785bdf5e89a847dc294c1d/examples/src/main/java/com/starrocks/connector/flink/examples/datastream)
 
     ```Java
     /**
@@ -303,7 +307,7 @@ DISTRIBUTED BY HASH(id);
     source.addSink(starRockSink);
     ```
 
-- 如果 input records 为 JSON 格式的 `String`，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见[LoadJsonRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadJsonRecords.java)。
+- 如果 input records 为 JSON 格式的 `String`，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见[LoadJsonRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/cd8086cfedc64d5181785bdf5e89a847dc294c1d/examples/src/main/java/com/starrocks/connector/flink/examples/datastream)
 
     ```Java
     /**
@@ -336,7 +340,7 @@ DISTRIBUTED BY HASH(id);
     source.addSink(starRockSink);
     ```
 
-- 如果 input records 为自定义的 Java 对象，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见[LoadCustomJavaRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCustomJavaRecords.java)。
+- 如果 input records 为自定义的 Java 对象，对应的 Flink DataStream 作业的主要代码如下所示，完整代码请参见[LoadCustomJavaRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/cd8086cfedc64d5181785bdf5e89a847dc294c1d/examples/src/main/java/com/starrocks/connector/flink/examples/datastream)
 
   - 本示例中，input record 是一个简单的 POJO `RowData`。
 

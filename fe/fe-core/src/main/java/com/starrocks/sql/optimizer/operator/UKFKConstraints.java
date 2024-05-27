@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.UniqueConstraint;
@@ -28,6 +29,8 @@ import java.util.Map;
 public class UKFKConstraints {
     // ColumnRefOperator::id -> UniqueConstraint
     private final Map<Integer, UniqueConstraintWrapper> uniqueKeys = Maps.newHashMap();
+    // The unique key of the data table needs to be collected when eliminating aggregation
+    private Map<Integer, UniqueConstraintWrapper> tableUniqueKeys = Maps.newHashMap();
     // ColumnRefOperator::id -> ForeignKeyConstraint
     private final Map<Integer, ForeignKeyConstraintWrapper> foreignKeys = Maps.newHashMap();
     private JoinProperty joinProperty;
@@ -36,12 +39,24 @@ public class UKFKConstraints {
         uniqueKeys.put(id, uniqueKey);
     }
 
+    public void addTableUniqueKey(int id, UniqueConstraintWrapper uniqueKey) {
+        tableUniqueKeys.put(id, uniqueKey);
+    }
+
     public void addForeignKey(int id, ForeignKeyConstraintWrapper foreignKey) {
         foreignKeys.put(id, foreignKey);
     }
 
     public UniqueConstraintWrapper getUniqueConstraint(Integer id) {
         return uniqueKeys.get(id);
+    }
+
+    public void setTableUniqueKeys(Map<Integer, UniqueConstraintWrapper> tableUniqueKeys) {
+        this.tableUniqueKeys = tableUniqueKeys;
+    }
+
+    public Map<Integer, UniqueConstraintWrapper> getTableUniqueKeys() {
+        return tableUniqueKeys;
     }
 
     public ForeignKeyConstraintWrapper getForeignKeyConstraint(Integer id) {
@@ -65,6 +80,11 @@ public class UKFKConstraints {
         from.foreignKeys.entrySet().stream()
                 .filter(entry -> toOutputColumns.contains(entry.getKey()))
                 .forEach(entry -> clone.foreignKeys.put(entry.getKey(), entry.getValue()));
+        if (!(from.getTableUniqueKeys().isEmpty()) &&
+                toOutputColumns.containsAll(Lists.newArrayList((from.getTableUniqueKeys().keySet())))) {
+            clone.setTableUniqueKeys(from.getTableUniqueKeys());
+        }
+
         return clone;
     }
 

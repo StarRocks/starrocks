@@ -48,6 +48,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/inverted/inverted_index_iterator.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
@@ -103,7 +104,7 @@ public:
     ColumnReader(ColumnReader&&) = delete;
     void operator=(ColumnReader&&) = delete;
 
-    // create a new column iterator. Caller should free the returned iterator after unused.
+    // create a new column iterator.
     StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
 
     // Caller should free returned iterator after unused.
@@ -126,6 +127,12 @@ public:
     bool has_zone_map() const { return _zonemap_index != nullptr; }
     bool has_bitmap_index() const { return _bitmap_index != nullptr; }
     bool has_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
+    bool has_original_bloom_filter_index() const {
+        return _bloom_filter_index != nullptr && (!_segment->tablet_schema().has_index(_column_unique_id, NGRAMBF));
+    }
+    bool has_ngram_bloom_filter_index() const {
+        return _bloom_filter_index != nullptr && _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
+    }
 
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
@@ -139,19 +146,30 @@ public:
     int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
 
     // page-level zone map filter.
+
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
-                           const IndexReadOptions& opts);
+                           const IndexReadOptions& opts, CompoundNodeType pred_relation);
 
     // segment-level zone map filter.
     // Return false to filter out this segment.
     // same as `match_condition`, used by vector engine.
     bool segment_zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& predicates) const;
 
-    // prerequisite: at least one predicate in |predicates| support bloom filter.
-    Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
-                        const IndexReadOptions& opts);
+    /// Treat the relationship between |predicates| as `(s_pred_1 OR s_pred_2 OR ... OR s_pred_n) AND (ns_pred_1 AND ns_pred_2 AND ... AND ns_pred_n)`,
+    /// where s_pred_i denotes a predicate which supports bloom filter, and ns_pred_i denotes a predicate which does not support bloom filter.
+    /// That is,
+    /// - only keep the rows in |row_ranges| which satisfy any predicate that supports bloom filter in |predicates|.
+    ///
+    /// prerequisite:
+    /// - if the original relationship between |predicates| is OR, all of them need to support bloom filter.
+    /// - if the original relationship between |predicates| is AND, at least one of them need to support bloom filter.
+    Status original_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
+                                 const IndexReadOptions& opts);
+
+    Status ngram_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
+                              const IndexReadOptions& opts);
 
     Status load_ordinal_index(const IndexReadOptions& opts);
 
@@ -166,9 +184,13 @@ public:
 
     const std::string& name() const { return _name; }
 
+    const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
+
 private:
     const std::string& file_name() const { return _segment->file_name(); }
-
+    template <bool is_original_bf>
+    Status bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
+                        const IndexReadOptions& opts);
     struct private_type {
         explicit private_type(int) {}
     };
@@ -183,10 +205,11 @@ private:
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
-    Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
+    Status _parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
     Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges);
 
+    template <CompoundNodeType PredRelation>
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 

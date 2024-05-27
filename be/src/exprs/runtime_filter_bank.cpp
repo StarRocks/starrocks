@@ -241,6 +241,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _join_mode = desc.build_join_mode;
     _is_topn_filter = desc.__isset.filter_type && desc.filter_type == TRuntimeFilterBuildType::TOPN_FILTER;
     _skip_wait = _is_topn_filter;
+    _is_group_colocate_rf = desc.__isset.build_from_group_execution && desc.build_from_group_execution;
 
     bool not_found = true;
     if (desc.__isset.plan_node_id_to_target_expr) {
@@ -616,7 +617,8 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     }
 }
 
-void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
+void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id,
+                                            RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
                                             std::set<TPlanNodeId>& local_rf_waiting_set) {
     if (this == parent) return;
     auto iter = parent->_descriptors.begin();
@@ -626,7 +628,8 @@ void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent,
             ++iter;
             continue;
         }
-        if (desc->is_bound(tuple_ids)) {
+        if (desc->is_bound(tuple_ids) && !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
+                                           state->shuffle_hash_bucket_rf_ids().contains(desc->filter_id()))) {
             add_descriptor(desc);
             if (desc->is_local()) {
                 local_rf_waiting_set.insert(desc->build_plan_node_id());

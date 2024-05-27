@@ -41,10 +41,8 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
 
     // test get
     vector<IndexValue> get_values(keys.size());
-    KeyIndexesInfo get_not_found;
-    size_t get_num_found = 0;
-    ASSERT_TRUE(memtable->get(N, key_slices.data(), get_values.data(), &get_not_found, &get_num_found, -1).ok());
-    ASSERT_EQ(keys.size(), get_num_found);
+    KeyIndexSet get_not_found;
+    ASSERT_TRUE(memtable->get(N, key_slices.data(), get_values.data(), &get_not_found, -1).ok());
     ASSERT_EQ(get_not_found.size(), 0);
     for (int i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], get_values[i]);
@@ -58,12 +56,10 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
         get2_key_slices.emplace_back((uint8_t*)(&get2_keys[i]), sizeof(Key));
     }
     vector<IndexValue> get2_values(get2_keys.size());
-    KeyIndexesInfo get2_not_found;
-    size_t get2_num_found = 0;
+    KeyIndexSet get2_not_found;
     // should only find 0,2,..N-2, not found: N,N+2, .. N*2-2
-    ASSERT_TRUE(
-            memtable->get(N, get2_key_slices.data(), get2_values.data(), &get2_not_found, &get2_num_found, -1).ok());
-    ASSERT_EQ(N / 2, get2_num_found);
+    ASSERT_TRUE(memtable->get(N, get2_key_slices.data(), get2_values.data(), &get2_not_found, -1).ok());
+    ASSERT_EQ(N / 2, get2_not_found.size());
 
     // test erase
     vector<Key> erase_keys;
@@ -77,7 +73,7 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
         num++;
     }
     vector<IndexValue> erase_old_values(erase_keys.size());
-    KeyIndexesInfo erase_not_found;
+    KeyIndexSet erase_not_found;
     size_t erase_num_found = 0;
     ASSERT_TRUE(memtable->erase(num, erase_key_slices.data(), erase_old_values.data(), &erase_not_found,
                                 &erase_num_found, -1)
@@ -107,7 +103,7 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
         idxes.emplace_back(i);
     }
     vector<IndexValue> upsert_old_values(upsert_keys.size());
-    KeyIndexesInfo upsert_not_found;
+    KeyIndexSet upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(memtable->upsert(N, upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(),
                                  &upsert_not_found, &upsert_num_found, -1)
@@ -141,10 +137,8 @@ TEST(PersistentIndexMemtableTest, test_replace) {
     Status st = memtable->replace(key_slices.data(), replace_values.data(), replace_idxes, -1);
     ASSERT_TRUE(st.ok());
     std::vector<IndexValue> new_get_values(keys.size());
-    KeyIndexesInfo get_not_found;
-    size_t get_num_found = 0;
-    ASSERT_TRUE(memtable->get(keys.size(), key_slices.data(), new_get_values.data(), &get_not_found, &get_num_found, -1)
-                        .ok());
+    KeyIndexSet get_not_found;
+    ASSERT_TRUE(memtable->get(keys.size(), key_slices.data(), new_get_values.data(), &get_not_found, -1).ok());
     ASSERT_EQ(keys.size(), new_get_values.size());
     for (int i = 0; i < N; i++) {
         ASSERT_EQ(replace_values[i], new_get_values[i]);

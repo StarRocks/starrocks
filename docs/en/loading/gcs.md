@@ -17,7 +17,7 @@ Each of these options has its own advantages, which are detailed in the followin
 
 In most cases, we recommend that you use the INSERT+`FILES()` method, which is much easier to use.
 
-However, the INSERT+`FILES()` method currently supports only the Parquet and ORC file formats. Therefore, if you need to load data of other file formats such as CSV, or [perform data changes such as DELETE during data loading](../loading/Load_to_Primary_Key_tables.md), you can resort to Broker Load.
+However, the INSERT+`FILES()` method currently supports only the Parquet, ORC, and CSV file formats. Therefore, if you need to load data of other file formats such as JSON, or [perform data changes such as DELETE during data loading](../loading/Load_to_Primary_Key_tables.md), you can resort to Broker Load.
 
 ## Before you begin
 
@@ -44,7 +44,7 @@ For information about all the authentication methods available, see [Authenticat
 
 ## Use INSERT+FILES()
 
-This method is available from v3.2 onwards and currently supports only the Parquet and ORC file formats.
+This method is available from v3.2 onwards and currently supports only the Parquet, ORC, and CSV (from v3.3.0 onwards) file formats.
 
 ### Advantages of INSERT+FILES()
 
@@ -349,8 +349,8 @@ This method supports the following file formats:
 ![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
 
 1. The user creates a load job.
-2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE).
-3. The backend (BE) nodes pull the data from the source and load the data into StarRocks.
+2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BEs) or compute nodes (CNs).
+3. The BEs or CNs pull the data from the source and load the data into StarRocks.
 
 ### Typical example
 

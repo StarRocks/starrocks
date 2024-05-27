@@ -43,6 +43,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -89,6 +90,7 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -311,7 +313,9 @@ public class AstToStringBuilder {
                 if (setVar instanceof SystemVariable) {
                     SystemVariable systemVariable = (SystemVariable) setVar;
                     String setVarSql = "";
-                    setVarSql += systemVariable.getType().toString() + " ";
+                    if (systemVariable.getType() != null) {
+                        setVarSql += systemVariable.getType().toString() + " ";
+                    }
                     setVarSql += "`" + systemVariable.getVariable() + "`";
                     setVarSql += " = ";
                     setVarSql += visit(systemVariable.getResolvedExpression());
@@ -382,6 +386,13 @@ public class AstToStringBuilder {
             }
 
             sb.append(stmt.getMvName());
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCleanTemporaryTableStatement(CleanTemporaryTableStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("clean temporary table on session '").append(stmt.getSessionId()).append("'");
             return sb.toString();
         }
 
@@ -1138,6 +1149,11 @@ public class AstToStringBuilder {
                     + " " + node.getOp() + " " + printWithParentheses(node.getChild(1));
         }
 
+        public String visitMatchExpr(MatchExpr node, Void context) {
+            return printWithParentheses(node.getChild(0))
+                    + " MATCH " + printWithParentheses(node.getChild(1));
+        }
+
         @Override
         public String visitLiteral(LiteralExpr node, Void context) {
             if (node instanceof DecimalLiteral) {
@@ -1425,12 +1441,14 @@ public class AstToStringBuilder {
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
-        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition, hidePassword);
+        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition,
+                hidePassword, table.isTemporaryTable());
     }
 
     public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
                                   List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
+                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword,
+                                  boolean isTemporary) {
         // 1. create table
         // 1.1 materialized view
         if (table.isMaterializedView()) {
@@ -1470,6 +1488,9 @@ public class AstToStringBuilder {
                 || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
                 || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
+        }
+        if (isTemporary) {
+            sb.append("TEMPORARY ");
         }
         sb.append("TABLE ");
         if (!Strings.isNullOrEmpty(dbName)) {

@@ -37,14 +37,14 @@
 #include <atomic>
 #include <fstream>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
+#include "block_cache/block_cache.h"
+#include "block_cache/datacache_utils.h"
 #include "cctz/time_zone.h"
-#include "common/constexpr.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -75,7 +75,7 @@ class RowDescriptor;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
-
+using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
 }
@@ -305,7 +305,31 @@ public:
         load_params->__set_filtered_rows(num_rows_load_filtered());
         load_params->__set_unselected_rows(num_rows_load_unselected());
         load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
+        // Update datacache load metrics
+        update_load_datacache_metrics(load_params);
     }
+
+    void update_num_datacache_read_bytes(const int64_t read_bytes) {
+        _num_datacache_read_bytes.fetch_add(read_bytes, std::memory_order_relaxed);
+    }
+
+    void update_num_datacache_read_time_ns(const int64_t read_time) {
+        _num_datacache_read_time_ns.fetch_add(read_time, std::memory_order_relaxed);
+    }
+
+    void update_num_datacache_write_bytes(const int64_t write_bytes) {
+        _num_datacache_write_bytes.fetch_add(write_bytes, std::memory_order_relaxed);
+    }
+
+    void update_num_datacache_write_time_ns(const int64_t write_time) {
+        _num_datacache_write_time_ns.fetch_add(write_time, std::memory_order_relaxed);
+    }
+
+    void update_num_datacache_count(const int64_t count) {
+        _num_datacache_count.fetch_add(count, std::memory_order_relaxed);
+    }
+
+    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const;
 
     std::atomic_int64_t* mutable_total_spill_bytes();
 
@@ -461,6 +485,20 @@ public:
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 
+    void set_shuffle_hash_bucket_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
+        this->_shuffle_hash_bucket_rf_ids = std::move(filter_ids);
+    }
+
+    const std::unordered_set<int32_t>& shuffle_hash_bucket_rf_ids() const { return this->_shuffle_hash_bucket_rf_ids; }
+
+    void set_broadcast_join_right_offsprings(BroadcastJoinRightOffsprings&& broadcast_join_right_offsprings) {
+        this->_broadcast_join_right_offsprings = std::move(broadcast_join_right_offsprings);
+    }
+
+    const BroadcastJoinRightOffsprings& broadcast_join_right_offsprings() const {
+        return this->_broadcast_join_right_offsprings;
+    }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -561,6 +599,13 @@ private:
     std::atomic<int64_t> _num_rows_load_unselected{0};   // rows filtered by predicates
     std::atomic<int64_t> _num_bytes_scan_from_source{0}; // total bytes scan from source node
 
+    // datacache select metrics
+    std::atomic<int64_t> _num_datacache_read_bytes{0};
+    std::atomic<int64_t> _num_datacache_read_time_ns{0};
+    std::atomic<int64_t> _num_datacache_write_bytes{0};
+    std::atomic<int64_t> _num_datacache_write_time_ns{0};
+    std::atomic<int64_t> _num_datacache_count{0};
+
     std::atomic<int64_t> _num_print_error_rows{0};
     std::atomic<int64_t> _num_log_rejected_rows{0}; // rejected rows
 
@@ -593,6 +638,9 @@ private:
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
+
+    std::unordered_set<int32_t> _shuffle_hash_bucket_rf_ids;
+    BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

@@ -38,6 +38,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.OrderByElement;
@@ -52,6 +53,7 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
+import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -151,8 +153,28 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitCreateTemporaryTableStatement(CreateTemporaryTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateTemporaryTableAsSelectStatement(CreateTemporaryTableAsSelectStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCreateTemporaryTableLikeStatement(CreateTemporaryTableLikeStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitDropTableStatement(DropTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     default R visitRecoverTableStatement(RecoverTableStmt statement, C context) {
@@ -176,6 +198,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowTableStatement(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTemporaryTablesStatement(ShowTemporaryTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -808,6 +834,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitDataCacheSelectStatement(DataCacheSelectStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // --------------------------------------- Export Statement --------------------------------------------------------
 
     default R visitExportStatement(ExportStmt statement, C context) {
@@ -1298,6 +1328,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitLikePredicate(LikePredicate node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitMatchExpr(MatchExpr node, C context) {
         return visitExpression(node, context);
     }
 

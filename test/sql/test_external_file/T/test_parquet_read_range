@@ -81,4 +81,7 @@ select * from read_range_big_page_test where c0 in (8193, 12289);
 -- repeated column with page_index need clear level cache when skip to specific page
 select * from repeated_value where c0 = 1;
 
+-- test lazy decode
+select * from read_range_test where c0 in (1, 4000);
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

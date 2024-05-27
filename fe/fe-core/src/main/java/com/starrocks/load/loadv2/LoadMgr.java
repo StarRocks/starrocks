@@ -51,6 +51,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
@@ -63,6 +64,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
@@ -111,7 +113,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
     private final LoadJobScheduler loadJobScheduler;
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
 
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
@@ -233,7 +235,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
                                 long createTimestamp, long estimateScanRows,
                                 int estimateFileNum, long estimateFileSize,
-                                TLoadJobType type, long timeout)
+                                TLoadJobType type, long timeout, Coordinator coordinator)
             throws UserException {
 
         // get db id
@@ -244,7 +246,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, type, timeout);
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, type, timeout, coordinator);
             loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
             loadJob.setEstimateScanRow(estimateScanRows);
         } else {

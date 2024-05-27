@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
@@ -67,6 +68,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -197,8 +199,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return !couldApplyCtx.canDictOptBeApplied && couldApplyCtx.stopOptPropagateUpward;
         }
 
-        public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
-            return operator.accept(new IsSimpleStrictPredicateVisitor(), null);
+        public static boolean isSimpleStrictPredicate(ScalarOperator operator, boolean enablePushdownOrPredicate) {
+            return operator.accept(new IsSimpleStrictPredicateVisitor(enablePushdownOrPredicate), null);
         }
 
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
@@ -460,6 +462,20 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     }
                 }
 
+                // rewrite pruned partition predicates
+                List<ScalarOperator> newPrunedPredicates = Lists.newArrayList();
+                if (CollectionUtils.isNotEmpty(scanOperator.getPrunedPartitionPredicates())) {
+                    for (ScalarOperator predicate : scanOperator.getPrunedPartitionPredicates()) {
+                        if (predicate.getUsedColumns().isIntersect(applyOptCols)) {
+                            final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+                            final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
+                            newPrunedPredicates.add(newCallOperator);
+                        } else {
+                            newPrunedPredicates.add(predicate);
+                        }
+                    }
+                }
+
                 newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
                     // TODO: maybe have to implement a clone method to create a physical node.
@@ -468,7 +484,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
-                                    scanOperator.getPrunedPartitionPredicates(),
+                                    newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex());
                     newOlapScan.setScanOptimzeOption(scanOperator.getScanOptimzeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
@@ -1183,12 +1199,28 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
     // The predicate no function all, this implementation is consistent with BE olap scan node
     private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
 
-        public IsSimpleStrictPredicateVisitor() {
+        private final boolean enablePushDownOrPredicate;
+
+        public IsSimpleStrictPredicateVisitor(boolean enablePushDownOrPredicate) {
+            this.enablePushDownOrPredicate = enablePushDownOrPredicate;
         }
 
         @Override
         public Boolean visit(ScalarOperator scalarOperator, Void context) {
             return false;
+        }
+
+        @Override
+        public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+            if (!enablePushDownOrPredicate) {
+                return false;
+            }
+
+            if (!predicate.isAnd() && !predicate.isOr()) {
+                return false;
+            }
+
+            return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
         }
 
         @Override
@@ -1226,6 +1258,13 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
 
             return predicate.getChild(0).isColumnRef();
+        }
+
+        @Override
+        public Boolean visitMatchExprOperator(MatchExprOperator predicate, Void context) {
+            // match expression is always satisfy the following format:
+            // SlotRef MATCH StringLiteral which is always SimpleStrictPredicate
+            return true;
         }
 
         // These type predicates couldn't be pushed down to storage engine,

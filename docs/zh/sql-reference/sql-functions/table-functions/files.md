@@ -21,14 +21,15 @@ displayed_sidebar: "Chinese"
   - Microsoft Azure Blob Storage
 - **文件格式：**
   - Parquet
-  - ORC（暂不支持数据导出）
+  - ORC
+  - CSV
 
 ## 语法
 
 - **导入**:
 
   ```SQL
-  FILES( data_location , data_format [, StorageCredentialParams ] [, columns_from_path ] )
+  FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] )
   ```
 
 - **导出**:
@@ -36,7 +37,6 @@ displayed_sidebar: "Chinese"
   ```SQL
   FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_param )
   ```
-
 
 ## 参数说明
 
@@ -94,7 +94,80 @@ displayed_sidebar: "Chinese"
 
 ### data_format
 
-数据文件的格式。有效值：`parquet` 和 `orc`。
+数据文件的格式。有效值：`parquet`、`orc` 和 `csv`。
+
+特定数据文件格式需要额外参数指定细节选项。
+
+#### CSV
+
+CSV 格式示例：
+
+```SQL
+"format"="csv",
+"csv.column_separator"="\\t",
+"csv.enclose"='"',
+"csv.skip_header"="1",
+"csv.escape"="\\"
+```
+
+##### csv.column_separator
+
+用于指定源数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败。
+
+需要注意的是，Files() 任务通过 MySQL 协议提交请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (`\`)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果源数据文件是 Hive 文件，这里必须传入 `\\x01`。
+
+> **说明**
+>
+> - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+> - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
+
+##### csv.enclose
+
+根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。
+
+被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。
+
+如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。
+
+##### csv.skip_header
+
+用于指定跳过 CSV 文件最开头的几行数据。取值类型：INTEGER。默认值：`0`。
+
+在某些 CSV 文件里，最开头的几行数据会用来定义列名、列类型等元数据信息。通过设置该参数，可以使 StarRocks 在导入数据时忽略 CSV 文件的前面几行。例如，如果设置该参数为 `1`，则 StarRocks 会在导入数据时忽略 CSV 文件的第一行。
+
+这里的行所使用的分隔符须与您在导入语句中所设定的行分隔符一致。
+
+##### csv.escape
+
+指定 CSV 文件用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。
+
+> **说明**
+>
+> `escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。
+> 以下为两个示例：
+> - 当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。
+> - 假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。
+
+### schema_detect
+
+自 v3.2 版本起，FILES() 支持为批量数据文件执行自动 Schema 检测和 Union 操作。StarRocks 首先扫描同批次中随机数据文件的数据进行采样，以检测数据的 Schema。然后，StarRocks 将对同批次中所有数据文件的列进行 Union 操作。
+
+您可以使用以下参数配置采样规则：
+
+- `auto_detect_sample_files`：每个批次中采样的数据文件数量。范围：[0, + ∞]。默认值：`1`。
+- `auto_detect_sample_rows`：每个采样数据文件中的数据扫描行数。范围：[0, + ∞]。默认值：`500`。
+
+采样后，StarRocks 根据以下规则 Union 所有数据文件的列：
+
+- 对于具有不同列名或索引的列，StarRocks 将每列识别为单独的列，最终返回所有单独列。
+- 对于列名相同但数据类型不同的列，StarRocks 将这些列识别为相同的列，并为其选择一个相对较小的通用数据类型。例如，如果文件 A 中的列 `col1` 是 INT 类型，而文件 B 中的列 `col1` 是 DECIMAL 类型，则在返回的列中使用 DOUBLE 数据类型。
+- 一般情况下，STRING 类型可用于统一所有数据类型。
+
+如果 StarRocks 无法统一所有列，将生成一个包含错误信息和所有文件 Schema 的错误报告。
+
+> **注意**
+>
+> 单个批次中的所有数据文件必须为相同的文件格式。
 
 ### StorageCredentialParams
 
@@ -166,30 +239,6 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 
 假设数据文件 **file1** 存储在路径 `/geo/country=US/city=LA/` 下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回的列的值。详细使用方法请见以下示例四。
 
-<!--
-
-### schema_detect
-
-自 v3.2 版本起，FILES() 支持为批量数据文件执行自动 Schema 检测和 Union 操作。StarRocks 首先扫描同批次中随机数据文件的数据进行采样，以检测数据的 Schema。然后，StarRocks 将对同批次中所有数据文件的列进行 Union 操作。
-
-您可以使用以下参数配置采样规则：
-
-- `schema_auto_detect_sample_rows`：扫描每个采样数据文件中的数据行数。范围：[-1, 500]。如果将此参数设置为 `-1`，则扫描所有数据行。
-- `schema_auto_detect_sample_files`：在每个批次中采样的随机数据文件数量。有效值：`1`（默认值）和 `-1`。如果将此参数设置为 `-1`，则扫描所有数据文件。
-
-采样后，StarRocks 根据以下规则 Union 所有数据文件的列：
-
-- 对于具有不同列名或索引的列，StarRocks 将每列识别为单独的列，最终返回所有单独列。
-- 对于列名相同但数据类型不同的列，StarRocks 将这些列识别为相同的列，并为其选择一个通用的数据类型。例如，如果文件 A 中的列 `col1` 是 INT 类型，而文件 B 中的列 `col1` 是 DECIMAL 类型，则在返回的列中使用 DOUBLE 数据类型。STRING 类型可用于统一所有数据类型。
-
-如果 StarRocks 无法统一所有列，将生成一个包含错误信息和所有文件 Schema 的错误报告。
-
-> **注意**
->
-> 单个批次中的所有数据文件必须为相同的文件格式。
-
--->
-
 ### unload_data_param
 
 从 v3.2 版本开始，FILES() 支持在远程存储中定义可写入文件以进行数据导出。有关详细说明，请参阅[使用 INSERT INTO FILES 导出数据](../../../unloading/unload_using_insert_into_files.md)。
@@ -198,21 +247,15 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 -- 自 v3.2 版本起支持。
 unload_data_param::=
     "compression" = "<compression_method>",
-    "max_file_size" = "<file_size>",
-    "partition_by" = "<column_name> [, ...]" 
+    "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } 
 ```
 
 | **参数**          | **必填** | **说明**                                                          |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`brotli`：使用 Brotli 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
-| max_file_size    | 否           | 当数据导出为多个文件时，每个数据文件的最大大小。默认值：`1GB`。单位：B、KB、MB、GB、TB 和 PB。 |
+| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
 | partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例五。 |
-| single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果达到 `max_file_size`，则数据存储在多个文件中。</li></ul>                  |
-
-> **注意**
->
-> 不能同时指定 `max_file_size` 和 `single`。
+| single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
 
 ## 注意事项
 

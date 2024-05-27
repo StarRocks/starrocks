@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 
 import java.util.Map;
 import java.util.Set;
@@ -45,6 +46,7 @@ public class RewriteContext {
     private final Set<ColumnRefOperator> queryColumnSet;
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
     private ScalarOperator unionRewriteQueryExtraPredicate;
+    private AggregatePushDownContext aggregatePushDownContext;
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
@@ -160,5 +162,13 @@ public class RewriteContext {
 
     public void setUnionRewriteQueryExtraPredicate(ScalarOperator unionRewriteQueryExtraPredicate) {
         this.unionRewriteQueryExtraPredicate = unionRewriteQueryExtraPredicate;
+    }
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
     }
 }

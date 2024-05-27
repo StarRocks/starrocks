@@ -34,6 +34,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
@@ -60,7 +61,6 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
-import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -76,6 +76,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 public class StreamLoadTask extends AbstractTxnStateChangeCallback
         implements Writable, GsonPostProcessable, GsonPreProcessable {
@@ -226,7 +228,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public void init() {
-        this.lock = new ReentrantReadWriteLock(true);
+        this.lock = new FairReentrantReadWriteLock();
         this.taskDeadlineMs = this.createTimeMs + this.timeoutMs;
         this.channels = Lists.newArrayListWithCapacity(this.channelNum);
         for (int i = 0; i < this.channelNum; i++) {
@@ -812,7 +814,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 Status status = coord.getExecStatus();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
-                    throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                    throw new LoadException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
                 }
                 this.numRowsNormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
@@ -820,7 +822,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                    throw new LoadException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
                 }
 
                 if (coord.isEnableLoadProfile()) {
@@ -1001,10 +1003,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             return;
         }
 
-        // sync stream load collect profile
+        // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
             collectProfile();
-            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
 
         writeLock();
@@ -1014,8 +1015,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             this.state = State.COMMITED;
             isCommitting = false;
+            endTimeMs = System.currentTimeMillis();
         } finally {
             writeUnlock();
+            // sync stream load related query info should unregister here
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
 
@@ -1071,7 +1075,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
         }
 
-        ProfileManager.getInstance().pushLoadProfile(profile);
+        ProfileManager.getInstance().pushProfile(null, profile);
     }
 
     public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,
@@ -1095,6 +1099,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             this.state = State.COMMITED;
             this.preparedChannelNum = this.channelNum;
+            this.endTimeMs = txnState.getCommitTime();
         } finally {
             writeUnlock();
         }
@@ -1105,10 +1110,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             throws UserException {
         if (!txnOperated) {
             return;
-        }
-
-        if (isSyncStreamLoad && coord.isEnableLoadProfile()) {
-            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
 
         writeLock();
@@ -1130,6 +1131,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
+            // sync stream load related query info should unregister here
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
 
@@ -1290,6 +1293,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     public String getStateName() {
         return state.name();
+    }
+
+    public TUniqueId getTUniqueId() {
+        return this.loadId;
     }
 
     public void setTUniqueId(TUniqueId loadId) {

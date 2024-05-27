@@ -34,6 +34,10 @@
 
 namespace starrocks {
 
+DEFINE_FAIL_POINT(expr_prepare_failed);
+DEFINE_FAIL_POINT(expr_prepare_fragment_local_call_failed);
+DEFINE_FAIL_POINT(expr_prepare_fragment_thread_local_call_failed);
+
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
 Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
@@ -66,6 +70,9 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
                                                          _fn.name.function_name, _fn_desc->args_nums,
                                                          _children.size()));
     }
+
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+    FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_failed);
 
     FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
     std::vector<FunctionContext::TypeDesc> args_types;
@@ -103,10 +110,11 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
 
     if (_fn_desc->prepare_function != nullptr) {
         FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+        FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_fragment_local_call_failed);
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }
-
+        FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_fragment_thread_local_call_failed);
         RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::THREAD_LOCAL));
     }
 
@@ -126,7 +134,8 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
 
 void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks::ExprContext* context,
                                        FunctionContext::FunctionStateScope scope) {
-    if (_fn_desc != nullptr && _fn_desc->close_function != nullptr) {
+    // _fn_context_index >= 0 means this function call has call opened
+    if (_fn_desc != nullptr && _fn_desc->close_function != nullptr && _fn_context_index >= 0) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
         (void)_fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
 

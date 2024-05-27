@@ -71,6 +71,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -79,6 +80,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -97,6 +99,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -175,6 +178,8 @@ public class OlapScanNode extends ScanNode {
     private List<List<LiteralExpr>> rowStoreKeyLiterals = Lists.newArrayList();
 
     private boolean usePkIndex = false;
+
+    private long gtid = 0;
 
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -281,14 +286,16 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
-    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds,
-                                             Set<String> aggOrPrimaryKeyTableValueColumnNames) {
+    public List<SlotDescriptor> getSlots() {
+        return desc.getSlots();
+    }
+
+    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds) {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
                 continue;
             }
-            if (unUsedOutputColumnIds.contains(slot.getId().asInt()) &&
-                    !aggOrPrimaryKeyTableValueColumnNames.contains(slot.getColumn().getName())) {
+            if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
                 unUsedOutputStringColumns.add(slot.getColumn().getName());
             }
         }
@@ -513,13 +520,18 @@ public class OlapScanNode extends ScanNode {
                 }
             }
 
+            if (gtid > 0) {
+                internalRange.setGtid(gtid);
+            }
+
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-                if (computeNodeIds.isEmpty()) {
-                    throw new UserException(" no backend or compute node in warehouse " + warehouseId);
+                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                if (CollectionUtils.isEmpty(warehouseManager.getAliveComputeNodes(warehouseId))) {
+                    Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                    ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
                 }
 
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
@@ -785,6 +797,10 @@ public class OlapScanNode extends ScanNode {
                 output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
             }
 
+            if (gtid > 0) {
+                output.append(prefix).append(String.format("gtid=%s", gtid));
+            }
+
             output.append("\n");
             output.append(prefix).append(String.format("cardinality=%s\n", cardinality));
             output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
@@ -802,6 +818,11 @@ public class OlapScanNode extends ScanNode {
             } else {
                 output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
             }
+
+            if (gtid > 0) {
+                output.append(prefix).append(String.format("gtid=%s", gtid));
+            }
+
             output.append("\n");
 
             output.append(prefix).append(String.format("actualRows=%s", actualRows))
@@ -882,7 +903,7 @@ public class OlapScanNode extends ScanNode {
             if (indexMeta != null) {
                 for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
                     TColumn tColumn = col.toThrift();
-                    tColumn.setColumn_name(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                    tColumn.setColumn_name(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
                     col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
                     columnsDesc.add(tColumn);
                 }
@@ -936,6 +957,13 @@ public class OlapScanNode extends ScanNode {
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.lake_scan_node.setColumn_access_paths(columnAccessPathToThrift());
             }
+
+            if (!scanTabletIds.isEmpty()) {
+                msg.lake_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+                msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+            }
+
+            msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -954,6 +982,10 @@ public class OlapScanNode extends ScanNode {
                         ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
                 msg.olap_scan_node.setMax_parallel_scan_instance_num(
                         ConnectContext.get().getSessionVariable().getMaxParallelScanInstanceNum());
+                msg.olap_scan_node.setEnable_prune_column_after_index_filter(
+                        ConnectContext.get().getSessionVariable().isEnablePruneColumnAfterIndexFilter());
+                msg.olap_scan_node.setEnable_gin_filter(
+                        ConnectContext.get().getSessionVariable().isEnableGinFilter());
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
@@ -1303,7 +1335,7 @@ public class OlapScanNode extends ScanNode {
             // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
             // maybe invalid.
             Preconditions.checkState(tabletToPartitionMap.containsKey(tabletId),
-                    String.format("Invalid tablet id: '%s'", tabletId));
+                    "Invalid tablet id: '" + tabletId + "'");
             long partitionId = tabletToPartitionMap.get(tabletId);
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }
@@ -1337,6 +1369,10 @@ public class OlapScanNode extends ScanNode {
 
     public List<List<LiteralExpr>> getRowStoreKeyLiterals() {
         return rowStoreKeyLiterals;
+    }
+
+    public void setGtid(long gtid) {
+        this.gtid = gtid;
     }
 
     // clear scan node， reduce body size

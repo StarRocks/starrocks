@@ -14,18 +14,17 @@
 
 #include "formats/parquet/chunk_writer.h"
 
-#include <parquet/arrow/writer.h>
+#include <parquet/file_writer.h>
+#include <parquet/schema.h>
 
-#include "column/array_column.h"
+#include <algorithm>
+#include <numeric>
+
 #include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
-#include "column/vectorized_fwd.h"
-#include "exprs/expr.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "formats/parquet/column_chunk_writer.h"
 #include "formats/parquet/level_builder.h"
-#include "util/defer_op.h"
 
 namespace starrocks::parquet {
 
@@ -55,7 +54,7 @@ Status ChunkWriter::write(Chunk* chunk) {
     for (size_t i = 0; i < _type_descs.size(); i++) {
         ASSIGN_OR_RETURN(auto col, _eval_func(chunk, i));
         auto level_builder = LevelBuilder(_type_descs[i], _schema->field(i));
-        level_builder.write(ctx, col, write_leaf_column);
+        RETURN_IF_ERROR(level_builder.write(ctx, col, write_leaf_column));
     }
 
     return Status::OK();

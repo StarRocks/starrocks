@@ -10,6 +10,7 @@
 #   image: copy the artifacts from a artifact docker image.
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
+ARG WITH_DEBUG_INFO=false
 
 ARG ARTIFACTIMAGE=starrocks/artifacts-centos7:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
@@ -24,8 +25,9 @@ COPY ${LOCAL_REPO_PATH}/fs_brokers/apache_hdfs_broker/output/apache_hdfs_broker 
 
 
 FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
-RUN rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo
+ARG WITH_DEBUG_INFO
 
+RUN if [ "$WITH_DEBUG_INFO" = "false" ]; then rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo; fi
 
 FROM registry.access.redhat.com/ubi8/ubi:8.7
 ARG DEPLOYDIR=/data/deploy

@@ -199,6 +199,7 @@ public class UtFrameUtils {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
+        ctx.setSessionId(UUIDUtil.genUUID());
         return ctx;
     }
 
@@ -1220,6 +1221,10 @@ public class UtFrameUtils {
         // build a small cache for test
         Config.mv_plan_cache_max_size = 10;
 
+        // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
+        // task run will only refresh 1 partition and will produce wrong result.
+        Config.default_mv_partition_refresh_number = -1;
+
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
 
@@ -1228,14 +1233,15 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
             // 300s: 5min
             connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
-            // 300s: 5min
-            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
 
             connectContext.getSessionVariable().setEnableShortCircuit(false);
             connectContext.getSessionVariable().setEnableQueryCache(false);
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
             connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+
+            // Disable text based rewrite by default.
+            connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
         }
 
         new MockUp<PlanTestBase>() {

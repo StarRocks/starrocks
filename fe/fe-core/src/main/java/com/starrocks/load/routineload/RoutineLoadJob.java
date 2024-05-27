@@ -52,8 +52,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -64,6 +62,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.RoutineLoadDesc;
@@ -119,6 +118,8 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
 
 /**
  * Routine load job is a function which stream load data from streaming medium to starrocks.
@@ -317,7 +318,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
-    protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+    protected ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
     // TODO(ml): error sample
 
     // save the latest 3 error log urls
@@ -519,6 +520,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public void setOtherMsg(String otherMsg) {
         this.otherMsg = String.format("[%s] %s", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 Strings.nullToEmpty(otherMsg));
+    }
+
+    public void clearOtherMsg() {
+        this.otherMsg = "";
     }
 
     public String getDbFullName() throws MetaNotFoundException {
@@ -803,7 +808,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     // remove all of task in jobs and change job state to paused
                     updateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                    "current error rows of job is more than max error num"),
+                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
                             isReplay);
                 }
             }
@@ -825,13 +830,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     .add("current_total_rows", currentTotalRows)
                     .add("current_error_rows", currentErrorRows)
                     .add("max_error_num", maxErrorNum)
-                    .add("msg", "current error rows is more than max error rows, begin to pause job")
+                    .add("msg", "current error rows is more than max error num, begin to pause job")
                     .build());
             if (!isReplay) {
                 // remove all of task in jobs and change job state to paused
                 updateState(JobState.PAUSED,
                         new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                "current error rows is more than max error num"),
+                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
                         isReplay);
             }
             // reset currentTotalNum and currentErrorNum
@@ -865,13 +870,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
         }
+
+        Table table = db.getTable(this.tableId);
+        if (table == null) {
+            throw new MetaNotFoundException("table " + this.tableId + " does not exist");
+        }
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            Table table = db.getTable(this.tableId);
-            if (table == null) {
-                throw new MetaNotFoundException("table " + this.tableId + " does not exist");
-            }
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
             StreamLoadPlanner planner =
@@ -915,7 +922,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
             return planParams;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -1241,7 +1248,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             if (txnStatus == TransactionStatus.ABORTED) {
                 RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
-                newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr);
+                newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr, true);
                 GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
                         .releaseBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getBeId());
                 GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
@@ -1258,9 +1265,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected static void unprotectedCheckMeta(Database db, String tblName, RoutineLoadDesc routineLoadDesc)
             throws UserException {
         Table table = db.getTable(tblName);
-        if (table == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
-        }
 
         if (table instanceof MaterializedView) {
             throw new AnalysisException(String.format(
@@ -1413,14 +1417,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // check table belong to database
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        Table table;
-        try {
-            table = db.getTable(tableId);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        Table table = db.getTable(tableId);
         if (table == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id).add("db_id", dbId)
                     .add("table_id", tableId)
@@ -1538,11 +1535,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(otherMsg);
 
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                if (warehouse != null) {
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                     row.add(warehouse.getName());
-                } else {
-                    row.add("");
+                } catch (Exception e) {
+                    row.add(e.getMessage());
                 }
             }
             row.add(getSourceProgressString());

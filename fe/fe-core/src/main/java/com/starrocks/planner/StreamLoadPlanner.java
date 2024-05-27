@@ -209,7 +209,7 @@ public class StreamLoadPlanner {
         }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
                 destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
-                enableAutomaticPartition);
+                enableAutomaticPartition, streamLoadInfo.getWarehouseId());
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }

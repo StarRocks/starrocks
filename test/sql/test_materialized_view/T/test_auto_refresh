@@ -1,0 +1,60 @@
+-- name: test_auto_refresh
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+    __time datetime,
+    c1 int
+)
+PARTITION BY date_trunc('DAY', __time);
+
+INSERT INTO t1 VALUES 
+    ('2024-04-01', 1),
+    ('2024-04-02', 1),
+    ('2024-04-03', 1),
+    ('2024-04-04', 1),
+    ('2024-04-05', 1);
+
+
+CREATE MATERIALIZED VIEW `mv1`
+PARTITION BY (`__time`)
+REFRESH ASYNC
+PROPERTIES (
+    "auto_refresh_partitions_limit" = "3",
+    "partition_refresh_number" = "1"
+)
+AS select * from t1;
+
+-- case 0: default refresh
+-- function: wait_async_materialized_view_finish('mv1')
+-- SELECT count(*) FROM mv1;
+
+
+-- case 2: manual complete refresh
+INSERT INTO t1 SELECT * FROM t1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT count(*) FROM mv1;
+
+-- case 3.1: partial refresh
+INSERT INTO t1 SELECT * FROM t1;
+REFRESH MATERIALIZED VIEW mv1 PARTITION start('2024-04-02') end('2024-04-04') WITH SYNC MODE;
+SELECT count(*) FROM mv1;
+
+-- case 3.2: partial refresh
+REFRESH MATERIALIZED VIEW mv1 PARTITION start('2024-04-01') end('2024-04-02') WITH SYNC MODE;
+SELECT count(*) FROM mv1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT count(*) FROM mv1;
+
+-- case 3.3 partial refresh
+TRUNCATE TABLE t1;
+REFRESH MATERIALIZED VIEW mv1 PARTITION start('2024-04-03') end('2024-04-05') WITH SYNC MODE;
+SELECT count(*) FROM mv1;
+REFRESH MATERIALIZED VIEW mv1 PARTITION start('2024-04-01') end('2024-04-02') WITH SYNC MODE;
+SELECT count(*) FROM mv1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT count(*) FROM mv1;
+
+
+-- cleanup
+drop database db_${uuid0};

@@ -49,6 +49,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -90,7 +91,7 @@ public class ExportMgr implements MemoryTrackable {
 
     public ExportMgr() {
         idToJob = Maps.newHashMap();
-        lock = new ReentrantReadWriteLock(true);
+        lock = new FairReentrantReadWriteLock();
     }
 
     public void readLock() {
@@ -136,7 +137,7 @@ public class ExportMgr implements MemoryTrackable {
         return job;
     }
 
-    public ExportJob getExportJob(String dbName, UUID queryId) throws AnalysisException {
+    public ExportJob getExportJob(String dbName, UUID queryId) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();

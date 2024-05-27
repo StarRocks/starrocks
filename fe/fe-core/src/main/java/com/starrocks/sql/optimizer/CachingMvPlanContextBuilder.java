@@ -91,6 +91,7 @@ public class CachingMvPlanContextBuilder {
         return Caffeine.newBuilder()
                 .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
                 .maximumSize(Config.mv_plan_cache_max_size)
+                .recordStats()
                 .build();
     }
 
@@ -139,36 +140,44 @@ public class CachingMvPlanContextBuilder {
     }
 
     public void invalidateAstFromCache(MaterializedView mv) {
-        ParseNode parseNode = mv.getDefineQueryParseNode();
-        if (parseNode == null) {
-            return;
+        try {
+            ParseNode parseNode = mv.getDefineQueryParseNode();
+            if (parseNode == null) {
+                return;
+            }
+            AstKey astKey = new AstKey(parseNode);
+            if (!astToMvsMap.containsKey(astKey)) {
+                return;
+            }
+            astToMvsMap.get(astKey).remove(mv);
+            LOG.info("Remove mv {} from ast cache", mv.getName());
+        } catch (Exception e) {
+            LOG.warn("invalidateAstFromCache failed: {}", mv.getName(), e);
         }
-        AstKey astKey = new AstKey(parseNode);
-        if (!astToMvsMap.containsKey(astKey)) {
-            return;
-        }
-        astToMvsMap.get(astKey).remove(mv);
-        LOG.info("Remove mv {} from ast cache", mv.getName());
     }
 
     /**
      * This method is used to put mv into ast cache, this will be only called in the first time.
      */
     public void putAstIfAbsent(MaterializedView mv) {
-        if (mv == null || !mv.isEnableRewrite()) {
+        if (!Config.enable_materialized_view_text_based_rewrite || mv == null || !mv.isEnableRewrite()) {
             return;
         }
-        // initialize define query parse node each time
-        mv.initDefineQueryParseNode();
+        try {
+            // initialize define query parse node each time
+            mv.initDefineQueryParseNode();
 
-        // cache by ast
-        ParseNode parseNode = mv.getDefineQueryParseNode();
-        if (parseNode == null) {
-            return;
+            // cache by ast
+            ParseNode parseNode = mv.getDefineQueryParseNode();
+            if (parseNode == null) {
+                return;
+            }
+            astToMvsMap.computeIfAbsent(new AstKey(parseNode), ignored -> Sets.newHashSet())
+                    .add(mv);
+            LOG.info("Add mv {} input ast cache", mv.getName());
+        } catch (Exception e) {
+            LOG.warn("putAstIfAbsent failed: {}", mv.getName(), e);
         }
-        astToMvsMap.computeIfAbsent(new AstKey(parseNode), ignored -> Sets.newHashSet())
-                .add(mv);
-        LOG.info("Add mv {} input ast cache", mv.getName());
     }
 
     /**

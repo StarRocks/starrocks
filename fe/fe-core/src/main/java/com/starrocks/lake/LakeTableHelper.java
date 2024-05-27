@@ -27,13 +27,17 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.transaction.TransactionState;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -101,7 +105,7 @@ public class LakeTableHelper {
         }
     }
 
-    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition) throws StarClientException {
+    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition, long warehouseId) throws StarClientException {
         List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();
@@ -113,8 +117,11 @@ public class LakeTableHelper {
                 if (GlobalStateMgr.isCheckpointThread()) {
                     throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
                 }
+                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
+                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
-                        StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                        workerGroupId);
 
                 return Optional.of(shardInfo);
             } catch (StarClientException e) {
@@ -127,10 +134,10 @@ public class LakeTableHelper {
         return Optional.empty();
     }
 
-    static boolean removePartitionDirectory(Partition partition) throws StarClientException {
+    static boolean removePartitionDirectory(Partition partition, long warehouseId) throws StarClientException {
         boolean ret = true;
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            ShardInfo shardInfo = getAssociatedShardInfo(subPartition).orElse(null);
+            ShardInfo shardInfo = getAssociatedShardInfo(subPartition, warehouseId).orElse(null);
             if (shardInfo == null) {
                 LOG.info("Skipped remove directory of empty partition {}", subPartition.getId());
                 continue;
@@ -147,8 +154,8 @@ public class LakeTableHelper {
         return ret;
     }
 
-    public static boolean isSharedPartitionDirectory(PhysicalPartition partition) throws StarClientException {
-        ShardInfo shardInfo = getAssociatedShardInfo(partition).orElse(null);
+    public static boolean isSharedPartitionDirectory(PhysicalPartition partition, long warehouseId) throws StarClientException {
+        ShardInfo shardInfo = getAssociatedShardInfo(partition, warehouseId).orElse(null);
         if (shardInfo == null) {
             return false;
         }
@@ -191,5 +198,16 @@ public class LakeTableHelper {
             }
         }
         return maxId;
+    }
+
+    public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && isLoadingTransaction(sourceType);
+    }
+
+    private static boolean isLoadingTransaction(TransactionState.LoadJobSourceType sourceType) {
+        return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
+                sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
 }

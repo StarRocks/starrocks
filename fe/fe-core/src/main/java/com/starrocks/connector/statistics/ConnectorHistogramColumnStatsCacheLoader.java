@@ -16,11 +16,9 @@ package com.starrocks.connector.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.Histogram;
@@ -122,12 +120,9 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
 
     private Histogram convert2Histogram(String tableUUID, TStatisticData statisticData) throws AnalysisException {
         Table table = getTableByUUID(tableUUID);
-        Column column = table.getColumn(statisticData.columnName);
-        if (column == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, statisticData.columnName);
-        }
+        Type columnType = StatisticUtils.getQueryStatisticsColumnType(table, statisticData.columnName);
 
-        List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, column.getType());
+        List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, columnType);
         Map<String, Long> mcv = HistogramUtils.convertMCV(statisticData.histogram);
         return new Histogram(buckets, mcv);
     }

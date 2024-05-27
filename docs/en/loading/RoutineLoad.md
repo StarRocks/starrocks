@@ -373,7 +373,7 @@ FROM KAFKA
 
   To specify the mapping and transformation relationship between the Avro-format data and the StarRocks table, you need to specify the parameter `COLUMNS` and property `jsonpaths`. The order of fields specified in the `COLUMNS` parameter must match that of the fields in the property `jsonpaths`, and the names of fields must match these of the StarRocks table. The property `jsonpaths` is used to extract the required fields from the Avro data. These fields are then named by the property `COLUMNS`.
 
-  For more information about data transformation, see [Transform data at loading](https://docs.starrocks.io/en-us/latest/loading/Etl_in_loading).
+  For more information about data transformation, see [Transform data at loading](./Etl_in_loading.md).
 
   > NOTE
   >

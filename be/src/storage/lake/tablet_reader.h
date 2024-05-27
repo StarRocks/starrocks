@@ -33,12 +33,12 @@ class SeekRange;
 class SeekTuple;
 class Segment;
 class TabletSchema;
+class TabletMetadataPB;
 
 namespace lake {
 
 class Rowset;
 class TabletManager;
-class TabletMetadataPB;
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
@@ -65,6 +65,8 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
 
+    void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
+
     Status prepare();
 
     // Precondition: the last method called must have been `prepare()`.
@@ -81,7 +83,10 @@ public:
 
 protected:
     Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override;
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                       std::vector<uint64_t>* rssid_rowids) override;
 
 private:
     using PredicateList = std::vector<const ColumnPredicate*>;
@@ -114,7 +119,6 @@ private:
     std::vector<SegmentSharedPtr> _segments;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
-    PredicateMap _pushdown_predicates;
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
@@ -122,6 +126,8 @@ private:
 
     MemPool _mempool;
     ObjectPool _obj_pool;
+
+    bool _is_asc_hint = true;
 
     // used for vertical compaction
     bool _is_vertical_merge = false;

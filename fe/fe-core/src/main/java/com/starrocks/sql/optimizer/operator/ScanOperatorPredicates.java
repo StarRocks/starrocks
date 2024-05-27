@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -162,5 +163,21 @@ public class ScanOperatorPredicates {
             strings.add(String.format("minMaxConjuncts=%s", minMaxConjuncts));
         }
         return Joiner.on(", ").join(strings);
+    }
+
+    /**
+     * Duplicate and rewrite all columnRefOperator in predicates by rewriter.
+     */
+    public void duplicate(ReplaceColumnRefRewriter rewriter) {
+        this.partitionConjuncts = this.partitionConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.noEvalPartitionConjuncts = this.noEvalPartitionConjuncts.stream()
+                .map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.nonPartitionConjuncts = nonPartitionConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.minMaxConjuncts = minMaxConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        Map<ColumnRefOperator, Column> newMinMaxColumnRefMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, Column> e : this.minMaxColumnRefMap.entrySet()) {
+            newMinMaxColumnRefMap.put((ColumnRefOperator) rewriter.rewrite(e.getKey()), e.getValue());
+        }
+        this.minMaxColumnRefMap = newMinMaxColumnRefMap;
     }
 }
