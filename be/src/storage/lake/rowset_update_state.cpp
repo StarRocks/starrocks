@@ -66,6 +66,14 @@ void RowsetUpdateState::init(const RowsetUpdateStateParams& params) {
     _schema_version = params.metadata.schema().schema_version();
 }
 
+static bool has_partial_update_state(const RowsetUpdateStateParams& params) {
+    return !params.op_write.txn_meta().partial_update_column_unique_ids().empty();
+}
+
+static bool has_auto_increment_partial_update_state(const RowsetUpdateStateParams& params) {
+    return params.op_write.txn_meta().has_auto_increment_partial_update_column_id();
+}
+
 Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
                                        bool need_resolve_conflict, bool need_lock) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segment_us");
@@ -91,12 +99,12 @@ Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateSt
     if (!params.op_write.has_txn_meta() || params.op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
-    if (!params.op_write.txn_meta().partial_update_column_unique_ids().empty()) {
+    if (has_partial_update_state(params)) {
         if (_partial_update_states[segment_id].src_rss_rowids.empty()) {
             RETURN_IF_ERROR(_prepare_partial_update_states(segment_id, params, need_lock));
         }
     }
-    if (params.op_write.txn_meta().has_auto_increment_partial_update_column_id()) {
+    if (has_auto_increment_partial_update_state(params)) {
         if (_auto_increment_partial_update_states[segment_id].src_rss_rowids.empty()) {
             RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(segment_id, params, need_lock));
         }
@@ -260,7 +268,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     std::vector<std::unique_ptr<Column>> read_column;
 
     std::shared_ptr<TabletSchema> modified_columns_schema = nullptr;
-    if (!txn_meta.partial_update_column_unique_ids().empty()) {
+    if (has_partial_update_state(params)) {
         std::vector<ColumnUID> update_column_ids(txn_meta.partial_update_column_unique_ids().begin(),
                                                  txn_meta.partial_update_column_unique_ids().end());
         modified_columns_schema = TabletSchema::create_with_uid(params.tablet_schema, update_column_ids);
@@ -438,7 +446,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     // will get unmodified_column_ids is full schema which is wrong.
     // To solve it, we can simply clear the unmodified_column_ids.
     if (has_auto_increment_col && unmodified_column_ids.size() == params.tablet_schema->num_columns() &&
-        _partial_update_states.size() == 0) {
+        !has_partial_update_state(params)) {
         unmodified_column_ids.clear();
     }
 
@@ -449,7 +457,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
 
     bool skip_because_file_exist = false;
     int64_t t_rewrite_start = MonotonicMillis();
-    if (params.op_write.txn_meta().has_auto_increment_partial_update_column_id() &&
+    if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
@@ -457,14 +465,14 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
                     &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                     unmodified_column_ids,
-                    _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr,
+                    has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
                     params.op_write, params.tablet));
         } else {
             skip_because_file_exist = true;
         }
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
-    } else if (_partial_update_states.size() != 0) {
+    } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
         // if rewrite fail, let segment gc to clean dest segment file
@@ -525,13 +533,13 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     int64_t t_start = MonotonicMillis();
 
     // reslove normal partial update
-    if (!params.op_write.txn_meta().partial_update_column_unique_ids().empty()) {
+    if (has_partial_update_state(params)) {
         RETURN_IF_ERROR(
                 _resolve_conflict_partial_update(params, new_rss_rowids, read_column_ids, segment_id, total_conflicts));
     }
 
     // reslove auto increment
-    if (params.op_write.txn_meta().has_auto_increment_partial_update_column_id()) {
+    if (has_auto_increment_partial_update_state(params)) {
         RETURN_IF_ERROR(_resolve_conflict_auto_increment(params, new_rss_rowids, segment_id, total_conflicts));
     }
     int64_t t_end = MonotonicMillis();
