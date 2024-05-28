@@ -34,6 +34,15 @@ struct PartialUpdateState {
         src_rss_rowids.clear();
         write_columns.clear();
     }
+    size_t memory_usage() const {
+        size_t memory_usage = 0;
+        for (const auto& col : write_columns) {
+            if (col != nullptr) {
+                memory_usage += col->memory_usage();
+            }
+        }
+        return memory_usage;
+    }
 };
 
 struct AutoIncrementPartialUpdateState {
@@ -62,6 +71,7 @@ struct AutoIncrementPartialUpdateState {
         schema.reset();
         rowids.clear();
     }
+    size_t memory_usage() const { return write_column ? write_column->memory_usage() : 0; }
 };
 
 struct RowsetUpdateStateParams {
