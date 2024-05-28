@@ -2075,7 +2075,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         _checksum = 0;
         break;
     }
-    default: { return Status::InternalError("Unknown commit type"); }
+    default: {
+        return Status::InternalError("Unknown commit type");
+    }
     }
     return Status::OK();
 }
