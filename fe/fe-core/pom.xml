@@ -212,6 +212,13 @@ under the License.
                 </exclusion>
             </exclusions>
         </dependency>
+        <!--Include velocity because we are already using it-->
+        <!-- https://mvnrepository.com/artifact/org.apache.velocity/velocity-engine-core -->
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity-engine-core</artifactId>
+            <version>2.3</version>
+        </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
         <dependency>
