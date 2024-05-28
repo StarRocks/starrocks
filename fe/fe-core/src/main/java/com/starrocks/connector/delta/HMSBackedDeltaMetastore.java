@@ -12,26 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.connector.delta;
 
-package com.starrocks.connector.metastore;
+import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.metastore.MetastoreTable;
+import org.apache.hadoop.conf.Configuration;
 
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
+public class HMSBackedDeltaMetastore extends DeltaLakeMetastore {
+    public HMSBackedDeltaMetastore(String catalogName, IHiveMetastore metastore, Configuration hdfsConfiguration) {
+        super(catalogName, metastore, hdfsConfiguration);
+    }
 
-import java.util.List;
-
-public interface IMetastore {
-    List<String> getAllDatabaseNames();
-
-    List<String> getAllTableNames(String dbName);
-
-    Database getDb(String dbName);
-
-    MetastoreTable getMetastoreTable(String dbName, String tableName);
-
-    Table getTable(String dbName, String tableName);
-
-    List<String> getPartitionKeys(String dbName, String tableName);
-
-    boolean tableExists(String dbName, String tableName);
+    @Override
+    public MetastoreTable getMetastoreTable(String dbName, String tableName) {
+        return this.delegate.getMetastoreTable(dbName, tableName);
+    }
 }

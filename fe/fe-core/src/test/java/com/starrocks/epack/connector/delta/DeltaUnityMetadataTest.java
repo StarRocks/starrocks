@@ -54,10 +54,8 @@ public class DeltaUnityMetadataTest {
 
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
                 "databricks_catalog", new MockDatabricksWorkspaceClient(config), hdfsEnvironment);
-        DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations("databricks0",
-                databricksUnityMetastore,
-                false,
-                hdfsEnvironment.getConfiguration(), MetastoreType.UNITY);
+        DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(databricksUnityMetastore,
+                false, MetastoreType.UNITY);
         deltaLakeUnityMetadata = new DeltaLakeMetadata(hdfsEnvironment, "databricks0",
                 metastoreOperations);
     }

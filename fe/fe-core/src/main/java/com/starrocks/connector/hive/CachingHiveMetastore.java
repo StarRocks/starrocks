@@ -32,6 +32,7 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.connector.metastore.MetastoreTable;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.logging.log4j.LogManager;
@@ -282,6 +283,11 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     public Database getDb(String dbName) {
         return get(databaseCache, dbName);
+    }
+
+    @Override
+    public MetastoreTable getMetastoreTable(String dbName, String tableName) {
+        return metastore.getMetastoreTable(dbName, tableName);
     }
 
     private Database loadDb(String dbName) {

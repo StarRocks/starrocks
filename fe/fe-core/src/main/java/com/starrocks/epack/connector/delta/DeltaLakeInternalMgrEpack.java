@@ -30,15 +30,15 @@ public class DeltaLakeInternalMgrEpack extends DeltaLakeInternalMgr {
     }
 
     @Override
-    public IMetastore createMetastore() {
+    public IMetastore createDeltaLakeMetastore() {
         if (metastoreType == MetastoreType.UNITY) {
-            return createDatabricksUnityMetastore();
+            return createUnityBackedDeltaLakeMetastore();
         } else {
-            return createHiveMetastore();
+            return createHMSBackedDeltaLakeMetastore();
         }
     }
 
-    public DatabricksUnityMetastore createDatabricksUnityMetastore() {
+    public UnityBackedDeltaLakeMetastore createUnityBackedDeltaLakeMetastore() {
         if (!properties.containsKey(DATABRICKS_HOST) || !properties.containsKey(DATABRICKS_TOKEN)) {
             throw new IllegalArgumentException("Databricks host and token must be set");
         }
@@ -50,6 +50,9 @@ public class DeltaLakeInternalMgrEpack extends DeltaLakeInternalMgr {
         String dataBricksCatalogName = properties.get(DATABRICKS_CATALOG_NAME);
         DatabricksConfig cfg = new DatabricksConfig().setHost(host).setToken(token);
         WorkspaceClient client = new WorkspaceClient(cfg);
-        return new DatabricksUnityMetastore(catalogName, dataBricksCatalogName, client, hdfsEnvironment);
+        DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore(catalogName,
+                dataBricksCatalogName, client, hdfsEnvironment);
+        return new UnityBackedDeltaLakeMetastore(catalogName, databricksUnityMetastore,
+                hdfsEnvironment.getConfiguration());
     }
 }

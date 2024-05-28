@@ -16,6 +16,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
+import com.starrocks.connector.metastore.MetastoreTable;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.data.FilteredColumnarBatch;
@@ -90,6 +91,21 @@ public class DatabricksUnityMetastore implements IMetastore {
         }
         return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), schemaInfo.getName(),
                 schemaInfo.getStorageLocation());
+    }
+
+    @Override
+    public MetastoreTable getMetastoreTable(String dbName, String tableName) {
+        String fullName = Joiner.on(".").join(databricksCatalogName, dbName, tableName);
+        TableInfo tableInfo = workspaceClient.tables().get(fullName);
+        if (tableInfo == null) {
+            return null;
+        }
+        if (!tableInfo.getTableType().equals(TableType.MANAGED)) {
+            return null;
+        }
+        String path = tableInfo.getStorageLocation();
+        long createTime = tableInfo.getCreatedAt();
+        return new MetastoreTable(dbName, tableName, path, createTime);
     }
 
     public DeltaLakeTable getTable(String dbName, String tblName) {
