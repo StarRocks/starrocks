@@ -312,7 +312,7 @@ public class TableFunctionTable extends Table {
             } else if (property.equalsIgnoreCase("false")) {
                 csvTrimSpace = false;
             } else {
-                throw new DdlException("illegal value of csv.skip_header: " + property + ", only true/false allowed");
+                throw new DdlException("illegal value of csv.trim_space: " + property + ", only true/false allowed");
             }
         }
     }
