@@ -621,7 +621,7 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_VERSION_INFO)) {
             if (RunMode.isSharedDataMode()) {
                 throw new AnalysisException(String.format("Does not support the table property \"%s\" in share data " +
-                                "mode, please remove it from the statement", PROPERTIES_VERSION_INFO));
+                        "mode, please remove it from the statement", PROPERTIES_VERSION_INFO));
             }
             String versionInfoStr = properties.get(PROPERTIES_VERSION_INFO);
             try {
@@ -1488,7 +1488,13 @@ public class PropertyAnalyzer {
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().addTableToGroup(
                         db, materializedView, colocateGroup, materializedView.isCloudNativeMaterializedView());
             }
-
+            // compression
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPRESSION)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTIES_COMPRESSION);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_COMPRESSION, str);
+                properties.remove(PropertyAnalyzer.PROPERTIES_COMPRESSION);
+            }
             // ORDER BY() -> sortKeys
             if (CollectionUtils.isNotEmpty(materializedView.getTableProperty().getMvSortKeys())) {
                 materializedView.getTableProperty().putMvSortKeys();
@@ -1566,7 +1572,6 @@ public class PropertyAnalyzer {
                     .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                             String.valueOf(dataProperty.getCooldownTimeMs()));
         }
-
         return dataProperty;
     }
 

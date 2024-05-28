@@ -256,18 +256,28 @@ public class MaterializedViewAnalyzerTest {
                         "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
                         "REFRESH ASYNC\n" +
                         "PROPERTIES (\n" +
+                        "\"compression\" = \"zstd\",\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT k1, k2, v1 from test.tbl1");
-        ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
-                (ShowStmt) analyzeSuccess("show full columns from mv1"));
-        ShowResultSet showResultSet = showExecutor.execute();
-        Assert.assertEquals("[[a, date, , YES, YES, null, , , a1]," +
-                        " [b, int, , YES, YES, null, , , b2]," +
-                        " [c, int, , YES, YES, null, , , ]]",
-                showResultSet.getResultRows().toString());
+        {
+            ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
+                    (ShowStmt) analyzeSuccess("show full columns from mv1"));
+            ShowResultSet showResultSet = showExecutor.execute();
+            Assert.assertEquals("[[a, date, , YES, YES, null, , , a1]," +
+                            " [b, int, , YES, YES, null, , , b2]," +
+                            " [c, int, , YES, YES, null, , , ]]",
+                    showResultSet.getResultRows().toString());
+        }
+        {
+            ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
+                    (ShowStmt) analyzeSuccess("show create table mv1"));
+            ShowResultSet showResultSet = showExecutor.execute();
+            String result = showResultSet.getResultRows().toString();
+            Assert.assertTrue(result.contains("zstd"));
+        }
     }
 
     @Test
@@ -341,10 +351,11 @@ public class MaterializedViewAnalyzerTest {
                     " should contain the partition column k1 of materialized view");
         }
     }
+
     @Test
     public void testCreateMvBaseOnView() throws Exception {
         starRocksAssert.useDatabase("test")
-                        .withView("create view v1 as select date_trunc('month', k1) as kv1, k2 as kv2 from tbl1");
+                .withView("create view v1 as select date_trunc('month', k1) as kv1, k2 as kv2 from tbl1");
 
         analyzeSuccess("create materialized view mv1 partition by k1 distributed by hash(k2) buckets 3 refresh async " +
                 "as select kv1 as k1, kv2 as k2 from v1");
