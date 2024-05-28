@@ -162,6 +162,25 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
 -- result:
 E: (1064, "Unknown table 'Delta table feature [column mapping] is not supported'")
 -- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 01:01:01' order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp = '2023-01-01 01:01:01' order by col_smallint;
+-- result:
+2	2	2023-01-01 01:01:01
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double order by col_smallint;
+-- result:
+E: (1064, 'Table partition by float/double/decimal datatype is not supported')
+-- !result
 drop catalog delta_test_${uuid0}
 -- result:
 -- !result
