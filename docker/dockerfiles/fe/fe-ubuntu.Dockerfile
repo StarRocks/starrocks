@@ -9,11 +9,8 @@
 #   image: copy the artifacts from a artifact docker image.
 #   local: copy the artifacts from a local repo. Mainly used for local development and test.
 ARG ARTIFACT_SOURCE=image
-# The USER and GROUP for $STARROCKS_ROOT. Use starrocks by default.
-ARG USER=starrocks
-ARG GROUP=starrocks
-# The user to run the container. Run as root by default
-ARG RUN_USER=root
+# The user for $STARROCKS_ROOT and to run the container. Run as root by default
+ARG USER=root
 
 ARG ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest
 FROM ${ARTIFACTIMAGE} as artifacts-from-image
@@ -30,8 +27,7 @@ FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
 FROM ubuntu:22.04
 ARG STARROCKS_ROOT=/opt/starrocks
 ARG USER
-ARG GROUP
-ARG RUN_USER
+ARG GROUP=starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
         default-jdk mysql-client curl vim tree net-tools less tzdata locales netcat && \
@@ -58,4 +54,4 @@ COPY --chown=$USER:$GROUP docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 # Create directory for FE metadata
 RUN mkdir -p /opt/starrocks/fe/meta
 
-USER $RUN_USER
+USER $USER
