@@ -205,6 +205,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
         EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
         EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
     }
+    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
@@ -225,6 +226,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
@@ -240,6 +242,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
+    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
     if (GetParam().enable_persistent_index) {
         check_local_persistent_index_meta(tablet_id, version);
     }
@@ -362,6 +365,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
         ASSERT_OK(delta_writer->write(*chunk2, indexes2.data(), indexes2.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
@@ -369,6 +373,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
     }
     config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize * 3, read_rows(tablet_id, version));
+    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
@@ -390,6 +395,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
@@ -409,6 +415,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
+    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
     if (GetParam().enable_persistent_index) {
         check_local_persistent_index_meta(tablet_id, version);
     }
@@ -498,6 +505,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
         delta_writer->close();
         txn_ids.push_back(txn_id);
     }
+    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
     // publish in order
     for (int64_t txn_id : txn_ids) {
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -514,6 +522,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
     EXPECT_EQ(new_tablet_metadata->rowsets(3).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(4).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(5).num_dels(), 0);
+    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
     if (GetParam().enable_persistent_index) {
         check_local_persistent_index_meta(tablet_id, version);
     }
