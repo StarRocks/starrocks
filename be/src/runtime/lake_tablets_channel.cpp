@@ -163,7 +163,9 @@ private:
         bool wait(int64_t timeout_ms) {
             std::unique_lock l(_mtx);
             while (!_notified) {
-                return 0 == _cond.wait_for(l, timeout_ms * 1000L);
+                if (_cond.wait_for(l, timeout_ms * 1000L) == ETIMEDOUT) {
+                    return false;
+                }
             }
             return true;
         }
