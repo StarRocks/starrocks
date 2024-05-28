@@ -474,8 +474,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             } else {
                 if (table instanceof View) {
                     try {
-                        // for privilege checking, treat hive view as table
-                        if (table.getType() == Table.TableType.HIVE_VIEW) {
+                        // for privilege checking, treat connector view as table
+                        if (table.isConnectorView()) {
                             Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                     tableName, PrivilegeType.SELECT);
                         } else {

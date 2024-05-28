@@ -194,6 +194,7 @@ public class Authorizer {
             case HIVE:
             case HIVE_VIEW:
             case ICEBERG:
+            case ICEBERG_VIEW:
             case HUDI:
             case JDBC:
             case DELTALAKE:
