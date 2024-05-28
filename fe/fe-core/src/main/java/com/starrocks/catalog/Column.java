@@ -57,6 +57,8 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TColumn;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -74,6 +76,8 @@ import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
  * This class represents the column-related metadata.
  */
 public class Column implements Writable, GsonPreProcessable, GsonPostProcessable {
+
+    private static final Logger LOG = LogManager.getLogger(Column.class);
 
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
     public static final int COLUMN_UNIQUE_ID_INIT_VALUE = -1;
@@ -228,6 +232,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
+        this.generatedColumnExpr = column.generatedColumnExpr();
+    }
+
+    public Column deepCopy() {
+        Column col = new Column(this);
+        col.setIsAutoIncrement(this.isAutoIncrement);
+        Type newType = type.clone();
+        col.setType(newType);
+        return col;
     }
 
     public ColumnDef toColumnDef() {
@@ -720,31 +733,40 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Column other = (Column) obj;
 
         if (!this.name.equalsIgnoreCase(other.getName())) {
+            LOG.info("name not equal");
             return false;
         }
         if (!this.getType().equals(other.getType())) {
+            LOG.info("type not equal");
             return false;
         }
         if (this.aggregationType != other.getAggregationType()) {
+            LOG.info("not equal 1");
             return false;
         }
         if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
+            LOG.info("not equal 2");
             return false;
         }
         if (this.isKey != other.isKey()) {
+            LOG.info("not equal 3");
             return false;
         }
         if (this.isAllowNull != other.isAllowNull) {
+            LOG.info("not equal 4");
             return false;
         }
         if (!this.isSameDefaultValue(other)) {
+            LOG.info("not equal 5");
             return false;
         }
         if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
+            LOG.info("not equal 6");
             return false;
         }
         if (this.isGeneratedColumn() &&
                 !this.generatedColumnExpr().equals(other.generatedColumnExpr())) {
+            LOG.info("not equal 7");
             return false;
         }
 

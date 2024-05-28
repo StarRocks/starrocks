@@ -4073,15 +4073,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String columnName = getIdentifierName(context.identifier(0));
         String rollupName = null;
         StarRocksParser.SubfieldDescContext subFieldDescContext = context.subfieldDesc();
-        List<String> parts = null;
+        List<String> parts = new ArrayList<>();
         if (subFieldDescContext.nestedFieldName() != null) {
             parts = getFieldName(subFieldDescContext.nestedFieldName());
+        } else {
+            parts.add(getIdentifierName(subFieldDescContext.identifier()));
         }
-        String fieldName = null;
-        if (parts != null && !parts.isEmpty()) {
-            fieldName = parts.get(parts.size() - 1);
-            parts.remove(parts.size() - 1);
-        }
+        String fieldName = parts.get(parts.size() - 1);
+        parts.remove(parts.size() - 1);
         TypeDef typeDef = new TypeDef(getType(subFieldDescContext.type()), createPos(subFieldDescContext.type()));
         ColumnPosition fieldPosition = null;
         if (context.FIRST() != null) {
@@ -4090,6 +4089,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             StarRocksParser.IdentifierContext identifier = context.identifier(1);
             String afterFieldName = getIdentifierName(identifier);
             fieldPosition = new ColumnPosition(afterFieldName, createPos(identifier));
+        }
+
+        if (fieldName == null) {
+            throw new ParsingException("add field clause, name is null");
         }
         FieldDef fieldDef = new FieldDef(fieldName, parts, typeDef, fieldPosition);
         return new AddFieldClause(columnName, fieldDef, rollupName, getProperties(context.properties()));

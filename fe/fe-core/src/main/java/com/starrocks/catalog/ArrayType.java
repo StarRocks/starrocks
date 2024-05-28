@@ -39,6 +39,10 @@ public class ArrayType extends Type {
         return itemType;
     }
 
+    public void setItemType(Type itemType) {
+        this.itemType = itemType;
+    }
+
     @Override
     public TColumnType toColumnTypeThrift() {
         Preconditions.checkArgument(false, "ArrayType.toColumnTypeThrift not implemented");

@@ -200,7 +200,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
                 RETURN_IF_ERROR(res);
                 _sub_readers->emplace_back(std::move(res).value());
-                _sub_reader_column_names.emplace_back(sub_column_name);
+                _sub_reader_column_names[std::string(sub_column_name)] = i;
             }
             return Status::OK();
         }
@@ -220,19 +220,19 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back(sub_column_name);
+            _sub_reader_column_names[std::string(sub_column_name)] = 0;
 
             // null flags
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("null_flag");
+            _sub_reader_column_names["null_flag"] = 1;
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("offset");
+            _sub_reader_column_names["offset"] = 2;
         } else {
             if (meta->children_columns_size() != 2) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
@@ -245,13 +245,13 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back(sub_column_name);
+            _sub_reader_column_names[std::string(sub_column_name)] = 0;
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("offset");
+            _sub_reader_column_names["offset"] = 1;
         }
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_MAP) {
@@ -266,25 +266,25 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("key");
+            _sub_reader_column_names["key"] = 0;
 
             // values
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("value");
+            _sub_reader_column_names["value"] = 1;
 
             // null flags
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("null_flag");
+            _sub_reader_column_names["null_flag"] = 2;
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(3), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("offset");
+            _sub_reader_column_names["offset"] = 3;
         } else {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("non-nullable map should have 2 children columns");
@@ -295,19 +295,19 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("key");
+            _sub_reader_column_names["key"] = 0;
 
             // values
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("value");
+            _sub_reader_column_names["value"] = 1;
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back("offset");
+            _sub_reader_column_names["offset"] = 2;
         }
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
@@ -318,7 +318,8 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names.emplace_back(sub_column_name);
+            _sub_reader_column_names[std::string(sub_column_name)] = i;
+            LOG(INFO) << "sub_column_reader name[" << i << "]" << sub_column_name;
         }
         return Status::OK();
     } else {
@@ -628,6 +629,7 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
 
 StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_iter(ColumnAccessPath* path,
                                                                                   const TabletColumn* column) {
+    LOG(INFO) << "create merge struct iter";
     DCHECK(_column_type == LogicalType::TYPE_STRUCT);
     DCHECK(column != nullptr);
     auto num_fields = column->subcolumn_count();
@@ -640,7 +642,11 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
 
     std::vector<ColumnAccessPath*> child_paths(num_fields, nullptr);
     if (path != nullptr && !path->children().empty()) {
+        LOG(INFO) << "column access path:" << path->path() << ", absolute_path:" << path->absolute_path();
         for (const auto& child : path->children()) {
+            if (child != nullptr) {
+                LOG(INFO) << "child column access path:" << child->path() << ", absolute_path:" << child->absolute_path();
+            }
             child_paths[child->index()] = child.get();
         }
     }
@@ -648,9 +654,10 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
     std::vector<std::unique_ptr<ColumnIterator>> field_iters;
     for (int i = 0; i < num_fields; ++i) {
         auto sub_column = column->subcolumn_ptr(i);
-        std::string_view sub_reader_column_name(_sub_reader_column_names[cur_sub_reader]);
-        if (!sub_column->name().compare(sub_reader_column_name)) {
-            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[cur_sub_reader]->new_iterator(child_paths[i], sub_column));
+        LOG(INFO) << "sub_column name:" << sub_column->name();
+        auto iter = _sub_reader_column_names.find(std::string(sub_column->name()));
+        if (iter != _sub_reader_column_names.end()) {
+            ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[iter->second]->new_iterator(child_paths[i], sub_column));
             field_iters.emplace_back(std::move(iter));
             cur_sub_reader++;
         } else {

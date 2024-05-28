@@ -685,7 +685,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
 
     @Override
     public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
-        String columnName = clause.getColumnName();
+        String columnName = clause.getColName();
         if (Strings.isNullOrEmpty(columnName)) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
@@ -701,8 +701,7 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
         } catch (AnalysisException e) {
             throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
         }
-        LOG.info("Analyze add field definition finished");
-        throw new SemanticException("Analyze add field definition success");
+        return null;
     }
 
     @Override
@@ -739,14 +738,13 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
         }
         
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
-        FieldDef fieldDef = new FieldDef(clause.getFieldName(), clause.getParentFieldNames(), null, null);
+        FieldDef fieldDef = new FieldDef(clause.getFieldName(), clause.getNestedFieldName(), null, null);
         try {
             fieldDef.analyze(baseColumn, true);
         } catch (AnalysisException e) {
             throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
         }
-        LOG.info("Analyze drop field definition finished");
-        throw new SemanticException("Analyze drop field definition success");
+        return null;
     }
 
     @Override

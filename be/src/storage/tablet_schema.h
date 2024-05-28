@@ -164,7 +164,14 @@ public:
     uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
     const TabletColumn& subcolumn(uint32_t i) const { return _extra_fields->sub_columns[i]; }
 
-    const TabletColumn* subcolumn_ptr(uint32_t i) const { return &(_extra_fields->sub_columns[i]); }
+    const TabletColumn* subcolumn_ptr(uint32_t i) const { 
+        LOG(INFO) << "i:" << i << ", total:" << _extra_fields->sub_columns.size();
+        //CHECK(i < _extra_fields->sub_columns.size());
+        if (i >= subcolumn_count()) {
+            return nullptr;
+        }
+        return &(_extra_fields->sub_columns[i]); 
+    }
 
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
