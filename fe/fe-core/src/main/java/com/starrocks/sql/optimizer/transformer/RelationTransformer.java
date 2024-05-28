@@ -389,7 +389,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         root = addOrderByLimit(root, setOperationRelation);
-        return new LogicalPlan(root, outputColumns, null);
+        return new LogicalPlan(root, outputColumns, ImmutableList.of());
     }
 
     private OptExprBuilder addOrderByLimit(OptExprBuilder root, QueryRelation relation) {
@@ -455,7 +455,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder valuesOpt = new OptExprBuilder(new LogicalValuesOperator(valuesOutputColumns, values),
                 Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), valuesOutputColumns));
-        return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
+        return new LogicalPlan(valuesOpt, valuesOutputColumns, ImmutableList.of());
     }
 
     private DistributionSpec getTableDistributionSpec(TableRelation node,
@@ -624,7 +624,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 new LogicalProjectOperator(outputVariables.stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
-        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, null);
+        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, ImmutableList.of());
     }
 
     @Override
@@ -646,7 +646,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
                 new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
 
-        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), null);
+        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), ImmutableList.of());
     }
 
     @Override
@@ -690,7 +690,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
             OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), newOutputColumns));
-            return new LogicalPlan(scanBuilder, newOutputColumns, null);
+            return new LogicalPlan(scanBuilder, newOutputColumns, ImmutableList.of());
         }
     }
 
@@ -777,7 +777,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     .setNeedOutputRightChildColumns(true).build();
             return new LogicalPlan(
                     new OptExprBuilder(root, Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
-                            expressionMapping), expressionMapping.getFieldMappings(), null);
+                            expressionMapping), expressionMapping.getFieldMappings(), ImmutableList.of());
         }
 
         LogicalPlan leftPlan = visit(node.getLeft());
@@ -818,7 +818,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalProjectOperator(expressionMapping.getFieldMappings().stream().distinct()
                             .collect(Collectors.toMap(Function.identity(), Function.identity())));
             return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                    expressionMapping.getFieldMappings(), null);
+                    expressionMapping.getFieldMappings(), ImmutableList.of());
         }
 
         ExpressionMapping outputExpressionMapping;
@@ -864,7 +864,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 new LogicalProjectOperator(outputExpressionMapping.getFieldMappings().stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
         return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                outputExpressionMapping.getFieldMappings(), null);
+                outputExpressionMapping.getFieldMappings(), ImmutableList.of());
     }
 
     @Override
@@ -905,7 +905,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         Operator root = new LogicalTableFunctionOperator(outputColumns, node.getTableFunction(), projectMap);
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
-                null, null);
+                null, ImmutableList.of());
     }
 
     @Override
