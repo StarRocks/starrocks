@@ -5,6 +5,9 @@ displayed_sidebar: "Chinese"
 
 # ALTER TABLE
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 ## 功能
 
 该语句用于修改已有表，包括：
@@ -104,22 +107,109 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
-ADD PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
-[DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
+ADD PARTITION [IF NOT EXISTS] <partition_name> partition_desc ["key"="value"]
+[distribution_desc];
 ```
 
-注意：
+##### `partition_desc`
 
-1. partition_desc 支持以下两种写法：
+增加分区时支持使用 Range 分区和 List 分区。
 
-   - `VALUES LESS THAN [MAXVALUE|("value1", ...)]`
-   - `VALUES [("value1", ...), ("value1", ...)]`
+- Range 分区
 
-2. 分区为左闭右开区间，如果用户仅指定右边界，系统会自动确定左边界。
-3. 如果没有指定分桶方式，则自动使用建表使用的分桶方式。
-4. 如指定分桶方式，只能修改分桶数，不可修改分桶方式或分桶列。
-5. `["key" = "value"]` 部分可以设置分区的一些属性，具体说明见 [CREATE TABLE](./CREATE_TABLE.md)。
+  <Tabs groupId="manual partitioning">
+  <TabItem value="example1" label="手动创建分区" default>
+
+  - 仅指定各个分区的上界
+
+    语法：
+
+    ```sql
+    PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+    (
+    PARTITION <partition_name1> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+    [ ,
+    PARTITION <partition_name2> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+    , ... ] 
+    )
+    ```
+
+  - 指定各个分区的上界和下界
+
+    语法：
+
+    ```sql
+    PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+    (
+    PARTITION <partition_name1> VALUES [ ( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    [ ,
+    PARTITION <partition_name2> VALUES [ ( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    , ...]
+    )
+    ```
+
+  </TabItem>
+  <TabItem value="example2" label="批量创建分区">
+
+    语法：
+
+    - 如果分区列为时间类型
+
+      ```sql
+      START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
+      ```
+
+    - 如果分区列为整数类型
+
+      ```sql
+      START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
+      ```
+
+  </TabItem>
+  </Tabs>
+  
+    :::info
+
+    - 可以为新的分区单独设置分桶数量，但是不支持单独设置分桶方式。
+    - 可以通过 `["key" = "value"]` 为新的分区设置属性，具体说明见 [CREATE TABLE](./CREATE_TABLE.md#properties)。
+
+    :::
+
+- List 分区
+
+    语法：
+
+    ```sql
+    PARTITION <partition_name> VALUES IN (value_list) [, (value_list) ...]
+
+    value_list ::=
+        value_item [, value_item [, ...] ]
+
+
+    value_item ::=
+        { <value> | ( <value> [, <value>, [, ...] ] ) }   
+    ```
+
+    示例：
+
+    - 分区列为单列，例如 `PARTITION BY LIST (city)`
+
+        ```sql
+        ALTER TABLE t_recharge_detail2
+        ADD PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego");
+        ```
+
+    - 分区列为多列，例如 `PARTITION BY LIST (dt,city)`
+
+        ```sql
+        ALTER TABLE t_recharge_detail4 
+        ADD PARTITION p202204_California VALUES IN (
+            ("2022-04-01", "Los Angeles"),
+            ("2022-04-01", "San Francisco"),
+            ("2022-04-02", "Los Angeles"),
+            ("2022-04-02", "San Francisco")
+        );
+        ```
 
 #### 删除分区 (DROP PARTITION)
 
