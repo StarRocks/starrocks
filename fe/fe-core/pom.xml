@@ -781,14 +781,6 @@ under the License.
                     <groupId>log4j</groupId>
                     <artifactId>log4j</artifactId>
                 </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase</groupId>
-                    <artifactId>hbase-protocol-shaded</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.htrace</groupId>
-                    <artifactId>htrace-core4</artifactId>
-                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
@@ -815,14 +807,6 @@ under the License.
                 <exclusion>
                     <groupId>org.apache.hadoop</groupId>
                     <artifactId>hadoop-hdfs</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.hbase</groupId>
-                    <artifactId>hbase-protocol-shaded</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.htrace</groupId>
-                    <artifactId>htrace-core4</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
