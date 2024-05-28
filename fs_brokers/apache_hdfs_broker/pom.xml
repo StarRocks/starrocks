@@ -339,6 +339,19 @@ under the License.
             <version>${hadoop.version}</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aliyun</artifactId>
+            <version>${hadoop.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.ksyun.kmr/hadoop-ks3 -->
+        <dependency>
+            <groupId>com.ksyun.kmr</groupId>
+            <artifactId>hadoop-ks3</artifactId>
+            <version>3.1.1-1.1.2</version>
+        </dependency>
     </dependencies>
 
     <build>
