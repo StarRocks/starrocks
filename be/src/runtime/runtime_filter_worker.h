@@ -157,14 +157,10 @@ struct RuntimeFilterWorkerEvent;
 
 struct RuntimeFilterWorkerMetrics {
     void update_event_nums(EventType event_type, int64_t delta) {
-        LOG(INFO) << "update event num, type: " << EventTypeToString(event_type)
-                  << ", old: " << runtime_filter_bytes[event_type] << ", delta:" << delta;
         event_nums[event_type] += delta;
     }
 
     void update_rf_bytes(EventType event_type, int64_t delta) {
-        LOG(INFO) << "update rf bytes, type: " << EventTypeToString(event_type)
-                  << ", old: " << runtime_filter_bytes[event_type] << ", delta:" << delta;
         runtime_filter_bytes[event_type] += delta;
     }
 

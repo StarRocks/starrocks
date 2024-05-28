@@ -882,7 +882,6 @@ void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddre
 void RuntimeFilterWorker::execute() {
     LOG(INFO) << "RuntimeFilterWorker start working.";
     for (;;) {
-        // @TODO pending queue size, total rf size
         RuntimeFilterWorkerEvent ev;
         if (!_queue.blocking_get(&ev)) {
             break;
