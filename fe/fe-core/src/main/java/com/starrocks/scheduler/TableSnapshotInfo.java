@@ -52,4 +52,13 @@ public class TableSnapshotInfo {
     public void setRefreshedPartitionInfos(Map<String, MaterializedView.BasePartitionInfo> refreshedPartitionInfos) {
         this.refreshedPartitionInfos = refreshedPartitionInfos;
     }
+
+    @Override
+    public String toString() {
+        return "TableSnapshotInfo{" +
+                "baseTableInfo=" + baseTableInfo +
+                ", baseTable=" + baseTable.getName() +
+                ", refreshedPartitionInfos=" + refreshedPartitionInfos +
+                '}';
+    }
 }
