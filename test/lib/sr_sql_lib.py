@@ -1168,6 +1168,7 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+<<<<<<< HEAD
     def wait_async_materialized_view_finish(self, mv_name, check_count=60):
         """
         wait async materialized view job finish and return status
@@ -1188,6 +1189,82 @@ class StarrocksSQLApiLib(object):
                 break
             time.sleep(3)
             count += 1
+=======
+    def wait_materialized_view_cancel(self, check_count=60):
+        """
+        wait materialized view job cancel and return status
+        """
+        status = ""
+        show_sql = "SHOW ALTER MATERIALIZED VIEW"
+        count = 0
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            status = res["result"][-1][8]
+            if status != "CANCELLED":
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
+
+    def wait_async_materialized_view_finish(self, mv_name, check_count=None):
+        """
+        wait async materialized view job finish and return status
+        """
+        current_db_sql = "select database();"
+        res = self.execute_sql(current_db_sql, True)
+        if not res["status"]:
+            tools.assert_true(False, "acquire current database error")
+        current_db = res["result"][0][-1]
+
+        show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
+        print(show_sql)
+
+        def is_all_finished(results):
+            for res in results:
+                if res[0] != "SUCCESS":
+                    return False
+            return True
+        def get_success_count(results):
+            cnt = 0
+            for res in results:
+                if res[0] == "SUCCESS":
+                    cnt += 1
+            return cnt 
+        
+        MAX_LOOP_COUNT = 60 
+        is_all_ok = False
+        count = 0
+        if check_count is None:
+            while count < MAX_LOOP_COUNT:
+                res = self.execute_sql(show_sql, True)
+                if not res["status"]:
+                    tools.assert_true(False, "show mv state error")
+
+                is_all_ok = is_all_finished(res["result"])
+                if is_all_ok:
+                    # sleep another 5s to avoid FE's async action.
+                    time.sleep(3)
+                    break
+                time.sleep(3)
+                count += 1
+        else:
+            while count < MAX_LOOP_COUNT:
+                res = self.execute_sql(show_sql, True)
+                if not res["status"]:
+                    tools.assert_true(False, "show mv state error")
+
+                success_cnt = get_success_count(res["result"])
+                if success_cnt >= check_count:
+                    is_all_ok = True
+                    # sleep to avoid FE's async action.
+                    time.sleep(2)
+                    break
+                time.sleep(2)
+                count += 1
+>>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
         tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
