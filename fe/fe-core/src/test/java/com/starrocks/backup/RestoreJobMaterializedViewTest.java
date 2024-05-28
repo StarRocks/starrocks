@@ -145,7 +145,7 @@ public class RestoreJobMaterializedViewTest {
     private NodeSelector nodeSelector;
 
     @Injectable
-    private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
+    private Repository repo = new Repository(repoId, "repo_mv_restore", false, "bos://my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
     private BackupMeta backupMeta;
@@ -183,7 +183,9 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 returns(arrayIds[0], arrayIds[1], Arrays.copyOfRange(arrayIds, 2, ID_SIZE));
             }
+        };
 
+        new Expectations() {
             {
                 systemInfoService.getNodeSelector();
                 minTimes = 0;
@@ -196,7 +198,9 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 result = com.starrocks.common.Status.OK;
             }
+        };
 
+        new Expectations() {
             {
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
@@ -206,7 +210,9 @@ public class RestoreJobMaterializedViewTest {
                     }
                 };
             }
+        };
 
+        new Expectations() {
             {
                 repo.upload(anyString, anyString);
                 result = Status.OK;
@@ -223,25 +229,26 @@ public class RestoreJobMaterializedViewTest {
                 };
             }
         };
+
         new MockUp<MarkedCountDownLatch>() {
-                @Mock
-                boolean await(long timeout, TimeUnit unit) {
-                    return true;
-                }
-            };
+            @Mock
+            boolean await(long timeout, TimeUnit unit) {
+                return true;
+            }
+        };
 
         new MockUp<ConnectContext>() {
-                @Mock
-                GlobalStateMgr getGlobalStateMgr() {
-                    return globalStateMgr;
-                }
-            };
+            @Mock
+            GlobalStateMgr getGlobalStateMgr() {
+                return globalStateMgr;
+            }
+        };
         new MockUp<GlobalStateMgr>() {
-                @Mock
-                BackupHandler getBackupHandler() {
-                    return backupHandler;
-                }
-            };
+            @Mock
+            BackupHandler getBackupHandler() {
+                return backupHandler;
+            }
+        };
 
         new MockUp<HdfsUtil>() {
             @Mock

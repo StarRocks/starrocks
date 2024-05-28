@@ -116,7 +116,7 @@ public class BackupJobMaterializedViewTest {
     @Mocked
     private EditLog editLog;
 
-    private Repository repo = new Repository(repoId, "repo", false, "my_repo",
+    private Repository repo = new Repository(repoId, "repo_mv", false, "my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
     @BeforeClass
