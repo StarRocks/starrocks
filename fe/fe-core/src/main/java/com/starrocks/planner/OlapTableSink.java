@@ -176,16 +176,6 @@ public class OlapTableSink extends DataSink {
         this.warehouseId = warehouseId;
     }
 
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
-                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition, long warehouseId,
-                         TInsertMode insertMode) {
-        this(dstTable, tupleDescriptor, partitionIds, writeQuorum, enableReplicatedStorage,
-                nullExprInAutoIncrement, enableAutomaticPartition);
-        this.warehouseId = warehouseId;
-        this.insertMode = insertMode;
-    }
-
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
             throws AnalysisException {
         TOlapTableSink tSink = new TOlapTableSink();
@@ -209,7 +199,6 @@ public class OlapTableSink extends DataSink {
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
-        tSink.setInsert_mode(insertMode);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
@@ -237,6 +226,10 @@ public class OlapTableSink extends DataSink {
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
+    }
+
+    public void setInsertMode(TInsertMode insertMode) {
+        this.insertMode = insertMode;
     }
 
     public void complete(String mergeCondition) throws UserException {
@@ -269,6 +262,7 @@ public class OlapTableSink extends DataSink {
         tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, warehouseId));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId));
         tSink.setPartial_update_mode(this.partialUpdateMode);
+        tSink.setInsert_mode(this.insertMode);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         if (canUseColocateMVIndex(dstTable)) {
             tSink.setEnable_colocate_mv_index(true);

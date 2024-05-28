@@ -1023,4 +1023,28 @@ public class InsertPlanTest extends PlanTestBase {
                 "     avgRowSize=2.0\n";
         Assert.assertEquals(expected, actual);
     }
+
+    @Test
+    public void testInsertIgnoreForPrimaryTable() throws Exception {
+        String sql = "explain insert ignore into tprimary select * from tprimary";
+        String plan = getInsertExecPlan(sql);
+        assertContains(plan, "  OLAP TABLE SINK\n" +
+                "    TABLE: tprimary\n" +
+                "    TUPLE ID: 1\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: tprimary");
+    }
+
+    @Test
+    public void testInsertIgnoreForDupTable() throws Exception {
+        String sql = "explain insert ignore into t0 select * from t0";
+        try {
+            getInsertExecPlan(sql);
+            Assert.fail();
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "Only support insert ignore for primary key olap table");
+        }
+    }
 }

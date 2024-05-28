@@ -209,7 +209,7 @@ public class StreamLoadPlanner {
         }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
                 destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
-                enableAutomaticPartition, streamLoadInfo.getWarehouseId(), streamLoadInfo.getInsertMode());
+                enableAutomaticPartition, streamLoadInfo.getWarehouseId());
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }
@@ -220,6 +220,7 @@ public class StreamLoadPlanner {
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns,
                 olapTableSink.missAutoIncrementColumn());
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
+        olapTableSink.setInsertMode(streamLoadInfo.getInsertMode());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.

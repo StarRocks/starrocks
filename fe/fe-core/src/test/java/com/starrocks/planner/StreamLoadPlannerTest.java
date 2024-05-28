@@ -57,6 +57,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TInsertMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -226,5 +227,48 @@ public class StreamLoadPlannerTest {
         sql = "k1 > 2 and k3 < 4";
         Expr where = com.starrocks.sql.parser.SqlParser.parseSqlToExpr(sql, 0);
         Assert.assertTrue(where instanceof CompoundPredicate);
+    }
+
+    @Test
+    public void testInsertMode() throws UserException {
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", Type.BIGINT, false);
+        columns.add(c1);
+        Column c2 = new Column("c2", Type.BIGINT, true);
+        columns.add(c2);
+        new Expectations() {
+            {
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+                destTable.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                scanNode.init((Analyzer) any);
+                minTimes = 0;
+                scanNode.getChildren();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                scanNode.getId();
+                minTimes = 0;
+                result = new PlanNodeId(5);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setInsert_mode(TInsertMode.IGNORE_MODE);
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        Assert.assertEquals(TInsertMode.IGNORE_MODE, streamLoadInfo.getInsertMode());
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        planner.plan(streamLoadInfo.getId());
     }
 }

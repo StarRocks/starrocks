@@ -376,13 +376,15 @@ public class InsertPlanner {
                 dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
-                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId(),
-                        insertStmt.isIgnore() ? TInsertMode.IGNORE_MODE : TInsertMode.UPSERT_MODE);
+                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
                 if (insertStmt.usePartialUpdate()) {
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
                 }
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
+                }
+                if (insertStmt.isIgnore()) {
+                    ((OlapTableSink) dataSink).setInsertMode(TInsertMode.IGNORE_MODE);
                 }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
