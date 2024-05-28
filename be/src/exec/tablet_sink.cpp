@@ -123,7 +123,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _automatic_bucket_size = table_sink.automatic_bucket_size;
     }
     if (table_sink.__isset.insert_mode) {
-      _insert_mode = table_sink.insert_mode;
+        _insert_mode = table_sink.insert_mode;
     }
 
     _schema = std::make_shared<OlapTableSchemaParam>();
@@ -477,12 +477,11 @@ Status OlapTableSink::_update_immutable_partition(const std::set<int64_t>& parti
     LOG(INFO) << "immutable partition rpc begin request " << request;
     TNetworkAddress master_addr = get_master_address();
     auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
-            master_addr.hostname, master_addr.port,
-            [&request, &result](FrontendServiceConnection& client) {
-                client->updateImmutablePartition(result, request);
-            },
-            timeout_ms));
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(master_addr.hostname, master_addr.port,
+                                                                [&request, &result](FrontendServiceConnection& client) {
+                                                                    client->updateImmutablePartition(result, request);
+                                                                },
+                                                                timeout_ms));
     LOG(INFO) << "immutable partition rpc end response " << result;
     if (result.status.status_code == TStatusCode::OK) {
         // add new created partitions

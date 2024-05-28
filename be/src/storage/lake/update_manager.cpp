@@ -222,7 +222,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
         DCHECK(state.upserts(segment_id) != nullptr);
         if (condition_column < 0) {
-            RETURN_IF_ERROR(_do_update(rowset_id, segment_id, state.upserts(segment_id), index, &new_deletes, insert_mode));
+            RETURN_IF_ERROR(
+                    _do_update(rowset_id, segment_id, state.upserts(segment_id), index, &new_deletes, insert_mode));
         } else {
             RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, segment_id, condition_column,
                                                       state.upserts(segment_id), index, &new_deletes));
@@ -315,8 +316,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 }
 
 Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const ColumnUniquePtr& upsert,
-                                 PrimaryIndex& index, DeletesMap* new_deletes,
-                                 const InsertMode& mode) {
+                                 PrimaryIndex& index, DeletesMap* new_deletes, const InsertMode& mode) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
     return index.upsert(rowset_id + upsert_idx, 0, *upsert, new_deletes, nullptr, mode);
 }

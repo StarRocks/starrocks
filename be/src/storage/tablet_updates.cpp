@@ -1704,7 +1704,8 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
-                                 DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema, const InsertMode& mode) {
+                                 DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema,
+                                 const InsertMode& mode) {
     if (condition_column >= 0) {
         auto tablet_column = tablet_schema->column(condition_column);
         std::vector<uint32_t> read_column_ids;

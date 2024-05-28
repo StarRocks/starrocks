@@ -654,7 +654,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(cons
         } else {
             return p;
         }
-    }  else if (method == STORAGE_AGGREGATE_FIRST) {
+    } else if (method == STORAGE_AGGREGATE_FIRST) {
         auto p = create_value_aggregator(type, method);
         if (field->is_nullable()) {
             return std::make_unique<FirstNullableColumnAggregator>(std::move(p));

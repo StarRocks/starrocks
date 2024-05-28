@@ -39,8 +39,7 @@ namespace starrocks {
 // TODO(cbl): move to common space latter
 static const string LOAD_OP_COLUMN = "__op";
 
-Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
-                                const std::vector<SlotDescriptor*>* slot_descs,
+Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
                                 const InsertMode insert_mode) {
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         const auto& last_column = tablet_schema->columns().back();

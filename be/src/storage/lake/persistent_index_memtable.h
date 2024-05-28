@@ -27,7 +27,8 @@ class PersistentIndexMemtable {
 public:
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  KeyIndexSet* not_founds, size_t* num_found, int64_t version, const InsertMode& mode = InsertMode::UPSERT_MODE);
+                  KeyIndexSet* not_founds, size_t* num_found, int64_t version,
+                  const InsertMode& mode = InsertMode::UPSERT_MODE);
 
     // |version|: version of index values
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
