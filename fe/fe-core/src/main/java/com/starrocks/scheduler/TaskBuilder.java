@@ -23,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
 import com.starrocks.qe.ConnectContext;
@@ -142,11 +143,18 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
+
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
+        // In PropertyAnalyzer.analyzeMVProperties, it removed the warehouse property, because
+        // it only keeps session started properties
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(materializedView.getWarehouseId());
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
         task.setProperties(taskProperties);
+
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
