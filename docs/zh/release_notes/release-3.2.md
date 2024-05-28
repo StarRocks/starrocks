@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- Stream Load 支持在传输过程中对数据进行压缩，减少网络带宽开销。可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、DEFLATE、ZSTD 压缩算法。[#43732](https://github.com/StarRocks/starrocks/pull/43732)
+- Stream Load 支持在传输过程中对数据进行压缩，减少网络带宽开销。可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。[#43732](https://github.com/StarRocks/starrocks/pull/43732)
 - 优化了存算分离集群的垃圾回收机制，支持手动对表或分区进行 Compaction 操作，可以更高效的回收对象存储上的数据。[#39532](https://github.com/StarRocks/starrocks/issues/39532)
 - 支持从 StarRocks 读取 ARRAY、MAP 和 STRUCT 等复杂类型的数据，并以 Arrow 格式可提供给 Flink connector 读取使用。[#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
 - 支持查询时异步填充 Data Cache，从而减少缓存填充对首次查询性能影响。[#40489](https://github.com/StarRocks/starrocks/pull/40489)
