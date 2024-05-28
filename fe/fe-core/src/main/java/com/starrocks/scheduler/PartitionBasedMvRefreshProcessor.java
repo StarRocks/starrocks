@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -221,6 +222,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // collect partition infos of ref base tables
         int retryNum = 0;
         boolean checked = false;
+        Stopwatch stopwatch = Stopwatch.createStarted();
         while (!checked && retryNum++ < Config.max_mv_check_base_table_change_retry_times) {
             mvEntity.increaseRefreshRetryMetaCount(1L);
             // refresh external table meta cache before sync partitions
@@ -239,8 +241,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
             checked = true;
         }
-        LOG.info("materialized view {} after checking partitions change {} times: {}", materializedView.getName(),
-                retryNum, checked);
+        LOG.info("materialized view {} after checking partitions change {} times: {}, costs: {} ms",
+                materializedView.getName(), retryNum, checked, stopwatch.elapsed(TimeUnit.MILLISECONDS));
         return checked;
     }
 
@@ -1542,6 +1544,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return Lists.newArrayList(databaseMap.values());
     }
 
+    /**
+     * Collect all base table snapshot infos for the materialized view which the snapshot infos are kept and used in the final
+     * update meta phase.
+     * </p>
+     * NOTE:
+     * 1. deep copy of the base table's metadata may be time costing, we can optimize it later.
+     * 2. no needs to lock the base table's metadata since the metadata is not changed during the refresh process.
+     * @param materializedView the materialized view to collect
+     * @return the base table and its snapshot info map
+     */
     @VisibleForTesting
     public Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(MaterializedView materializedView) {
         Map<Long, TableSnapshotInfo> tables = Maps.newHashMap();
@@ -1553,6 +1565,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new LockTimeoutException("Failed to lock database: " + Joiner.on(",").join(dbs)
                     + " in collectBaseTableSnapshotInfos");
         }
+        Stopwatch stopwatch = Stopwatch.createStarted();
         try {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
@@ -1574,7 +1587,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 } else if (table.isOlapMaterializedView()) {
                     MaterializedView copied = DeepCopy.copyWithGson(table, MaterializedView.class);
                     if (copied == null) {
-                        throw new DmlException("Failed to copy olap table: %s", table.getName());
+                        throw new DmlException("Failed to copy materialized view: %s", table.getName());
                     }
                     tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 } else if (table.isCloudNativeTable()) {
@@ -1586,7 +1599,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 } else if (table.isCloudNativeMaterializedView()) {
                     LakeMaterializedView copied = DeepCopy.copyWithGson(table, LakeMaterializedView.class);
                     if (copied == null) {
-                        throw new DmlException("Failed to copy lake table: %s", table.getName());
+                        throw new DmlException("Failed to copy lake materialized view: %s", table.getName());
                     }
                     tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 } else {
@@ -1597,6 +1610,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         } finally {
             locker.unlockDatabases(dbs, LockType.READ);
         }
+        LOG.info("Collect base table snapshot infos for materialized view: {}, cost: {} ms",
+                materializedView.getName(), stopwatch.elapsed(TimeUnit.MILLISECONDS));
         return tables;
     }
 

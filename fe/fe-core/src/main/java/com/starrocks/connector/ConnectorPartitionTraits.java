@@ -398,6 +398,7 @@ public abstract class ConnectorPartitionTraits {
 
     /**
      * Check whether the base table's partition has changed or not.
+     * </p>
      * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
      * version and modified time.
      */

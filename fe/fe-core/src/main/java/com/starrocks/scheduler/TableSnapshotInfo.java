@@ -57,7 +57,7 @@ public class TableSnapshotInfo {
     public String toString() {
         return "TableSnapshotInfo{" +
                 "baseTableInfo=" + baseTableInfo +
-                ", baseTable=" + baseTable +
+                ", baseTable=" + baseTable.getName() +
                 ", refreshedPartitionInfos=" + refreshedPartitionInfos +
                 '}';
     }
