@@ -245,11 +245,11 @@ public class PaimonMetadata implements ConnectorMetadata {
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    RemoteFileDesc.createPamonRemoteFileDesc(paimonSplitsInfo));
+                    RemoteFileDesc.createPaimonRemoteFileDesc(paimonSplitsInfo));
             remoteFileInfo.setFiles(remoteFileDescs);
         } else {
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    RemoteFileDesc.createPamonRemoteFileDesc(paimonSplits.get(filter)));
+                    RemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(filter)));
             remoteFileInfo.setFiles(remoteFileDescs);
         }
 

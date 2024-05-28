@@ -408,7 +408,7 @@ public class PaimonMetadataTest {
                                                            long snapshotId, ScalarOperator predicate, List<String> fieldNames,
                                                            long limit) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
-                        .setFiles(Lists.newArrayList(RemoteFileDesc.createPamonRemoteFileDesc(
+                        .setFiles(Lists.newArrayList(RemoteFileDesc.createPaimonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))
                         .build());
             }
