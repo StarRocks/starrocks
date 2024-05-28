@@ -1937,8 +1937,6 @@ public class SubqueryTest extends PlanTestBase {
         }
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void testUnionRelationSubquery() throws Exception {
         String sql = "select * from t0 where v2 = 1 and v1 not in (select v4 from t1 union all select v7 from t2);";
@@ -1955,5 +1953,4 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 10: v4");
     }
->>>>>>> 4a6e86cee4 ([BugFix] correlation in plan should not be null (#46226))
 }
