@@ -1613,7 +1613,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 Expr partitionExpr = parsePartitionExpr(serializedObject.expressionSql, partitionCol);
                 if (partitionExpr == null) {
                     LOG.warn("parse partition expr failed, sql: {}", serializedObject.expressionSql);
-                   continue;
+                    continue;
                 }
                 partitionRefTableExprs.add(partitionExpr);
                 // for compatibility
