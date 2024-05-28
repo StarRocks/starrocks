@@ -980,7 +980,7 @@ public class MaterializedViewTest {
 
     @Test
     public void testBasePartitionInfo() {
-        MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(-1l, -1l, 123456l);
+        MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(-1L, -1L, 123456L);
         Assert.assertEquals(-1, basePartitionInfo.getExtLastFileModifiedTime());
         Assert.assertEquals(-1, basePartitionInfo.getFileNumber());
         basePartitionInfo.setExtLastFileModifiedTime(100);
