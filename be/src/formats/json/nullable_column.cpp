@@ -213,7 +213,7 @@ static Status add_nullable_struct_column(Column* column, const TypeDescriptor& t
         nullable_column->append_nulls(1);
         return Status::OK();
     }
-    
+
     auto& null_column = nullable_column->null_column();
     auto& data_column = nullable_column->data_column();
 

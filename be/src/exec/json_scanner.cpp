@@ -121,6 +121,46 @@ void JsonScanner::close() {
     FileScanner::close();
 }
 
+static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
+    switch (src_type.type) {
+    case TYPE_ARRAY: {
+        TypeDescriptor json_type(TYPE_ARRAY);
+        const auto& child_type = src_type.children[0];
+        json_type.children.emplace_back(construct_json_type(child_type));
+        return json_type;
+    }
+    case TYPE_STRUCT: {
+        TypeDescriptor json_type(TYPE_STRUCT);
+        json_type.field_names = src_type.field_names;
+        for (auto& child_type : src_type.children) {
+            json_type.children.emplace_back(construct_json_type(child_type));
+        }
+        return json_type;
+    }
+    case TYPE_MAP: {
+        TypeDescriptor json_type(TYPE_MAP);
+        const auto& key_type = src_type.children[0];
+        const auto& value_type = src_type.children[1];
+        json_type.children.emplace_back(construct_json_type(key_type));
+        json_type.children.emplace_back(construct_json_type(value_type));
+        return json_type;
+    }
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_BIGINT:
+    case TYPE_INT:
+    case TYPE_SMALLINT:
+    case TYPE_TINYINT:
+    case TYPE_VARCHAR:
+    case TYPE_JSON: {
+        return src_type;
+    }
+    default:
+        // Treat other types as VARCHAR.
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
+}
+
 Status JsonScanner::_construct_json_types() {
     size_t slot_size = _src_slot_descriptors.size();
     _json_types.resize(slot_size);
@@ -130,83 +170,7 @@ Status JsonScanner::_construct_json_types() {
             continue;
         }
 
-        switch (slot_desc->type().type) {
-        case TYPE_ARRAY: {
-            TypeDescriptor json_type(TYPE_ARRAY);
-            TypeDescriptor* child_type = &json_type;
-
-            const TypeDescriptor* slot_type = &(slot_desc->type().children[0]);
-            while (slot_type->type == TYPE_ARRAY) {
-                slot_type = &(slot_type->children[0]);
-
-                child_type->children.emplace_back(TYPE_ARRAY);
-                child_type = &(child_type->children[0]);
-            }
-
-            // the json lib don't support get_int128_t(), so we load with BinaryColumn and then convert to LargeIntColumn
-            if (slot_type->type == TYPE_FLOAT || slot_type->type == TYPE_DOUBLE || slot_type->type == TYPE_BIGINT ||
-                slot_type->type == TYPE_INT || slot_type->type == TYPE_SMALLINT || slot_type->type == TYPE_TINYINT) {
-                // Treat these types as what they are.
-                child_type->children.emplace_back(slot_type->type);
-            } else if (slot_type->type == TYPE_VARCHAR) {
-                auto varchar_type = TypeDescriptor::create_varchar_type(slot_type->len);
-                child_type->children.emplace_back(varchar_type);
-            } else if (slot_type->type == TYPE_CHAR) {
-                auto char_type = TypeDescriptor::create_char_type(slot_type->len);
-                child_type->children.emplace_back(char_type);
-            } else if (slot_type->type == TYPE_JSON) {
-                child_type->children.emplace_back(TypeDescriptor::create_json_type());
-            } else {
-                // Treat other types as VARCHAR.
-                auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-                child_type->children.emplace_back(varchar_type);
-            }
-
-            _json_types[column_pos] = std::move(json_type);
-            break;
-        }
-
-        // Treat these types as what they are.
-        case TYPE_FLOAT:
-        case TYPE_DOUBLE:
-        case TYPE_BIGINT:
-        case TYPE_INT:
-        case TYPE_SMALLINT:
-        case TYPE_TINYINT: {
-            _json_types[column_pos] = TypeDescriptor{slot_desc->type().type};
-            break;
-        }
-
-        case TYPE_CHAR: {
-            auto char_type = TypeDescriptor::create_char_type(slot_desc->type().len);
-            _json_types[column_pos] = std::move(char_type);
-            break;
-        }
-
-        case TYPE_VARCHAR: {
-            auto varchar_type = TypeDescriptor::create_varchar_type(slot_desc->type().len);
-            _json_types[column_pos] = std::move(varchar_type);
-            break;
-        }
-
-        case TYPE_JSON: {
-            _json_types[column_pos] = TypeDescriptor::create_json_type();
-            break;
-        }
-
-        case TYPE_STRUCT:
-        case TYPE_MAP: {
-            _json_types[column_pos] = slot_desc->type();
-            break;
-        }
-
-        // Treat other types as VARCHAR.
-        default: {
-            auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            _json_types[column_pos] = std::move(varchar_type);
-            break;
-        }
-        }
+        _json_types[column_pos] = construct_json_type(slot_desc->type());
     }
     return Status::OK();
 }
