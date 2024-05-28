@@ -258,6 +258,7 @@ public class Coordinator {
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
 
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
+    private final Map<PlanFragmentId, ColocatedBackendSelector.Assignment> fragmentIdToColocatedAssignment = Maps.newHashMap();
 
     // used only by channel stream load, records the mapping from channel id to target BE's address
     private final Map<Integer, TNetworkAddress> channelIdToBEHTTP = Maps.newHashMap();
@@ -3653,10 +3654,17 @@ public class Coordinator {
                                 scanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum());
                     }
                 }
+
+                PlanFragment fragment = scanNode.getFragment();
+                fragmentIdToColocatedAssignment.put(fragmentId,
+                        new ColocatedBackendSelector.Assignment(fragment.getNumOlapScanNodes()));
             }
             Map<Integer, TNetworkAddress> bucketSeqToAddress =
                     fragmentIdToSeqToAddressMap.get(fragmentId);
             BucketSeqToScanRange bucketSeqToScanRange = fragmentIdBucketSeqToScanRangeMap.get(scanNode.getFragmentId());
+            Assignment colocatedAssignment = fragmentIdToColocatedAssignment.get(fragmentId);
+
+            colocatedAssignment.recordAssignedScanNode(scanNode);
 
             for (Integer bucketSeq : scanNode.bucketSeq2locations.keySet()) {
                 //fill scanRangeParamsList
@@ -3678,9 +3686,11 @@ public class Coordinator {
                     scanRangeParamsList.add(scanRangeParams);
                 }
             }
-            // Because of the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
-            // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
-            if (rightOrFullBucketShuffleFragmentIds.contains(fragmentId.asInt())) {
+            // Because the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
+            // Therefore, if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate,
+            // after the last scan node of this fragment is assigned.
+            if (rightOrFullBucketShuffleFragmentIds.contains(fragmentId.asInt()) &&
+                    colocatedAssignment.isAllScanNodesAssigned()) {
                 int bucketNum = getFragmentBucketNum(fragmentId);
 
                 for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
@@ -3747,6 +3757,23 @@ public class Coordinator {
 
             recordUsedBackend(execHostPort, backendIdRef.getRef());
             fragmentIdToSeqToAddressMap.get(fragmentId).put(bucketSeq, execHostPort);
+        }
+
+        public class Assignment {
+            private final int numOlapScanNodes;
+            private final Set<PlanNodeId> assignedScanNodeIds = Sets.newHashSet();
+
+            public Assignment(int numOlapScanNodes) {
+                this.numOlapScanNodes = numOlapScanNodes;
+            }
+
+            public void recordAssignedScanNode(OlapScanNode scanNode) {
+                assignedScanNodeIds.add(scanNode.getId());
+            }
+
+            public boolean isAllScanNodesAssigned() {
+                return assignedScanNodeIds.size() == numOlapScanNodes;
+            }
         }
     }
 
