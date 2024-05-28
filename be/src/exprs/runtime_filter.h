@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <numeric>
+
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -182,6 +184,10 @@ public:
     // we can use can_use() to check if this bloom filter can be used
     bool can_use() const { return _directory != nullptr; }
 
+    size_t get_alloc_size() const {
+        return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
+    }
+
 private:
     // The number of bits to set in a tiny Bloom filter block
 
@@ -223,10 +229,6 @@ private:
 #endif
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
-
-    size_t get_alloc_size() const {
-        return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
-    }
 
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
@@ -330,6 +332,15 @@ public:
             return _bf.can_use();
         }
         return _hash_partition_bf[0].can_use();
+    }
+
+    size_t bf_alloc_size() const {
+        if (_hash_partition_bf.empty()) {
+            return _bf.get_alloc_size();
+        }
+        return std::accumulate(
+                _hash_partition_bf.begin(), _hash_partition_bf.end(), 0ull,
+                [](size_t total, const SimdBlockFilter& bf) -> size_t { return total + bf.get_alloc_size(); });
     }
 
     // RuntimeFilter version
