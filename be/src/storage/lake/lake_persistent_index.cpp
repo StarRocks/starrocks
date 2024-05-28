@@ -192,13 +192,20 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
                                    IOStat* stat, const InsertMode& mode) {
     std::set<KeyIndex> not_founds;
     size_t num_found;
-    RETURN_IF_ERROR(
-            _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number(), mode));
-    KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
-    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
+    if (mode == InsertMode::UPSERT_MODE) {
+        RETURN_IF_ERROR(
+                _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number(), mode));
+        KeyIndexSet& key_indexes = not_founds;
+        KeyIndexSet found_key_indexes;
+        RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
+        set_difference(&key_indexes, found_key_indexes);
+        RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
+    } else if (mode == InsertMode::IGNORE_MODE) {
+        RETURN_IF_ERROR(get(n, keys, old_values));
+        RETURN_IF_ERROR(
+                _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number(), mode));
+    }
+
     if (is_memtable_full()) {
         return flush_memtable();
     }

@@ -801,6 +801,9 @@ public:
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (mode == InsertMode::IGNORE_MODE) {
+                if (old_values[idx].get_value() != NullIndexValue) {
+                    continue;
+                }
                 auto it = _map.find(key, hash);
                 if (it != _map.end() && it->second.get_value() != NullIndexValue) {
                     old_values[idx] = value;
@@ -1120,6 +1123,9 @@ public:
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
             if (mode == InsertMode::IGNORE_MODE) {
+                if (old_values[idx].get_value() != NullIndexValue) {
+                    continue;
+                }
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
@@ -3816,20 +3822,34 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     size_t num_found = 0;
     MonotonicStopWatch watch;
     watch.start();
-    RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size, mode));
-    if (stat != nullptr) {
-        stat->l0_write_cost += watch.elapsed_time();
-        watch.reset();
+    if (mode == InsertMode::UPSERT_MODE) {
+        RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size, mode));
+        if (stat != nullptr) {
+            stat->l0_write_cost += watch.elapsed_time();
+            watch.reset();
+        }
+        if (config::enable_parallel_get_and_bf) {
+            RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
+        } else {
+            RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, stat));
+        }
+        if (stat != nullptr) {
+            stat->l1_l2_read_cost += watch.elapsed_time();
+            watch.reset();
+        }
+    } else if (mode == InsertMode::IGNORE_MODE) {
+        RETURN_IF_ERROR(get(n, keys, old_values));
+        if (stat != nullptr) {
+            stat->l1_l2_read_cost += watch.elapsed_time();
+            watch.reset();
+        }
+        RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size, mode));
+        if (stat != nullptr) {
+            stat->l0_write_cost += watch.elapsed_time();
+            watch.reset();
+        }
     }
-    if (config::enable_parallel_get_and_bf) {
-        RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
-    } else {
-        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, stat));
-    }
-    if (stat != nullptr) {
-        stat->l1_l2_read_cost += watch.elapsed_time();
-        watch.reset();
-    }
+
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
                                                                 std::pair<int64_t, int64_t>(0, 0));
     for (size_t i = 0; i < n; i++) {
