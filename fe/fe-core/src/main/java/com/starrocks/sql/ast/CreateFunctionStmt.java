@@ -34,6 +34,7 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String TYPE_KEY = "type";
     public static final String ISOLATION_KEY = "isolation";
     public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
+    public static final String TYPE_STARROCKS_PYTHON = "Python";
     public static final String EVAL_METHOD_NAME = "evaluate";
     public static final String CREATE_METHOD_NAME = "create";
     public static final String DESTROY_METHOD_NAME = "destroy";
@@ -47,6 +48,7 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String WINDOW_UPDATE_METHOD_NAME = "windowUpdate";
     public static final String IS_ANALYTIC_NAME = "analytic";
     public static final String PROCESS_METHOD_NAME = "process";
+    public static final String INPUT_TYPE = "input";
 
     private final FunctionName functionName;
     private final boolean isAggregate;
@@ -54,6 +56,7 @@ public class CreateFunctionStmt extends DdlStmt {
     private final FunctionArgsDef argsDef;
     private final TypeDef returnType;
     private final Map<String, String> properties;
+    private final String content;
 
     // needed item set after analyzed
     private Function function;
@@ -71,14 +74,13 @@ public class CreateFunctionStmt extends DdlStmt {
                     .put(PrimitiveType.VARCHAR, String.class)
                     .build();
 
-
     public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
-                              TypeDef returnType, TypeDef intermediateType, Map<String, String> properties) {
-        this(functionType, functionName, argsDef, returnType, intermediateType, properties, NodePosition.ZERO);
+                              TypeDef returnType, Map<String, String> properties, String content) {
+        this(functionType, functionName, argsDef, returnType, properties, content, NodePosition.ZERO);
     }
 
     public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
-                              TypeDef returnType, TypeDef intermediateType, Map<String, String> properties,
+                              TypeDef returnType, Map<String, String> properties, String content,
                               NodePosition pos) {
         super(pos);
         this.functionName = functionName;
@@ -86,6 +88,7 @@ public class CreateFunctionStmt extends DdlStmt {
         this.isTable = functionType.equalsIgnoreCase("TABLE");
         this.argsDef = argsDef;
         this.returnType = returnType;
+        this.content = content;
         if (properties == null) {
             this.properties = ImmutableSortedMap.of();
         } else {
@@ -132,6 +135,10 @@ public class CreateFunctionStmt extends DdlStmt {
 
     public String getLangType() {
         return properties.get(TYPE_KEY);
+    }
+
+    public String getContent() {
+        return content;
     }
 
     public void setFunction(Function function) {

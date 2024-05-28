@@ -267,7 +267,7 @@ public class AnalyzeFunctionTest {
                 "CREATE FUNCTION f(INT, INT, CHAR(10), BIGINT, ...) RETURNS INT",
                 getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
-                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT INTERMEDIATE INT",
+                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT",
                 getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
                 "CREATE TABLE FUNCTION f(INT, INT) RETURNS INT",
