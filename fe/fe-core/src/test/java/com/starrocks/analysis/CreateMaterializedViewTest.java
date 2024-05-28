@@ -1436,7 +1436,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view query statement only support select"));
+            Assert.assertTrue(e.getMessage().contains("Materialized view query statement only supports a single query blocks"));
         }
     }
 
