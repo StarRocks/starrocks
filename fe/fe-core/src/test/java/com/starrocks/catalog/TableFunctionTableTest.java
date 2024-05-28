@@ -229,7 +229,7 @@ public class TableFunctionTableTest {
         properties.put("csv.trim_space", "FALS");
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "illegal value of csv.skip_header: FALS, only true/false allowed",
+                "illegal value of csv.trim_space: FALS, only true/false allowed",
                 () -> new TableFunctionTable(properties));
     }
 }
