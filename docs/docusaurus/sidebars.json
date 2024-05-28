@@ -285,6 +285,7 @@
                 "using_starrocks/Colocate_join",
                 "using_starrocks/Lateral_join",
                 "using_starrocks/query_cache",
+                "using_starrocks/block_cache",
                 {
                     "type": "category",
                     "label": "Index",
@@ -1503,6 +1504,7 @@
                 "using_starrocks/Colocate_join",
                 "using_starrocks/Lateral_join",
                 "using_starrocks/query_cache",
+                "using_starrocks/block_cache",
                 {
                     "type": "category",
                     "label": "索引",
