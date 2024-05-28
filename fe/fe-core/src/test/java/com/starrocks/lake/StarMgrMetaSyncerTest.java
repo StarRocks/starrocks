@@ -35,6 +35,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
@@ -120,6 +121,10 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getWarehouseMgr();
                 minTimes = 0;
                 result = warehouseManager;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = new LockManager();
             }
         };
 

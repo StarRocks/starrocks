@@ -34,6 +34,7 @@ import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.connector.trino.TrinoViewColumnTypeConverter;
 import com.starrocks.connector.trino.TrinoViewDefinition;
 import com.starrocks.credential.CloudConfiguration;
@@ -135,11 +136,11 @@ public class HiveMetastoreApiConverter {
         return "";
     }
 
-    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
+    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database, String dbName) {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), database.getName(),
+        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName.toLowerCase(),
                 database.getLocationUri());
     }
 
@@ -181,6 +182,11 @@ public class HiveMetastoreApiConverter {
                 .setHiveTableType(HiveTable.HiveTableType.fromString(table.getTableType()));
 
         return tableBuilder.build();
+    }
+
+    public static MetastoreTable toMetastoreTable(Table table) {
+        String tableLocation = toTableLocation(table.getSd(), table.getParameters());
+        return new MetastoreTable(table.getDbName(), table.getTableName(), tableLocation, table.getCreateTime());
     }
 
     public static Table toMetastoreApiTable(HiveTable table) {

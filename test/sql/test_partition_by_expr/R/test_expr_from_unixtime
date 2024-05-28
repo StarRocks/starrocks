@@ -205,3 +205,24 @@ DISTRIBUTED BY HASH (`rowkey`) BUCKETS 1;
 insert INTO site_access_par_3 values ("2023-01-04", 1704077791000);
 -- result:
 -- !result
+CREATE TABLE partition_unixtime2 (
+                        dt bigint,
+                        id int
+                )
+                PARTITION BY RANGE(from_unixtime(dt))(
+                START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+                );
+-- result:
+-- !result
+insert into partition_unixtime2 values(1609430400,1),(1609516800,2),(1609603200,3),(1609689600,4),(1609776000,5),
+                                      (1609862400,6),(1609948800,7),(1610035200,8),(1610121600,9),(1610207900,10);
+-- result:
+-- !result
+select * from partition_unixtime2 where dt<1609862400 order by dt;
+-- result:
+1609430400	1
+1609516800	2
+1609603200	3
+1609689600	4
+1609776000	5
+-- !result

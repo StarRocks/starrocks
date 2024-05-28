@@ -40,7 +40,7 @@ public:
                           starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                           const std::vector<uint32_t>& unmodified_column_ids,
                           std::vector<std::unique_ptr<Column>>* unmodified_column_data,
-                          const starrocks::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet);
+                          const starrocks::TxnLogPB_OpWrite& op_write, const starrocks::lake::Tablet* tablet);
 };
 
 } // namespace starrocks

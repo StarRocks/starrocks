@@ -26,6 +26,7 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.connector.metastore.MetastoreTable;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -92,7 +93,7 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public Database getDb(String dbName) {
         org.apache.hadoop.hive.metastore.api.Database db = client.getDb(dbName);
-        return HiveMetastoreApiConverter.toDatabase(db);
+        return HiveMetastoreApiConverter.toDatabase(db, dbName);
     }
 
     @Override
@@ -104,6 +105,12 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public void dropTable(String dbName, String tableName) {
         client.dropTable(dbName, tableName);
+    }
+
+    @Override
+    public MetastoreTable getMetastoreTable(String dbName, String tableName) {
+        org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
+        return HiveMetastoreApiConverter.toMetastoreTable(table);
     }
 
     public Table getTable(String dbName, String tableName) {

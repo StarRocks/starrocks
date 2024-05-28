@@ -39,12 +39,14 @@ public class TestLockInterface {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         Config.slow_lock_threshold_ms = 0;
         Config.lock_manager_enabled = true;
+        Config.lock_manager_enable_using_fine_granularity_lock = true;
         Config.lock_manager_enable_resolve_deadlock = true;
     }
 
     @After
     public void tearDown() {
         Config.lock_manager_enabled = false;
+        Config.lock_manager_enable_using_fine_granularity_lock = false;
         Config.lock_manager_enable_resolve_deadlock = false;
     }
 

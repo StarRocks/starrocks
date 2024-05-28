@@ -40,20 +40,31 @@ public class Constants {
         MV,
         INSERT,
         PIPE,
-        DATACACHE_SELECT
+        DATACACHE_SELECT;
+
+        // Whether the task source is mergeable, only MV is mergeable by default.
+        public boolean isMergeable() {
+            return this == MV;
+        }
     }
 
-    // PENDING -> RUNNING -> FAILED
-    //                    -> SUCCESS
+    //                   ------> FAILED
+    //                  |
+    //                  |
+    //     PENDING -> RUNNING -> SUCCESS
+    //        |
+    //        |
+    //         ----------------> MERGED
     public enum TaskRunState {
-        PENDING,
-        RUNNING,
-        FAILED,
-        SUCCESS,
+        PENDING,    // The task run is created and in the pending queue waiting to be scheduled
+        RUNNING,    // The task run is scheduled into running queue and is running
+        FAILED,     // The task run is failed
+        SUCCESS,    // The task run is finished successfully
+        MERGED,     // The task run is merged
     }
 
     public static boolean isFinishState(TaskRunState state) {
-        return state.equals(TaskRunState.SUCCESS) || state.equals(TaskRunState.FAILED);
+        return state.equals(TaskRunState.SUCCESS) || state.equals(TaskRunState.FAILED) || state.equals(TaskRunState.MERGED);
     }
 
     // Used to determine the scheduling order of Pending TaskRun to Running TaskRun

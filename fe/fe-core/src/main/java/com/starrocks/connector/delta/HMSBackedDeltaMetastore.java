@@ -12,13 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.connector.delta;
 
-package com.starrocks.connector.hive.glue.metastore;
+import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.metastore.MetastoreTable;
+import org.apache.hadoop.conf.Configuration;
 
-import com.amazonaws.auth.AWSCredentialsProvider;
-import org.apache.hadoop.hive.conf.HiveConf;
+public class HMSBackedDeltaMetastore extends DeltaLakeMetastore {
+    public HMSBackedDeltaMetastore(String catalogName, IHiveMetastore metastore, Configuration hdfsConfiguration) {
+        super(catalogName, metastore, hdfsConfiguration);
+    }
 
-public interface AWSCredentialsProviderFactory {
-
-    AWSCredentialsProvider buildAWSCredentialsProvider(HiveConf hiveConf);
+    @Override
+    public MetastoreTable getMetastoreTable(String dbName, String tableName) {
+        return this.delegate.getMetastoreTable(dbName, tableName);
+    }
 }

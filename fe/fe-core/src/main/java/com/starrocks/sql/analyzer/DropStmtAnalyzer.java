@@ -22,7 +22,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -112,11 +111,11 @@ public class DropStmtAnalyzer {
             }
             // Check if a view
             if (statement.isView()) {
-                if (!(table instanceof View)) {
+                if (!table.isView()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "VIEW");
                 }
             } else {
-                if (table instanceof View) {
+                if (table.isView()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "TABLE");
                 }
             }

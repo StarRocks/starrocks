@@ -186,7 +186,6 @@ public class LoadLoadingTask extends LoadTask {
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
-        summaryProfile.addInfoString("Memory Limit", DebugUtil.getPrettyStringBytes(execMemLimit));
         summaryProfile.addInfoString("Timeout", DebugUtil.getPrettyStringMs(timeoutS * 1000));
         summaryProfile.addInfoString("Strict Mode", String.valueOf(strictMode));
         summaryProfile.addInfoString("Partial Update", String.valueOf(partialUpdate));
@@ -234,13 +233,14 @@ public class LoadLoadingTask extends LoadTask {
             long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
 
-            if (context.getSessionVariable().isEnableProfile()) {
+            if (context.getSessionVariable().isEnableProfile()
+                    || ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
                 RuntimeProfile profile = buildFinishedTopLevelProfile();
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.collectProfileSync();
-                profile.addChild(curCoordinator.buildQueryProfile(context.needMergeProfile()));
+                profile.addChild(curCoordinator.buildQueryProfile(true));
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");

@@ -1075,7 +1075,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
         }
 
-        ProfileManager.getInstance().pushLoadProfile(profile);
+        ProfileManager.getInstance().pushProfile(null, profile);
     }
 
     public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,

@@ -1862,9 +1862,13 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
-    // already committed, so we can ignore timeout error here
-    std::unique_lock<std::mutex> ul(_lock);
-    RETURN_IF_ERROR(_wait_for_version(version, 120000, ul));
+    {
+        // already committed, so we can ignore timeout error here
+        std::unique_lock<std::mutex> ul(_lock);
+        RETURN_IF_ERROR(_wait_for_version(version, 120000, ul));
+    }
+    // Release metadata memory after rowsets have been compacted.
+    Rowset::close_rowsets(input_rowsets);
     return Status::OK();
 }
 
@@ -2214,6 +2218,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                     strings::Substitute("_light_apply_compaction_commit error: $0 $1", st.to_string(), debug_string()));
             return;
         }
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
     }
     int64_t t_index_delvec = MonotonicMillis();
 

@@ -1,4 +1,7 @@
 -- name: test_basic_create_index
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -123,6 +126,9 @@ DROP TABLE t_test_basic_create_index_dup;
 -- result:
 -- !result
 -- name: test_query_gin_index
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -188,6 +194,9 @@ drop table t_test_gin_index_query;
 -- result:
 -- !result
 -- name: test_gin_index_single_predicate_none
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -298,6 +307,9 @@ DROP TABLE t_gin_index_single_predicate_none;
 -- result:
 -- !result
 -- name: test_gin_index_single_predicate_english
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -395,6 +407,9 @@ DROP TABLE t_gin_index_single_predicate_english;
 -- result:
 -- !result
 -- name: test_gin_index_multiple_predicate_none
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -493,6 +508,9 @@ DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
 -- name: test_gin_index_multiple_predicate_english
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -542,6 +560,9 @@ DROP TABLE t_gin_index_multiple_predicate_english;
 -- result:
 -- !result
 -- name: test_gin_index_compaction
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -709,6 +730,9 @@ DROP TABLE t_gin_index_compaction_english_cumu;
 -- result:
 -- !result
 -- name: test_gin_index_type
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -825,6 +849,9 @@ PROPERTIES (
 E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 -- name: test_clone_for_gin
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -870,6 +897,9 @@ SELECT * FROM t_clone_for_gin ORDER BY id1;
 2	ABC	ABC	ABC	ABC
 -- !result
 -- name: test_complex_predicate_for_gin
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -1033,6 +1063,9 @@ DROP TABLE t_complex_predicate_for_gin_english;
 -- result:
 -- !result
 -- name: test_delete_and_column_prune
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE `t_delete_and_column_prune` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -1069,6 +1102,9 @@ DROP TABLE t_delete_and_column_prune;
 -- result:
 -- !result
 -- name: test_upper_case_column_name
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -1121,6 +1157,9 @@ DROP TABLE t_upper_case_column_name;
 -- result:
 -- !result
 -- name: test_alter_replicated_storage
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE `t_alter_replicated_storage` (
   `id` bigint(20) NOT NULL COMMENT "",
   `text` varchar(255) NULL COMMENT "",
@@ -1160,6 +1199,9 @@ DROP TABLE t_alter_replicated_storage;
 -- result:
 -- !result
 -- name: test_disable_global_dict_rewrite
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE `t_disable_global_dict_rewrite` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -1232,6 +1274,9 @@ DROP TABLE t_disable_global_dict_rewrite;
 -- result:
 -- !result
 -- name: test_create_mv_with_match
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE `t_create_mv_with_match` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -1262,6 +1307,9 @@ DROP TABLE t_create_mv_with_match;
 -- result:
 -- !result
 -- name: test_alter_gin_col_into_other_type
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE `t_alter_gin_col_into_other_type` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -1312,5 +1360,109 @@ SELECT * FROM t_alter_gin_col_into_other_type;
 1	abc
 -- !result
 DROP TABLE t_alter_gin_col_into_other_type;
+-- result:
+-- !result
+-- name: test_gin_var @sequential
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_var VALUES (1, "abc bcd");
+-- result:
+-- !result
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+-- result:
+1	abc bcd
+-- !result
+SET enable_gin_filter = false;
+-- result:
+-- !result
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+-- result:
+E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+-- !result
+SET enable_gin_filter = true;
+-- result:
+-- !result
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+-- result:
+1	abc bcd
+-- !result
+DROP TABLE t_gin_var;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "false");
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'standard');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+DROP TABLE t_gin_var;
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+DROP TABLE t_gin_var;
 -- result:
 -- !result

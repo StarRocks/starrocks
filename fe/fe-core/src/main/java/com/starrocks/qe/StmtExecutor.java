@@ -1071,6 +1071,7 @@ public class StmtExecutor {
         if (context instanceof HttpConnectContext) {
             batch = httpResultSender.sendQueryResult(coord, execPlan);
         } else {
+            boolean needSendResult = !isExplainAnalyze && !context.getSessionVariable().isEnableExecutionOnly();
             // send mysql result
             // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
             //    We will not send real query result to client. Instead, we only send OK to client with
@@ -1084,7 +1085,7 @@ public class StmtExecutor {
             do {
                 batch = coord.getNext();
                 // for outfile query, there will be only one empty batch send back with eos flag
-                if (batch.getBatch() != null && !isOutfileQuery && !isExplainAnalyze) {
+                if (batch.getBatch() != null && !isOutfileQuery && needSendResult) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
                     // so We need to send fields after first batch arrived
                     if (!isSendFields) {
@@ -1620,6 +1621,8 @@ public class StmtExecutor {
                 explainString += Tracers.printTiming();
             } else if (parsedStmt.getTraceMode() == Tracers.Mode.LOGS) {
                 explainString += Tracers.printLogs();
+            } else if (parsedStmt.getTraceMode() == Tracers.Mode.REASON) {
+                explainString += Tracers.printReasons();
             } else {
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
             }

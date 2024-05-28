@@ -12,19 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.qe;
 
-package com.starrocks.connector.hive.glue.metastore;
+import org.junit.Assert;
+import org.junit.jupiter.api.Test;
 
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import org.apache.hadoop.hive.conf.HiveConf;
+class QueryStatisticsItemTest {
 
-public class DefaultAWSCredentialsProviderFactory implements
-        AWSCredentialsProviderFactory {
+    @Test
+    void testQueryStatisticsItem() {
+        String queryId = "123";
+        String warehouseName = "wh1";
 
-    @Override
-    public AWSCredentialsProvider buildAWSCredentialsProvider(HiveConf hiveConf) {
-        return new DefaultAWSCredentialsProviderChain();
+        final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+                .queryId("123")
+                .warehouseName("wh1").build();
+
+        Assert.assertEquals("wh1", item.getWarehouseName());
+        Assert.assertEquals("123", item.getQueryId());
     }
-
 }

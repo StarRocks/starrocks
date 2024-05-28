@@ -291,7 +291,13 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public SubmitResult executeTask(String taskName) {
-        return executeTask(taskName, new ExecuteOption());
+        Task task = getTask(taskName);
+        if (task == null) {
+            return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
+        }
+        ExecuteOption option = new ExecuteOption(task.getSource().isMergeable());
+        option.setManual(true);
+        return executeTask(taskName, option);
     }
 
     public SubmitResult executeTask(String taskName, ExecuteOption option) {
@@ -306,9 +312,8 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    // for test
     public SubmitResult executeTaskSync(Task task) {
-        return executeTaskSync(task, new ExecuteOption());
+        return executeTaskSync(task, new ExecuteOption(task.getSource().isMergeable()));
     }
 
     public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
@@ -548,7 +553,7 @@ public class TaskManager implements MemoryTrackable {
         try {
             createTask(task, false);
             if (task.getType() == Constants.TaskType.MANUAL) {
-                submitResult = executeTask(taskName);
+                submitResult = executeTask(task.getName());
             } else {
                 submitResult = new SubmitResult(null, SUBMITTED);
             }
@@ -770,7 +775,7 @@ public class TaskManager implements MemoryTrackable {
                     LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
-                ExecuteOption executeOption = new ExecuteOption();
+                ExecuteOption executeOption = new ExecuteOption(task.getSource().isMergeable());
                 executeOption.setReplay(true);
                 TaskRun taskRun = TaskRunBuilder
                         .newBuilder(task)
@@ -779,7 +784,7 @@ public class TaskManager implements MemoryTrackable {
 
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                if (!taskRunManager.arrangeTaskRun(taskRun)) {
+                if (!taskRunManager.arrangeTaskRun(taskRun, true)) {
                     LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
                 }
                 break;
@@ -827,13 +832,13 @@ public class TaskManager implements MemoryTrackable {
                 status.setErrorCode(statusChange.getErrorCode());
                 status.setState(Constants.TaskRunState.FAILED);
                 taskRunManager.getTaskRunHistory().addHistory(status);
-            } else if (toStatus == Constants.TaskRunState.SUCCESS) {
+            } else if (toStatus == Constants.TaskRunState.MERGED) {
                 // This only happened when the task run is merged by others and no run ever.
                 LOG.info("Replay update pendingTaskRun which is merged by others, query_id:{}, taskId:{}",
                         statusChange.getQueryId(), taskId);
                 status.setErrorMessage(statusChange.getErrorMessage());
                 status.setErrorCode(statusChange.getErrorCode());
-                status.setState(Constants.TaskRunState.SUCCESS);
+                status.setState(Constants.TaskRunState.MERGED);
                 status.setProgress(100);
                 status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);

@@ -132,9 +132,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
     private Expr generatedColumnExpr;
 
+    // Only for persist
     public Column() {
         this.name = "";
-        this.columnId = ColumnId.create(this.name);
         this.type = Type.NULL;
         this.isAggregationTypeImplicit = false;
         this.isKey = false;
@@ -380,6 +380,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public boolean isGeneratedColumn() {
         return generatedColumnExpr != null;
+    }
+
+    public boolean isShadowColumn() {
+        return this.name.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX);
     }
 
     public int getOlapColumnIndexSize() {
@@ -788,7 +792,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                     SqlModeHelper.MODE_DEFAULT);
         }
 
-        if (columnId == null) {
+        if (columnId == null || Strings.isNullOrEmpty(columnId.getId())) {
             columnId = ColumnId.create(name);
         }
     }

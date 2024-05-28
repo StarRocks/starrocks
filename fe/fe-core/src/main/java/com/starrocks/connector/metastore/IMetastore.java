@@ -27,6 +27,8 @@ public interface IMetastore {
 
     Database getDb(String dbName);
 
+    MetastoreTable getMetastoreTable(String dbName, String tableName);
+
     Table getTable(String dbName, String tableName);
 
     List<String> getPartitionKeys(String dbName, String tableName);

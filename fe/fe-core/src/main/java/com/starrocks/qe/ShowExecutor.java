@@ -58,6 +58,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -670,7 +671,7 @@ public class ShowExecutor {
             createSqlBuilder.append("CREATE DATABASE `").append(statement.getDb()).append("`");
             if (!Strings.isNullOrEmpty(db.getLocation())) {
                 createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-            } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
+            } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase() && Strings.isNullOrEmpty(db.getCatalogName())) {
                 String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
                 createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
             }
@@ -809,6 +810,8 @@ public class ShowExecutor {
             } else if (table.isDeltalakeTable()) {
                 location = table.getTableLocation();
             } else if (table.isPaimonTable()) {
+                location = table.getTableLocation();
+            } else if (table instanceof IcebergView) {
                 location = table.getTableLocation();
             }
 

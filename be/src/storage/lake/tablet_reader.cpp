@@ -120,6 +120,9 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 
         // not split for data skew between tablet
         if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
+            // set _need_split false to make iterator can get data this round if split do not happen,
+            // otherwise, iterator will return empty.
+            _need_split = false;
             return init_collector(read_params);
         }
 
@@ -407,7 +410,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
         } else {
-            _collect_iter = new_heap_merge_iterator(seg_iters, (keys_type == PRIMARY_KEYS));
+            _collect_iter = new_heap_merge_iterator(
+                    seg_iters,
+                    (keys_type == PRIMARY_KEYS) && StorageEngine::instance()->enable_light_pk_compaction_publish());
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {
