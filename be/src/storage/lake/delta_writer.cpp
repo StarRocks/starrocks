@@ -74,7 +74,8 @@ public:
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                              const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                             MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id, InsertMode insert_mode)
+                             MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id,
+                             InsertMode insert_mode)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),

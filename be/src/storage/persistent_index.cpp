@@ -1123,7 +1123,8 @@ public:
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
-                    auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                    auto old_value =
+                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
                     if (old_value != NullIndexValue) {
                         old_values[idx] = value;
                         nfound++;
@@ -1162,7 +1163,8 @@ public:
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
-                    auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                    auto old_value =
+                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
                     if (old_value != NullIndexValue) {
                         nfound++;
                         continue;
@@ -1750,7 +1752,8 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
         const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
         auto& keys_info = not_founds_by_key_size[_fixed_key_size];
         for (size_t i = 0; i < shard_size; ++i) {
-            RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, &keys_info, num_found, idxes_by_shard[i], mode));
+            RETURN_IF_ERROR(
+                    _shards[shard_offset + i]->upsert(keys, values, &keys_info, num_found, idxes_by_shard[i], mode));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1768,8 +1771,8 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
             const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, idxes);
             auto& not_found = not_founds_by_key_size[key_size];
             for (size_t i = 0; i < shard_size; ++i) {
-                RETURN_IF_ERROR(
-                        _shards[shard_offset + i]->upsert(keys, values, &not_found, num_found, idxes_by_shard[i], mode));
+                RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, &not_found, num_found,
+                                                                  idxes_by_shard[i], mode));
             }
         }
     }
@@ -2072,9 +2075,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         _checksum = 0;
         break;
     }
-    default: {
-        return Status::InternalError("Unknown commit type");
-    }
+    default: { return Status::InternalError("Unknown commit type"); }
     }
     return Status::OK();
 }

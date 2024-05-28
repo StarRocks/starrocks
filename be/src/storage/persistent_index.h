@@ -208,8 +208,7 @@ public:
     // |num_found|: add the number of keys found(or already exist) to this argument
     // |idxes|: the target indexes of keys
     virtual Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                          const std::vector<size_t>& idxes,
-                          const InsertMode& mode = InsertMode::UPSERT_MODE) = 0;
+                          const std::vector<size_t>& idxes, const InsertMode& mode = InsertMode::UPSERT_MODE) = 0;
 
     // batch insert
     // |keys|: key array as raw buffer

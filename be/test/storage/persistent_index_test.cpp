@@ -176,7 +176,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
     ASSERT_EQ(ignore_num_found, expect_exists);
     ASSERT_EQ(ignore_not_found.size(), expect_not_found);
     ASSERT_EQ(ignore_old_values.size(), N);
-    for (int i = 0; i < N ; i++) {
+    for (int i = 0; i < N; i++) {
         if (i % 2 == 0) {
             ASSERT_EQ(ignore_old_values[i].get_value(), i * 4);
         }
@@ -277,7 +277,6 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
 
-
     // test ignore
     vector<Key> ignore_keys(N);
     vector<Slice> ignore_key_slices;
@@ -306,7 +305,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
     ASSERT_EQ(ignore_num_found, expect_exists);
     ASSERT_EQ(ignore_not_found.size(), expect_not_found);
     ASSERT_EQ(ignore_old_values.size(), N);
-    for (int i = 0; i < N ; i++) {
+    for (int i = 0; i < N; i++) {
         if (i % 2 == 0) {
             ASSERT_EQ(ignore_old_values[i].get_value(), i * 4);
         }
@@ -431,7 +430,8 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index) {
     }
     erase_old_values.clear();
     erase_num_found = 0;
-    ASSERT_TRUE(idx->erase(erase_key_slices.data(), erase_old_values.data(), &erase_not_found, &erase_num_found, idxes).ok());
+    ASSERT_TRUE(idx->erase(erase_key_slices.data(), erase_old_values.data(), &erase_not_found, &erase_num_found, idxes)
+                        .ok());
 
     // test upsert
     vector<Key> upsert_keys(N);
@@ -553,7 +553,8 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
 
         //std::vector<IndexValue> old_values(second_keys.size());
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
-        ASSERT_OK(index.upsert(second_n, second_key_slices.data(), second_values.data(), old_values.data(), InsertMode::UPSERT_MODE));
+        ASSERT_OK(index.upsert(second_n, second_key_slices.data(), second_values.data(), old_values.data(),
+                               InsertMode::UPSERT_MODE));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -969,7 +970,8 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
 
         std::vector<IndexValue> old_values(NUM_SNAPSHOT, IndexValue(NullIndexValue));
         ASSERT_OK(index.prepare(EditVersion(2, 0), NUM_SNAPSHOT));
-        ASSERT_OK(index.upsert(NUM_SNAPSHOT, snapshot_key_slices.data(), snapshot_values.data(), old_values.data(), InsertMode::UPSERT_MODE));
+        ASSERT_OK(index.upsert(NUM_SNAPSHOT, snapshot_key_slices.data(), snapshot_values.data(), old_values.data(),
+                               InsertMode::UPSERT_MODE));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -987,7 +989,8 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
         config::l0_l1_merge_ratio = 1;
         std::vector<IndexValue> wal_old_values(NUM_WAL, IndexValue(NullIndexValue));
         ASSERT_OK(index.prepare(EditVersion(3, 0), NUM_WAL));
-        ASSERT_OK(index.upsert(NUM_WAL, wal_key_slices.data(), wal_values.data(), wal_old_values.data(), InsertMode::UPSERT_MODE));
+        ASSERT_OK(index.upsert(NUM_WAL, wal_key_slices.data(), wal_values.data(), wal_old_values.data(),
+                               InsertMode::UPSERT_MODE));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -1073,7 +1076,9 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
 
         std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(2, 0), keys.size()).ok());
-        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data(), InsertMode::UPSERT_MODE).ok());
+        ASSERT_TRUE(
+                index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data(), InsertMode::UPSERT_MODE)
+                        .ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
 
@@ -1199,7 +1204,9 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
 
         std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(2, 0), keys.size()).ok());
-        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data(), InsertMode::UPSERT_MODE).ok());
+        ASSERT_TRUE(
+                index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data(), InsertMode::UPSERT_MODE)
+                        .ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
 
