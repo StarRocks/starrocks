@@ -160,9 +160,9 @@ public class PaimonMetadataTest {
         meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
-                .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
+                .withBucketPath("dummy").withDataFiles(meta1).isStreaming(false).build());
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)
-                .withBucketPath("not used").withDataFiles(meta2).isStreaming(false).build());
+                .withBucketPath("dummy").withDataFiles(meta2).isStreaming(false).build());
 
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();

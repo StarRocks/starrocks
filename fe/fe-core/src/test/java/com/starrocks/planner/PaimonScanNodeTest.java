@@ -150,8 +150,7 @@ public class PaimonScanNodeTest {
         };
         desc.setTable(table);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-        DeletionFile deletionFile = new DeletionFile("dummy", 1, 22, 0L);
-        scanNode.splitRawFileScanRangeLocations(rawFile, deletionFile);
+        scanNode.splitRawFileScanRangeLocations(rawFile, null);
         scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024, null);
         scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024);
         Assertions.assertEquals(6, scanNode.getScanRangeLocations(10).size());

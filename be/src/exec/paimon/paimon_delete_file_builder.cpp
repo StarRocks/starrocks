@@ -34,21 +34,16 @@ Status PaimonDeleteFileBuilder::build(const TPaimonDeletionFile* paimon_deletion
     ASSIGN_OR_RETURN(raw_deletion_vector, _fs->new_random_access_file(path));
 
     // Check whether the bitmap size stored in deletion file is equals to the size from paimon api
-    uint32_t size_from_deletion_vector_file;
-    RETURN_IF_ERROR(raw_deletion_vector->read_at_fully(offset, &size_from_deletion_vector_file, BITMAP_SIZE_LENGTH));
-#ifdef IS_LITTLE_ENDIAN
-    size_from_deletion_vector_file = swap_endian32(size_from_deletion_vector_file);
-#endif
-
+    int32_t size_from_deletion_vector_file;
+    RETURN_IF_ERROR(raw_deletion_vector->read_at_fully(offset, &size_from_deletion_vector_file,
+                                                       sizeof(size_from_deletion_vector_file)));
     DCHECK(size_from_deletion_vector_file == length);
 
     // Check the correctness of magic number
-    uint32_t magic_number_from_deletion_vector_file;
+    int32_t magic_number_from_deletion_vector_file;
     RETURN_IF_ERROR(raw_deletion_vector->read_at_fully(offset + BITMAP_SIZE_LENGTH,
-                                                       &magic_number_from_deletion_vector_file, MAGIC_NUMBER_LENGTH));
-#ifdef IS_LITTLE_ENDIAN
-    magic_number_from_deletion_vector_file = swap_endian32(magic_number_from_deletion_vector_file);
-#endif
+                                                       &magic_number_from_deletion_vector_file,
+                                                       sizeof(magic_number_from_deletion_vector_file)));
     DCHECK(magic_number_from_deletion_vector_file == MAGIC_NUMBER);
 
     std::unique_ptr<char[]> deletion_vector(new char[serialized_bitmap_length]);
@@ -60,7 +55,6 @@ Status PaimonDeleteFileBuilder::build(const TPaimonDeletionFile* paimon_deletion
             roaring_bitmap_portable_deserialize_safe(deletion_vector.get(), serialized_bitmap_length);
     roaring64_bitmap_t* bitmap64 = roaring64_bitmap_move_from_roaring32(bitmap);
     _skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap64);
-
     roaring_bitmap_free(bitmap);
     return Status::OK();
 }
