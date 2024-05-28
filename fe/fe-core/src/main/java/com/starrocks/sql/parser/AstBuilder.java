@@ -5181,9 +5181,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         String inlineContent = null;
-        if (context.content != null) {
-            String text = context.content.getText();
-            inlineContent = text.substring(5, text.length() - 3);
+        if (context.inlineFunction() != null) {
+            String content = context.inlineFunction().ATTACHMENT().getText();
+            inlineContent = context.inlineFunction().ATTACHMENT().getText().substring(2, content.length() - 2);
         }
 
         FunctionName fnName = FunctionName.createFnName(functionName);

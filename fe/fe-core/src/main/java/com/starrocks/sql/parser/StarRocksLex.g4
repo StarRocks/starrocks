@@ -476,6 +476,7 @@ UNLOCK: 'UNLOCK';
 LOW_PRIORITY: 'LOW_PRIORITY';
 DISK: 'DISK';
 BEFORE: 'BEFORE';
+DOUBLE_DOLLAR: '$$';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -587,6 +588,6 @@ WS
     : [ \r\n\t\u3000]+ -> channel(HIDDEN)
     ;
 
-FUNCTION_CONTENT
-    : BEGIN .* END
+ATTACHMENT
+    : DOUBLE_DOLLAR .* DOUBLE_DOLLAR
     ;

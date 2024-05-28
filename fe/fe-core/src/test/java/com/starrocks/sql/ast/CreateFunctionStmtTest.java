@@ -71,10 +71,10 @@ public class CreateFunctionStmtTest {
                 + "properties (\n"
                 + "    \"symbol\" = \"echo\",\n"
                 + "    \"type\" = \"Python\"\n"
-                + ") BEGIN \n"
+                + ") AS $$ \n"
                 + "def a(b):\n" +
                 "   return b \n" +
-                "END;";
+                "$$;";
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
         Assert.assertTrue(stmt.getContent().contains("\n"));
