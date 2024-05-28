@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "common/gflags_utils.h"
 #include "common/logging.h"
+#include "common/shutdown_hook.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
 #include "fslib/star_cache_configuration.h"
@@ -467,6 +468,9 @@ void shutdown_staros_worker() {
     g_starlet->stop();
     g_starlet.reset();
     g_worker = nullptr;
+
+    LOG(INFO) << "Executing starlet shutdown hooks ...";
+    staros::starlet::common::ShutdownHook::shutdown();
 }
 
 // must keep each config the same
