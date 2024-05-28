@@ -7,9 +7,6 @@ CREATE TABLE `t1` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 8
 PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
 "replication_num" = "1"
 );
 
