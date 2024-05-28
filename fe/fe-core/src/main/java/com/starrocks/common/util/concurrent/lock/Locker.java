@@ -286,8 +286,6 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
         if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
-            Preconditions.checkState(!tableListClone.isEmpty());
-
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, 0);
@@ -313,8 +311,6 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
         if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
-            Preconditions.checkState(!tableListClone.isEmpty());
-
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, timeout);

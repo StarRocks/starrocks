@@ -2896,7 +2896,7 @@ public class Config extends ConfigBase {
      * Whether to use table level lock
      */
     @ConfField
-    public static boolean lock_manager_enable_using_fine_granularity_lock = false;
+    public static boolean lock_manager_enable_using_fine_granularity_lock = true;
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
