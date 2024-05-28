@@ -1613,6 +1613,8 @@ public class StmtExecutor {
                 explainString += Tracers.printTiming();
             } else if (parsedStmt.getTraceMode() == Tracers.Mode.LOGS) {
                 explainString += Tracers.printLogs();
+            } else if (parsedStmt.getTraceMode() == Tracers.Mode.REASON) {
+                explainString += Tracers.printReasons();
             } else {
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
             }
