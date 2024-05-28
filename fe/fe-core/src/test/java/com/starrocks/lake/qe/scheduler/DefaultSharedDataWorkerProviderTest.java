@@ -589,7 +589,7 @@ public class DefaultSharedDataWorkerProviderTest {
 
         { // normal case
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider, 1);
             // the computation will not fail even though there are non-available locations
@@ -607,7 +607,7 @@ public class DefaultSharedDataWorkerProviderTest {
                     ImmutableMap.of(availNode.getId(), availNode));
 
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, provider1, 1);
             // the computation will not fail even though there are non-available locations
@@ -624,7 +624,7 @@ public class DefaultSharedDataWorkerProviderTest {
             WorkerProvider providerNoAvailNode = new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes),
                     ImmutableMap.of());
             FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            ColocatedBackendSelector.Assignment colAssignment = new ColocatedBackendSelector.Assignment(scanNode, 1);
             ColocatedBackendSelector selector =
                     new ColocatedBackendSelector(scanNode, assignment, colAssignment, false, providerNoAvailNode, 1);
             Assert.assertThrows(NonRecoverableException.class, selector::computeScanRangeAssignment);
