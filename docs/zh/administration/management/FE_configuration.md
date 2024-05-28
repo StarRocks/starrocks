@@ -2396,7 +2396,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：是否开启[行列混存表](../../table_design/hybrid_table.md)功能。
-- 引入版本：-
+- 引入版本：v3.2.3
+
+##### enable_experimental_gin
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启[全文倒排索引](../../table_design/indexes/inverted_index.md)功能。
+- 引入版本：v3.3.0
 
 ##### storage_usage_soft_limit_percent
 
