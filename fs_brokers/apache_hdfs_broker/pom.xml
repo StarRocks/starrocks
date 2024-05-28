@@ -380,7 +380,7 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aliyun</artifactId>
-            <version>3.3.6</version>
+            <version>${hadoop.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.ksyun.kmr/hadoop-ks3 -->
