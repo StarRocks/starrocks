@@ -9,7 +9,7 @@ From v3.1.7 and v3.2.3 onwards, StarRocks introduced Block Cache to accelerate q
 
 Compared to File Cache, Block Cache has the following advantages:
 
-- Fewer reads from object storage, meaning less cost on access to object storage (if your object storage charges based on access frequencies).
+- Fewer reads from object storage, meaning less cost on access to object storage (if your object storage charges based on access frequency).
 - Less write pressure on local disks and CPU usage, thus less impact on other loading or query tasks (because background loading threads are no longer needed).
 - Optimized cache effectiveness (because File Cache may load less frequently used data in the file).
 - Optimized control over the cached data, thus avoiding overwhelmed local disks caused by excessive data failed to be evicted by File Cache.
