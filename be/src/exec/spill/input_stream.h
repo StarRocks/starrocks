@@ -110,6 +110,7 @@ public:
     }
 
 private:
+    // used to cache data_size in blocks
     mutable std::optional<size_t> _data_size;
     std::vector<BlockPtr> _blocks;
 };

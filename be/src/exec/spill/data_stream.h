@@ -35,6 +35,8 @@ SpillOutputDataStreamPtr create_spill_output_stream(Spiller* spiller, BlockGroup
 
 using InputStreamPtr = std::shared_ptr<SpillInputStream>;
 
+// Transfer data from input_stream to output stream
+// This class will execution io tasks. make sure call it in io threads
 class DataTranster {
 public:
     static Status transfer(workgroup::YieldContext& yield_ctx, RuntimeState* state, Serde* serde,
