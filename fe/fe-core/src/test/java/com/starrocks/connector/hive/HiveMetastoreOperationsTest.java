@@ -457,6 +457,43 @@ public class HiveMetastoreOperationsTest {
     }
 
     @Test
+    public void testCreateTableForExternalWithoutLocation() throws DdlException {
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public void createDirectory(Path path, Configuration conf) {
+            }
+        };
+
+        HiveMetastoreOperations mockedHmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
+                new Configuration(), MetastoreType.HMS, "hive_catalog") {
+            @Override
+            public Path getDefaultLocation(String dbName, String tableName) {
+                return new Path("mytable_locatino");
+            }
+        };
+
+        Map<String, String> properties = Maps.newHashMap();
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                true,
+                new TableName("hive_catalog", "hive_db", "hive_table"),
+                Lists.newArrayList(
+                        new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
+                        new ColumnDef("p1", TypeDef.create(PrimitiveType.INT))),
+                "hive",
+                null,
+                new ListPartitionDesc(Lists.newArrayList("p1"), new ArrayList<>()),
+                null,
+                properties,
+                new HashMap<>(),
+                "my table comment");
+        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        stmt.setColumns(columns);
+
+        Assert.assertTrue(mockedHmsOps.createTable(stmt));
+    }
+
+    @Test
     public void testCreateTableLike() throws DdlException {
         new MockUp<HiveWriteUtils>() {
             public void createDirectory(Path path, Configuration conf) {

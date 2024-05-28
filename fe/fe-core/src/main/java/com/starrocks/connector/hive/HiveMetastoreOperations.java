@@ -49,7 +49,6 @@ import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.starrocks.connector.PartitionUtil.executeInNewThread;
-import static com.starrocks.connector.hive.HiveWriteUtils.checkExternalLocationProperties;
 import static com.starrocks.connector.hive.HiveWriteUtils.checkLocationProperties;
 import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
 import static com.starrocks.connector.hive.HiveWriteUtils.isDirectory;
@@ -147,7 +146,7 @@ public class HiveMetastoreOperations {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         Map<String, String> properties = stmt.getProperties() != null ? stmt.getProperties() : new HashMap<>();
-        Path tablePath;
+        Path tablePath = null;
         boolean tableLocationExists = false;
         if (!stmt.isExternal()) {
             checkLocationProperties(properties);
@@ -165,8 +164,10 @@ public class HiveMetastoreOperations {
                 tablePath = getDefaultLocation(dbName, tableName);
             }
         } else {
-            checkExternalLocationProperties(properties);
-            tablePath = new Path(properties.get(EXTERNAL_LOCATION_PROPERTY));
+            // checkExternalLocationProperties(properties);
+            if (properties.containsKey(EXTERNAL_LOCATION_PROPERTY)) {
+                tablePath = new Path(properties.get(EXTERNAL_LOCATION_PROPERTY));
+            }
             tableLocationExists = true;
         }
 
@@ -197,7 +198,7 @@ public class HiveMetastoreOperations {
                         .map(Column::getName)
                         .collect(Collectors.toList()).subList(0, stmt.getColumns().size() - partitionColNames.size()))
                 .setFullSchema(stmt.getColumns())
-                .setTableLocation(tablePath.toString())
+                .setTableLocation(tablePath == null ? null : tablePath.toString())
                 .setProperties(stmt.getProperties())
                 .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, "parquet")))
                 .setCreateTime(System.currentTimeMillis())
