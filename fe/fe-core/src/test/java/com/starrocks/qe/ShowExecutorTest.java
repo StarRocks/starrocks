@@ -1081,6 +1081,62 @@ public class ShowExecutorTest {
                 resultSet.getResultRows().get(0).get(1));
     }
 
+
+    @Test
+    public void testShowCreateHiveExternalTable() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                List<Column> fullSchema = new ArrayList<>();
+                Column columnId = new Column("id", Type.INT, true);
+                columnId.setComment("id");
+                Column columnName = new Column("name", Type.VARCHAR);
+                Column columnYear = new Column("year", Type.INT);
+                Column columnDt = new Column("dt", Type.INT);
+                fullSchema.add(columnId);
+                fullSchema.add(columnName);
+                fullSchema.add(columnYear);
+                fullSchema.add(columnDt);
+                List<String> partitions = Lists.newArrayList();
+                partitions.add("year");
+                partitions.add("dt");
+                HiveTable.Builder tableBuilder = HiveTable.builder()
+                        .setId(1)
+                        .setTableName("test_table")
+                        .setCatalogName("hive_catalog")
+                        .setResourceName(toResourceName("hive_catalog", "hive"))
+                        .setHiveDbName("hive_db")
+                        .setHiveTableName("test_table")
+                        .setPartitionColumnNames(partitions)
+                        .setFullSchema(fullSchema)
+                        .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
+                        .setCreateTime(10000)
+                        .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE);
+                return tableBuilder.build();
+            }
+        };
+
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
+
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE EXTERNAL TABLE `test_table` (\n" +
+                        "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                        "  `name` varchar DEFAULT NULL,\n" +
+                        "  `year` int(11) DEFAULT NULL,\n" +
+                        "  `dt` int(11) DEFAULT NULL\n" +
+                        ")\n" +
+                        "PARTITION BY ( year, dt )\n" +
+                        "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
+                resultSet.getResultRows().get(0).get(1));
+    }
+
     @Test
     public void testShowCreateExternalCatalog() throws AnalysisException, DdlException {
         new MockUp<CatalogMgr>() {

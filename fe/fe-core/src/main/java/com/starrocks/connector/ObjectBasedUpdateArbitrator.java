@@ -30,13 +30,13 @@ public class ObjectBasedUpdateArbitrator extends TableUpdateArbitrator {
     public Map<String, Optional<HivePartitionDataInfo>> getPartitionDataInfos() {
         Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = Maps.newHashMap();
         List<String> partitionNameToFetch = partitionNames;
-        if (partitionLimit >= 0) {
-            partitionNameToFetch = partitionNames.subList(0, partitionLimit);
+        if (partitionLimit >= 0 && partitionLimit < partitionNames.size()) {
+            partitionNameToFetch = partitionNames.subList(partitionNames.size() - partitionLimit, partitionNames.size());
         }
         List<RemoteFileInfo> remoteFileInfos =
                     GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(table, partitionNameToFetch);
         for (int i = 0; i < partitionNameToFetch.size(); i++) {
-            RemoteFileInfo remoteFileInfo = remoteFileInfos.get(0);
+            RemoteFileInfo remoteFileInfo = remoteFileInfos.get(i);
             List<RemoteFileDesc> remoteFileDescs = remoteFileInfo.getFiles();
             if (remoteFileDescs != null) {
                 long lastFileModifiedTime = Long.MIN_VALUE;

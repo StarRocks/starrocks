@@ -30,8 +30,8 @@ public class DirectoryBasedUpdateArbitrator extends TableUpdateArbitrator {
     public Map<String, Optional<HivePartitionDataInfo>> getPartitionDataInfos() {
         Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = Maps.newHashMap();
         List<String> partitionNameToFetch = partitionNames;
-        if (partitionLimit >= 0) {
-            partitionNameToFetch = partitionNames.subList(0, partitionLimit);
+        if (partitionLimit >= 0 && partitionLimit < partitionNames.size()) {
+            partitionNameToFetch = partitionNames.subList(partitionNames.size() - partitionLimit, partitionNames.size());
         }
         List<RemoteFileInfo> remoteFileInfos =
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfoForPartitions(table, partitionNameToFetch);
