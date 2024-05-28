@@ -44,6 +44,11 @@ CREATE EXTERNAL TABLE tbl_for_refresh (
 )
 PARTITION BY (dt);
 
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200701 VALUES in ('2020-07-01');
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200702 VALUES in ('2020-07-02');
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200703 VALUES in ('2020-07-03');
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200704 VALUES in ('2020-07-04');
+
 INSERT OVERWRITE TABLE tbl_for_refresh VALUES (6,"2020-07-04");
 
 set catalog default_catalog;
