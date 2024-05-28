@@ -3642,7 +3642,7 @@ struct RowsetLoadInfo {
 Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
                                 const TabletSchemaCSPtr& base_tablet_schema, const std::string& err_msg_header) {
     OlapStopWatch watch;
-    if (_tablet.tablet_state() == TABLET_NOTREADY) {
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
         string msg = strings::Substitute(
                 "$0 tablet state is not TABLET_NOTREADY, link_from is not allowed tablet_id:$1 tablet_state:$2",
                 err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
@@ -3860,7 +3860,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                                    ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
                                    const std::string& err_msg_header) {
     OlapStopWatch watch;
-    if (_tablet.tablet_state() == TABLET_NOTREADY) {
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
         string msg = strings::Substitute(
                 "$0 tablet state is not TABLET_NOTREADY, convert_from is not allowed tablet_id:$1 tablet_state:$2",
                 err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
@@ -4129,9 +4129,9 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                                    ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
                                    const std::string& err_msg_header) {
     OlapStopWatch watch;
-    if (_tablet.tablet_state() == TABLET_NOTREADY) {
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
         string msg = strings::Substitute(
-                "$0 tablet state is not TABLET_NOTREADY, link_from is not allowed tablet_id:$1 tablet_state:$2",
+                "$0 tablet state is not TABLET_NOTREADY, reorder_from is not allowed tablet_id:$1 tablet_state:$2",
                 err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
