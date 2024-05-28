@@ -123,7 +123,7 @@ None
 -- !result
 select count(1) from test_mv1;
 -- result:
-16
+8
 -- !result
 function: wait_async_materialized_view_finish("test_mv2")
 -- result:
@@ -131,7 +131,7 @@ None
 -- !result
 select count(1) from test_mv2;
 -- result:
-16
+12
 -- !result
 drop materialized view test_mv1;
 -- result:
