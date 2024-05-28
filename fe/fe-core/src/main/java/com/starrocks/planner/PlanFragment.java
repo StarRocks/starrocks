@@ -706,8 +706,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.cacheParam = cacheParam;
     }
 
-    public List<OlapScanNode> collectOlapScanNodes() {
-        List<OlapScanNode> olapScanNodes = Lists.newArrayList();
+    public int getNumOlapScanNodes() {
+        int numOlapScanNodes = 0;
         Queue<PlanNode> queue = Lists.newLinkedList();
         queue.add(planRoot);
         while (!queue.isEmpty()) {
@@ -717,13 +717,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 continue;
             }
             if (node instanceof OlapScanNode) {
-                olapScanNodes.add((OlapScanNode) node);
+                numOlapScanNodes++;
             }
 
             queue.addAll(node.getChildren());
         }
 
-        return olapScanNodes;
+        return numOlapScanNodes;
     }
 
     public PlanNode getLeftMostNode() {
