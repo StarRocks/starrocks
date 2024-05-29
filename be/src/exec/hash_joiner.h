@@ -163,6 +163,8 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* runtime_filter_num = nullptr;
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
 
+    RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
+
     void prepare(RuntimeProfile* runtime_profile);
 };
 
