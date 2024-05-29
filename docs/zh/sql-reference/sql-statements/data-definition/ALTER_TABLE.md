@@ -136,7 +136,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
         value_item [, ...] -- 如果存在多个枚举值，则枚举值之间用英文逗号分隔。
 
     value_item ::=
-        { <value> | ( <value> [, ...] ) } -- 如果存在多个分区列，则每个分区列的值之间以英文逗号分隔。
+        { <value> | ( <value> [, ...] ) } -- 如果存在多个分区列，则每个分区列的值之间以英文逗号分隔，并且包裹在英文括号中。
     ```
 
 参数：
@@ -167,8 +167,8 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
   - 如果建表时指定分区列为 `datekey`，例如 `PARTITION BY RANGE (datekey)`，并且建表后需要批量新增多个分区，则可以执行：
 
     ```sql
-    ALTER TABLE site_access ADD PARTITIONS 
-        START ("2021-01-05") END ("2021-01-10") EVERY (INTERVAL 1 DAY);
+    ALTER TABLE site_access
+        ADD PARTITIONS START ("2021-01-05") END ("2021-01-10") EVERY (INTERVAL 1 DAY);
     ```
 
 - List 分区
