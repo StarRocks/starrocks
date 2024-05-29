@@ -81,6 +81,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
+import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.replication.ReplicationJob;
@@ -571,7 +572,8 @@ public class EditLog {
                 }
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
-                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
+                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(),
+                            FeConstants.STARROCKS_META_VERSION)) {
                         throw new JournalInconsistentException("Not compatible with meta version "
                                 + metaVersion.getStarRocksVersion()
                                 + ", current version is " + FeConstants.STARROCKS_META_VERSION);
@@ -618,7 +620,8 @@ public class EditLog {
                 }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
                     final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .replayUpsertTransactionStateBatch(stateBatch);
                     LOG.debug("opcode: {}, txn ids: {}", opCode, stateBatch.getTxnIds());
                     break;
                 }
@@ -853,7 +856,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
+                    globalStateMgr.getLocalMetastore()
+                            .replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
                     break;
                 }
                 case OperationType.OP_REPLACE_TEMP_PARTITION: {
@@ -1039,7 +1043,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+                    globalStateMgr.getLocalMetastore()
+                            .replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
                     break;
                 }
                 case OperationType.OP_CREATE_CATALOG: {
@@ -1210,6 +1215,10 @@ public class EditLog {
                 case OperationType.OP_RECOVER_PARTITION_VERSION: {
                     PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
+                    break;
+                }
+                case OperationType.OP_ADD_KEY: {
+                    globalStateMgr.getKeyMgr().replayAddKey((EncryptionKeyPB) journal.getData());
                     break;
                 }
                 default: {
@@ -1502,6 +1511,10 @@ public class EditLog {
 
     public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
         logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
+    }
+
+    public void logAddKey(EncryptionKeyPB key) {
+        logJsonObject(OperationType.OP_ADD_KEY, key);
     }
 
     public void logTimestamp(Timestamp stamp) {
@@ -1924,7 +1937,8 @@ public class EditLog {
             Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
+        RolePrivilegeCollectionInfo info =
+                new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logUpdateRolePrivilege(info);
     }
 
@@ -1936,7 +1950,8 @@ public class EditLog {
             Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
+        RolePrivilegeCollectionInfo info =
+                new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
     }
 

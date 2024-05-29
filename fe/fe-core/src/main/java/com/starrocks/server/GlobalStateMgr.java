@@ -115,6 +115,8 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.encryption.KeyMgr;
+import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -456,6 +458,9 @@ public class GlobalStateMgr {
 
     private final ReplicationMgr replicationMgr;
 
+    private final KeyMgr keyMgr;
+    private final KeyRotationDaemon keyRotationDaemon;
+
     private LockManager lockManager;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
@@ -747,6 +752,10 @@ public class GlobalStateMgr {
         });
 
         this.replicationMgr = new ReplicationMgr();
+
+        this.keyMgr = new KeyMgr();
+        this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
@@ -755,9 +764,11 @@ public class GlobalStateMgr {
         this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
         AccessControlProvider accessControlProvider;
         if (Config.access_control.equals("ranger")) {
-            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+            accessControlProvider =
+                    new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
         } else {
-            accessControlProvider = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
+            accessControlProvider =
+                    new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessController());
         }
         this.authorizer = new Authorizer(accessControlProvider);
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
@@ -955,6 +966,10 @@ public class GlobalStateMgr {
 
     public ReplicationMgr getReplicationMgr() {
         return replicationMgr;
+    }
+
+    public KeyMgr getKeyMgr() {
+        return keyMgr;
     }
 
     public LockManager getLockManager() {
@@ -1237,7 +1252,8 @@ public class GlobalStateMgr {
                 // configuration. If it is upgraded from an old version, the original
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
-                VariableMgr.setSystemVariable(VariableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+                VariableMgr.setSystemVariable(VariableMgr.getDefaultSessionVariable(),
+                        new SystemVariable(SetType.GLOBAL,
                                 SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
@@ -1251,6 +1267,11 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+        try {
+            keyMgr.initDefaultMasterKey();
+        } catch (InvalidConfException e) {
+            throw new IllegalStateException("init default master key failed", e);
+        }
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1276,6 +1297,8 @@ public class GlobalStateMgr {
 
         checkpointer.start();
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
+
+        keyRotationDaemon.start();
 
         // heartbeat mgr
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
@@ -1457,10 +1480,12 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                 .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
-        try (DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())))) {
+        try (DataInputStream dis = new DataInputStream(
+                new BufferedInputStream(Files.newInputStream(curFile.toPath())))) {
             loadHeader(dis);
             while (true) {
                 SRMetaBlockReader reader = new SRMetaBlockReader(dis);
@@ -1624,6 +1649,7 @@ public class GlobalStateMgr {
                 storageVolumeMgr.save(dos);
                 dictionaryMgr.save(dos);
                 replicationMgr.save(dos);
+                keyMgr.save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2280,7 +2306,8 @@ public class GlobalStateMgr {
         if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
             timeout = Config.thrift_rpc_timeout_ms * 10;
         } else {
-            timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
+            timeout =
+                    ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
         }
 
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
@@ -2325,7 +2352,8 @@ public class GlobalStateMgr {
             if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)
                     && !(table instanceof IcebergTable) && !(table instanceof JDBCTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps/jdbc external table/view");
+                        "table : " + tableName +
+                                " not exists, or is not hive/hudi/iceberg/odps/jdbc external table/view");
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);

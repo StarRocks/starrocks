@@ -28,9 +28,10 @@ enum EncryptionAlgorithmPB {
 message EncryptionKeyPB {
     optional int64 id = 1; // not required, e.g. DEK may not have an id
     optional int64 parent_id = 2; // not required, e.g. root key may not have parent
-    optional EncryptionKeyTypePB type = 3;
-    optional EncryptionAlgorithmPB algorithm = 4;
-    optional bytes encrypted_key = 5; // encrypted key raw bytes
+    optional int64 createTime = 3; // create timestamp
+    optional EncryptionKeyTypePB type = 4;
+    optional EncryptionAlgorithmPB algorithm = 5;
+    optional bytes encrypted_key = 6; // encrypted key raw bytes
 }
 
 // EncryptionMeta stores all key hierarchy info used to encrypt this file, e.g.
