@@ -296,7 +296,8 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
     }
 
     return std::make_shared<ConnectorChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
-                                                  std::move(morsel), scan_node, factory->get_chunk_buffer());
+                                                  std::move(morsel), scan_node, factory->get_chunk_buffer(),
+                                                  _enable_adaptive_io_tasks);
 }
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
@@ -610,12 +611,14 @@ void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
 
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                           ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
+                                           ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer,
+                                           bool enable_adaptive_io_tasks)
         : ChunkSource(op, runtime_profile, std::move(morsel), chunk_buffer),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()) {
+          _runtime_bloom_filters(op->runtime_bloom_filters()),
+          _enable_adaptive_io_tasks(enable_adaptive_io_tasks) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     auto* scan_morsel = (ScanMorsel*)_morsel.get();
@@ -662,8 +665,7 @@ ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 
-    ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
-    if (scan_op->enable_adaptive_io_tasks()) {
+    if (_enable_adaptive_io_tasks) {
         MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
         mem_tracker->release(_request_mem_tracker_bytes);
 
