@@ -33,7 +33,9 @@ namespace starrocks {
 class SegmentReplicateTask final : public Runnable {
 public:
     SegmentReplicateTask(ReplicateToken* replicate_token, std::unique_ptr<SegmentPB> segment, bool eos)
-            : _replicate_token(replicate_token), _segment(std::move(segment)), _eos(eos),
+            : _replicate_token(replicate_token),
+              _segment(std::move(segment)),
+              _eos(eos),
               _create_time_ns(MonotonicNanos()) {}
 
     ~SegmentReplicateTask() override = default;
