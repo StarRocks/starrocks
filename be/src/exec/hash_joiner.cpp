@@ -54,6 +54,13 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     build_buckets_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile, "BuildBuckets", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
+<<<<<<< HEAD
+=======
+    build_keys_per_bucket = ADD_COUNTER(runtime_profile, "BuildKeysPerBucket%", TUnit::UNIT);
+    hash_table_memory_usage = ADD_COUNTER(runtime_profile, "HashTableMemoryUsage", TUnit::BYTES);
+
+    partial_runtime_bloom_filter_bytes = ADD_COUNTER(runtime_profile, "PartialRuntimeBloomFilterBytes", TUnit::BYTES);
+>>>>>>> 16ec9c16fe ([Enhancement] add more profile and metrics to measure runtime bloom filter size (#46360))
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
