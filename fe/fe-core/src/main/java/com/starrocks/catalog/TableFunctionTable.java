@@ -217,6 +217,72 @@ public class TableFunctionTable extends Table {
                 throw new DdlException("failed to parse auto_detect_sample_files: ", e);
             }
         }
+<<<<<<< HEAD
+=======
+
+        if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_ROWS)) {
+            autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
+        } else {
+            try {
+                autoDetectSampleRows = Integer.parseInt(properties.get(PROPERTY_AUTO_DETECT_SAMPLE_ROWS));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse auto_detect_sample_files: ", e);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
+            csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH || len == 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
+                        PROPERTY_CSV_COLUMN_SEPARATOR, 1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
+            csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_ROW_DELIMITER_LENGTH || len == 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
+                        PROPERTY_CSV_ROW_DELIMITER, 1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ENCLOSE).getBytes();
+            if (bs.length == 0) {
+                throw new DdlException("empty property csv.enclose");
+            }
+            csvEnclose = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ESCAPE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ESCAPE).getBytes();
+            if (bs.length == 0) {
+                throw new DdlException("empty property csv.escape");
+            }
+            csvEscape = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_SKIP_HEADER)) {
+            try {
+                csvSkipHeader = Integer.parseInt(properties.get(PROPERTY_CSV_SKIP_HEADER));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse csv.skip_header: ", e);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_TRIM_SPACE)) {
+            String property = properties.get(PROPERTY_CSV_TRIM_SPACE);
+            if (property.equalsIgnoreCase("true")) {
+                csvTrimSpace = true;
+            } else if (property.equalsIgnoreCase("false")) {
+                csvTrimSpace = false;
+            } else {
+                throw new DdlException("illegal value of csv.trim_space: " + property + ", only true/false allowed");
+            }
+        }
+>>>>>>> 144b65cfc2 ([Enhancement] `files()` `csv.trim_space` error report (#44740))
     }
 
     private void parseFiles() throws DdlException {

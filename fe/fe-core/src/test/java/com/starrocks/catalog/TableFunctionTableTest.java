@@ -171,4 +171,56 @@ public class TableFunctionTableTest {
                         "'hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2'",
                 () -> new TableFunctionTable(properties));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testIllegalDelimiter() throws DdlException {
+        {
+            Map<String, String> properties = newProperties();
+            properties.put("csv.row_delimiter", "0123456789012345678901234567890123456789012345678901234567890");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
+                    () -> new TableFunctionTable(properties));
+            properties.put("csv.row_delimiter", "");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
+                    () -> new TableFunctionTable(properties));
+        }
+
+        {
+            Map<String, String> properties = newProperties();
+            properties.put("csv.column_separator", "0123456789012345678901234567890123456789" +
+                    "012345678901234567890");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "The valid bytes length for 'csv.column_separator' is [1, 50]",
+                    () -> new TableFunctionTable(properties));
+
+            properties.put("csv.column_separator", "");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "The valid bytes length for 'csv.column_separator' is [1, 50]",
+                    () -> new TableFunctionTable(properties));
+        }
+    }
+
+    @Test
+    public void testIllegalCSVTrimSpace() throws DdlException {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+            }
+        };
+
+        Map<String, String> properties = newProperties();
+        properties.put("csv.trim_space", "FALSE");
+
+        ExceptionChecker.expectThrowsNoException(() -> new TableFunctionTable(properties));
+
+        properties.put("csv.trim_space", "FALS");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "illegal value of csv.trim_space: FALS, only true/false allowed",
+                () -> new TableFunctionTable(properties));
+    }
+>>>>>>> 144b65cfc2 ([Enhancement] `files()` `csv.trim_space` error report (#44740))
 }
