@@ -137,6 +137,7 @@ PROPERTIES (
 -- !result
 create table cust_order_by_ctas ORDER BY (first_name,last_name) as select * from customers;
 -- result:
+E: (1064, 'Getting analyzing error. Detail message: only primary key support sort key.')
 -- !result
 create table cust_index_ctas (INDEX idx_bitmap_customer_id (customer_id) USING BITMAP) as select * from customers;
 -- result:
