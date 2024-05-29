@@ -16,7 +16,6 @@ package com.starrocks.connector.delta;
 
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
-import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.connector.metastore.IMetastore;
@@ -53,12 +52,10 @@ public class DeltaLakeMetadataFactory {
     }
 
     public DeltaLakeMetadata create() {
-        IMetastore queryLevelCacheMetastore = createQueryLevelCacheMetastore();
-        boolean enableCatalogLevelCache = metastore instanceof CachingHiveMetastore;
-
-        DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(catalogName, queryLevelCacheMetastore,
-                enableCatalogLevelCache,
-                hdfsEnvironment.getConfiguration(), metastoreType);
+        // todo(ywb） support query level cache later
+        IMetastore queryLevelCacheMetastore = metastore;
+        DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(queryLevelCacheMetastore,
+                false, metastoreType);
 
         return new DeltaLakeMetadata(hdfsEnvironment, catalogName, metastoreOperations);
     }

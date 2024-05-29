@@ -15,27 +15,20 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.metastore.IMetastore;
-import org.apache.hadoop.conf.Configuration;
 
 import java.util.List;
 
 public class DeltaMetastoreOperations {
-    private final String catalogName;
     private final IMetastore metastore;
     private final boolean enableCatalogLevelCache;
-    private final Configuration hadoopConf;
     private final MetastoreType metastoreType;
 
-    public DeltaMetastoreOperations(String catalogName, IMetastore metastore, boolean enableCatalogLevelCache,
-                                    Configuration hadoopConf, MetastoreType metastoreType) {
-        this.catalogName = catalogName;
+    public DeltaMetastoreOperations(IMetastore metastore, boolean enableCatalogLevelCache, MetastoreType metastoreType) {
         this.metastore = metastore;
         this.enableCatalogLevelCache = enableCatalogLevelCache;
-        this.hadoopConf = hadoopConf;
         this.metastoreType = metastoreType;
     }
 
@@ -52,17 +45,7 @@ public class DeltaMetastoreOperations {
     }
 
     public Table getTable(String dbName, String tableName) {
-        Table table = metastore.getTable(dbName, tableName);
-        if (table == null) {
-            return null;
-        }
-        if (table.isDeltalakeTable()) {
-            return table;
-        }
-        HiveTable hiveTable = (HiveTable) table;
-        String path = hiveTable.getTableLocation();
-        long createTime = table.getCreateTime();
-        return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, table.getName(), path, hadoopConf, createTime);
+        return metastore.getTable(dbName, tableName);
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {

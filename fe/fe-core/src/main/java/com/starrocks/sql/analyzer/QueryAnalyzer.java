@@ -35,10 +35,10 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -336,12 +336,12 @@ public class QueryAnalyzer {
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
-                } else if (table instanceof HiveView) {
-                    HiveView hiveView = (HiveView) table;
-                    QueryStatement queryStatement = hiveView.getQueryStatement();
-                    View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema(),
-                            Table.TableType.HIVE_VIEW);
-                    view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
+                } else if (table instanceof ConnectorView) {
+                    ConnectorView connectorView = (ConnectorView) table;
+                    QueryStatement queryStatement = connectorView.getQueryStatement();
+                    View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
+                            connectorView.getType());
+                    view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
 

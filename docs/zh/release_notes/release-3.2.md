@@ -4,6 +4,42 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+## 3.2.7
+
+发布日期：2024 年 5 月 24 日
+
+### 新增特性
+
+- Stream Load 支持在传输过程中对数据进行压缩，减少网络带宽开销。可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。[#43732](https://github.com/StarRocks/starrocks/pull/43732)
+- 优化了存算分离集群的垃圾回收机制，支持手动对表或分区进行 Compaction 操作，可以更高效的回收对象存储上的数据。[#39532](https://github.com/StarRocks/starrocks/issues/39532)
+- 支持从 StarRocks 读取 ARRAY、MAP 和 STRUCT 等复杂类型的数据，并以 Arrow 格式可提供给 Flink connector 读取使用。[#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+- 支持查询时异步填充 Data Cache，从而减少缓存填充对首次查询性能影响。[#40489](https://github.com/StarRocks/starrocks/pull/40489)
+- 外表 ANALYZE TABLE 命令支持收集直方图统计信息，可以有效应对数据倾斜场景。参见 [CBO 统计信息]( https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/#%E9%87%87%E9%9B%86-hiveiceberghudi-%E8%A1%A8%E7%9A%84%E7%BB%9F%E8%AE%A1%E4%BF%A1%E6%81%AF)。[#42693](https://github.com/StarRocks/starrocks/pull/42693)
+- Lateral Join 结合 [UNNEST](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/unnest/) 支持 LEFT JOIN。[#43973](https://github.com/StarRocks/starrocks/pull/43973)
+- Query Pool 内存支持通过 BE 静态参数 `query_pool_spill_mem_limit_threshold` 配置 Spill 阈值，如果超过阈值，查询可以通过中间结果落盘的方式降低内存占用减少 OOM。[#44063](https://github.com/StarRocks/starrocks/pull/44063)
+- 支持基于 Hive View 创建异步物化视图。[#45085](https://github.com/StarRocks/starrocks/pull/45085)
+
+### 功能优化
+
+- 优化 Broker Load 任务导入 HDFS 数据时对应路径下没有数据时的报错信息。[#43839](https://github.com/StarRocks/starrocks/pull/43839)
+- 优化 Files 函数读取 S3 数据场景下没有配置 Access Key 和 Secret Key 的报错信息。[#42450](https://github.com/StarRocks/starrocks/pull/42450)
+- 优化 Broker Load 导入时任何分区下均没有数据导入的报错信息。[#44292](https://github.com/StarRocks/starrocks/pull/44292)
+- 优化 INSERT INTO SELECT 导入时，目标表与 SELECT 列数据不匹配的场景下的报错信息。[#44331](https://github.com/StarRocks/starrocks/pull/44331)
+
+### 问题修复
+
+修复了如下问题：
+
+- BITMAP 类型在并发读写场景下可能会导致 BE Crash。[#44167](https://github.com/StarRocks/starrocks/pull/44167)
+- 主键索引可能会导致 BE Crash。[#43793](https://github.com/StarRocks/starrocks/pull/43793) [#43569](https://github.com/StarRocks/starrocks/pull/43569) [#44034](https://github.com/StarRocks/starrocks/pull/44034)
+- str_to_map 函数并发场景下可能会导致 BE Crash。[#43901](https://github.com/StarRocks/starrocks/pull/43901)
+- Apache Ranger 的 Masking 策略下，在查询中添加表的别名报错。[#44445](https://github.com/StarRocks/starrocks/pull/44445)
+- 存算分离模式下执行过程中某个节点异常，无法路由到备用节点。同时针对该问题，优化部分报错信息。[#43489](https://github.com/StarRocks/starrocks/pull/43489)
+- 在容器环境下获取内存信息不正确。[#43225](https://github.com/StarRocks/starrocks/issues/43225)
+- 取消 INSERT 任务时抛出异常。[#44239](https://github.com/StarRocks/starrocks/pull/44239)
+- 无法动态创建基于表达式的动态分区。[#44163](https://github.com/StarRocks/starrocks/pull/44163)
+- 创建分区可能导致 FE 死锁。[#44974](https://github.com/StarRocks/starrocks/pull/44974)
+
 ## 3.2.6
 
 发布日期：2024 年 4 月 18 日

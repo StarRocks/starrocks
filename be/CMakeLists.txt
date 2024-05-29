@@ -59,11 +59,13 @@ message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # Set dirs
 set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(RELATIVE_BASE_DIR "be")
+set(FILE_PREFIX_MAP_FLAG "-ffile-prefix-map=${BASE_DIR}=${RELATIVE_BASE_DIR}")
 set(BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
-set(GENSRC_DIR "${BASE_DIR}/../gensrc/build/")
 set(SRC_DIR "${BASE_DIR}/src/")
+set(GENSRC_DIR "${SRC_DIR}/gen_cpp/build")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
@@ -99,13 +101,6 @@ option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
         message(FATAL_ERROR "Need GCC version at least 4.8.2")
-    endif()
-
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "10.3.0")
-        message(STATUS "GCC version ${CMAKE_CXX_COMPILER_VERSION} is greater than 10.3.0, disable -Werror. Be careful with compile warnings.")
-    else()
-        #   -Werror: compile warnings should be errors when using the toolchain compiler.
-        set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -Werror")
     endif()
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 elseif (NOT APPLE)
@@ -387,6 +382,15 @@ set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
+find_package(absl CONFIG REQUIRED)
+set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
+find_package(gRPC CONFIG REQUIRED)
+message(STATUS "Using gRPC ${gRPC_VERSION}")
+get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
+add_library(protobuf::libprotobuf ALIAS protobuf)
+
 # Disable libdefalte on aarch64
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(libdeflate STATIC IMPORTED GLOBAL)
@@ -459,15 +463,10 @@ if ("${USE_STAROS}" STREQUAL "ON")
         message(STATUS "Searching starlet related libraries from ${STARLET_INSTALL_DIR} ...")
     endif()
 
-    # explicitly import ZLIB::ZLIB which is required by starlet thirdparty
-    add_library(ZLIB::ZLIB STATIC IMPORTED)
-    set_target_properties(ZLIB::ZLIB PROPERTIES IMPORTED_LOCATION ${LIBZ})
-
     # Tell cmake that PROTOBUF library is already found
     set(PROTOBUF_FOUND TRUE)
     # starrocks project has its imported libprotobuf.a and libre2.a
     # add following ALIAS so grpc can find the correct dependent libraries
-    add_library(protobuf::libprotobuf ALIAS protobuf)
     add_library(re2::re2 ALIAS re2)
     add_library(glog::glog ALIAS glog)
     add_library(gflags::gflags_static ALIAS gflags)
@@ -479,20 +478,11 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(starcache::starcache ALIAS starcache)
     add_library(Snappy::snappy ALIAS snappy)
 
-    set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
-    find_package(absl CONFIG REQUIRED)
-
     # required by azure-*
     set(LIBXML2_INCLUDE_DIR "${STARLET_INSTALL_DIR}/third_party/include/libxml2" CACHE PATH "libxml2 include path")
     set(LIBXML2_LIBRARY "${STARLET_INSTALL_DIR}/third_party/lib/libxml2.a" CACHE FILEPATH "libxml2 static library")
     add_library(libxml2 STATIC IMPORTED GLOBAL)
     set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${LIBXML2_LIBRARY})
-
-    set(gRPC_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc" CACHE PATH "grpc search path")
-    find_package(gRPC CONFIG REQUIRED)
-    message(STATUS "Using gRPC ${gRPC_VERSION}")
-    get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-    include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
     set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
     find_package (prometheus-cpp CONFIG REQUIRED)
@@ -627,6 +617,7 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-p
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} ${FILE_PREFIX_MAP_FLAG}")
 # disable link delete(void*, long)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
@@ -775,6 +766,8 @@ endif()
 
 # Add flags that are common across build types
 SET(CMAKE_CXX_FLAGS "${CXX_COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
+# apply -ffile-prefix-map option to .c source files as well
+SET(CMAKE_C_FLAGS "${FILE_PREFIX_MAP_FLAG} ${CMAKE_C_FLAGS}")
 
 message(STATUS "Compiler Flags: ${CMAKE_CXX_FLAGS}")
 
@@ -897,6 +890,9 @@ set(STARROCKS_DEPENDENCIES
     zstd
     streamvbyte
     arrow
+    arrow_flight
+    gRPC::grpc
+    gRPC::grpc++
     jemalloc # required by arrow
     parquet
     orc

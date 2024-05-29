@@ -22,11 +22,13 @@ StarRocks 底层数据是按列存储在数据文件。每个数据文件会包�
 
 ### 创建全文倒排索引
 
-:::note
+创建全文倒排索引前，需要开启 FE 配置项 `enable_experimental_gin`。
 
-仅明细表支持全文倒排索引并且必须设置表属性 `replicated_storage`为 `false`。
+```sql
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+```
 
-:::
+并且创建时，仅支持表的类型为明细表并且必须设置表属性 `replicated_storage` 为 `false`。
 
 #### 建表时创建全文倒排索引
 
@@ -99,7 +101,7 @@ ALTER TABLE t DROP index idx;
 
 ### 借助全文倒排索引进行查询
 
-创建了全文倒排索引之后，您还需要根据索引列值是否进行分词处理来确定哪些查询能够利用索引加速。
+创建了全文倒排索引之后，您需要确保开启系统变量 `enable_gin_filter`，才能利用倒排索引加速查询。并且，您还需要根据索引列值是否进行分词处理来确定哪些查询能够利用索引加速。
 
 #### 索引列进行分词时支持的查询
 

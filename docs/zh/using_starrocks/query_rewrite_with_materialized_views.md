@@ -985,10 +985,10 @@ mysql> EXPLAIN LOGICAL
 
 ## 基于 External Catalog 构建物化视图
 
-StarRocks 支持基于 Hive Catalog、Hudi Catalog 和 Iceberg Catalog 的外部数据源上构建异步物化视图，并支持透明地改写查询。基于 External Catalog 的物化视图支持大多数查询改写功能，但存在以下限制：
+StarRocks 支持基于 Hive Catalog、Hudi Catalog、Iceberg Catalog 和 Paimon Catalog 的外部数据源上构建异步物化视图，并支持透明地改写查询。基于 External Catalog 的物化视图支持大多数查询改写功能，但存在以下限制：
 
-- 基于 Hudi、Iceberg 和 JDBC Catalog 创建的物化视图不支持 Union 改写。
-- 基于 Hudi、Iceberg 和 JDBC Catalog 创建的物化视图不支持 View Delta Join 改写。
+- 基于 Hudi、Iceberg、Paimon 和 JDBC Catalog 创建的物化视图不支持 Union 改写。
+- 基于 Hudi、Iceberg、Paimon 和 JDBC Catalog 创建的物化视图不支持 View Delta Join 改写。
 - 基于 Hudi、Iceberg 和 JDBC Catalog 创建的物化视图不支持分区增量刷新。
 
 ## 基于文本的物化视图改写

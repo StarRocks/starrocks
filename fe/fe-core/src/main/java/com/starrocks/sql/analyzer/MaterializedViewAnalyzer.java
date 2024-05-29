@@ -134,7 +134,8 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.KUDU,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
-                    Table.TableType.HIVE_VIEW);
+                    Table.TableType.HIVE_VIEW,
+                    Table.TableType.ICEBERG_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
@@ -247,7 +248,8 @@ public class MaterializedViewAnalyzer {
             // check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation) &&
                     !(queryStatement.getQueryRelation() instanceof SetOperationRelation)) {
-                throw new SemanticException("Materialized view query statement only support select or set operation",
+                throw new SemanticException("Materialized view query statement only supports a single query block or " +
+                        "multiple query blocks in set operations",
                         queryStatement.getQueryRelation().getPos());
             }
 

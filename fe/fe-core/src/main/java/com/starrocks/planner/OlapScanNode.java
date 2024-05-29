@@ -286,14 +286,16 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
-    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds,
-                                             Set<String> aggOrPrimaryKeyTableValueColumnNames) {
+    public List<SlotDescriptor> getSlots() {
+        return desc.getSlots();
+    }
+
+    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds) {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
                 continue;
             }
-            if (unUsedOutputColumnIds.contains(slot.getId().asInt()) &&
-                    !aggOrPrimaryKeyTableValueColumnNames.contains(slot.getColumn().getName())) {
+            if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
                 unUsedOutputStringColumns.add(slot.getColumn().getName());
             }
         }

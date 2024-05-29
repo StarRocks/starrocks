@@ -597,8 +597,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildCompressionType() {
-        compressionType = TCompressionType.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
-                TCompressionType.LZ4_FRAME.name()));
+        String compression = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
+                TCompressionType.LZ4_FRAME.name());
+        for (TCompressionType type : TCompressionType.values()) {
+            if (type.name().equalsIgnoreCase(compression)) {
+                compressionType = type;
+                return this;
+            }
+        }
+        compressionType = TCompressionType.LZ4_FRAME;
         return this;
     }
 
@@ -657,7 +664,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 return "UNKNOWN";
         }
     }
-
 
     public TableProperty buildConstraint() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {

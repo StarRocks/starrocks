@@ -169,7 +169,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_TYPE = "query_cache_type";
     public static final String INTERACTIVE_TIMEOUT = "interactive_timeout";
     public static final String WAIT_TIMEOUT = "wait_timeout";
-    public static final String WAREHOUSE = "warehouse";
 
     public static final String CATALOG = "catalog";
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
