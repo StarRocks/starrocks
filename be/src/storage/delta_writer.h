@@ -79,7 +79,6 @@ enum State {
 
 // Statistics for DeltaWriter
 struct DeltaWriterStat {
-
     int32_t task_count = 0;
     int64_t pending_time_ns = 0;
 
@@ -95,7 +94,7 @@ struct DeltaWriterStat {
     int32_t memtable_full_count = 0;
     // The number that reach memory limit, and each will
     // trigger memtable flush, and wait for it to finish
-    int32_t memory_excedd_count = 0;
+    int32_t memory_exceed_count = 0;
     // Accumulated time to wait for flush because of reaching memory limit
     int64_t write_wait_flush_tims_ns = 0;
 

@@ -622,7 +622,7 @@ Status DeltaWriter::_flush_memtable() {
     watch.start();
     Status st = _flush_token->wait();
     auto elapsed_time = watch.elapsed_time();
-    _stats.memory_excedd_count += 1;
+    _stats.memory_exceed_count += 1;
     _stats.write_wait_flush_tims_ns += elapsed_time;
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(elapsed_time / 1000);
     return st;
