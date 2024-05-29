@@ -40,7 +40,6 @@ public:
     ShortCircuitHybridScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
                                const TScanRange& scan_range, TExecShortCircuitParams& common_request)
             : ScanNode(pool, tnode, descs),
-              _tnode(tnode),
               _common_request(common_request),
               _tuple_id(tnode.olap_scan_node.tuple_id) {}
 
@@ -54,7 +53,6 @@ public:
     Status _process_value_chunk(std::vector<bool>& found);
 
 private:
-    const TPlanNode& _tnode;
     TableReaderPtr _table_reader;
     TExecShortCircuitParams& _common_request;
     TDescriptorTable* _t_desc_tbl;
