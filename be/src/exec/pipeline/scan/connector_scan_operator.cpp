@@ -296,7 +296,8 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
     }
 
     return std::make_shared<ConnectorChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
-                                                  std::move(morsel), scan_node, factory->get_chunk_buffer());
+                                                  std::move(morsel), scan_node, factory->get_chunk_buffer(),
+                                                  _enable_adaptive_io_tasks);
 }
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
