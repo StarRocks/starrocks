@@ -436,7 +436,7 @@ PARALLEL_TEST(JsonParserTest, test_big_illegal_document_stream) {
 
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     simdjson::ondemand::object row;
 
@@ -499,7 +499,7 @@ PARALLEL_TEST(JsonParserTest, test_big_illegal_json_array) {
 
     std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     ASSERT_TRUE(st.ok());
 
