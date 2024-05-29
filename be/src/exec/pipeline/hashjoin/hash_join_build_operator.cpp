@@ -14,9 +14,11 @@
 
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 
+#include <numeric>
 #include <utility>
 
 #include "exec/pipeline/query_context.h"
+#include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/race_detect.h"
@@ -141,6 +143,16 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         if (all_build_merged) {
             auto&& in_filters = _partial_rf_merger->get_total_in_filters();
             auto&& bloom_filters = _partial_rf_merger->get_total_bloom_filters();
+
+            {
+                size_t total_bf_bytes = std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
+                                                        [](size_t total, RuntimeFilterBuildDescriptor* desc) -> size_t {
+                                                            auto rf = desc->runtime_filter();
+                                                            total += (rf == nullptr ? 0 : rf->bf_alloc_size());
+                                                            return total;
+                                                        });
+                COUNTER_UPDATE(_join_builder->build_metrics().partial_runtime_bloom_filter_bytes, total_bf_bytes);
+            }
 
             // publish runtime bloom-filters
             state->runtime_filter_port()->publish_runtime_filters(bloom_filters);

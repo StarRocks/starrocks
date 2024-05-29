@@ -29,6 +29,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "util/blocking_queue.hpp"
 #include "util/ref_count_closure.h"
+#include "util/system_metrics.h"
 #include "util/uid_util.h"
 namespace starrocks {
 
@@ -113,6 +114,35 @@ private:
     const bool _is_pipeline;
 };
 
+enum EventType {
+    RECEIVE_TOTAL_RF = 0,
+    CLOSE_QUERY = 1,
+    OPEN_QUERY = 2,
+    RECEIVE_PART_RF = 3,
+    SEND_PART_RF = 4,
+    SEND_BROADCAST_GRF = 5,
+    MAX_COUNT,
+};
+
+inline std::string EventTypeToString(EventType type) {
+    switch (type) {
+    case RECEIVE_TOTAL_RF:
+        return "RECEIVE_TOTAL_RF";
+    case CLOSE_QUERY:
+        return "CLOSE_QUERY";
+    case OPEN_QUERY:
+        return "OPEN_QUERY";
+    case RECEIVE_PART_RF:
+        return "RECEIVE_PART_RF";
+    case SEND_PART_RF:
+        return "SEND_PART_RF";
+    case SEND_BROADCAST_GRF:
+        return "SEND_BROADCAST_GRF";
+    default:
+        break;
+    }
+    __builtin_unreachable();
+}
 // RuntimeFilterWorker works in a separated thread, and does following jobs:
 // 1. deserialize runtime filters.
 // 2. merge runtime filters.
@@ -124,6 +154,16 @@ private:
 // - send partitioned RF(for hash join node)
 // - close a query(delete runtime filter merger)
 struct RuntimeFilterWorkerEvent;
+
+struct RuntimeFilterWorkerMetrics {
+    void update_event_nums(EventType event_type, int64_t delta) { event_nums[event_type] += delta; }
+
+    void update_rf_bytes(EventType event_type, int64_t delta) { runtime_filter_bytes[event_type] += delta; }
+
+    std::array<std::atomic_int64_t, EventType::MAX_COUNT> event_nums{};
+    std::array<std::atomic_int64_t, EventType::MAX_COUNT> runtime_filter_bytes{};
+};
+
 class RuntimeFilterWorker {
 public:
     RuntimeFilterWorker(ExecEnv* env);
@@ -143,6 +183,7 @@ public:
                                        int64_t rpc_http_min_size);
 
     size_t queue_size() const;
+    const RuntimeFilterWorkerMetrics* metrics() const { return _metrics; }
 
 private:
     void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params);
@@ -166,6 +207,7 @@ private:
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
     ExecEnv* _exec_env;
     std::thread _thread;
+    RuntimeFilterWorkerMetrics* _metrics = nullptr;
 };
 
 }; // namespace starrocks
