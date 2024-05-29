@@ -631,6 +631,8 @@ jstat -gcutil pid 1000 1000
 
    14. 如果数据和元数据完整，且该节点的角色是 Leader，可以删除之前添加的配置并重新启动节点。
 
+    </TabItem>
+
   </Tabs>
 
 6. 存活的 Follower 节点是集群当前实质上的 Leader 节点。删除除了当前节点外所有 FE 节点。

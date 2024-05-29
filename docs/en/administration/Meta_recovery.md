@@ -636,6 +636,8 @@ Follow these steps to recover the metadata:
 
    14. If the data and metadata are intact, and the role of the node is Leader, you can remove the configuration you added earlier and restart the node.
 
+    </TabItem>
+
   </Tabs>
 
 6. The surviving Follower node is now essentially the Leader node of the cluster. Drop all FE nodes except for the current node.
