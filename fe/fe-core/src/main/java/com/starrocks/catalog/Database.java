@@ -686,17 +686,9 @@ public class Database extends MetaObject implements Writable {
                     throw new UserException("function already exists");
                 }
             }
-            // Get function id for this UDF, use CatalogIdGenerator. Only get function id
-            // when isReplay is false
-            long functionId = GlobalStateMgr.getCurrentState().getNextId();
-            // all user-defined functions id are negative to avoid conflicts with the builtin function
-            function.setFunctionId(-functionId);
+            GlobalFunctionMgr.assignIdToUserDefinedFunction(function);
         }
-
-        existFuncs = existFuncs.stream()
-                .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
-                .collect(ImmutableList.toImmutableList());
-        name2Function.put(functionName, ImmutableList.<Function>builder().addAll(existFuncs).add(function).build());
+        name2Function.put(functionName, GlobalFunctionMgr.addOrReplaceFunction(function, existFuncs));
     }
 
     public synchronized void dropFunction(FunctionSearchDesc function) throws UserException {

@@ -85,17 +85,37 @@ public class GlobalFunctionMgr {
                     throw new UserException("function already exists");
                 }
             }
-            // Get function id for this UDF, use CatalogIdGenerator. Only get function id
-            // when isReplay is false
-            long functionId = GlobalStateMgr.getCurrentState().getNextId();
-            // all user-defined functions id are negative to avoid conflicts with the builtin function
-            function.setFunctionId(-functionId);
+            assignIdToUserDefinedFunction(function);
         }
+        name2Function.put(functionName, addOrReplaceFunction(function, existFuncs));
+    }
 
-        existFuncs = existFuncs.stream()
-                .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
-                .collect(ImmutableList.toImmutableList());
-        name2Function.put(functionName, ImmutableList.<Function>builder().addAll(existFuncs).add(function).build());
+    /**
+     * Add the function to the given list of functions. If an identical function exists within the list, it is replaced
+     * by the incoming function.
+     *
+     * @param function   The function to be added.
+     * @param existFuncs The list of functions to which the function is added. This list is not modified.
+     * @return a new list of functions with the given function added or replaced.
+     */
+    public static ImmutableList<Function> addOrReplaceFunction(Function function, List<Function> existFuncs) {
+        return ImmutableList.<Function>builder()
+                .addAll(existFuncs.stream()
+                        .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
+                        .collect(ImmutableList.toImmutableList()))
+                .add(function)
+                .build();
+    }
+
+    /**
+     * Assign a globally unique id to the given user-defined function.
+     * All user-defined functions IDs are negative to avoid conflicts with the builtin function.
+     *
+     * @param function Function to be modified.
+     */
+    public static void assignIdToUserDefinedFunction(Function function) {
+        long functionId = GlobalStateMgr.getCurrentState().getNextId();
+        function.setFunctionId(-functionId);
     }
 
     public synchronized void userAddFunction(Function f, boolean allowExists) throws UserException {
