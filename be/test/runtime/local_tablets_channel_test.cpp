@@ -220,10 +220,12 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
         add_chunk_request.add_partition_ids(_partition_id);
     }
 
+    bool close_channel;
     PTabletWriterAddBatchResult add_chunk_response;
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK)
             << add_chunk_response.status().error_msgs(0);
+    ASSERT_TRUE(close_channel);
 
     auto* profile = _root_profile->get_child(fmt::format("Index (id={})", _index_id));
     ASSERT_NE(nullptr, profile);
