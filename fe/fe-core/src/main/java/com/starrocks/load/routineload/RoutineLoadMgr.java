@@ -43,6 +43,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -200,28 +202,35 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             // collect all nodes group by warehouse
             if (RunMode.isSharedDataMode()) {
                 for (Warehouse warehouse : GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses()) {
-                    List<Long> allComputeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getAllComputeNodeIds(warehouse.getId());
-                    List<Long> aliveNodeIds = new ArrayList<>();
-                    for (long nodeId : allComputeNodeIds) {
-                        ComputeNode node =
-                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
-                        if (node != null && node.isAlive()) {
-                            aliveNodeIds.add(nodeId);
+                    try {
+                        List<Long> allComputeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getAllComputeNodeIds(warehouse.getId());
+                        List<Long> aliveNodeIds = new ArrayList<>();
+                        for (long nodeId : allComputeNodeIds) {
+                            ComputeNode node =
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                            .getBackendOrComputeNode(nodeId);
+                            if (node != null && node.isAlive()) {
+                                aliveNodeIds.add(nodeId);
+                            }
                         }
-                    }
 
-                    finalAliveNodeIds.addAll(aliveNodeIds);
+                        finalAliveNodeIds.addAll(aliveNodeIds);
 
-                    // add new nodes
-                    Map<Long, Integer> nodesInfo = warehouseNodeTasksNum.get(warehouse.getId());
-                    if (nodesInfo == null) {
-                        nodesInfo = new HashMap<>();
-                        warehouseNodeTasksNum.put(warehouse.getId(), nodesInfo);
-                    }
-                    for (Long nodeId : aliveNodeIds) {
-                        if (!nodesInfo.containsKey(nodeId)) {
-                            nodesInfo.put(nodeId, 0);
+                        // add new nodes
+                        Map<Long, Integer> nodesInfo = warehouseNodeTasksNum.get(warehouse.getId());
+                        if (nodesInfo == null) {
+                            nodesInfo = new HashMap<>();
+                            warehouseNodeTasksNum.put(warehouse.getId(), nodesInfo);
+                        }
+                        for (Long nodeId : aliveNodeIds) {
+                            if (!nodesInfo.containsKey(nodeId)) {
+                                nodesInfo.put(nodeId, 0);
+                            }
+                        }
+                    } catch (ErrorReportException e) {
+                        if (e.getErrorCode() != ErrorCode.ERR_WAREHOUSE_SUSPENDED) {
+                            throw e;
                         }
                     }
                 }

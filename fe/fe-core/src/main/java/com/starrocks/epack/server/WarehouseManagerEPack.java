@@ -77,6 +77,13 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
     }
 
+    /**
+     * get all compute node from warehouse. Note: the warehouse should exist and be available, otherwise exception will be thrown.
+     *
+     * @param warehouseId
+     * @return
+     * @exceptions ERR_UNKNOWN_WAREHOUSE, ERR_WAREHOUSE_SUSPENDED
+     */
     @Override
     public List<Long> getAllComputeNodeIds(long warehouseId) {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
