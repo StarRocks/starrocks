@@ -1454,11 +1454,11 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             if (!needAlter) {
-                LOG.info("index[{}] is not changed. ignore", alterIndexId);
+                LOG.debug("index[{}] is not changed. ignore", alterIndexId);
                 continue;
             }
 
-            LOG.info("index[{}] is changed. start checking...", alterIndexId);
+            LOG.debug("index[{}] is changed. start checking...", alterIndexId);
             // 1. check order: a) has key; b) value after key
             boolean meetValue = false;
             boolean hasKey = false;

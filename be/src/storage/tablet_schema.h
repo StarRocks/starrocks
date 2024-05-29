@@ -165,8 +165,6 @@ public:
     const TabletColumn& subcolumn(uint32_t i) const { return _extra_fields->sub_columns[i]; }
 
     const TabletColumn* subcolumn_ptr(uint32_t i) const { 
-        LOG(INFO) << "i:" << i << ", total:" << _extra_fields->sub_columns.size();
-        //CHECK(i < _extra_fields->sub_columns.size());
         if (i >= subcolumn_count()) {
             return nullptr;
         }

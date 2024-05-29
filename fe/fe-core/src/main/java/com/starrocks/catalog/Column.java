@@ -733,40 +733,31 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Column other = (Column) obj;
 
         if (!this.name.equalsIgnoreCase(other.getName())) {
-            LOG.info("name not equal");
             return false;
         }
         if (!this.getType().equals(other.getType())) {
-            LOG.info("type not equal");
             return false;
         }
         if (this.aggregationType != other.getAggregationType()) {
-            LOG.info("not equal 1");
             return false;
         }
         if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
-            LOG.info("not equal 2");
             return false;
         }
         if (this.isKey != other.isKey()) {
-            LOG.info("not equal 3");
             return false;
         }
         if (this.isAllowNull != other.isAllowNull) {
-            LOG.info("not equal 4");
             return false;
         }
         if (!this.isSameDefaultValue(other)) {
-            LOG.info("not equal 5");
             return false;
         }
         if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
-            LOG.info("not equal 6");
             return false;
         }
         if (this.isGeneratedColumn() &&
                 !this.generatedColumnExpr().equals(other.generatedColumnExpr())) {
-            LOG.info("not equal 7");
             return false;
         }
 
