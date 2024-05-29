@@ -14,6 +14,8 @@ set catalog mv_hive_${uuid0};
 create database mv_hive_db_${uuid0};
 use mv_hive_db_${uuid0};
 
+shell: hadoop fs -test -d ${hdfs_path}/tbl_for_refresh && hadoop fs -rm -r ${hdfs_path}/tbl_for_refresh >/dev/null || echo "exit 0" >/dev/null
+
 CREATE EXTERNAL TABLE tbl_for_refresh (
   num int,
   dt date
@@ -50,8 +52,6 @@ ALTER TABLE tbl_for_refresh ADD PARTITION p20200701 VALUES in ('2020-07-01');
 ALTER TABLE tbl_for_refresh ADD PARTITION p20200702 VALUES in ('2020-07-02');
 ALTER TABLE tbl_for_refresh ADD PARTITION p20200703 VALUES in ('2020-07-03');
 ALTER TABLE tbl_for_refresh ADD PARTITION p20200704 VALUES in ('2020-07-04');
-
-INSERT OVERWRITE tbl_for_refresh VALUES (6,"2020-07-04");
 
 set catalog default_catalog;
 use db_${uuid0};
