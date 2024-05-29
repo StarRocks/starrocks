@@ -44,7 +44,7 @@ public:
 private:
     struct StreamWithStatus {
         std::unique_ptr<Stream> stream;
-        std::future<Status> async_status; // TODO: remove
+        std::future<Status> async_status;
     };
 
     std::deque<StreamWithStatus> _queue;

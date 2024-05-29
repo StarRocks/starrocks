@@ -14,6 +14,7 @@
 
 #include "connector_sink_operator.h"
 
+#include <tuple>
 #include <utility>
 
 #include "connector/async_flush_stream_poller.h"

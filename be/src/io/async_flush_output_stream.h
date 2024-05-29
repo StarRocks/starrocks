@@ -46,7 +46,7 @@ public:
 
         bool is_empty() { return buffer_.empty(); }
 
-        Buffer* get_buffer() { return &buffer_; }
+        Buffer* get_buffer_ptr() { return &buffer_; }
 
     private:
         Buffer buffer_;

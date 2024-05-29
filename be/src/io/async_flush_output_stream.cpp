@@ -50,13 +50,13 @@ Status AsyncFlushOutputStream::write(const uint8_t* data, int64_t size) {
         while (!_slice_chunk_queue.empty() && _slice_chunk_queue.front()->is_full()) {
             auto chunk = _slice_chunk_queue.front();
             _slice_chunk_queue.pop_front();
-            _releasable_bytes.fetch_add(chunk->get_buffer()->capacity());
+            _releasable_bytes.fetch_add(chunk->get_buffer_ptr()->capacity());
 
             auto task = [this, chunk]() {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
                 CurrentThread::current().set_query_id(_runtime_state->query_id());
                 CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-                auto buffer = chunk->get_buffer();
+                auto buffer = chunk->get_buffer_ptr();
                 DeferOp op([this, chunk, capacity = buffer->capacity()] {
                     _releasable_bytes.fetch_sub(capacity);
                     delete chunk;
@@ -92,12 +92,12 @@ Status AsyncFlushOutputStream::close() {
     if (!_slice_chunk_queue.empty() && !_slice_chunk_queue.front()->is_empty()) {
         auto chunk = _slice_chunk_queue.front();
         _slice_chunk_queue.pop_front();
-        _releasable_bytes.fetch_add(chunk->get_buffer()->capacity());
+        _releasable_bytes.fetch_add(chunk->get_buffer_ptr()->capacity());
         auto task = [&, chunk]() {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
             CurrentThread::current().set_query_id(_runtime_state->query_id());
             CurrentThread::current().set_fragment_instance_id(_runtime_state->fragment_instance_id());
-            auto buffer = chunk->get_buffer();
+            auto buffer = chunk->get_buffer_ptr();
             DeferOp op([this, chunk, capacity = buffer->capacity()] {
                 _releasable_bytes.fetch_sub(capacity);
                 delete chunk;

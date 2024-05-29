@@ -14,7 +14,9 @@
 
 #include "async_flush_stream_poller.h"
 
-void starrocks::connector::AsyncFlushStreamPoller::enqueue(std::unique_ptr<Stream> stream) {
+namespace starrocks::connector {
+
+void AsyncFlushStreamPoller::enqueue(std::unique_ptr<Stream> stream) {
     auto async_status = stream->io_status();
     _queue.push_back({
             .stream = std::move(stream),
@@ -22,7 +24,7 @@ void starrocks::connector::AsyncFlushStreamPoller::enqueue(std::unique_ptr<Strea
     });
 }
 
-pair<Status, bool> starrocks::connector::AsyncFlushStreamPoller::poll() {
+pair<Status, bool> AsyncFlushStreamPoller::poll() {
     Status status;
     while (!_queue.empty()) {
         auto& f = _queue.front();
@@ -36,10 +38,12 @@ pair<Status, bool> starrocks::connector::AsyncFlushStreamPoller::poll() {
     return {status, _queue.empty()};
 }
 
-int64_t starrocks::connector::AsyncFlushStreamPoller::releasable_memory() {
+int64_t AsyncFlushStreamPoller::releasable_memory() {
     int64_t releasable_memory = 0;
     for (auto& ss : _queue) {
         releasable_memory += ss.stream->releasable_memory();
     }
     return releasable_memory;
 }
+
+} // namespace starrocks::connector
