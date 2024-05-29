@@ -218,6 +218,7 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
         rf_desc->set_shared_runtime_filter(rf);
     }
 }
+
 RuntimeFilterMerger::RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options,
                                          bool is_pipeline)
         : _exec_env(env), _query_id(query_id), _query_options(query_options), _is_pipeline(is_pipeline) {}
@@ -496,15 +497,6 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     pool->clear();
 }
 
-enum EventType {
-    RECEIVE_TOTAL_RF = 0,
-    CLOSE_QUERY = 1,
-    OPEN_QUERY = 2,
-    RECEIVE_PART_RF = 3,
-    SEND_PART_RF = 4,
-    SEND_BROADCAST_GRF = 5,
-};
-
 struct RuntimeFilterWorkerEvent {
 public:
     RuntimeFilterWorkerEvent() = default;
@@ -532,9 +524,14 @@ static_assert(std::is_move_assignable<RuntimeFilterWorkerEvent>::value);
 
 RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread([this] { execute(); }) {
     Thread::set_thread_name(_thread, "runtime_filter");
+    _metrics = new RuntimeFilterWorkerMetrics();
 }
 
-RuntimeFilterWorker::~RuntimeFilterWorker() = default;
+RuntimeFilterWorker::~RuntimeFilterWorker() {
+    if (_metrics) {
+        delete _metrics;
+    }
+}
 
 void RuntimeFilterWorker::close() {
     _queue.shutdown();
@@ -550,6 +547,7 @@ void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOpti
     ev.query_options = query_options;
     ev.create_rf_merger_request = params;
     ev.is_opened_by_pipeline = is_pipeline;
+    _metrics->update_event_nums(ev.type, 1);
     _queue.put(std::move(ev));
 }
 
@@ -558,6 +556,7 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
     RuntimeFilterWorkerEvent ev;
     ev.type = CLOSE_QUERY;
     ev.query_id = query_id;
+    _metrics->update_event_nums(ev.type, 1);
     _queue.put(std::move(ev));
 }
 
@@ -571,6 +570,8 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
     ev.transmit_via_http_min_size = rpc_http_min_size;
     ev.transmit_addrs = addrs;
     ev.transmit_rf_request = std::move(params);
+    _metrics->update_event_nums(ev.type, 1);
+    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
     _queue.put(std::move(ev));
 }
 
@@ -584,6 +585,8 @@ void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterPa
     ev.transmit_via_http_min_size = rpc_http_min_size;
     ev.destinations = destinations;
     ev.transmit_rf_request = std::move(params);
+    _metrics->update_event_nums(ev.type, 1);
+    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
     _queue.put(std::move(ev));
 }
 
@@ -604,8 +607,11 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     ev.query_id.hi = params.query_id().hi();
     ev.query_id.lo = params.query_id().lo();
     ev.transmit_rf_request = params;
+    _metrics->update_event_nums(ev.type, 1);
+    _metrics->update_rf_bytes(ev.type, ev.transmit_rf_request.data().size());
     _queue.put(std::move(ev));
 }
+
 // receive total runtime filter in pipeline engine.
 static inline void receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterParams& params,
                                                          const std::shared_ptr<JoinRuntimeFilter>& shared_rf) {
@@ -884,8 +890,10 @@ void RuntimeFilterWorker::execute() {
         LOG_IF_EVERY_N(INFO, _queue.get_size() > CpuInfo::num_cores() * 10, 10)
                 << "runtime filter worker queue may be too large, size: " << _queue.get_size();
 
+        _metrics->update_event_nums(ev.type, -1);
         switch (ev.type) {
         case RECEIVE_TOTAL_RF: {
+            _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
             _receive_total_runtime_filter(ev.transmit_rf_request);
             break;
         }
@@ -915,6 +923,7 @@ void RuntimeFilterWorker::execute() {
         }
 
         case RECEIVE_PART_RF: {
+            _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
             auto it = _mergers.find(ev.query_id);
             if (it == _mergers.end()) {
                 VLOG_QUERY << "receive part rf: rf merger not existed. query_id = " << ev.query_id;
@@ -928,11 +937,13 @@ void RuntimeFilterWorker::execute() {
         }
 
         case SEND_PART_RF: {
+            _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
             _deliver_part_runtime_filter(std::move(ev.transmit_addrs), std::move(ev.transmit_rf_request),
                                          ev.transmit_timeout_ms, ev.transmit_via_http_min_size);
             break;
         }
         case SEND_BROADCAST_GRF: {
+            _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
             _process_send_broadcast_runtime_filter_event(std::move(ev.transmit_rf_request), std::move(ev.destinations),
                                                          ev.transmit_timeout_ms, ev.transmit_via_http_min_size);
             break;
