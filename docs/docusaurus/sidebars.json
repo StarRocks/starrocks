@@ -418,6 +418,7 @@
                     ]
                 },
                 "administration/Data_recovery",
+                "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 {
                     "type": "category",
@@ -1637,6 +1638,7 @@
                     ]
                 },
                 "administration/Data_recovery",
+                "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 {
                     "type": "category",
