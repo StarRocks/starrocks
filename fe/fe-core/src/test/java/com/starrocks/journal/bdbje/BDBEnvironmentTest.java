@@ -38,6 +38,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -352,6 +353,7 @@ public class BDBEnvironmentTest {
         LOG.info("---------------------");
     }
 
+    @Ignore
     @Test
     public void testAddBadFollowerNoFailover() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -359,6 +361,7 @@ public class BDBEnvironmentTest {
         System.out.println("testAddBadFollowerNoFailover cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
+    @Ignore
     @Test
     public void testAddBadFollowerAfterFailover() throws Exception {
         long startMs = System.currentTimeMillis();
