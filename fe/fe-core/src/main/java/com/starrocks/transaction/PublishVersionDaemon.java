@@ -77,6 +77,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -874,8 +875,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 locker.lockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
                 try {
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
+                        List<PartitionCommitInfo> txnPartitionCommitInfos = getPartitionCommitInfos(transactionState, tableId);
                         LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                                "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
+                                "db:{}, mv:{}, transaction state:{}", table.getName(), mvDb.getFullName(),
+                                materializedView.getName(), txnPartitionCommitInfos);
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
@@ -885,5 +888,16 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         }
+    }
+
+    private List<PartitionCommitInfo> getPartitionCommitInfos(TransactionState txnState, long tableId) {
+        TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(tableId);
+        if (tableCommitInfo == null) {
+            return Collections.emptyList();
+        }
+        if (tableCommitInfo.getIdToPartitionCommitInfo() == null) {
+            return Collections.emptyList();
+        }
+        return new ArrayList<>(tableCommitInfo.getIdToPartitionCommitInfo().values());
     }
 }

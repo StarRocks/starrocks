@@ -64,6 +64,23 @@ public class CreateFunctionStmtTest {
         }
     }
 
+    @Test
+    public void testCreateUDFWithContent() {
+        String createFunctionSql = "CREATE FUNCTION echo(int) \n"
+                + "RETURNS int \n"
+                + "properties (\n"
+                + "    \"symbol\" = \"echo\",\n"
+                + "    \"type\" = \"Python\"\n"
+                + ") AS $$ \n"
+                + "def a(b):\n" +
+                "   return b \n" +
+                "$$;";
+        CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+        Assert.assertTrue(stmt.getContent().contains("\n"));
+        Assert.assertTrue(stmt.getContent().contains("def a(b):"));
+    }
+
     @Test(expected = Throwable.class)
     public void testGetIfDisableUDF() throws Exception {
         boolean val = Config.enable_udf;
