@@ -79,6 +79,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -1253,7 +1254,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             sb.append(colocateGroup).append("\"");
         }
 
+        // append warehouse
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            sb.append(",\n");
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+                    .append("\" = \"");
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(this.warehouseId);
+            if (warehouse != null) {
+                sb.append(warehouse.getName()).append("\"");
+            } else {
+                sb.append("null").append("\"");
+            }
+        }
         sb.append("\n)");
+
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
             define = this.getViewDefineSql();
