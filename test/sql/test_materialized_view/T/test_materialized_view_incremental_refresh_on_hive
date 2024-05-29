@@ -20,7 +20,9 @@ CREATE EXTERNAL TABLE tbl_for_refresh (
 )
 PARTITION BY (dt);
 
-INSERT OVERWRITE TABLE tbl_for_refresh VALUES
+set enable_write_hive_external_table = true;
+
+INSERT OVERWRITE tbl_for_refresh VALUES
   (2,"2020-07-01"),(3,"2020-07-02"),(4,"2020-07-03"),(5,"2020-07-04");
 
 set catalog default_catalog;
@@ -49,7 +51,7 @@ ALTER TABLE tbl_for_refresh ADD PARTITION p20200702 VALUES in ('2020-07-02');
 ALTER TABLE tbl_for_refresh ADD PARTITION p20200703 VALUES in ('2020-07-03');
 ALTER TABLE tbl_for_refresh ADD PARTITION p20200704 VALUES in ('2020-07-04');
 
-INSERT OVERWRITE TABLE tbl_for_refresh VALUES (6,"2020-07-04");
+INSERT OVERWRITE tbl_for_refresh VALUES (6,"2020-07-04");
 
 set catalog default_catalog;
 use db_${uuid0};

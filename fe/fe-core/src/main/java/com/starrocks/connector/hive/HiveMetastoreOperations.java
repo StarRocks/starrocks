@@ -167,6 +167,8 @@ public class HiveMetastoreOperations {
             // checkExternalLocationProperties(properties);
             if (properties.containsKey(EXTERNAL_LOCATION_PROPERTY)) {
                 tablePath = new Path(properties.get(EXTERNAL_LOCATION_PROPERTY));
+            } else if (properties.containsKey(LOCATION_PROPERTY)) {
+                tablePath = new Path(properties.get(LOCATION_PROPERTY));
             }
             tableLocationExists = true;
         }
