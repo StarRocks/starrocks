@@ -164,13 +164,13 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                         collect(Collectors.toList());
         partitionColumns.retainAll(scanColumns);
         if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
-            throw new StarRocksPlannerException("Table partition by float/decimal datatype is not supported",
+            throw new StarRocksPlannerException("Table partition by float/double/decimal datatype is not supported",
                     ErrorType.UNSUPPORTED);
         }
     }
 
     private boolean notSupportedPartitionColumnType(Type type) {
-        return type.isFloat() || type.isDecimalOfAnyVersion();
+        return type.isFloat() || type.isDouble() || type.isDecimalOfAnyVersion();
     }
 
     private boolean containsMaterializedColumn(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumns) {
