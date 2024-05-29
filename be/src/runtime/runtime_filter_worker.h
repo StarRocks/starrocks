@@ -156,13 +156,9 @@ inline std::string EventTypeToString(EventType type) {
 struct RuntimeFilterWorkerEvent;
 
 struct RuntimeFilterWorkerMetrics {
-    void update_event_nums(EventType event_type, int64_t delta) {
-        event_nums[event_type] += delta;
-    }
+    void update_event_nums(EventType event_type, int64_t delta) { event_nums[event_type] += delta; }
 
-    void update_rf_bytes(EventType event_type, int64_t delta) {
-        runtime_filter_bytes[event_type] += delta;
-    }
+    void update_rf_bytes(EventType event_type, int64_t delta) { runtime_filter_bytes[event_type] += delta; }
 
     std::array<std::atomic_int64_t, EventType::MAX_COUNT> event_nums{};
     std::array<std::atomic_int64_t, EventType::MAX_COUNT> runtime_filter_bytes{};
