@@ -339,6 +339,7 @@ under the License.
             <version>${hadoop.version}</version>
         </dependency>
 
+<<<<<<< HEAD
         <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
         <dependency>
             <groupId>com.qcloud.cos</groupId>
@@ -374,6 +375,20 @@ under the License.
             <groupId>com.qcloud</groupId>
             <artifactId>hadoop-ranger-client-for-hadoop</artifactId>
             <version>3.3.0-4.1</version>
+=======
+        <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aliyun</artifactId>
+            <version>${hadoop.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.ksyun.kmr/hadoop-ks3 -->
+        <dependency>
+            <groupId>com.ksyun.kmr</groupId>
+            <artifactId>hadoop-ks3</artifactId>
+            <version>3.1.1-1.1.2</version>
+>>>>>>> 3a8dee9f8b ([BugFix] Revert "[Feature] Broker support COS posix bucket (#42638)" (#46425))
         </dependency>
     </dependencies>
 
