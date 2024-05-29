@@ -1,5 +1,6 @@
 -- name: testShortCircuit
 set enable_short_circuit=true;
+set enable_profile=true;
 
 CREATE TABLE short_circuit
     (c1 int,
@@ -48,3 +49,4 @@ insert into short_circuit_bool values
 select * from short_circuit_bool where k1 = 6 and k2=true;
 
 set enable_short_circuit=false;
+set enable_profile=false;
