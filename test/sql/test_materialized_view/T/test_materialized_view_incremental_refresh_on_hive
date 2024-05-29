@@ -58,4 +58,4 @@ use db_${uuid0};
 
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 
-select * from test_mv1;
+select * from test_mv1 order by dt;
