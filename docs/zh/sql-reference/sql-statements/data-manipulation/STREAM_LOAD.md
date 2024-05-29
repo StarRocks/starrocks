@@ -99,6 +99,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | partitions   | 否           | 指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。 |
 | temporary_partitions | 否           | 指定要把数据导入哪些[临时分区](../../../table_design/Temporary_partition.md)。|
 | columns      | 否           | 指定源数据文件和 StarRocks 表之间的列对应关系。如果源数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定 `columns` 参数。您可以通过 `columns` 参数实现数据转换。例如，要导入一个 CSV 格式的数据文件，文件中有两列，分别可以对应到目标 StarRocks 表的 `id` 和 `city` 两列。如果要实现把数据文件中第一列的数据乘以 100 以后再落入 StarRocks 表的转换，可以指定 `"columns: city,tmp_id, id = tmp_id * 100"`。具体请参见本文“[列映射](#列映射)”章节。 |
+| partial_update | 否 |是否使用部分列更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。|
+| partial_update_mode | 否 | 指定部分更新的模式，取值包括 `auto` 和 `column`。<ul><li>auto（默认值），表示由系统通过分析更新语句以及其涉及的列，自动判断执行部分更新时使用的模式。</li><li>`column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。</li></ul>|
 
 #### CSV 适用参数
 
