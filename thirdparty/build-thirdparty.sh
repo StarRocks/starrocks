@@ -1250,7 +1250,8 @@ build_avx2ki() {
      patch $TP_INSTALL_DIR/ksl/include/operatoroverload.h -p1 < $TP_PATCH_DIR/avx2ki-2.0.0-operation.patch
      # patch avx2ki/avx2ki_type.h
      patch $TP_INSTALL_DIR/ksl/include/avx2ki_type.h -p1 < $TP_PATCH_DIR/avx2ki-2.0.0-type.patch
-     
+}
+
 build_absl() {
     check_if_source_exist "${ABSL_SOURCE}"
     cd "$TP_SOURCE_DIR/${ABSL_SOURCE}"
