@@ -1860,7 +1860,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap,
                                         newIndexes, id);
                 if (!fastSchemaEvolution) {
-                    throw new DdlException("Addfield requires enabling fast schema evolution");
+                    throw new DdlException("Add field requires enable fast schema evolution");
                 }
             } else if (alterClause instanceof DropFieldClause) {
                 if (RunMode.isSharedDataMode()) {
@@ -1873,7 +1873,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap,
                                 newIndexes);
                 if (!fastSchemaEvolution) {
-                    throw new DdlException("Dropfield requires enabling fast schema evolution");
+                    throw new DdlException("Drop field requires enable fast schema evolution");
                 }
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
