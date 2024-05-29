@@ -39,9 +39,7 @@ class ShortCircuitHybridScanNode : public ScanNode {
 public:
     ShortCircuitHybridScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
                                const TScanRange& scan_range, TExecShortCircuitParams& common_request)
-            : ScanNode(pool, tnode, descs),
-              _common_request(common_request),
-              _tuple_id(tnode.olap_scan_node.tuple_id) {}
+            : ScanNode(pool, tnode, descs), _common_request(common_request), _tuple_id(tnode.olap_scan_node.tuple_id) {}
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     // do not call ScanNode::prepare which will register some useless profile counters
