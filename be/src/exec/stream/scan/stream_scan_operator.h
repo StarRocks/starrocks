@@ -65,7 +65,31 @@ private:
 class StreamChunkSource : public ConnectorChunkSource {
 public:
     StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+<<<<<<< HEAD
                       ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+=======
+                      ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer, bool enable_adaptive_io_task);
+
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
+
+    [[nodiscard]] Status set_stream_offset(int64_t table_version, int64_t changelog_id);
+    void set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_time_limit);
+    Status reset_status();
+    int64_t get_lane_owner() {
+        auto [lane_owner, version] = _morsel->get_lane_owner_and_version();
+        return lane_owner;
+    }
+
+protected:
+    bool _reach_eof() const override;
+
+    connector::StreamDataSource* _get_stream_data_source() const {
+        return down_cast<connector::StreamDataSource*>(_data_source.get());
+    }
+
+    int64_t _epoch_rows_limit = -1; // -1: not limit;
+    int64_t _epoch_time_limit = -1; // -1: not limit;
+>>>>>>> 5967988192 ([BugFix] Fix down_cast failed in adaptive io task (#46372))
 };
 
 } // namespace starrocks::pipeline

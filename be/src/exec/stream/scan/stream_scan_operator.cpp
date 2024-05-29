@@ -36,7 +36,8 @@ ChunkSourcePtr StreamScanOperator::create_chunk_source(MorselPtr morsel, int32_t
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<StreamScanOperatorFactory*>(_factory);
     return std::make_shared<StreamChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
-                                               std::move(morsel), scan_node, factory->get_chunk_buffer());
+                                               std::move(morsel), scan_node, factory->get_chunk_buffer(),
+                                               enable_adaptive_io_tasks());
 }
 
 bool StreamScanOperator::is_finished() const {
@@ -94,6 +95,43 @@ StatusOr<ChunkPtr> StreamScanOperator::pull_chunk(RuntimeState* state) {
 }
 
 StreamChunkSource::StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+<<<<<<< HEAD
                                      ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
         : ConnectorChunkSource(op, runtime_profile, std::move(morsel), scan_node, chunk_buffer) {}
+=======
+                                     ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer,
+                                     bool enable_adaptive_io_tasks)
+        : ConnectorChunkSource(op, runtime_profile, std::move(morsel), scan_node, chunk_buffer,
+                               enable_adaptive_io_tasks) {}
+
+Status StreamChunkSource::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(ConnectorChunkSource::prepare(state));
+    // open data source eagerly rather than delay until to read data so that
+    // it can interact with stream pipeline engine normally, such as set_offset()
+    [[maybe_unused]] bool mem_alloc_failed = false;
+    RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
+    return Status::OK();
+}
+
+Status StreamChunkSource::set_stream_offset(int64_t table_version, int64_t changelog_id) {
+    return _get_stream_data_source()->set_offset(table_version, changelog_id);
+}
+
+void StreamChunkSource::set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_time_limit) {
+    _epoch_rows_limit = epoch_rows_limit;
+    _epoch_time_limit = epoch_time_limit;
+}
+
+Status StreamChunkSource::reset_status() {
+    _status = Status::OK();
+    return _get_stream_data_source()->reset_status();
+}
+
+bool StreamChunkSource::_reach_eof() const {
+    connector::StreamDataSource* data_source = _get_stream_data_source();
+    return (_epoch_rows_limit != -1 && data_source->num_rows_read_in_epoch() >= _epoch_rows_limit) ||
+           (_epoch_time_limit != -1 && data_source->cpu_time_spent_in_epoch() >= _epoch_time_limit);
+}
+
+>>>>>>> 5967988192 ([BugFix] Fix down_cast failed in adaptive io task (#46372))
 } // namespace starrocks::pipeline
