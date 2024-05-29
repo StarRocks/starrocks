@@ -459,6 +459,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -487,6 +489,7 @@ import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
+    private static final Logger LOG = LogManager.getLogger(AstBuilder.class);
     private final long sqlMode;
 
     private final IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap;
@@ -4092,7 +4095,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (fieldName == null) {
-            throw new ParsingException("add field clause, name is null");
+            throw new ParsingException("add field clause name is null");
         }
         FieldDef fieldDef = new FieldDef(fieldName, parts, typeDef, fieldPosition);
         return new AddFieldClause(columnName, fieldDef, rollupName, getProperties(context.properties()));
@@ -4115,8 +4118,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> parts = getFieldName(context.nestedFieldName());
         String fieldName = null;
         if (parts != null && !parts.isEmpty()) {
+            for (String name : parts) {
+                LOG.info("field name: {}", name);
+            }
+            LOG.info("field name size: {}", parts.size());
             fieldName = parts.get(parts.size() - 1);
             parts.remove(parts.size() - 1);
+            LOG.info("field name size: {}, name: {}", parts.size(), fieldName);
+        }
+        if (fieldName == null) {
+            throw new ParsingException("drop field clause name is null");
         }
         return new DropFieldClause(columnName, fieldName, parts, rollupName, getProperties(context.properties()));
     }

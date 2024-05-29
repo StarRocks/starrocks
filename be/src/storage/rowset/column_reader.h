@@ -87,7 +87,7 @@ struct NgramBloomFilterReaderOptions;
 // This will cache data shared by all reader
 class ColumnReader {
     struct private_type;
-
+    struct SubReaderId;
 public:
     // Create and initialize a ColumnReader.
     // This method will not take the ownership of |meta|.
@@ -224,6 +224,8 @@ private:
     StatusOr<std::unique_ptr<ColumnIterator>> _create_merge_struct_iter(ColumnAccessPath* path,
                                                                         const TabletColumn* column);
 
+    void _update_sub_reader_pos(const TabletColumn* column, int pos);
+
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
@@ -252,7 +254,23 @@ private:
 
     using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
     std::unique_ptr<SubReaderList> _sub_readers;
-    std::map<std::string, int> _sub_reader_column_names;
+    // only used for struct column right now
+    struct SubReaderId {
+        std::string name;
+        int32_t id;
+        
+        bool operator==(const SubReaderId& other) const {
+            return id == other.id && name == other.name;
+        }
+
+        bool operator<(const SubReaderId& other) const {
+            if (id != other.id) {
+                return id < other.id;
+            }
+            return name < other.name;
+        }
+    };
+    std::map<SubReaderId, int> _sub_reader_pos;
 
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,

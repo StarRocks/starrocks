@@ -459,7 +459,8 @@ public class SchemaChangeHandler extends AlterHandler {
      * @throws DdlException
      */
     private boolean processAddField(AddFieldClause alterClause, OlapTable olapTable,
-                                     Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes) throws DdlException {
+                                     Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes,
+                                     int id) throws DdlException {
         boolean fastSchemaEvolution = RunMode.isSharedNothingMode() && olapTable.getUseFastSchemaEvolution();
         String modifyColumnName = alterClause.getColName();
 
@@ -490,7 +491,7 @@ public class SchemaChangeHandler extends AlterHandler {
         StructType oriFieldType = ((StructType) modifyFieldType);
         String fieldName = alterClause.getFieldName();
         Type fieldType = alterClause.getType();
-        StructField addField = new StructField(fieldName, fieldType);
+        StructField addField = new StructField(fieldName, id, fieldType, null);
         ColumnPosition fieldPos = alterClause.getFieldPos();
         ArrayList<StructField> oriFields = oriFieldType.getFields();
         int posIndex = -1;
@@ -1850,22 +1851,30 @@ public class SchemaChangeHandler extends AlterHandler {
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
+                
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                int id = olapTable.incAndGetMaxColUniqueId();
+                locker.unLockDatabase(db, LockType.READ);
                 fastSchemaEvolution &=
                         processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap,
-                                newIndexes);
+                                        newIndexes, id);
+                if (!fastSchemaEvolution) {
+                    throw new DdlException("Addfield requires enabling fast schema evolution");
+                }
             } else if (alterClause instanceof DropFieldClause) {
                 if (RunMode.isSharedDataMode()) {
                     throw new DdlException("Share data mode does not support drop field");
                 }
                 DropFieldClause dropFieldClause = (DropFieldClause) alterClause;
-                if (!fastSchemaEvolution) {
-                    throw new DdlException("Dropfield requires enabling fast schema evolution");
-                }
                 modifyFieldColumns = Set.of(dropFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
                 fastSchemaEvolution &=
                         processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap,
                                 newIndexes);
+                if (!fastSchemaEvolution) {
+                    throw new DdlException("Dropfield requires enabling fast schema evolution");
+                }
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
@@ -1908,14 +1917,11 @@ public class SchemaChangeHandler extends AlterHandler {
 
         SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexSchemaMap, propertyMap, newIndexes, 
                                                          modifyFieldColumns);
-
-        LOG.info("finalAnalyze add/drop field clause finish");
         if (schemaChangeData.getNewIndexSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
             return null;
         }
 
-        LOG.info("start submit drop field clause, fastSchemaEvolution: " + fastSchemaEvolution);
         if (!fastSchemaEvolution) {
             return createJob(schemaChangeData);
         } else if (RunMode.isSharedNothingMode()) {
@@ -2690,10 +2696,10 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     // the invoker should keep write lock
-    public void modifyTableAddOrDropColumns(Database db, OlapTable olapTable,
-                                            Map<Long, List<Column>> indexSchemaMap,
-                                            List<Index> indexes, long jobId, long txnId,
-                                            Map<Long, Long> indexToNewSchemaId, boolean isReplay)
+    public void modifyTableAddOrDrop(Database db, OlapTable olapTable,
+                                     Map<Long, List<Column>> indexSchemaMap,
+                                     List<Index> indexes, long jobId, long txnId,
+                                     Map<Long, Long> indexToNewSchemaId, boolean isReplay)
             throws DdlException, NotImplementedException {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
@@ -2762,8 +2768,8 @@ public class SchemaChangeHandler extends AlterHandler {
             if (!isReplay) {
                 TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(db.getId(), olapTable.getId(),
                         indexSchemaMap, indexes, jobId, txnId, indexToNewSchemaId);
-                LOG.debug("logModifyTableAddOrDropColumns info:{}", info);
-                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDropColumns(info);
+                LOG.debug("logModifyTableAddOrDrop info:{}", info);
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDrop(info);
             }
 
             schemaChangeJob.setWatershedTxnId(txnId);
@@ -2772,14 +2778,14 @@ public class SchemaChangeHandler extends AlterHandler {
             this.addAlterJobV2(schemaChangeJob);
 
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
-            LOG.info("finished modify table's add or drop columns. table: {}, is replay: {}", olapTable.getName(),
+            LOG.info("finished modify table's add or drop column(field). table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
-    public void replayModifyTableAddOrDropColumns(TableAddOrDropColumnsInfo info) throws
+    public void replayModifyTableAddOrDrop(TableAddOrDropColumnsInfo info) throws
             MetaNotFoundException {
         LOG.debug("info:{}", info);
         long dbId = info.getDbId();
@@ -2797,7 +2803,7 @@ public class SchemaChangeHandler extends AlterHandler {
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db, LockType.WRITE);
-            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
+            modifyTableAddOrDrop(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
                     indexToNewSchemaId, true);
         } catch (DdlException e) {
             // should not happen
@@ -2827,7 +2833,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // for schema change add/drop value column optimize, direct modify table meta.
         // when modify this, please also pay attention to the OlapTable#copyOnlyForQuery() operation.
         // try to copy first before modifying, avoiding in-place changes.
-        modifyTableAddOrDropColumns(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
+        modifyTableAddOrDrop(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
                 schemaChangeData.getNewIndexSchema(), schemaChangeData.getIndexes(), jobId, txnId,
                 indexToNewSchemaId, false);
     }

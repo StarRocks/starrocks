@@ -196,11 +196,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             _sub_readers = std::make_unique<SubReaderList>();
             for (int i = 0; i < meta->children_columns_size(); ++i) {
                 auto sub_column = (column != nullptr) ? column->subcolumn_ptr(i) : nullptr;
-                auto sub_column_name = (sub_column != nullptr) ? sub_column->name() : "None";
                 auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
                 RETURN_IF_ERROR(res);
                 _sub_readers->emplace_back(std::move(res).value());
-                _sub_reader_column_names[std::string(sub_column_name)] = i;
             }
             return Status::OK();
         }
@@ -215,24 +213,20 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             _sub_readers->reserve(3);
 
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
-            auto sub_column_name = (sub_column != nullptr) ? sub_column->name() : "element";
             // elements
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names[std::string(sub_column_name)] = 0;
 
             // null flags
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["null_flag"] = 1;
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["offset"] = 2;
         } else {
             if (meta->children_columns_size() != 2) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
@@ -240,18 +234,15 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             _sub_readers->reserve(2);
 
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
-            auto sub_column_name = (sub_column != nullptr) ? sub_column->name() : "element";
             // elements
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names[std::string(sub_column_name)] = 0;
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["offset"] = 1;
         }
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_MAP) {
@@ -266,25 +257,21 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["key"] = 0;
 
             // values
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["value"] = 1;
 
             // null flags
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["null_flag"] = 2;
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(3), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["offset"] = 3;
         } else {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("non-nullable map should have 2 children columns");
@@ -295,31 +282,26 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["key"] = 0;
 
             // values
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["value"] = 1;
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment, nullptr);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names["offset"] = 2;
         }
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         _sub_readers = std::make_unique<SubReaderList>();
         for (int i = 0; i < meta->children_columns_size(); ++i) {
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(i) : nullptr;
-            auto sub_column_name = (sub_column != nullptr) ? sub_column->name() : "None";
             auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-            _sub_reader_column_names[std::string(sub_column_name)] = i;
-            LOG(INFO) << "sub_column_reader name[" << i << "]" << sub_column_name;
+            _update_sub_reader_pos(sub_column, i);
         }
         return Status::OK();
     } else {
@@ -627,9 +609,17 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 
+void ColumnReader::_update_sub_reader_pos(const TabletColumn* column, int pos) {
+    if (column == nullptr) {
+        return;
+    }
+    auto name = column->name();
+    int id = column->unique_id();
+    _sub_reader_pos[{std::string(name), id}] = pos;
+}
+
 StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_iter(ColumnAccessPath* path,
                                                                                   const TabletColumn* column) {
-    LOG(INFO) << "create merge struct iter";
     DCHECK(_column_type == LogicalType::TYPE_STRUCT);
     DCHECK(column != nullptr);
     auto num_fields = column->subcolumn_count();
@@ -642,11 +632,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
 
     std::vector<ColumnAccessPath*> child_paths(num_fields, nullptr);
     if (path != nullptr && !path->children().empty()) {
-        LOG(INFO) << "column access path:" << path->path() << ", absolute_path:" << path->absolute_path();
         for (const auto& child : path->children()) {
-            if (child != nullptr) {
-                LOG(INFO) << "child column access path:" << child->path() << ", absolute_path:" << child->absolute_path();
-            }
             child_paths[child->index()] = child.get();
         }
     }
@@ -654,9 +640,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
     std::vector<std::unique_ptr<ColumnIterator>> field_iters;
     for (int i = 0; i < num_fields; ++i) {
         auto sub_column = column->subcolumn_ptr(i);
-        LOG(INFO) << "sub_column name:" << sub_column->name();
-        auto iter = _sub_reader_column_names.find(std::string(sub_column->name()));
-        if (iter != _sub_reader_column_names.end()) {
+        auto iter = _sub_reader_pos.find({std::string(sub_column->name()), sub_column->unique_id()});
+        if (iter != _sub_reader_pos.end()) {
             ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[iter->second]->new_iterator(child_paths[i], sub_column));
             field_iters.emplace_back(std::move(iter));
             cur_sub_reader++;
