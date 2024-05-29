@@ -150,6 +150,10 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.automv.analysis.TunespaceAnalyzer;
+import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
+import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
+import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 
 public class Analyzer {
     private final AnalyzerVisitor analyzerVisitor;
@@ -1007,6 +1011,21 @@ public class Analyzer {
         public Void visitShowDictionaryStatement(ShowDictionaryStmt statement, ConnectContext context) {
             DictionaryAnalyzer.analyze(statement, context);
             return null;
+        }
+        // tunespace
+        @Override
+        public Void visitCreateTunespaceStmt(CreateTunespaceStmt node, ConnectContext context) {
+            return TunespaceAnalyzer.analyze(node, context);
+        }
+
+        @Override
+        public Void visitAlterTunespaceStmt(AlterTunespaceStmt node, ConnectContext context) {
+            return TunespaceAnalyzer.analyze(node, context);
+        }
+
+        @Override
+        public Void visitShowRecommendationsStmt(ShowRecommendationsStmt node, ConnectContext context) {
+            return TunespaceAnalyzer.analyze(node, context);
         }
     }
 }

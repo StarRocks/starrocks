@@ -168,6 +168,8 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
+import com.starrocks.sql.automv.qe.TunespaceExecutor;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
@@ -528,6 +530,8 @@ public class StmtExecutor {
                                 throw e;
                             }
                         }
+                    } else if (TunespaceExecutor.isTunespaceStmt(parsedStmt)) {
+                        com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
@@ -644,6 +648,8 @@ public class StmtExecutor {
                         }
                     }
                 }
+            } else if (TunespaceExecutor.isTunespaceStmt(parsedStmt)) {
+                handleTunespaceStmt();
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
@@ -1226,6 +1232,19 @@ public class StmtExecutor {
         }
 
         sendShowResult(resultSet);
+    }
+
+    private void handleTunespaceStmt() throws IOException {
+        Preconditions.checkArgument(TunespaceExecutor.isTunespaceStmt(parsedStmt));
+        ShowResultSet resultSet = TunespaceExecutor.execute(parsedStmt, context);
+        if (parsedStmt instanceof ShowRecommendationsStmt) {
+            if (isProxy) {
+                proxyResultSet = resultSet;
+                context.getState().setEof();
+                return;
+            }
+            sendShowResult(resultSet);
+        }
     }
 
     private void handleAnalyzeProfileStmt() throws IOException {

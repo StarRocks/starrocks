@@ -350,6 +350,13 @@ statement
 
     // Unsupported Statement
     | unsupportedStatement
+
+    // tunespace statment
+    | createTunespaceStatement
+    | dropTunespaceStatement
+    | truncateTunespaceStatement
+    | alterTunespaceStatement
+    | showRecommendationsStatement
     ;
 
 
@@ -2398,6 +2405,33 @@ replicaList
     : REPLICA '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
+// ------------------------------------------- Tunespace ---------------------------------------------------------------
+createTunespaceStatement
+    : CREATE TUNESPACE (IF NOT EXISTS)? qualifiedName
+    ;
+
+dropTunespaceStatement
+    : DROP TUNESPACE (IF EXISTS)? qualifiedName
+    ;
+
+truncateTunespaceStatement
+    : TRUNCATE TUNESPACE (IF EXISTS)? qualifiedName
+    ;
+
+alterTunespaceStatement
+    : ALTER TUNESPACE tunespace=qualifiedName alterTunespaceClause
+    ;
+
+showRecommendationsStatement
+    : SHOW RECOMMENDATIONS FROM qualifiedName (limitElement)?
+    ;
+
+alterTunespaceClause
+    : APPEND queryStatement
+    | POPULATE (AS queryStatement |FROM (DATABASE database=qualifiedName|TUNESPACE srcTunespace=qualifiedName))
+    | DELETE WHERE (where=expression)
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -2993,4 +3027,5 @@ nonReserved
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT | NGRAMBF
+    | TUNESPACE | APPEND | POPULATE | RECOMMENDATIONS
     ;

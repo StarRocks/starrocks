@@ -65,7 +65,8 @@ enum TResultSinkType {
     STATISTIC,
     VARIABLE,
     HTTP_PROTOCAL,
-    METADATA_ICEBERG
+    METADATA_ICEBERG,
+    CUSTOMIZED
 }
 
 enum TResultSinkFormatType {
