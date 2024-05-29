@@ -21,7 +21,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "connector/async_io_poller.h"
+#include "connector/async_flush_stream_poller.h"
 #include "connector/connector.h"
 #include "connector/sink_memory_manager.h"
 #include "connector_chunk_sink.h"

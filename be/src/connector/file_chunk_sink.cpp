@@ -16,8 +16,7 @@
 
 #include <future>
 
-#include "column/datum.h"
-#include "connector/async_io_poller.h"
+#include "connector/async_flush_stream_poller.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"

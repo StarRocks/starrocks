@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "connector/async_io_poller.h"
+#include "connector/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
 
@@ -29,7 +29,7 @@ ConnectorSinkOperator::ConnectorSinkOperator(OperatorFactory* factory, int32_t i
                                              std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
                                              connector::SinkOperatorMemoryManager* op_mem_mgr,
                                              FragmentContext* fragment_context)
-        : Operator(factory, id, "connector_sink_operator", plan_node_id, false, driver_sequence),
+        : Operator(factory, id, "connector_sink", plan_node_id, false, driver_sequence),
           _connector_chunk_sink(std::move(connector_chunk_sink)),
           _io_poller(std::move(io_poller)),
           _sink_mem_mgr(std::move(sink_mem_mgr)),

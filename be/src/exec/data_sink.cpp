@@ -172,13 +172,13 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<SchemaTableSink>(state->obj_pool(), row_desc, output_exprs);
         break;
     }
-        //    case TDataSinkType::ICEBERG_TABLE_SINK: {
-        //        if (!thrift_sink.__isset.iceberg_table_sink) {
-        //            return Status::InternalError("Missing iceberg table sink");
-        //        }
-        //        *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
-        //        break;
-        //    }
+    case TDataSinkType::ICEBERG_TABLE_SINK: {
+        if (!thrift_sink.__isset.iceberg_table_sink) {
+            return Status::InternalError("Missing iceberg table sink");
+        }
+        *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
     case TDataSinkType::HIVE_TABLE_SINK: {
         if (!thrift_sink.__isset.hive_table_sink) {
             return Status::InternalError("Missing hive table sink");

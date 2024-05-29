@@ -178,7 +178,7 @@ private:
             return size;
         }
 
-        const static int64_t BATCH_SIZE = 0;
+        const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
         std::function<MemTracker*()> _loader;
 
@@ -351,10 +351,10 @@ public:
         }
     }
 
-    CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = default;
-    CurrentThreadMemTrackerSetter& operator=(const CurrentThreadMemTrackerSetter&) = default;
+    CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
+    void operator=(const CurrentThreadMemTrackerSetter&) = delete;
     CurrentThreadMemTrackerSetter(CurrentThreadMemTrackerSetter&&) = delete;
-    CurrentThreadMemTrackerSetter& operator=(CurrentThreadMemTrackerSetter&&) = delete;
+    void operator=(CurrentThreadMemTrackerSetter&&) = delete;
 
 private:
     MemTracker* _old_mem_tracker;

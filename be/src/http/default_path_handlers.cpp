@@ -198,9 +198,9 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
         for (const auto& item : items) {
             std::string level_str = ItoaKMGT(item.level);
-            std::string limit_str = item.limit == -1 ? "none" : std::to_string(item.limit);
-            string current_consumption_str = std::to_string(item.cur_consumption);
-            string peak_consumption_str = std::to_string(item.peak_consumption);
+            std::string limit_str = item.limit == -1 ? "none" : ItoaKMGT(item.limit);
+            string current_consumption_str = ItoaKMGT(item.cur_consumption);
+            string peak_consumption_str = ItoaKMGT(item.peak_consumption);
             (*output) << strings::Substitute(
                     "<tr><td>$0</td><td>$1</td><td>$2</td><td>$3</td><td>$4</td><td>$5</td></tr>\n", item.level,
                     item.label, item.parent_label, limit_str, current_consumption_str, peak_consumption_str);
@@ -219,8 +219,8 @@ void malloc_stats_write_cb(void* opaque, const char* data) {
 void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     if (mem_tracker != nullptr) {
         (*output) << "<pre>"
-                  << "Mem Limit: " << PrettyPrinter::print(mem_tracker->limit(), TUnit::BYTES, true) << std::endl
-                  << "Mem Consumption: " << PrettyPrinter::print(mem_tracker->consumption(), TUnit::BYTES, true)
+                  << "Mem Limit: " << PrettyPrinter::print(mem_tracker->limit(), TUnit::BYTES) << std::endl
+                  << "Mem Consumption: " << PrettyPrinter::print(mem_tracker->consumption(), TUnit::BYTES) << std::endl
                   << std::endl
                   << "</pre>";
     } else {

@@ -33,5 +33,5 @@ add_library(Connector STATIC
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp
         utils.cpp
-        async_io_poller.cpp
+        async_flush_stream_poller.cpp
 )
