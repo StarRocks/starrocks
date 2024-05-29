@@ -32,12 +32,18 @@ bool SinkOperatorMemoryManager::kill_victim() {
     std::string partition;
     WriterAndStream* victim = nullptr;
     for (auto& [key, writer_and_stream] : *_candidates) {
-        if (victim == nullptr || victim->first->get_written_bytes() <= writer_and_stream.first->get_written_bytes()) {
-            partition = key;
-            victim = &writer_and_stream;
+        if (writer_and_stream.first->get_written_bytes() < _early_close_threshold) {
+            continue;
         }
+        if (victim && victim->first->get_written_bytes() > writer_and_stream.first->get_written_bytes()) {
+            continue;
+        }
+        partition = key;
+        victim = &writer_and_stream;
     }
-    DCHECK(victim != nullptr); // silence warning
+    if (victim == nullptr) {
+        return false;
+    }
 
     auto result = victim->first->commit();
     _commit_func(result);
@@ -60,11 +66,12 @@ SinkMemoryManager::SinkMemoryManager(MemTracker* mem_tracker) : _mem_tracker(mem
         _high_watermark_bytes = _mem_tracker->limit() * _high_watermark_percent / 100;
         _low_watermark_bytes = _mem_tracker->limit() * _low_watermark_percent / 100;
         _min_watermark_bytes = _mem_tracker->limit() * _min_watermark_percent / 100;
+        _early_close_writer_min_bytes = config::connector_sink_writer_early_close_minimum_bytes;
     }
 }
 
 SinkOperatorMemoryManager* SinkMemoryManager::create_child_manager() {
-    _children.push_back(std::make_unique<SinkOperatorMemoryManager>());
+    _children.push_back(std::make_unique<SinkOperatorMemoryManager>(_early_close_writer_min_bytes));
     auto* p = _children.back().get();
     DCHECK(p != nullptr);
     return p;
@@ -82,9 +89,11 @@ bool SinkMemoryManager::can_accept_more_input(SinkOperatorMemoryManager* child_m
 
     if (available_memory() <= _low_watermark_bytes) {
         // trigger early close
-        while (child_manager->has_victim() && available_memory() + _total_releasable_memory() < _high_watermark_bytes) {
+        while (available_memory() + _total_releasable_memory() < _high_watermark_bytes) {
             bool found = child_manager->kill_victim();
-            DCHECK(found);
+            if (!found) {
+                break;
+            }
             child_manager->update_releasable_memory();
         }
     }

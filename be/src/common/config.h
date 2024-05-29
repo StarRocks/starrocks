@@ -1318,5 +1318,6 @@ CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 CONF_mInt64(connector_sink_mem_high_watermark_percent, "30");
 CONF_mInt64(connector_sink_mem_low_watermark_percent, "20");
 CONF_mInt64(connector_sink_mem_min_watermark_percent, "10");
+CONF_mInt64(connector_sink_writer_early_close_minimum_bytes, "16777216");
 
 } // namespace starrocks::config

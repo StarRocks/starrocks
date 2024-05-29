@@ -26,13 +26,12 @@ namespace starrocks::connector {
 /// not thread-safe except `releasable_memory()`
 class SinkOperatorMemoryManager {
 public:
-    SinkOperatorMemoryManager() = default;
+    SinkOperatorMemoryManager(int64_t early_close_threshold) : _early_close_threshold(early_close_threshold) {}
 
     void init(std::unordered_map<std::string, WriterAndStream>* writer_stream_pairs, AsyncFlushStreamPoller* io_poller,
               CommitFunc commit_func);
 
-    bool has_victim() { return !_candidates->empty(); }
-
+    // return true if a victim is found and killed, otherwise return false
     bool kill_victim();
 
     int64_t update_releasable_memory();
@@ -45,6 +44,7 @@ private:
     CommitFunc _commit_func;
     AsyncFlushStreamPoller* _io_poller;
     std::atomic_int64_t _releasable_memory{0};
+    int64_t _early_close_threshold{-1};
 };
 
 /// 1. manage all sink operators in a query
@@ -70,6 +70,7 @@ private:
     int64_t _high_watermark_bytes = -1;
     int64_t _low_watermark_bytes = -1;
     int64_t _min_watermark_bytes = -1;
+    int64_t _early_close_writer_min_bytes = -1;
 
     MemTracker* _mem_tracker = nullptr;
     std::vector<std::unique_ptr<SinkOperatorMemoryManager>> _children; // size of dop

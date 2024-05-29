@@ -34,4 +34,5 @@ add_library(Connector STATIC
         iceberg_chunk_sink.cpp
         utils.cpp
         async_flush_stream_poller.cpp
+        sink_memory_manager.cpp
 )
