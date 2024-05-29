@@ -682,11 +682,11 @@ None
 -- !result
 select s.ai_1, t.d_4 from array_test s left join array_test t on s.ai_1 = t.d_4 order by 1, 2;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 76. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<decimal32(8, 5)>.')
+E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 76. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<DECIMAL32(8,5)>.')
 -- !result
 select s.ai_1, t.d_5 from array_test s left join array_test t on s.ai_1 = t.d_5 order by 1, 2;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 76. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<decimal64(16, 3)>.')
+E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 76. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<DECIMAL64(16,3)>.')
 -- !result
 select s.ai_1, t.d_6 from array_test s left join array_test t on s.ai_1 = t.d_6 order by 1, 2;
 -- result:
@@ -898,7 +898,7 @@ E: (1064, 'Getting analyzing error from line 1, column 66 to line 1, column 77. 
 -- !result
 select s.ai_1, t.d_2 from array_test s right join array_test t on s.ai_1 = t.d_2 order by 1, 2;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 66 to line 1, column 77. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<decimal64(4, 3)>.')
+E: (1064, 'Getting analyzing error from line 1, column 66 to line 1, column 77. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<DECIMAL64(4,3)>.')
 -- !result
 select s.ai_1, t.d_3 from array_test s right join array_test t on s.ai_1 = t.d_3 order by 1, 2;
 -- result:
@@ -906,11 +906,11 @@ E: (1064, 'Getting analyzing error from line 1, column 66 to line 1, column 77. 
 -- !result
 select s.ai_1, t.d_4 from array_test s right join array_test t on s.ai_1 = t.d_4 order by 1, 2;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 66 to line 1, column 77. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<decimal32(8, 5)>.')
+E: (1064, 'Getting analyzing error from line 1, column 66 to line 1, column 77. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<DECIMAL32(8,5)>.')
 -- !result
 select s.ai_1, t.d_5 from array_test s right join array_test t on s.ai_1 = t.d_5 order by 1, 2;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 66 to line 1, column 77. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<decimal64(16, 3)>.')
+E: (1064, 'Getting analyzing error from line 1, column 66 to line 1, column 77. Detail message: Column type array<array<bigint(20)>> does not support binary predicate operation with type array<DECIMAL64(16,3)>.')
 -- !result
 select s.ai_1, t.d_6 from array_test s right join array_test t on s.ai_1 = t.d_6 order by 1, 2;
 -- result:
