@@ -25,6 +25,11 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
     auto struct_column = down_cast<StructColumn*>(column);
 
     try {
+        if (value->type() != simdjson::ondemand::json_type::object) {
+            std::ostringstream ss;
+            ss << "Expected value type [object], got [" << value->type() << "]";
+            return Status::DataQualityError(ss.str());
+        }
         simdjson::ondemand::object obj = value->get_object();
 
         for (size_t i = 0; i < type_desc.children.size(); i++) {

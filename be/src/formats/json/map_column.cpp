@@ -26,6 +26,11 @@ Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std
     auto map_column = down_cast<MapColumn*>(column);
 
     try {
+        if (value->type() != simdjson::ondemand::json_type::object) {
+            std::ostringstream ss;
+            ss << "Expected value type [object], got [" << value->type() << "]";
+            return Status::DataQualityError(ss.str());
+        }
         simdjson::ondemand::object obj = value->get_object();
         simdjson::ondemand::parser parser;
         size_t field_count = 0;
