@@ -43,7 +43,7 @@ You can follow these steps to recover the metadata and start FE:
    ALTER SYSTEM CREATE IMAGE;
    ```
 
-6. After the new image file is transmitted to the directory **meta****/image** of all FE nodes, you can remove the configuration `ignore_unknown_log_id = true` from all FE configuration files and restart the FE nodes.
+6. After the new image file is transmitted to the directory **meta/image** of all FE nodes, you can remove the configuration `ignore_unknown_log_id = true` from all FE configuration files and restart the FE nodes.
 
 ### Metadata damage
 
@@ -378,7 +378,7 @@ To solve this issue, you need to set the `priority_networks` of the node in the 
 
 ### 3. System clock among nodes is not synchronized
 
-You can identify this issue based on the following error message from **fe.out**, **fe.log** or **fe/meta//bdb/****je.info****.0**:
+You can identify this issue based on the following error message from **fe.out**, **fe.log** or **fe/meta//bdb/je.info.0**:
 
 ```Plain
 com.sleepycat.je.EnvironmentFailureException: (JE 7.3.7) Environment must be closed, caused by: com.sleepycat.je.EnvironmentFailureException: Environment invalid because of previous exception: (JE 7.3.7) 172.26.92.139_29917_1631006307557(2180):xxx Clock delta: 11020 ms. between Feeder: 172.26.92.154_29917_1641969377236 and this Replica exceeds max permissible delta: 5000 ms. HANDSHAKE_ERROR: Error during the handshake between two nodes. Some validity or compatibility check failed, preventing further communication between the nodes. Environment is invalid and must be closed. fetchRoot of 0x1278/0x1fcbb8 state=0 expires=never
