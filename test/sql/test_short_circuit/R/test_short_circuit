@@ -72,6 +72,10 @@ select * from short_circuit_bool where k1 = 6 and k2=true;
 -- result:
 6	1	6
 -- !result
+explain analyze select * from short_circuit_bool where k1 = 6 and k2=true;
+-- result:
+E: (1064, "short circuit point query doesn't suppot explain analyze stmt, you can set it off by using  set enable_short_circuit=false")
+-- !result
 set enable_short_circuit=false;
 -- result:
 -- !result
