@@ -372,18 +372,6 @@ public class PlanFragmentBuilder {
         return execPlan;
     }
 
-    private static void maybeClearOlapScanNodePartitions(PlanFragment fragment) {
-        List<OlapScanNode> olapScanNodes = fragment.collectOlapScanNodes();
-        long numNodesWithBucketColumns =
-                olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
-        // Either all OlapScanNode use bucketColumns for local shuffle, or none of them do.
-        // Therefore, clear bucketColumns if only some of them contain bucketColumns.
-        boolean needClear = numNodesWithBucketColumns > 0 && numNodesWithBucketColumns < olapScanNodes.size();
-        if (needClear) {
-            clearOlapScanNodePartitions(fragment.getPlanRoot());
-        }
-    }
-
     /**
      * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
      * <p>
