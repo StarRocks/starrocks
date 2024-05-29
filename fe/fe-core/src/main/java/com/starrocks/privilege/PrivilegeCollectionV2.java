@@ -89,9 +89,16 @@ public class PrivilegeCollectionV2 implements GsonPostProcessable {
             PrivilegeEntry entry,
             ActionSet actionSet,
             PEntryObject object,
-            boolean isGrant) {
+            boolean isGrant, boolean isDeepCopy) {
         if (entry == null) {
-            privilegeEntryList.add(new PrivilegeEntry(actionSet, object, isGrant));
+            ActionSet actionSetCopy = null;
+            if (isDeepCopy) {
+                actionSetCopy = new ActionSet(actionSet);
+            } else {
+                actionSetCopy = actionSet;
+            }
+
+            privilegeEntryList.add(new PrivilegeEntry(actionSetCopy, object, isGrant));
             Collections.sort(privilegeEntryList);
         } else {
             entry.actionSet.add(actionSet);
@@ -113,32 +120,33 @@ public class PrivilegeCollectionV2 implements GsonPostProcessable {
         typeToPrivilegeEntryList.computeIfAbsent(objectType, k -> new ArrayList<>());
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
         for (PEntryObject object : objects) {
-            grantObjectToList(new ActionSet(privilegeTypes), object, isGrant, privilegeEntryList);
+            grantObjectToList(new ActionSet(privilegeTypes), object, isGrant, privilegeEntryList, false);
         }
     }
 
     private void grantObjectToList(
-            ActionSet actionSet, PEntryObject object, boolean isGrant, List<PrivilegeEntry> privilegeEntryList) {
+            ActionSet actionSet, PEntryObject object, boolean isGrant,
+            List<PrivilegeEntry> privilegeEntryList, boolean isDeepCopy) {
         PrivilegeEntry entry = findEntry(privilegeEntryList, object, isGrant);
         PrivilegeEntry oppositeEntry = findEntry(privilegeEntryList, object, !isGrant);
         if (oppositeEntry == null) {
             // intend to grant with grant option, and there's no matching entry that grant without grant option
             // or intend to grant without grant option, and there's no matching entry that grant with grant option
             // either way it's simpler
-            addAction(privilegeEntryList, entry, actionSet, object, isGrant);
+            addAction(privilegeEntryList, entry, actionSet, object, isGrant, isDeepCopy);
         } else {
             if (isGrant) {
                 // intend to grant with grant option, and there's already an entry that grant without grant option
                 // we should remove the entry and create a new one or added to the matching one
                 removeAction(privilegeEntryList, oppositeEntry, actionSet);
-                addAction(privilegeEntryList, entry, actionSet, object, true);
+                addAction(privilegeEntryList, entry, actionSet, object, true, isDeepCopy);
             } else {
                 // intend to grant without grant option, and there's already an entry that grant with grant option
                 // we should check for each action, for those that's not in the existing entry
                 // we should create a new entry or add to the matching one
                 ActionSet remaining = oppositeEntry.actionSet.difference(actionSet);
                 if (!remaining.isEmpty()) {
-                    addAction(privilegeEntryList, entry, remaining, object, false);
+                    addAction(privilegeEntryList, entry, remaining, object, false, isDeepCopy);
                 }
             }
         }
@@ -279,7 +287,7 @@ public class PrivilegeCollectionV2 implements GsonPostProcessable {
             } else {
                 List<PrivilegeEntry> typeList = typeToPrivilegeEntryList.get(typeId);
                 for (PrivilegeEntry entry : otherList) {
-                    grantObjectToList(entry.actionSet, entry.object, entry.withGrantOption, typeList);
+                    grantObjectToList(entry.actionSet, entry.object, entry.withGrantOption, typeList, true);
                 } // for privilege entry in other.list
             }
         } // for typeId, privilegeEntryList in other
