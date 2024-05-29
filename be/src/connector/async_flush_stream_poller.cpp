@@ -24,7 +24,7 @@ void AsyncFlushStreamPoller::enqueue(std::unique_ptr<Stream> stream) {
     });
 }
 
-pair<Status, bool> AsyncFlushStreamPoller::poll() {
+std::pair<Status, bool> AsyncFlushStreamPoller::poll() {
     Status status;
     while (!_queue.empty()) {
         auto& f = _queue.front();
