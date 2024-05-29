@@ -113,7 +113,7 @@ public class QueryRuntimeProfile {
     private ExecPlan execPlan;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
     // whether this profile is belong to short-circuit query
-    private boolean isShortCircuit;
+    private final boolean isShortCircuit;
 
     // ------------------------------------------------------------------------------------
     // Fields for load.

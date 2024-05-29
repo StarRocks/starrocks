@@ -28,6 +28,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TScanRangeLocations;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +70,8 @@ public class ShortCircuitExecutor {
         this.protocol = protocol;
         if (enableProfile) {
             this.perBeExecutionProfile = new HashMap<>();
+        } else {
+            this.perBeExecutionProfile = Collections.emptyMap();
         }
     }
 
