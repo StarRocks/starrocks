@@ -40,8 +40,10 @@ ENV JAVA_HOME=/lib/jvm/default-java
 
 WORKDIR $STARROCKS_ROOT
 
-RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
-             --shell /usr/sbin/nologin $USER && \
+RUN groupadd --gid 1000 $GROUP && \
+    if [ "$USER" != "root" ]; then \
+        useradd --no-create-home --uid 1000 --gid 1000 --shell /usr/sbin/nologin $USER; \
+    fi && \
     chown -R $USER:$GROUP $STARROCKS_ROOT
 USER $USER
 
