@@ -347,8 +347,8 @@ public class FileSystemManager {
                 if (authentication.equals(AUTHENTICATION_KERBEROS)) {
                     conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                             AUTHENTICATION_KERBEROS);
-                    conf.set(CommonConfigurationKeysPublic.HADOOP_KERBEROS_KEYTAB_LOGIN_AUTORENEWAL_ENABLED,
-                            "true");
+                    //conf.set(CommonConfigurationKeysPublic.HADOOP_KERBEROS_KEYTAB_LOGIN_AUTORENEWAL_ENABLED,
+                    //        "true");
 
                     String principal = preparePrincipal(properties.get(KERBEROS_PRINCIPAL));
                     String keytab = "";
