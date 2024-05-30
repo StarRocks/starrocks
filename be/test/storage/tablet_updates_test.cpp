@@ -3461,4 +3461,3 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
 }
 
 } // namespace starrocks
-
