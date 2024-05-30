@@ -237,14 +237,14 @@ public class DatabaseTest {
         name.setDb(db.getCatalogName());
         final Type[] argTypes = {Type.INT, Type.INT};
         Function f = new Function(name, argTypes, Type.INT, false);
-        db.addFunction(f, false);
+        db.addFunction(f);
 
         // Add addDoubleDouble function to database
         FunctionName name2 = new FunctionName(null, "addDoubleDouble");
         name2.setDb(db.getCatalogName());
         final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
         Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
-        db.addFunction(f2, false);
+        db.addFunction(f2);
     }
 
     @Test
@@ -255,10 +255,10 @@ public class DatabaseTest {
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // Add the UDF for the first time
-        db.addFunction(f, false);
+        db.addFunction(f);
 
         // Attempt to add the same UDF again, expecting an exception
-        Assert.assertThrows(UserException.class, () -> db.addFunction(f, false));
+        Assert.assertThrows(UserException.class, () -> db.addFunction(f));
     }
 
     @Test

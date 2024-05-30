@@ -655,6 +655,10 @@ public class Database extends MetaObject implements Writable {
         return catalogName;
     }
 
+    public synchronized void addFunction(Function function) throws UserException {
+        addFunction(function, false);
+    }
+
     public synchronized void addFunction(Function function, boolean allowExists) throws UserException {
         addFunctionImpl(function, false, allowExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function);

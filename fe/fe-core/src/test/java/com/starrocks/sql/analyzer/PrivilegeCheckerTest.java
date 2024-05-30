@@ -1674,7 +1674,7 @@ public class PrivilegeCheckerTest {
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
-            db1.addFunction(function, false);
+            db1.addFunction(function);
         } catch (Throwable e) {
             // ignore
         }
@@ -2787,7 +2787,7 @@ public class PrivilegeCheckerTest {
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
-            db1.addFunction(function, false);
+            db1.addFunction(function);
         } catch (Throwable e) {
             // ignore
         }
@@ -2900,7 +2900,7 @@ public class PrivilegeCheckerTest {
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
-            db1.addFunction(function, false);
+            db1.addFunction(function);
         } catch (Throwable e) {
             // ignore
         }
