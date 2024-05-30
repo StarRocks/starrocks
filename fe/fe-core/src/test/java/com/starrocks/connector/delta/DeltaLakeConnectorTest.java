@@ -16,8 +16,10 @@ package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.ConnectorContext;
+import com.starrocks.connector.ConnectorFactory;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -35,5 +37,37 @@ public class DeltaLakeConnectorTest {
         DeltaLakeMetadata deltaLakeMetadata = (DeltaLakeMetadata) metadata;
         Assert.assertEquals("delta0", deltaLakeMetadata.getCatalogName());
         Assert.assertEquals(deltaLakeMetadata.getMetastoreType(), MetastoreType.HMS);
+    }
+
+    @Test
+    public void testCreateDeltaLakeConnectorWithException1() {
+        Map<String, String> properties = ImmutableMap.of("type", "deltalake",
+                "hive.metastore.TYPE", "glue",  "aws.glue.access_key", "xxxxx",
+                "aws.glue.secret_key", "xxxx",
+                "aws.glue.region", "us-west-2");
+        try {
+            ConnectorFactory.createConnector(new ConnectorContext("delta0", "deltalake", properties));
+            Assert.fail("Should throw exception");
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertEquals("hive.metastore.uris must be set in properties when creating catalog of hive-metastore",
+                    e.getMessage());
+        }
+    }
+
+    @Test
+    public void testCreateDeltaLakeConnectorWithException2() {
+        Map<String, String> properties = ImmutableMap.of("type", "deltalake",
+                "hive.metastore.type", "error_metastore",  "aws.glue.access_key", "xxxxx",
+                "aws.glue.secret_key", "xxxx",
+                "aws.glue.region", "us-west-2");
+        try {
+            ConnectorFactory.createConnector(new ConnectorContext("delta0", "deltalake", properties));
+            Assert.fail("Should throw exception");
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertEquals("Getting analyzing error. Detail message: hive metastore type [error_metastore] is not supported.",
+                    e.getMessage());
+        }
     }
 }
