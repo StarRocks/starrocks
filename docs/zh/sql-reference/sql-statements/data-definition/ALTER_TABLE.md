@@ -5,9 +5,6 @@ displayed_sidebar: "Chinese"
 
 # ALTER TABLE
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 ## 功能
 
 该语句用于修改已有表，包括：
@@ -115,7 +112,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
         PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
 
     partition_key_desc ::=
-        { LESS THAN [MAXVALUE | value_list]
+        { LESS THAN { MAXVALUE | value_list }
         | [ value_list , value_list ) } -- 注意此处的 [ 代表左闭合区间
 
     value_list ::=
@@ -146,7 +143,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
   - Range 分区支持新增单个分区 `single_range_partition` 或者批量创建分区 `multi_range_partition`。
   - List 分区仅支持新增单个分区。
 
-- `distributionDesc`：
+- `distribution_desc`：
 
    可以为新的分区单独设置分桶数量，但是不支持单独设置分桶方式。
 
@@ -180,7 +177,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
     ADD PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego");
     ```
 
-  - 如果建表时指定多个分区列，例如 `PARTITION BY LIST (dt,city)`，如果需要新增一个分区，则可以执行：
+  - 如果建表时指定多个分区列，例如 `PARTITION BY LIST (dt,city)`，并且建表后需要新增一个分区，则可以执行：
 
     ```sql
     ALTER TABLE t_recharge_detail4 
