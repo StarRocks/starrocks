@@ -257,6 +257,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/Meta_recovery",
         {
           "type": "category",
           "label": "User Privileges and Authentication",
@@ -871,6 +872,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/Meta_recovery",
         {
           "type": "category",
           "label": "管理用户权限",
