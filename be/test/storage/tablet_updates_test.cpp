@@ -3459,7 +3459,6 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
     ASSERT_FALSE(_tablet->updates()->convert_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
     ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
 }
-} // namespace starrocks
-}
 
 } // namespace starrocks
+
