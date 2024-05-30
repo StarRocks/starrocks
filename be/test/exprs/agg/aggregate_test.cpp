@@ -33,6 +33,7 @@
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Data_types.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
@@ -43,6 +44,19 @@
 #include "util/unaligned_access.h"
 
 namespace starrocks {
+// adaptor to TypeDescriptor
+struct UTRawType {
+    LogicalType type;
+    int precision;
+    int scale;
+    operator TypeDescriptor() {
+        TypeDescriptor type_desc;
+        type_desc.type = type;
+        type_desc.precision = precision;
+        type_desc.scale = scale;
+        return type_desc;
+    }
+};
 
 class AggregateTest : public testing::Test {
 public:
@@ -343,27 +357,27 @@ TEST_F(AggregateTest, test_decimal_sum) {
     {
         const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL32>(ctx, func, 524076, 2499500, 3023576);
     }
     {
         const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL64>(ctx, func, 524076, 2499500, 3023576);
     }
     {
         const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL128>(ctx, func, 524076, 2499500, 3023576);
     }
@@ -405,9 +419,9 @@ TEST_F(AggregateTest, test_decimal_avg) {
     {
         const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 12});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 12});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 9);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 9);
@@ -417,9 +431,9 @@ TEST_F(AggregateTest, test_decimal_avg) {
     {
         const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 3);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 3);
@@ -429,9 +443,9 @@ TEST_F(AggregateTest, test_decimal_avg) {
     {
         const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 15);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 15);
@@ -768,8 +782,7 @@ TEST_F(AggregateTest, test_minby) {
 TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, true);
     auto* ctx_with_args0 = FunctionContext::create_test_context(
-            {FunctionContext::TypeDesc{.type = TYPE_INT}, FunctionContext::TypeDesc{.type = TYPE_VARCHAR}},
-            FunctionContext::TypeDesc{.type = TYPE_INT});
+            {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
     std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
 
     auto result_column = Int32Column::create();
@@ -796,9 +809,8 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     //test nullable column
     func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
     auto* ctx_with_args1 = FunctionContext::create_test_context(
-            {FunctionContext::TypeDesc{.type = TYPE_DOUBLE},
-             FunctionContext::TypeDesc{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
-            FunctionContext::TypeDesc{.type = TYPE_DOUBLE});
+            {UTRawType{.type = TYPE_DOUBLE}, UTRawType{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
+            UTRawType{.type = TYPE_DOUBLE});
     std::unique_ptr<FunctionContext> gc_ctx1(ctx_with_args1);
 
     aggr_state = ManagedAggrState::create(ctx_with_args1, func);
@@ -835,8 +847,7 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
 TEST_F(AggregateTest, test_minby_with_nullable_aggregator) {
     const AggregateFunction* func = get_aggregate_function("min_by", TYPE_VARCHAR, TYPE_INT, true);
     auto* ctx_with_args0 = FunctionContext::create_test_context(
-            {FunctionContext::TypeDesc{.type = TYPE_INT}, FunctionContext::TypeDesc{.type = TYPE_VARCHAR}},
-            FunctionContext::TypeDesc{.type = TYPE_INT});
+            {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
     std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
 
     auto result_column = Int32Column::create();
@@ -863,9 +874,8 @@ TEST_F(AggregateTest, test_minby_with_nullable_aggregator) {
     //test nullable column
     func = get_aggregate_function("min_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
     auto* ctx_with_args1 = FunctionContext::create_test_context(
-            {FunctionContext::TypeDesc{.type = TYPE_DOUBLE},
-             FunctionContext::TypeDesc{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
-            FunctionContext::TypeDesc{.type = TYPE_DOUBLE});
+            {UTRawType{.type = TYPE_DOUBLE}, UTRawType{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
+            UTRawType{.type = TYPE_DOUBLE});
     std::unique_ptr<FunctionContext> gc_ctx1(ctx_with_args1);
 
     aggr_state = ManagedAggrState::create(ctx_with_args1, func);
@@ -1042,34 +1052,34 @@ TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
     {
         const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL32>(ctx, func, 523776, 2499500, 3023276);
     }
     {
         const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL64>(ctx, func, 523776, 2499500, 3023276);
     }
     {
         const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
-        auto* ctx = FunctionContext::create_test_context(
-                {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
-                FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL128>(ctx, func, 523776, 2499500, 3023276);
     }
 }
 
 TEST_F(AggregateTest, test_window_funnel) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)),
@@ -1308,7 +1318,7 @@ TEST_F(AggregateTest, test_group_concat) {
 }
 
 TEST_F(AggregateTest, test_group_concat_const_seperator) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR))};
 
@@ -1354,7 +1364,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
@@ -1409,7 +1419,7 @@ TEST_F(AggregateTest, test_percentile_cont) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont_1) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
@@ -1464,7 +1474,7 @@ TEST_F(AggregateTest, test_percentile_cont_1) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont_2) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
@@ -1497,7 +1507,7 @@ TEST_F(AggregateTest, test_percentile_cont_2) {
 }
 
 TEST_F(AggregateTest, test_percentile_disc) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
@@ -1649,7 +1659,7 @@ ColumnPtr gen_histogram_column() {
 }
 
 TEST_F(AggregateTest, test_histogram) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
@@ -1800,7 +1810,7 @@ TEST_F(AggregateTest, test_any_value) {
 }
 
 TEST_F(AggregateTest, test_exchange_bytes) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT))};
 
@@ -1838,7 +1848,7 @@ TEST_F(AggregateTest, test_exchange_bytes) {
 }
 
 TEST_F(AggregateTest, test_array_aggV2) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
 
@@ -2248,7 +2258,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
 }
 
 TEST_F(AggregateTest, test_group_concatV2) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {
+    std::vector<TypeDescriptor> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};

@@ -127,7 +127,7 @@ def get_call_stub(desc):
     elif input_type == "arrow":
         return VectorizeArrowCallStub(symbol, return_type, location, content)
 
-class EchoFlightServer(flight.FlightServerBase):
+class UDFFlightServer(flight.FlightServerBase):
     def do_exchange(self, context, descriptor, reader, writer):
         func_desc = json.loads(descriptor.command)
         stub = get_call_stub(func_desc)
@@ -143,7 +143,7 @@ class EchoFlightServer(flight.FlightServerBase):
 
 def main(unix_socket_path):
     location = unix_socket_path
-    server = EchoFlightServer(location)
+    server = UDFFlightServer(location)
     print("Pywork start success")
     sys.stdout.flush()
     server.wait()
