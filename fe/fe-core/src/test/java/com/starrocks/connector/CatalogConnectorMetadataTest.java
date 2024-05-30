@@ -172,7 +172,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.dropTable(null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.alterMaterializedView(null);
-                connectorMetadata.addPartitions(null, null, null);
+                connectorMetadata.addPartitions(com.starrocks.common.util.Util.getOrCreateConnectContext(), null, null, null);
                 connectorMetadata.dropPartition(null, null, null);
                 connectorMetadata.renamePartition(null, null, null);
                 connectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);
@@ -209,7 +209,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.dropTable(null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);
-        catalogConnectorMetadata.addPartitions(null, null, null);
+        catalogConnectorMetadata.addPartitions(com.starrocks.common.util.Util.getOrCreateConnectContext(), null, null, null);
         catalogConnectorMetadata.dropPartition(null, null, null);
         catalogConnectorMetadata.renamePartition(null, null, null);
         catalogConnectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);
