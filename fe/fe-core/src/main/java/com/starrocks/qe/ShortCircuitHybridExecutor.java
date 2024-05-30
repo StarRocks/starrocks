@@ -135,7 +135,9 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                     deserializer.deserialize(runtimeProfileTree, shortCircuitResult.profile);
                     RuntimeProfile beProfile = new RuntimeProfile(beAddress.toString());
                     beProfile.update(runtimeProfileTree);
-                    perBeExecutionProfile.put(beAddress.toString(), beProfile);
+                    if (enableProfile) {
+                        perBeExecutionProfile.put(beAddress.toString(), beProfile);
+                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

@@ -43,7 +43,7 @@ select * from short_circuit where c1 in (10);
 -- !result
 select c1||c2 from short_circuit where c1 = 6;
 -- result:
-1
+66
 -- !result
 CREATE TABLE short_circuit_bool
     (k1 int,
