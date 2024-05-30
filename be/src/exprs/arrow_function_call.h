@@ -42,6 +42,7 @@ private:
     std::unique_ptr<UDFCallStub> _build_stub(FunctionContext* context);
     RuntimeState* _runtime_state = nullptr;
 
+    std::string _lib_path;
     std::shared_ptr<ArrowCallStubCtx> _call_stub_ctx;
 };
 } // namespace starrocks

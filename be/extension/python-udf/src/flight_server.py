@@ -44,8 +44,9 @@ class CallStub(object):
             self.eval_func = self.exec_env[self.symbol]
         else:
             try:
-                module = self.load_module(location, self.symbol)
-                self.eval_func = getattr(module, self.symbol)
+                module_with_symbol = self.symbol.split(".")
+                module = self.load_module(location, module_with_symbol[0])
+                self.eval_func = getattr(module, module_with_symbol[1])
             except Exception as e:
                 raise ValueError(f"Failed to load UDF module: {location} symbol {symbol} with error: {e}")
 
@@ -70,7 +71,7 @@ class CallStub(object):
 
     def load_module(self, location, module_name):
         importer = zipimport.zipimporter(location)
-        dependencies = get_imported_packages_ast(importer, module_name)
+        dependencies = self.get_imported_packages_ast(importer, module_name)
         for dep in dependencies:
             if importer.find_module(dep):
                 importer.load_module(dep)

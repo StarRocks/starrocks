@@ -98,9 +98,12 @@ Status ArrowFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         fn_ctx->set_constant_columns(std::move(const_columns));
     }
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        // TODO: download zip here
-        // auto function_cache = UserFunctionCache::instance();
-        // download
+        auto function_cache = UserFunctionCache::instance();
+        if (_fn.hdfs_location != "inline") {
+            RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &_lib_path));
+        } else {
+            _lib_path = "inline";
+        }
         _call_stub_ctx = std::make_shared<ArrowCallStubCtx>();
     }
     return Status::OK();
@@ -120,7 +123,7 @@ std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(FunctionContext*
     if (binary_type == TFunctionBinaryType::PYTHON) {
         PyFunctionDescriptor py_func_desc;
         py_func_desc.symbol = _fn.scalar_fn.symbol;
-        py_func_desc.location = _fn.hdfs_location;
+        py_func_desc.location = _lib_path;
         py_func_desc.input_type = _fn.input_type;
         py_func_desc.input_types = context->get_arg_types();
         py_func_desc.return_type = context->get_return_type();
