@@ -18,7 +18,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -44,7 +44,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
-import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -64,6 +63,8 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -196,19 +197,14 @@ public class PipeManagerTest {
         // not exists
         String sql = "create pipe p_warehouse properties('warehouse' = 'w1') " +
                 "as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
-        Exception e = Assert.assertThrows(AnalysisException.class, () -> createPipe(sql));
-        Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter w1.", e.getMessage());
+        Exception e = Assert.assertThrows(ErrorReportException.class, () -> createPipe(sql));
+        Assert.assertEquals("Warehouse name: w1 not exist.", e.getMessage());
 
         // mock the warehouse
-        new MockUp<PipeAnalyzer>() {
-            @Mock
-            public void analyzeWarehouseProperty(String warehouseName) {
-            }
-        };
         new MockUp<WarehouseManager>() {
             @Mock
-            public boolean warehouseExists(String warehouseName) {
-                return true;
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(1000L, "w1");
             }
         };
 
