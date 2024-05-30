@@ -15,6 +15,10 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
+
+#include "column/vectorized_fwd.h"
+#include "storage/uint24.h"
 
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
@@ -329,6 +333,14 @@ struct Hash128WithSeed {
     std::size_t operator()(int128_t value) const {
         return phmap_mix_with_seed<sizeof(size_t), seed>()(hash_128(seed, value));
     }
+};
+template <typename T>
+struct HashTypeTraits {
+    using HashFunc = StdHashWithSeed<T, PhmapSeed2>;
+};
+template <>
+struct HashTypeTraits<int128_t> {
+    using HashFunc = Hash128WithSeed<PhmapSeed2>;
 };
 
 } // namespace starrocks

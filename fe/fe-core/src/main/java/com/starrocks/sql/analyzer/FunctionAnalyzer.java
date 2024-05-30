@@ -133,7 +133,8 @@ public class FunctionAnalyzer {
                         functionCallExpr.getPos());
             }
 
-            int sepPos = functionCallExpr.getParams().exprs().size() - functionCallExpr.getParams().getOrderByElemNum() - 1;
+            int sepPos =
+                    functionCallExpr.getParams().exprs().size() - functionCallExpr.getParams().getOrderByElemNum() - 1;
             Expr arg1 = functionCallExpr.getChild(sepPos);
             if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
                 throw new SemanticException(
@@ -146,7 +147,8 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.LAG)
                 || fnName.getFunction().equals(FunctionSet.LEAD)) {
             if (!functionCallExpr.isAnalyticFnCall()) {
-                throw new SemanticException(fnName.getFunction() + " only used in analytic function", functionCallExpr.getPos());
+                throw new SemanticException(fnName.getFunction() + " only used in analytic function",
+                        functionCallExpr.getPos());
             } else {
                 if (functionCallExpr.getChildren().size() > 2) {
                     if (!functionCallExpr.getChild(2).isConstant()) {
@@ -169,7 +171,8 @@ public class FunctionAnalyzer {
 
         if (FunctionSet.onlyAnalyticUsedFunctions.contains(fnName.getFunction())) {
             if (!functionCallExpr.isAnalyticFnCall()) {
-                throw new SemanticException(fnName.getFunction() + " only used in analytic function", functionCallExpr.getPos());
+                throw new SemanticException(fnName.getFunction() + " only used in analytic function",
+                        functionCallExpr.getPos());
             }
         }
 
@@ -395,7 +398,8 @@ public class FunctionAnalyzer {
                 Preconditions.checkNotNull(k);
                 if (counterNum > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
                     throw new SemanticException("The maximum number of the third parameter is "
-                            + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(), counterNumExpr.getPos());
+                            + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(),
+                            counterNumExpr.getPos());
                 }
                 if (k > counterNum) {
                     throw new SemanticException(
@@ -414,7 +418,8 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.PERCENTILE_DISC) ||
-                fnName.getFunction().equals(FunctionSet.PERCENTILE_CONT)) {
+                fnName.getFunction().equals(FunctionSet.PERCENTILE_CONT) ||
+                fnName.getFunction().equals(FunctionSet.LC_PERCENTILE_DISC)) {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException(fnName + " requires two parameters");
             }
