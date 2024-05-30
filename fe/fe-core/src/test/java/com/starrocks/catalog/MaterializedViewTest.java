@@ -285,7 +285,13 @@ public class MaterializedViewTest {
         Assert.assertNotNull(table);
         // test partition related info
         MaterializedView oldMv = (MaterializedView) table;
+<<<<<<< HEAD
         Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumns();
+=======
+        Assert.assertTrue(oldMv.getRefreshScheme().isAsync());
+        Assert.assertTrue(oldMv.getRefreshScheme().toString().contains("MvRefreshScheme"));
+        Map<Table, Column> partitionMap = oldMv.getRelatedPartitionTableAndColumn();
+>>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
         Table table1 = db.getTable("tbl1");
         Assert.assertTrue(partitionMap.containsKey(table1));
         List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
@@ -805,6 +811,7 @@ public class MaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateMVWithCoolDownTime() throws Exception {
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.table1\n" +
@@ -872,5 +879,17 @@ public class MaterializedViewTest {
                 DataProperty.getInferredDefaultDataProperty(), false);
         Assert.assertTrue(mockDataProperty.getCooldownTimeMs() < 253402271999000L);
         // misbehavior
+=======
+    public void testBasePartitionInfo() {
+        MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(-1L, -1L, 123456L);
+        Assert.assertEquals(-1, basePartitionInfo.getExtLastFileModifiedTime());
+        Assert.assertEquals(-1, basePartitionInfo.getFileNumber());
+        basePartitionInfo.setExtLastFileModifiedTime(100);
+        basePartitionInfo.setFileNumber(10);
+        Assert.assertEquals(100, basePartitionInfo.getExtLastFileModifiedTime());
+        Assert.assertEquals(10, basePartitionInfo.getFileNumber());
+        Assert.assertTrue(basePartitionInfo.toString().contains(
+                "BasePartitionInfo{id=-1, version=-1, lastRefreshTime=123456, lastFileModifiedTime=100, fileNumber=10}"));
+>>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
     }
 }

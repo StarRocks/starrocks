@@ -1313,6 +1313,21 @@ public class MvUtils {
         return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
     }
 
+<<<<<<< HEAD
+=======
+    public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
+    }
+
+    public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
+    }
+
+    public static Table getTableChecked(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
+    }
+
+>>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
         List<Expr> matches = Lists.newArrayList();
         partitionExpr.collect(expr -> isStr2Date(expr), matches);
