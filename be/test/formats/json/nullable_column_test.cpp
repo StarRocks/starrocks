@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "runtime/types.h"
 #include "simdjson.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -111,4 +112,34 @@ TEST_F(AddNullableColumnTest, add_null_numeric_array) {
     column->check_or_die();
 }
 
+TEST_F(AddNullableColumnTest, test_add_struct) {
+    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
+            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+    auto column = ColumnHelper::create_column(type_desc, true);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "key0": {"key1": "foo", "key2": "bar", "key3": "baz" }}  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field_unordered("key0");
+
+    ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
+
+    ASSERT_EQ("[{key1:'foo',key2:'bar'}]", column->debug_string());
+}
+
+TEST_F(AddNullableColumnTest, test_add_map) {
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
+                                                               TypeDescriptor::create_varchar_type(10));
+
+    auto column = ColumnHelper::create_column(type_desc, true);
+
+    simdjson::ondemand::parser parser;
+    auto json = R"(  { "key0": {"key1": "foo", "key2": "bar", "key3": "baz" }}  )"_padded;
+    auto doc = parser.iterate(json);
+    simdjson::ondemand::value val = doc.find_field_unordered("key0");
+
+    ASSERT_OK(add_nullable_column(column.get(), type_desc, "root_key", &val, true));
+
+    ASSERT_EQ("[{'key1':'foo','key2':'bar','key3':'baz'}]", column->debug_string());
+}
 } // namespace starrocks

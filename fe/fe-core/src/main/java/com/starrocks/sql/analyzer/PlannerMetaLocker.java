@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -108,17 +107,10 @@ public class PlannerMetaLocker {
 
     public void unlock() {
         Locker locker = new Locker();
-
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
-                Database database = dbs.get(entry.getKey());
-                List<Long> tableIds = new ArrayList<>(entry.getValue());
-                locker.unLockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
-            }
-        } else {
-            for (Map.Entry<Long, Database> db : dbs.entrySet()) {
-                locker.unLockDatabase(db.getValue(), LockType.READ);
-            }
+        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+            Database database = dbs.get(entry.getKey());
+            List<Long> tableIds = new ArrayList<>(entry.getValue());
+            locker.unLockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
         }
     }
 

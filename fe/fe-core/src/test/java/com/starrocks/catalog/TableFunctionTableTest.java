@@ -212,4 +212,24 @@ public class TableFunctionTableTest {
                     () -> new TableFunctionTable(properties));
         }
     }
+
+    @Test
+    public void testIllegalCSVTrimSpace() throws DdlException {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+            }
+        };
+
+        Map<String, String> properties = newProperties();
+        properties.put("csv.trim_space", "FALSE");
+
+        ExceptionChecker.expectThrowsNoException(() -> new TableFunctionTable(properties));
+
+        properties.put("csv.trim_space", "FALS");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "illegal value of csv.trim_space: FALS, only true/false allowed",
+                () -> new TableFunctionTable(properties));
+    }
 }

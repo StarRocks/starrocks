@@ -18,6 +18,8 @@
 #include "column/array_column.h"
 #include "column/nullable_column.h"
 #include "formats/json/binary_column.h"
+#include "formats/json/map_column.h"
+#include "formats/json/struct_column.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
 
@@ -203,6 +205,78 @@ static Status add_nullable_native_json_column(Column* column, const TypeDescript
     }
 }
 
+static Status add_nullable_struct_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                         simdjson::ondemand::value* value) {
+    auto nullable_column = down_cast<NullableColumn*>(column);
+
+    if (value->is_null()) {
+        nullable_column->append_nulls(1);
+        return Status::OK();
+    }
+
+    auto& null_column = nullable_column->null_column();
+    auto& data_column = nullable_column->data_column();
+
+    RETURN_IF_ERROR(add_struct_column(data_column.get(), type_desc, name, value));
+
+    null_column->append(0);
+    return Status::OK();
+}
+
+static Status add_nullable_map_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                      simdjson::ondemand::value* value) {
+    auto nullable_column = down_cast<NullableColumn*>(column);
+
+    auto& null_column = nullable_column->null_column();
+    auto& data_column = nullable_column->data_column();
+
+    if (value->is_null()) {
+        nullable_column->append_nulls(1);
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(add_map_column(data_column.get(), type_desc, name, value));
+
+    null_column->append(0);
+    return Status::OK();
+}
+
+static Status add_adaptive_nullable_struct_column(Column* column, const TypeDescriptor& type_desc,
+                                                  const std::string& name, simdjson::ondemand::value* value) {
+    auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
+
+    if (value->is_null()) {
+        nullable_column->append_nulls(1);
+        return Status::OK();
+    }
+
+    auto& data_column = nullable_column->begin_append_not_default_value();
+
+    RETURN_IF_ERROR(add_struct_column(data_column.get(), type_desc, name, value));
+
+    nullable_column->finish_append_one_not_default_value();
+
+    return Status::OK();
+}
+
+static Status add_adaptive_nullable_map_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                               simdjson::ondemand::value* value) {
+    auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
+
+    if (value->is_null()) {
+        nullable_column->append_nulls(1);
+        return Status::OK();
+    }
+
+    auto& data_column = nullable_column->begin_append_not_default_value();
+
+    RETURN_IF_ERROR(add_map_column(data_column.get(), type_desc, name, value));
+
+    nullable_column->finish_append_one_not_default_value();
+
+    return Status::OK();
+}
+
 static Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                   simdjson::ondemand::value* value) {
     // The type mappint should be in accord with JsonScanner::_construct_json_types();
@@ -256,6 +330,13 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
                                                simdjson::error_message(e.error()));
             return Status::DataQualityError(err_msg);
         }
+    }
+    case TYPE_STRUCT: {
+        return add_nullable_struct_column(column, type_desc, name, value);
+    }
+
+    case TYPE_MAP: {
+        return add_nullable_map_column(column, type_desc, name, value);
     }
 
     default:
@@ -318,6 +399,13 @@ static Status add_adpative_nullable_column(Column* column, const TypeDescriptor&
                                                simdjson::error_message(e.error()));
             return Status::DataQualityError(err_msg);
         }
+    }
+    case TYPE_STRUCT: {
+        return add_adaptive_nullable_struct_column(column, type_desc, name, value);
+    }
+
+    case TYPE_MAP: {
+        return add_adaptive_nullable_map_column(column, type_desc, name, value);
     }
 
     default:

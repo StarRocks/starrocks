@@ -104,6 +104,7 @@ public class LoadLoadingTask extends LoadTask {
     private final int fileNum;
 
     private final LoadJob.JSONOptions jsonOptions;
+    private long warehouseId;
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
@@ -130,6 +131,7 @@ public class LoadLoadingTask extends LoadTask {
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
         this.jsonOptions = builder.jsonOptions;
+        this.warehouseId = builder.warehouseId;
     }
 
     public void prepare() throws UserException {
@@ -139,6 +141,7 @@ public class LoadLoadingTask extends LoadTask {
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
+        loadPlanner.setWarehouseId(warehouseId);
         loadPlanner.plan();
     }
 
@@ -328,6 +331,7 @@ public class LoadLoadingTask extends LoadTask {
         private int fileNum = 0;
         private LoadTaskCallback callback;
         private int priority;
+        private long warehouseId;
 
         private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -448,6 +452,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setJSONOptions(LoadJob.JSONOptions options) {
             this.jsonOptions = options;
+            return this;
+        }
+
+        public Builder setWarehouseId(long warehouseId) {
+            this.warehouseId = warehouseId;
             return this;
         }
 
