@@ -17,16 +17,19 @@ package com.starrocks.catalog;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.IOException;
+
 /**
  * TODO: Support comments for struct fields. The Metastore does not properly store
  * comments of struct fields. We set comment to null to avoid compatibility issues.
  */
-public class StructField {
+public class StructField implements GsonPostProcessable {
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "type")
@@ -37,10 +40,18 @@ public class StructField {
     private final String comment;
     private int position;  // in struct
 
-    public StructField(String name, Type type, String comment) {
+    @SerializedName(value = "fieldId")
+    private int fieldId;
+
+    public StructField(String name, int fieldId, Type type, String comment) {
         this.name = name;
         this.type = type;
         this.comment = comment;
+        this.fieldId = fieldId;
+    }
+
+    public StructField(String name, Type type, String comment) {
+        this(name, -1, type, comment);
     }
 
     public StructField(String name, Type type) {
@@ -115,6 +126,7 @@ public class StructField {
         TStructField field = new TStructField();
         field.setName(name);
         field.setComment(comment);
+        field.setId(fieldId);
         node.struct_fields.add(field);
         type.toThrift(container);
     }
@@ -137,6 +149,13 @@ public class StructField {
     @Override
     public StructField clone() {
         return new StructField(name, type.clone(), comment);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (fieldId <= 0) {
+            fieldId = -1;
+        }
     }
 }
 

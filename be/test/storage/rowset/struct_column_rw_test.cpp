@@ -133,6 +133,9 @@ protected:
         LOG(INFO) << "Finish writing";
         // read and check
         auto res = ColumnReader::create(&meta, segment.get());
+        ColumnMetaPB meta2 = meta;
+        ColumnMetaPB meta3 = meta;
+        auto res = ColumnReader::create(&meta, segment.get(), nullptr);
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
 
@@ -163,6 +166,87 @@ protected:
             ASSERT_EQ(src_column->size(), rows_read);
 
             ASSERT_EQ("{f1:1,f2:'Column2'}", dst_column->debug_item(0));
+        }
+
+        {
+            TabletColumn new_struct_column = create_struct(0, true);
+            std::vector<std::string> names{"f1", "f3"};
+            TabletColumn f1_tablet_column = create_int_value(1, STORAGE_AGGREGATE_NONE, true);
+            new_struct_column.add_sub_column(f1_tablet_column);
+            // add new field column f3
+            TabletColumn f3_tablet_column = create_int_value(3, STORAGE_AGGREGATE_NONE, true, "2");
+            ASSERT_TRUE(f3_tablet_column.has_default_value());
+            new_struct_column.add_sub_column(f3_tablet_column);
+            auto res = ColumnReader::create(&meta2, segment.get(), &struct_column);
+            ASSERT_TRUE(res.ok());
+            auto struct_reader = std::move(res).value();
+            ASSIGN_OR_ABORT(auto iter, struct_reader->new_iterator(nullptr, &new_struct_column));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            auto st = iter->seek_to_first();
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            auto dst_f1_column = Int32Column::create();
+            auto dst_f3_column = Int32Column::create();
+            Columns dst_columns;
+            dst_columns.emplace_back(std::move(dst_f1_column));
+            dst_columns.emplace_back(std::move(dst_f3_column));
+
+            ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+            size_t rows_read = src_column->size();
+            st = iter->next_batch(&rows_read, dst_column.get());
+            ASSERT_TRUE(st.ok());
+            ASSERT_EQ(src_column->size(), rows_read);
+
+            ASSERT_EQ("{f1:1,f3:2}", dst_column->debug_item(0));
+        }
+
+        {
+            TabletColumn new_struct_column = create_struct(0, true);
+            std::vector<std::string> names{"f1", "f3"};
+            TabletColumn f1_tablet_column = create_int_value(1, STORAGE_AGGREGATE_NONE, true, "5");
+            f1_tablet_column.set_unique_id(10);
+            new_struct_column.add_sub_column(f1_tablet_column);
+            // add new field column f3
+            TabletColumn f3_tablet_column = create_int_value(3, STORAGE_AGGREGATE_NONE, true, "2");
+            ASSERT_TRUE(f3_tablet_column.has_default_value());
+            new_struct_column.add_sub_column(f3_tablet_column);
+            auto res = ColumnReader::create(&meta3, segment.get(), &struct_column);
+            ASSERT_TRUE(res.ok());
+            auto struct_reader = std::move(res).value();
+            ASSIGN_OR_ABORT(auto iter, struct_reader->new_iterator(nullptr, &new_struct_column));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            auto st = iter->seek_to_first();
+            ASSERT_TRUE(st.ok()) << st.to_string();
+
+            auto dst_f1_column = Int32Column::create();
+            auto dst_f3_column = Int32Column::create();
+            Columns dst_columns;
+            dst_columns.emplace_back(std::move(dst_f1_column));
+            dst_columns.emplace_back(std::move(dst_f3_column));
+
+            ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+            size_t rows_read = src_column->size();
+            st = iter->next_batch(&rows_read, dst_column.get());
+            ASSERT_TRUE(st.ok());
+            ASSERT_EQ(src_column->size(), rows_read);
+
+            ASSERT_EQ("{f1:5,f3:2}", dst_column->debug_item(0));
         }
 
         {
