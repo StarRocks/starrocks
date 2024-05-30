@@ -445,7 +445,7 @@ public class HiveMetadata implements ConnectorMetadata {
         HiveTable table = (HiveTable) getTable(stmt.getDbName(), stmt.getTableName());
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterClause;
         List<String> partitionColumns = table.getPartitionColumnNames();
-        // now do not support to specify locaition of hive partition in add partition
+        // now do not support to specify location of hive partition in add partition
         if (!(addPartitionClause.getPartitionDesc() instanceof SingleItemListPartitionDesc)) {
             return;
         }
