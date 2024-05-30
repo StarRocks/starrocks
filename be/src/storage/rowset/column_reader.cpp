@@ -622,7 +622,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
     DCHECK(_column_type == LogicalType::TYPE_STRUCT);
     DCHECK(column != nullptr);
     auto num_fields = column->subcolumn_count();
-    int cur_sub_reader = 0;
 
     std::unique_ptr<ColumnIterator> null_iter;
     if (is_nullable()) {
@@ -643,7 +642,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
         if (iter != _sub_reader_pos.end()) {
             ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[iter->second]->new_iterator(child_paths[i], sub_column));
             field_iters.emplace_back(std::move(iter));
-            cur_sub_reader++;
         } else {
             if (!sub_column->has_default_value() && !sub_column->is_nullable()) {
                 return Status::InternalError(
