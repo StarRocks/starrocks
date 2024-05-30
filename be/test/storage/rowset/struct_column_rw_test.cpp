@@ -132,7 +132,6 @@ protected:
 
         LOG(INFO) << "Finish writing";
         // read and check
-        auto res = ColumnReader::create(&meta, segment.get());
         ColumnMetaPB meta2 = meta;
         ColumnMetaPB meta3 = meta;
         auto res = ColumnReader::create(&meta, segment.get(), nullptr);
