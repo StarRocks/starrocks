@@ -63,8 +63,7 @@ public class DeltaLakeMetadataFactory {
     public synchronized Optional<DeltaLakeCacheUpdateProcessor> getCacheUpdateProcessor() {
         Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor;
         if (metastore instanceof CachingDeltaLakeMetastore) {
-            cacheUpdateProcessor = Optional.of(new DeltaLakeCacheUpdateProcessor(catalogName,
-                    (CachingDeltaLakeMetastore) metastore));
+            cacheUpdateProcessor = Optional.of(new DeltaLakeCacheUpdateProcessor((CachingDeltaLakeMetastore) metastore));
         } else {
             cacheUpdateProcessor = Optional.empty();
         }

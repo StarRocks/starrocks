@@ -14,28 +14,44 @@
 
 package com.starrocks.connector.delta;
 
+
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.CachingMetastore;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
-import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.qe.ConnectContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.InvocationTargetException;
+import java.rmi.NoSuchObjectException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 
 public class CachingDeltaLakeMetastore extends CachingMetastore implements IMetastore {
+    private static final Logger LOG = LogManager.getLogger(CachingDeltaLakeMetastore.class);
+
     public final IMetastore delegate;
+    private final Map<DatabaseTableName, Long> lastAccessTimeMap;
 
     public CachingDeltaLakeMetastore(IMetastore metastore, Executor executor, long expireAfterWriteSec,
                                      long refreshIntervalSec, long maxSize) {
         super(executor, expireAfterWriteSec, refreshIntervalSec, maxSize);
         this.delegate = metastore;
+        this.lastAccessTimeMap = Maps.newConcurrentMap();
     }
 
     public static CachingDeltaLakeMetastore createQueryLevelInstance(IMetastore metastore, long perQueryCacheMaxSize) {
@@ -90,16 +106,15 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
 
     @Override
     public MetastoreTable getMetastoreTable(String dbName, String tableName) {
-        return get(metastoreTableCache, DatabaseTableName.of(dbName, tableName));
-    }
-
-    @Override
-    public MetastoreTable loadMetastoreTable(DatabaseTableName databaseTableNam) {
-        return delegate.getMetastoreTable(databaseTableNam.getDatabaseName(), databaseTableNam.getTableName());
+        return delegate.getMetastoreTable(dbName, tableName);
     }
 
     @Override
     public Table getTable(String dbName, String tableName) {
+        if (ConnectContext.get() != null && ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
+            DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
+            lastAccessTimeMap.put(databaseTableName, System.currentTimeMillis());
+        }
         return get(tableCache, DatabaseTableName.of(dbName, tableName));
     }
 
@@ -118,10 +133,8 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tblName);
         tableNameLockMap.putIfAbsent(databaseTableName, dbName + "_" + tblName + "_lock");
         synchronized (tableNameLockMap.get(databaseTableName)) {
-            MetastoreTable newMetastoreTable;
             Table newDeltaLakeTable;
             try {
-                newMetastoreTable = loadMetastoreTable(databaseTableName);
                 newDeltaLakeTable = loadTable(databaseTableName);
             } catch (StarRocksConnectorException e) {
                 Throwable cause = e.getCause();
@@ -134,14 +147,31 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IMeta
                 }
             }
 
-            metastoreTableCache.put(databaseTableName, newMetastoreTable);
             tableCache.put(databaseTableName, newDeltaLakeTable);
         }
     }
 
-    public synchronized void invalidateTable(String dbName, String tableName) {
-        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
-        metastoreTableCache.invalidate(databaseTableName);
-        tableCache.invalidate(databaseTableName);
+    public Set<DatabaseTableName> getCachedTableNames() {
+        return lastAccessTimeMap.keySet();
+    }
+
+    public void refreshTableBackground(String dbName, String tblName) {
+        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tblName);
+        if (lastAccessTimeMap.containsKey(databaseTableName)) {
+            long lastAccessTime = lastAccessTimeMap.get(databaseTableName);
+            long intervalSec = (System.currentTimeMillis() - lastAccessTime) / 1000;
+            long refreshIntervalSinceLastAccess = Config.background_refresh_metadata_time_secs_since_last_access_secs;
+            if (refreshIntervalSinceLastAccess >= 0 && intervalSec > refreshIntervalSinceLastAccess) {
+                invalidateTable(dbName, tblName);
+                lastAccessTimeMap.remove(databaseTableName);
+                LOG.info("{}.{} skip refresh because of the last access time is {}", dbName, tblName,
+                        LocalDateTime.ofInstant(Instant.ofEpochMilli(lastAccessTime), ZoneId.systemDefault()));
+                return;
+            }
+        }
+        refreshTable(dbName, tblName, true);
+        Set<DatabaseTableName> cachedTableName = tableCache.asMap().keySet();
+        lastAccessTimeMap.keySet().retainAll(cachedTableName);
+        LOG.info("Refresh table {}.{} in background", dbName, tblName);
     }
 }
