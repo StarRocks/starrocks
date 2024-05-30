@@ -19,6 +19,7 @@ namespace starrocks::lake {
 enum DeltaWriterFinishMode {
     kWriteTxnLog,
     kDontWriteTxnLog,
+    kSkipTxnLog,
 };
 
 }

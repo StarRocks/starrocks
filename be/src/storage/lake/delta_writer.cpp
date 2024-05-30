@@ -409,6 +409,11 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
 
+    if (mode == kSkipTxnLog) {
+        // Not need to create txn log in delta writer finish when handle schema change.
+        return Status::OK();
+    }
+
     if (UNLIKELY(_txn_id < 0)) {
         return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
     }
