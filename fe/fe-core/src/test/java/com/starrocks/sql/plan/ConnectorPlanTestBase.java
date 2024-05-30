@@ -291,7 +291,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 MOCK_TABLE_MAP = new CaseInsensitiveMap<>();
 
         public MockedDeltaLakeMetadata() {
-            super(null, null, null);
+            super(null, null, null, Optional.empty());
 
             long tableId = GlobalStateMgr.getCurrentState().getNextId();
             List<Column> columns = ImmutableList.<Column>builder()
