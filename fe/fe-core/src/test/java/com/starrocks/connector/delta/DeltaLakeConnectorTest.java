@@ -66,8 +66,8 @@ public class DeltaLakeConnectorTest {
             Assert.fail("Should throw exception");
         } catch (Exception e) {
             Assert.assertTrue(e instanceof StarRocksConnectorException);
-            Assert.assertEquals("Getting analyzing error. Detail message: hive metastore type [error_metastore] is not supported.",
-                    e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: hive metastore type [error_metastore] " +
+                            "is not supported.", e.getMessage());
         }
     }
 }
