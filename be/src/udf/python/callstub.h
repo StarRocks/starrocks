@@ -20,18 +20,18 @@
 #include "udf/udf_call_stub.h"
 
 namespace starrocks {
-class PyWorkerHandle;
+class ArrowFlightWithRW;
 
 class ArrowFlightFuncCallStub final : public AbstractArrowFuncCallStub {
 public:
-    ArrowFlightFuncCallStub(FunctionContext* func_ctx, std::shared_ptr<PyWorkerHandle> handle)
-            : AbstractArrowFuncCallStub(func_ctx), _py_worker_handle(std::move(handle)) {}
+    ArrowFlightFuncCallStub(FunctionContext* func_ctx, std::shared_ptr<ArrowFlightWithRW> client)
+            : AbstractArrowFuncCallStub(func_ctx), _client(std::move(client)) {}
     ~ArrowFlightFuncCallStub() override = default;
 
     StatusOr<std::shared_ptr<RecordBatch>> do_evaluate(RecordBatch&& batch) final;
 
 private:
-    std::shared_ptr<PyWorkerHandle> _py_worker_handle;
+    std::shared_ptr<ArrowFlightWithRW> _client;
 };
 
 struct PyEnvDescriptor {
@@ -41,6 +41,8 @@ struct PyEnvDescriptor {
 };
 
 struct PyFunctionDescriptor {
+    // used for reuse python env
+    int32_t driver_id;
     std::string symbol;
     std::string location;
     std::string content;

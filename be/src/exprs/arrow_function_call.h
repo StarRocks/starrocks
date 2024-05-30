@@ -39,7 +39,7 @@ public:
     bool is_constant() const override;
 
 private:
-    std::unique_ptr<UDFCallStub> _build_stub(FunctionContext* context);
+    std::unique_ptr<UDFCallStub> _build_stub(int32_t driver_id, FunctionContext* context);
     RuntimeState* _runtime_state = nullptr;
 
     std::string _lib_path;

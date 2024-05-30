@@ -25,7 +25,9 @@
 
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "arrow/buffer.h"
@@ -57,10 +59,10 @@
 
 namespace starrocks {
 
-class ChildProcess {
+class PyWorker {
 public:
-    ChildProcess(pid_t pid) : _pid(pid) {}
-    ~ChildProcess() { terminate_and_wait(); }
+    PyWorker(pid_t pid) : _pid(pid) {}
+    ~PyWorker() { terminate_and_wait(); }
 
     void terminate() {
         if (_pid != -1) {
@@ -85,7 +87,11 @@ public:
     }
     void remove_unix_socket();
 
+    const std::string url() { return _url; }
+    void set_url(std::string url) { _url = std::move(url); }
+
 private:
+    std::string _url;
     pid_t _pid = -1;
 };
 
@@ -96,7 +102,8 @@ public:
     using FlightStreamWriter = arrow::flight::FlightStreamWriter;
     using FlightStreamReader = arrow::flight::FlightStreamReader;
 
-    Status init(const std::string& uri_string, const PyFunctionDescriptor& func_desc);
+    Status init(const std::string& uri_string, const PyFunctionDescriptor& func_desc,
+                std::shared_ptr<PyWorker> process);
     StatusOr<std::shared_ptr<arrow::RecordBatch>> rpc(arrow::RecordBatch& batch);
 
     void close();
@@ -106,9 +113,11 @@ private:
     std::unique_ptr<ArrowFlightClient> _arrow_client;
     std::unique_ptr<FlightStreamWriter> _writer;
     std::unique_ptr<FlightStreamReader> _reader;
+    std::shared_ptr<PyWorker> _process;
 };
 
-Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDescriptor& func_desc) {
+Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDescriptor& func_desc,
+                               std::shared_ptr<PyWorker> process) {
     using namespace arrow::flight;
     Location location;
     RETURN_IF_ARROW_ERROR(location.Parse(uri_string, &location));
@@ -116,6 +125,7 @@ Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDe
     ASSIGN_OR_RETURN(auto command, func_desc.to_json_string());
     FlightDescriptor descriptor = FlightDescriptor::Command(command);
     RETURN_IF_ARROW_ERROR(_arrow_client->DoExchange(descriptor, &_writer, &_reader));
+    _process = std::move(process);
     return Status::OK();
 }
 
@@ -136,22 +146,16 @@ void ArrowFlightWithRW::close() {
     }
 }
 
-class PyWorkerHandle {
-public:
-    PyWorkerHandle(std::unique_ptr<ArrowFlightWithRW> arrow_client, std::shared_ptr<ChildProcess> process)
-            : _arrow_client(std::move(arrow_client)), _process(std::move(process)) {}
-
-    ArrowFlightWithRW* client() const { return _arrow_client.get(); }
-
-private:
-    std::unique_ptr<ArrowFlightWithRW> _arrow_client;
-    std::shared_ptr<ChildProcess> _process;
-};
-using PyWorkerPtr = std::shared_ptr<PyWorkerHandle>;
-
 class PyWorkerManager {
 public:
-    static StatusOr<PyWorkerPtr> create_worker(const PyFunctionDescriptor& func_desc);
+    using WorkerClientPtr = std::shared_ptr<ArrowFlightWithRW>;
+
+    static PyWorkerManager& getInstance() {
+        static PyWorkerManager instance;
+        return instance;
+    }
+
+    StatusOr<WorkerClientPtr> get_client(const PyFunctionDescriptor& func_desc);
 
     static std::string unix_socket(pid_t pid) {
         std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
@@ -169,7 +173,12 @@ public:
     }
 
 private:
-    static Status _fork_py_worker(std::unique_ptr<ChildProcess>* child_process, std::string* unix_socket);
+    Status _fork_py_worker(std::unique_ptr<PyWorker>* child_process);
+    StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
+
+    const size_t max_worker_per_driver = 2;
+    std::mutex _mutex;
+    std::unordered_map<int32_t, std::vector<std::shared_ptr<PyWorker>>> _processes;
 };
 
 static Status close_all_fd_except(const std::unordered_set<int>& fds) {
@@ -202,20 +211,20 @@ static Status close_all_fd_except(const std::unordered_set<int>& fds) {
     return Status::OK();
 }
 
-void ChildProcess::remove_unix_socket() {
+void PyWorker::remove_unix_socket() {
     unlink(PyWorkerManager::unix_socket_path(_pid).c_str());
 }
 
-StatusOr<PyWorkerPtr> PyWorkerManager::create_worker(const PyFunctionDescriptor& func_desc) {
-    std::unique_ptr<ChildProcess> child_process;
+auto PyWorkerManager::get_client(const PyFunctionDescriptor& func_desc) -> StatusOr<WorkerClientPtr> {
+    std::shared_ptr<PyWorker> handle;
     std::string url;
-    RETURN_IF_ERROR(_fork_py_worker(&child_process, &url));
+    ASSIGN_OR_RETURN(handle, _acquire_worker(func_desc.driver_id, config::python_worker_reuse, &url));
     auto arrow_client = std::make_unique<ArrowFlightWithRW>();
-    RETURN_IF_ERROR(arrow_client->init(url, func_desc));
-    return std::make_shared<PyWorkerHandle>(std::move(arrow_client), std::move(child_process));
+    RETURN_IF_ERROR(arrow_client->init(url, func_desc, std::move(handle)));
+    return arrow_client;
 }
 
-Status PyWorkerManager::_fork_py_worker(std::unique_ptr<ChildProcess>* child_process, std::string* unix_socket) {
+Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process) {
     ASSIGN_OR_RETURN(auto py_env, PythonEnvManager::getInstance().getDefault());
 
     std::string python_path = py_env.get_python_path();
@@ -264,7 +273,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<ChildProcess>* child_pro
     } else {
         close(pipefd[1]);
         butil::fd_guard guard(pipefd[0]);
-        *child_process = std::make_unique<ChildProcess>(cpid);
+        *child_process = std::make_unique<PyWorker>(cpid);
 
         pollfd fds[1];
         fds[0].fd = pipefd[0];
@@ -286,14 +295,50 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<ChildProcess>* child_pro
             (*child_process)->terminate_and_wait();
             return Status::InternalError(fmt::format("worker start failed:{}", result.to_string()));
         }
-        *unix_socket = PyWorkerManager::unix_socket(cpid);
+        (*child_process)->set_url(PyWorkerManager::unix_socket(cpid));
     }
     return Status::OK();
 }
 
+StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t driver_id, size_t reusable,
+                                                                     std::string* url) {
+    if (!reusable) {
+        std::unique_ptr<PyWorker> child_process;
+        RETURN_IF_ERROR(_fork_py_worker(&child_process));
+        *url = child_process->url();
+        return child_process;
+    }
+    std::shared_ptr<PyWorker> worker;
+    {
+        // try to find a worker from pool
+        std::lock_guard guard(_mutex);
+        auto& workers = _processes[driver_id];
+        if (workers.size() > max_worker_per_driver) {
+            worker = workers[rand() % max_worker_per_driver];
+        }
+    }
+    if (worker != nullptr) {
+        *url = worker->url();
+        return worker;
+    }
+
+    std::unique_ptr<PyWorker> uniq_worker;
+    RETURN_IF_ERROR(_fork_py_worker(&uniq_worker));
+    *url = uniq_worker->url();
+    worker = std::move(uniq_worker);
+
+    {
+        // add to pool
+        std::lock_guard guard(_mutex);
+        _processes[driver_id].push_back(worker);
+    }
+
+    return worker;
+}
+
 StatusOr<std::shared_ptr<arrow::RecordBatch>> ArrowFlightFuncCallStub::do_evaluate(RecordBatch&& batch) {
     size_t num_rows = batch.num_rows();
-    ASSIGN_OR_RETURN(auto result_batch, _py_worker_handle->client()->rpc(batch));
+    ASSIGN_OR_RETURN(auto result_batch, _client->rpc(batch));
     if (result_batch->num_rows() != num_rows) {
         return Status::InternalError(
                 fmt::format("unexpected result batch rows from UDF:{} expect:{}", result_batch->num_rows(), num_rows));
@@ -349,7 +394,8 @@ StatusOr<std::string> PyFunctionDescriptor::to_json_string() const {
 }
 
 std::unique_ptr<UDFCallStub> build_py_call_stub(FunctionContext* context, const PyFunctionDescriptor& func_desc) {
-    auto worker_with_st = PyWorkerManager::create_worker(func_desc);
+    auto& instance = PyWorkerManager::getInstance();
+    auto worker_with_st = instance.get_client(func_desc);
     if (!worker_with_st.ok()) {
         return create_error_call_stub(worker_with_st.status());
     }

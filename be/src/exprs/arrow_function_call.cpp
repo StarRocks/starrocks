@@ -57,7 +57,7 @@ StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context
     _call_stub_ctx->inner_states.lazy_emplace_l(
             driver_id, [&](auto& value) { stub = value.get(); },
             [&](auto build) {
-                auto value = _build_stub(function_context);
+                auto value = _build_stub(driver_id, function_context);
                 stub = value.get();
                 build(driver_id, std::move(value));
             });
@@ -118,7 +118,7 @@ bool ArrowFunctionCallExpr::is_constant() const {
     return false;
 }
 
-std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(FunctionContext* context) {
+std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(int32_t driver_id, FunctionContext* context) {
     auto binary_type = _fn.binary_type;
     if (binary_type == TFunctionBinaryType::PYTHON) {
         PyFunctionDescriptor py_func_desc;
