@@ -25,7 +25,7 @@ public class TaskRunBuilder {
     private Map<String, String> properties;
     private Constants.TaskType type;
     private ConnectContext connectContext;
-    private ExecuteOption executeOption = new ExecuteOption();
+    private ExecuteOption executeOption = new ExecuteOption(false);
 
     public static TaskRunBuilder newBuilder(Task task) {
         return new TaskRunBuilder(task);

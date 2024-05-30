@@ -15,6 +15,7 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -53,6 +54,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
@@ -87,8 +89,8 @@ public class StatementPlanner {
             session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
 
             // Note: we only could get the olap table after Analyzing phase
-            boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
             if (stmt instanceof QueryStatement) {
+                boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
                 ExecPlan plan;
@@ -102,12 +104,7 @@ public class StatementPlanner {
                 setOutfileSink(queryStmt, plan);
                 return plan;
             } else if (stmt instanceof InsertStmt) {
-                InsertStmt insertStmt = (InsertStmt) stmt;
-                boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-                boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
-                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
-                        !session.getSessionVariable().isCboUseDBLock();
-                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
+                return planInsertStmt(dbs, (InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -120,6 +117,23 @@ public class StatementPlanner {
         }
 
         return null;
+    }
+
+    public static ExecPlan planInsertStmt(Map<String, Database> dbs,
+                                          InsertStmt insertStmt,
+                                          ConnectContext connectContext) {
+        // if use optimistic lock, we will unlock it in InsertPlanner#buildExecPlanWithRetrye
+        boolean useOptimisticLock = isLockFreeInsertStmt(insertStmt, connectContext);
+        return new InsertPlanner(dbs, useOptimisticLock).plan(insertStmt, connectContext);
+    }
+
+    private static boolean isLockFreeInsertStmt(InsertStmt insertStmt,
+                                                ConnectContext connectContext) {
+        boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
+        boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+        boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(insertStmt);
+        return isOnlyOlapTableQueries && isSelect && isLeader &&
+                !connectContext.getSessionVariable().isCboUseDBLock();
     }
 
     private static boolean isLockFree(boolean isOnlyOlapTable, ConnectContext session) {
@@ -310,6 +324,37 @@ public class StatementPlanner {
             return;
         }
         unlockDatabases(dbs.values());
+    }
+
+    public static boolean tryLock(Map<String, Database> dbs, long timeout, TimeUnit unit) {
+        if (dbs == null) {
+            return false;
+        }
+        List<Database> dbList = new ArrayList<>(dbs.values());
+        return tryLockDatabases(dbList, timeout, unit);
+    }
+
+    public static boolean tryLockDatabases(List<Database> dbs, long timeout, TimeUnit unit) {
+        if (dbs == null) {
+            return false;
+        }
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        List<Database> lockedDbs = Lists.newArrayList();
+        boolean isLockSuccess = false;
+        try {
+            for (Database db : dbs) {
+                if (!db.tryReadLock(timeout, unit)) {
+                    return false;
+                }
+                lockedDbs.add(db);
+            }
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                lockedDbs.stream().forEach(t -> t.readUnlock());
+            }
+        }
+        return true;
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.

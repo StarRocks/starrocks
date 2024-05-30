@@ -1059,6 +1059,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
 - Introduced in: v3.3.0
 
+##### enable_legacy_compatibility_for_replication
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
+- Introduced in: v3.1.10, v3.2.6
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -1156,6 +1165,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
 - Introduced in: v2.4
+
+##### enable_materialized_view_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
+- Introduced in: v3.1.11, v3.2.5
 
 ##### enable_mv_automatic_active_check
 
@@ -2110,7 +2128,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### task_check_interval_second
 
-- Default: 4 * 3600
+- Default: 3600
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
@@ -2358,16 +2376,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-<!--
 ##### tablet_sched_be_down_tolerate_time_s
 
 - Default: 900
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum duration the scheduler allows for a BE node to remain inactive. After the time threshold is reached, tablets on that BE node will be migrated to other active BE nodes.
+- Introduced in: v2.5.7
 
 <!--
 ##### tablet_sched_colocate_be_down_tolerate_time_s

@@ -66,6 +66,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
+#include "util/stack_util.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
@@ -1049,28 +1050,6 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         state->set_load_label(table_sink.label);
     }
 
-    // profile must add to state's object pool
-    _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
-
-    // add all counter
-    _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
-    _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
-    _filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
-    _open_timer = ADD_TIMER(_profile, "OpenTime");
-    _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
-    _prepare_data_timer = ADD_TIMER(_profile, "PrepareDataTime");
-    _convert_chunk_timer = ADD_CHILD_TIMER(_profile, "ConvertChunkTime", "PrepareDataTime");
-    _validate_data_timer = ADD_CHILD_TIMER(_profile, "ValidateDataTime", "PrepareDataTime");
-    _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
-    _pack_chunk_timer = ADD_CHILD_TIMER(_profile, "PackChunkTime", "SendDataTime");
-    _send_rpc_timer = ADD_CHILD_TIMER(_profile, "SendRpcTime", "SendDataTime");
-    _wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
-    _serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
-    _compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
-    _client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
-    _server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
-    _server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
-
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema, state));
     _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
@@ -1093,14 +1072,50 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapTableSink::prepare(RuntimeState* state) {
-    _span->AddEvent("prepare");
+void OlapTableSink::_prepare_profile(RuntimeState* state) {
+    // For pipeline, the profile will be set in OlapTableSinkOperator::prepare
+    // For non-pipeline, the profile should be created and added to state's object pool
+    if (_profile == nullptr) {
+        _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
+    }
 
+    _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
+    _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
+    _filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
+    _open_timer = ADD_TIMER(_profile, "OpenTime");
+    _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
+    _prepare_data_timer = ADD_TIMER(_profile, "PrepareDataTime");
+    _convert_chunk_timer = ADD_CHILD_TIMER(_profile, "ConvertChunkTime", "PrepareDataTime");
+    _validate_data_timer = ADD_CHILD_TIMER(_profile, "ValidateDataTime", "PrepareDataTime");
+    _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
+    _pack_chunk_timer = ADD_CHILD_TIMER(_profile, "PackChunkTime", "SendDataTime");
+    _send_rpc_timer = ADD_CHILD_TIMER(_profile, "SendRpcTime", "SendDataTime");
+    _wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
+    _serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
+    _compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
+    _client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
+    _server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
+    _server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
     _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
+}
+
+void OlapTableSink::set_profile(RuntimeProfile* profile) {
+    if (_profile != nullptr) {
+        LOG(WARNING) << "OlapTableSink profile is set duplicated, load_id: " << print_id(_load_id)
+                     << ", txn_id: " << _txn_id << ", stack\n"
+                     << get_stack_trace();
+        return;
+    }
+    _profile = profile;
+}
+
+Status OlapTableSink::prepare(RuntimeState* state) {
+    _span->AddEvent("prepare");
+    _prepare_profile(state);
 
     SCOPED_TIMER(_profile->total_time_counter());
 
@@ -2167,7 +2182,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             if (nullable->has_null()) {
                 NullData& nulls = nullable->null_column_data();
                 for (size_t j = 0; j < num_rows; ++j) {
-                    if (nulls[j]) {
+                    if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         std::stringstream ss;
                         ss << "NULL value in non-nullable column '" << desc->col_name() << "'";

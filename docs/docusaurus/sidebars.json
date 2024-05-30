@@ -156,7 +156,7 @@
                     "label": "Load from Object Storage",
                     "link": {
                         "type": "doc",
-                        "id": "loading/s3"
+                        "id": "loading/objectstorage"
                     },
                     "items": [
                         "loading/s3",
@@ -279,31 +279,13 @@
                                 "using_starrocks/create_partitioned_materialized_view"
                             ]
                         },
-                        {
-                            "type": "category",
-                            "label": "Usage",
-                            "link": {
-                                "type": "doc",
-                                "id": "cover_pages/mv_usage"
-                            },
-                            "items": [
-                                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                                {
-                                    "type": "link",
-                                    "label": "Information schema",
-                                    "href": "/docs/sql-reference/information_schema#materialized_views"
-                                },
                                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
-                            ]
-                        }
                     ]
                 },
                 "using_starrocks/Colocate_join",
                 "using_starrocks/Lateral_join",
                 "using_starrocks/query_cache",
+                "using_starrocks/block_cache",
                 {
                     "type": "category",
                     "label": "Index",
@@ -405,7 +387,9 @@
                                 "id": "administration/management/monitoring/Monitor_and_Alert"
                             },
                             "items": [
-                                "administration/management/monitoring/metrics"
+                                "administration/management/monitoring/metrics",
+                                "administration/management/monitoring/metrics-materialized_view",
+                                "administration/management/monitoring/metrics-shared-data"
                             ]
                         },
                         "administration/management/audit_loader",
@@ -434,6 +418,7 @@
                     ]
                 },
                 "administration/Data_recovery",
+                "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 {
                     "type": "category",
@@ -1391,7 +1376,7 @@
                     "label": "从对象存储导入",
                     "link": {
                         "type": "doc",
-                        "id": "loading/s3"
+                        "id": "loading/objectstorage"
                     },
                     "items": [
                         "loading/s3",
@@ -1514,31 +1499,13 @@
                                 "using_starrocks/create_partitioned_materialized_view"
                             ]
                         },
-                        {
-                            "type": "category",
-                            "label": "Usage",
-                            "link": {
-                                "type": "doc",
-                                "id": "cover_pages/mv_usage"
-                            },
-                            "items": [
-                                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                                {
-                                    "type": "link",
-                                    "label": "Information schema",
-                                    "href": "/docs/sql-reference/information_schema#materialized_views"
-                                },
                                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
-                            ]
-                        }
                     ]
                 },
                 "using_starrocks/Colocate_join",
                 "using_starrocks/Lateral_join",
                 "using_starrocks/query_cache",
+                "using_starrocks/block_cache",
                 {
                     "type": "category",
                     "label": "索引",
@@ -1640,7 +1607,9 @@
                                 "id": "administration/management/monitoring/Monitor_and_Alert"
                             },
                             "items": [
-                                "administration/management/monitoring/metrics"
+                                "administration/management/monitoring/metrics",
+                                "administration/management/monitoring/metrics-materialized_view",
+                                "administration/management/monitoring/metrics-shared-data"
                             ]
                         },
                         "administration/management/audit_loader",
@@ -1669,6 +1638,7 @@
                     ]
                 },
                 "administration/Data_recovery",
+                "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 {
                     "type": "category",

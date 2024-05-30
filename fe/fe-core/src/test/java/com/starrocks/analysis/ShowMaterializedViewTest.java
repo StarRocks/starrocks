@@ -54,6 +54,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -65,7 +66,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.collections.MapUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -241,8 +241,9 @@ public class ShowMaterializedViewTest {
         // wait until the running task run map is not empty
         int maxCount = 3000;
         int count = 0;
-        while (MapUtils.isEmpty(trm.getRunningTaskRunMap()) && count < maxCount) {
-            Thread.sleep(10);
+        TaskRunScheduler taskRunScheduler = trm.getTaskRunScheduler();
+        while (taskRunScheduler.getRunningTaskCount() > 0 && count < maxCount) {
+            Thread.sleep(100);
             count++;
         }
 
@@ -266,8 +267,8 @@ public class ShowMaterializedViewTest {
         Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(dbName).isEmpty());
 
         long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
-        Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));
-        while (MapUtils.isNotEmpty(trm.getRunningTaskRunMap())) {
+        Assert.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
+        while (taskRunScheduler.getRunningTaskCount() > 0) {
             Thread.sleep(100);
         }
     }

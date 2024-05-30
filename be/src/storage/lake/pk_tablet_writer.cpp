@@ -18,18 +18,36 @@
 
 #include "column/chunk.h"
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 
 HorizontalPkTabletWriter::HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
-                                                   int64_t txn_id)
+                                                   int64_t txn_id, bool is_compaction)
         : HorizontalGeneralTabletWriter(tablet, std::move(schema), txn_id),
-          _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
+          _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {
+    if (is_compaction) {
+        auto rows_mapper_filename = lake_rows_mapper_filename(tablet.id(), txn_id);
+        if (rows_mapper_filename.ok()) {
+            _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(rows_mapper_filename.value());
+        }
+    }
+}
 
 HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
+
+Status HorizontalPkTabletWriter::write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) {
+    RETURN_IF_ERROR(HorizontalGeneralTabletWriter::write(data));
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+    }
+    return Status::OK();
+}
 
 Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     auto name = gen_del_filename(_txn_id);
@@ -64,10 +82,42 @@ Status HorizontalPkTabletWriter::flush_segment_writer() {
     return Status::OK();
 }
 
+Status HorizontalPkTabletWriter::finish() {
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->finalize());
+    }
+    return HorizontalGeneralTabletWriter::finish();
+}
+
 VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
-                                               int64_t txn_id, uint32_t max_rows_per_segment)
-        : VerticalGeneralTabletWriter(tablet, std::move(schema), txn_id, max_rows_per_segment) {}
+                                               int64_t txn_id, uint32_t max_rows_per_segment, bool is_compaction)
+        : VerticalGeneralTabletWriter(tablet, std::move(schema), txn_id, max_rows_per_segment) {
+    if (is_compaction) {
+        auto rows_mapper_filename = lake_rows_mapper_filename(tablet.id(), txn_id);
+        if (rows_mapper_filename.ok()) {
+            _rows_mapper_builder = std::make_unique<RowsMapperBuilder>(rows_mapper_filename.value());
+        }
+    }
+}
 
 VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
+
+Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes,
+                                             bool is_key, const std::vector<uint64_t>& rssid_rowids) {
+    // Save rssid_rowids only when writing key columns
+    DCHECK(is_key);
+    RETURN_IF_ERROR(VerticalGeneralTabletWriter::write_columns(data, column_indexes, is_key));
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
+    }
+    return Status::OK();
+}
+
+Status VerticalPkTabletWriter::finish() {
+    if (_rows_mapper_builder != nullptr) {
+        RETURN_IF_ERROR(_rows_mapper_builder->finalize());
+    }
+    return VerticalGeneralTabletWriter::finish();
+}
 
 } // namespace starrocks::lake

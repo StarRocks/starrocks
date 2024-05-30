@@ -160,7 +160,7 @@ public class DebugUtil {
         return printId(uuid);
     }
 
-    public static String getStackTrace(Exception e) {
+    public static String getStackTrace(Throwable e) {
         StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
         return sw.toString();

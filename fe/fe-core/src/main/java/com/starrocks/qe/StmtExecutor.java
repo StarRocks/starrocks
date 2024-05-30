@@ -39,9 +39,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -124,7 +127,6 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -194,6 +196,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.REWRITE;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -204,6 +207,8 @@ import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 // second: Do handle function for statement.
 public class StmtExecutor {
     private static final Logger LOG = LogManager.getLogger(StmtExecutor.class);
+    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
+    private static final Gson GSON = new Gson();
 
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
@@ -215,7 +220,7 @@ public class StmtExecutor {
     private Coordinator coord = null;
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
-    private final boolean isProxy;
+    private boolean isProxy;
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
@@ -245,6 +250,10 @@ public class StmtExecutor {
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
+    }
+
+    public void setProxy() {
+        isProxy = true;
     }
 
     public Coordinator getCoordinator() {
@@ -433,19 +442,8 @@ public class StmtExecutor {
                 // set isQuery before `forwardToLeader` to make it right for audit log.
                 context.getState().setIsQuery(isQuery);
 
-                if (isQuery &&
-                        ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
-                    SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
-                    optHints = selectRelation.getSelectList().getOptHints();
-                }
-
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    context.setSessionVariable(sessionVariable);
+                if (parsedStmt.isExistQueryScopeHint()) {
+                    processQueryScopeHint();
                 }
 
                 if (parsedStmt.isExplain()) {
@@ -506,6 +504,20 @@ public class StmtExecutor {
             if (context.isHTTPQueryDump) {
                 return;
             }
+
+            // For follower: verify sql in BlackList before forward to leader
+            // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
+            if (parsedStmt instanceof QueryStatement && Config.enable_sql_blacklist && !parsedStmt.isExplain() &&
+                    !isProxy) {
+                OriginStatement origStmt = parsedStmt.getOrigStmt();
+                if (origStmt != null) {
+                    String originSql = origStmt.originStmt.trim()
+                            .toLowerCase().replaceAll(" +", " ");
+                    // If this sql is in blacklist, show message.
+                    SqlBlackList.verifying(originSql);
+                }
+            }
+
             if (isForwardToLeader()) {
                 context.setIsForward(true);
                 forwardToLeader();
@@ -519,17 +531,6 @@ public class StmtExecutor {
                 final boolean isStatisticsJob = context.isStatisticsJob();
                 if (!isStatisticsJob) {
                     WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
-                }
-
-                // sql's blacklist is enabled through enable_sql_blacklist.
-                if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
-                    OriginStatement origStmt = parsedStmt.getOrigStmt();
-                    if (origStmt != null) {
-                        String originSql = origStmt.originStmt.trim()
-                                .toLowerCase().replaceAll(" +", " ");
-                        // If this sql is in blacklist, show message.
-                        SqlBlackList.verifying(originSql);
-                    }
                 }
 
                 // Record planner costs in audit log
@@ -693,7 +694,33 @@ public class StmtExecutor {
                 }
             }
 
-            context.setSessionVariable(sessionVariableBackup);
+            if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
+                clearQueryScopeHintContext(sessionVariableBackup);
+            }
+        }
+    }
+
+    private void clearQueryScopeHintContext(SessionVariable sessionVariableBackup) {
+        context.setSessionVariable(sessionVariableBackup);
+    }
+
+    // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
+    private void processQueryScopeHint() throws DdlException {
+        SessionVariable clonedSessionVariable = null;
+        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+            if (hint instanceof SetVarHint) {
+                if (clonedSessionVariable == null) {
+                    clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+                }
+                for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                    VariableMgr.setSystemVariable(clonedSessionVariable,
+                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                }
+            }
+        }
+
+        if (clonedSessionVariable != null) {
+            context.setSessionVariable(clonedSessionVariable);
         }
     }
 
@@ -799,6 +826,21 @@ public class StmtExecutor {
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
+                String jsonString = GSON.toJson(queryDetail);
+                if (Config.enable_profile_log_compress) {
+                    byte[] jsonBytes;
+                    try {
+                        jsonBytes = CompressionUtils.gzipCompressString(jsonString);
+                        PROFILE_LOG.info(jsonBytes);
+                    } catch (IOException e) {
+                        LOG.warn("Compress queryDetail string failed, length: {}, reason: {}",
+                                jsonString.length(), e.getMessage());
+                    }
+                } else {
+                    PROFILE_LOG.info(jsonString);
+                }
+            }
         };
         return coord.tryProcessProfileAsync(task);
     }
@@ -1850,12 +1892,11 @@ public class StmtExecutor {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
-                String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
                     if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable)) {
                         // schema table and iceberg table does not need txn
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                                database.getId(), transactionId, errorMsg,
+                                database.getId(), transactionId, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                                 Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();

@@ -158,7 +158,7 @@ CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
 // The sys log level, INFO, WARNING, ERROR, FATAL.
-CONF_String(sys_log_level, "INFO");
+CONF_mString(sys_log_level, "INFO");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
 CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
 // The log roll num.
@@ -1002,9 +1002,9 @@ CONF_String(directory_of_inject,
             "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
 
 // Used by to_base64
-CONF_Int64(max_length_for_to_base64, "200000");
+CONF_mInt64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
-CONF_Int64(max_length_for_bitmap_function, "1000000");
+CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
@@ -1054,7 +1054,6 @@ CONF_mInt32(pindex_major_compaction_limit_per_disk, "1");
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // enable use bloom filter for pindex or not
 CONF_mBool(enable_pindex_filter, "true");
-CONF_mBool(enable_reab_pindex_by_page, "true");
 // use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
 // 1. The records to be found are in the index, bloom filter is no usage
 // 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io
@@ -1071,7 +1070,7 @@ CONF_mBool(enable_pindex_compression, "false");
 CONF_mBool(enable_pindex_rebuild_in_compaction, "false");
 
 // enable read pindex by page
-CONF_mBool(enable_pindex_read_by_page, "false");
+CONF_mBool(enable_pindex_read_by_page, "true");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
@@ -1170,7 +1169,12 @@ CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");
 
+// Skip get from pk index when light pk compaction publish is enabled
+CONF_mBool(enable_light_pk_compaction_publish, "false");
+
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
+
+CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 } // namespace starrocks::config

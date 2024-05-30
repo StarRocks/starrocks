@@ -82,6 +82,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import javax.validation.constraints.NotNull;
 
 public class TransactionState implements Writable {
@@ -174,7 +176,7 @@ public class TransactionState implements Writable {
                 case OFFSET_OUT_OF_RANGE:
                     return "Offset out of range";
                 case NO_PARTITIONS:
-                    return "all partitions have no load data";
+                    return "No partitions have data available for loading";
                 case FILTERED_ROWS:
                     return "too many filtered rows";
                 default:
@@ -308,7 +310,7 @@ public class TransactionState implements Writable {
     // used for PublishDaemon to check whether this txn can be published
     // not persisted, so need to rebuilt if FE restarts
     private volatile TransactionChecker finishChecker = null;
-    private long checkerCreationTime = 0;
+
     private Span txnSpan = null;
     private String traceParent = null;
     private Set<TabletCommitInfo> tabletCommitInfos = null;
@@ -318,6 +320,7 @@ public class TransactionState implements Writable {
     // Therefore, a snapshot of this information is maintained here.
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
+    private Map<String, Lock> createPartitionLocks = Maps.newHashMap();
 
     public TransactionState() {
         this.dbId = -1;
@@ -1002,30 +1005,22 @@ public class TransactionState implements Writable {
         return true;
     }
 
-    // Note: caller should hold db lock
-    public void prepareFinishChecker(Database db) {
-        synchronized (this) {
-            finishChecker = TransactionChecker.create(this, db);
-            checkerCreationTime = System.nanoTime();
-        }
-    }
-
     public boolean checkCanFinish() {
-        // finishChecker may be null if FE restarts
-        // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
-        if (finishChecker == null || System.nanoTime() - checkerCreationTime > 10000000000L) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db == null) {
-                // consider txn finished if db is dropped
-                return true;
-            }
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            // consider txn finished if db is dropped
+            return true;
+        }
+
+        if (finishChecker == null) {
             db.readLock();
             try {
-                prepareFinishChecker(db);
+                finishChecker = TransactionChecker.create(this, db);
             } finally {
                 db.readUnlock();
             }
         }
+
         if (finishState == null) {
             finishState = new TxnFinishState();
         }
@@ -1084,4 +1079,25 @@ public class TransactionState implements Writable {
         tabletIdToTTabletLocation.clear();
     }
 
+    public void lockCreatePartition(String partitionName) {
+        Lock locker = null;
+        synchronized (createPartitionLocks) {
+            locker = createPartitionLocks.get(partitionName);
+            if (locker == null) {
+                locker = new ReentrantLock();
+                createPartitionLocks.put(partitionName, locker);
+            }
+        }
+        locker.lock();
+    }
+
+    public void unlockCreatePartition(String partitionName) {
+        Lock locker = null;
+        synchronized (createPartitionLocks) {
+            locker = createPartitionLocks.get(partitionName);
+        }
+        if (locker != null) {
+            locker.unlock();
+        }
+    }
 }

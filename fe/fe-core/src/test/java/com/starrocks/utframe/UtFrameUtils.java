@@ -41,6 +41,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.starlet.StarletAgentFactory;
+import com.starrocks.analysis.HintNode;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -92,11 +94,11 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -449,18 +451,8 @@ public class UtFrameUtils {
 
         try {
             // update session variable by adding optional hints.
-            if (statementBase instanceof QueryStatement &&
-                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
-                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    connectContext.setSessionVariable(sessionVariable);
-                }
+            if (statementBase.isExistQueryScopeHint()) {
+                processQueryScopeHint(statementBase, connectContext);
             }
 
             ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
@@ -469,7 +461,7 @@ public class UtFrameUtils {
             return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
         } finally {
             // before returning we have to restore session variable.
-            connectContext.setSessionVariable(oldSessionVariable);
+            clearQueryScopeHintContext(connectContext, oldSessionVariable);
         }
     }
 
@@ -493,18 +485,8 @@ public class UtFrameUtils {
 
         try {
             // update session variable by adding optional hints.
-            if (statementBase instanceof QueryStatement &&
-                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
-                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    connectContext.setSessionVariable(sessionVariable);
-                }
+            if (statementBase.isExistQueryScopeHint()) {
+                processQueryScopeHint(statementBase, connectContext);
             }
 
             ExecPlan execPlan;
@@ -518,7 +500,7 @@ public class UtFrameUtils {
             return new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
-            connectContext.setSessionVariable(oldSessionVariable);
+            clearQueryScopeHintContext(connectContext, oldSessionVariable);
         }
     }
 
@@ -762,35 +744,28 @@ public class UtFrameUtils {
 
     private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
             throws Exception {
-        Map<String, String> optHints = null;
-        SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
-        if (statement.getQueryRelation() instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) statement.getQueryRelation();
-            optHints = selectRelation.getSelectList().getOptHints();
-        }
-
-        if (optHints != null) {
-            SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
-            for (String key : optHints.keySet()) {
-                VariableMgr.setSystemVariable(sessionVariable,
-                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        try {
+            if (statement.isExistQueryScopeHint()) {
+                processQueryScopeHint(statement, connectContext);
             }
-            connectContext.setSessionVariable(sessionVariable);
+
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan = getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+            OptExpression optimizedPlan = getQueryOptExpression(connectContext, columnRefFactory, logicalPlan);
+
+            ExecPlan execPlan;
+            try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Builder")) {
+                execPlan = PlanFragmentBuilder
+                        .createPhysicalPlan(optimizedPlan, connectContext,
+                                logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                                TResultSinkType.MYSQL_PROTOCAL, true);
+            }
+
+            return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
+        } finally {
+            clearQueryScopeHintContext(connectContext, oldSessionVariable);
         }
-
-        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = getQueryLogicalPlan(connectContext, columnRefFactory, statement);
-        OptExpression optimizedPlan = getQueryOptExpression(connectContext, columnRefFactory, logicalPlan);
-
-        ExecPlan execPlan;
-        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Builder")) {
-            execPlan = PlanFragmentBuilder
-                    .createPhysicalPlan(optimizedPlan, connectContext,
-                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
-                            TResultSinkType.MYSQL_PROTOCAL, true);
-        }
-
-        return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
@@ -1161,5 +1136,29 @@ public class UtFrameUtils {
                 }
             }
         };
+    }
+
+    private static void processQueryScopeHint(StatementBase parsedStmt, ConnectContext context) throws DdlException {
+        SessionVariable clonedSessionVariable = null;
+        Map<String, UserVariable> userVariablesFromHint = Maps.newHashMap();
+        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+            if (hint instanceof SetVarHint) {
+                if (clonedSessionVariable == null) {
+                    clonedSessionVariable = (SessionVariable) context.getSessionVariable().clone();
+                }
+                for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                    VariableMgr.setSystemVariable(clonedSessionVariable,
+                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                }
+            }
+        }
+
+        if (clonedSessionVariable != null) {
+            context.setSessionVariable(clonedSessionVariable);
+        }
+    }
+
+    private static void clearQueryScopeHintContext(ConnectContext context, SessionVariable sessionVariableBackup) {
+        context.setSessionVariable(sessionVariableBackup);
     }
 }

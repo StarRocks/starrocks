@@ -56,6 +56,13 @@ class Tablet;
 class TabletManager;
 class TxnManager;
 
+enum DiskState {
+    ONLINE,
+    OFFLINE,       // detected by health_check, tablets on OFFLINE disk will be dropped.
+    DISABLED,      // set by user, tablets on DISABLED disk will be dropped.
+    DECOMMISSIONED // set by user, tablets on DECOMMISSIONED disk will be migrated to other disks.
+};
+
 // A DataDir used to manage data in same path.
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
@@ -72,8 +79,9 @@ public:
 
     const std::string& path() const { return _path; }
     int64_t path_hash() const { return _path_hash; }
-    bool is_used() const { return _is_used; }
-    void set_is_used(bool is_used) { _is_used = is_used; }
+    bool is_used() const { return _state == DiskState::ONLINE || _state == DiskState::DECOMMISSIONED; }
+    DiskState get_state() const { return _state; }
+    void set_state(DiskState state) { _state = state; }
     int32_t cluster_id() const { return _cluster_id_mgr->cluster_id(); }
 
     DataDirInfo get_dir_info() {
@@ -82,7 +90,7 @@ public:
         info.path_hash = _path_hash;
         info.disk_capacity = _disk_capacity_bytes;
         info.available = _available_bytes;
-        info.is_used = _is_used;
+        info.is_used = is_used();
         info.storage_medium = _storage_medium;
         return info;
     }
@@ -174,7 +182,7 @@ private:
     // the actual capacity of the disk of this data dir
     int64_t _disk_capacity_bytes;
     TStorageMedium::type _storage_medium;
-    bool _is_used;
+    DiskState _state;
 
     TabletManager* _tablet_manager;
     TxnManager* _txn_manager;

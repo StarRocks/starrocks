@@ -256,7 +256,7 @@ set(EXEC_FILES
         ./storage/tablet_meta_manager_test.cpp
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
-        ./storage/table_schema_test.cpp
+        ./storage/tablet_schema_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
@@ -401,6 +401,7 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./storage/delta_writer_test.cpp
+        ./storage/rows_mapper_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

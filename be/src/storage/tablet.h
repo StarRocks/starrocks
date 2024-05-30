@@ -299,6 +299,9 @@ public:
 
     void set_will_be_force_replaced() { _will_be_force_replaced = true; }
 
+    void remove_all_delta_column_group_cache() const;
+    void remove_all_delta_column_group_cache_unlocked() const;
+
 protected:
     void on_shutdown() override;
 

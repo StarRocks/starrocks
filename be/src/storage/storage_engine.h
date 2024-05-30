@@ -283,12 +283,18 @@ public:
 
     void clear_rowset_delta_column_group_cache(const Rowset& rowset);
 
+    void disable_disks(const std::vector<string>& disabled_disks);
+
+    void decommission_disks(const std::vector<string>& decommissioned_disks);
+
     void wake_finish_publish_vesion_thread() {
         std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
         _finish_publish_version_cv.notify_one();
     }
 
     bool is_as_cn() { return !_options.need_write_cluster_id; }
+
+    bool enable_light_pk_compaction_publish();
 
 protected:
     static StorageEngine* _s_instance;

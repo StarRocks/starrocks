@@ -256,17 +256,13 @@ public class InformationSchemaDataSource {
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
-        if (partitionInfo.isRangePartition()) {
-            int idx = 0;
-            for (Column column : partitionInfo.getPartitionColumns()) {
-                if (idx != 0) {
-                    partitionKeySb.append(", ");
-                }
-                partitionKeySb.append("`").append(column.getName()).append("`");
-                idx++;
+        int idx = 0;
+        for (Column column : partitionInfo.getPartitionColumns()) {
+            if (idx != 0) {
+                partitionKeySb.append(", ");
             }
-        } else {
-            partitionKeySb.append(DEFAULT_EMPTY_STRING);
+            partitionKeySb.append("`").append(column.getName()).append("`");
+            idx++;
         }
 
         // PRIMARY KEYS
@@ -279,7 +275,7 @@ public class InformationSchemaDataSource {
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
                 || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
-        tableConfigInfo.setPartition_key(partitionKeySb.toString());
+        tableConfigInfo.setPartition_key(partitionKeySb.length() > 0 ? partitionKeySb.toString() : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
@@ -359,7 +355,8 @@ public class InformationSchemaDataSource {
     }
 
     private static void genPartitionMetaInfo(Database db, OlapTable table,
-            PartitionInfo partitionInfo, Partition partition, TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
+                                             PartitionInfo partitionInfo, Partition partition,
+                                             TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
         // PARTITION_NAME
         partitionMetaInfo.setPartition_name(partition.getName());
         // PARTITION_ID
@@ -431,16 +428,23 @@ public class InformationSchemaDataSource {
         for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
-                db.readLock();
-                try {
-                    List<Table> allTables = db.getTables();
-                    for (Table table : allTables) {
-                        try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
-                        } catch (AccessDeniedException e) {
+
+                List<Table> allTables = db.getTables();
+                for (Table table : allTables) {
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
+                    if (request.isSetTable_name()) {
+                        if (!table.getName().equals(request.getTable_name())) {
                             continue;
                         }
+                    }
 
+                    db.readLock();
+                    try {
                         TTableInfo info = new TTableInfo();
 
                         info.setTable_catalog(DEF);
@@ -479,9 +483,10 @@ public class InformationSchemaDataSource {
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
+
+                    } finally {
+                        db.readUnlock();
                     }
-                } finally {
-                    db.readUnlock();
                 }
             }
         }

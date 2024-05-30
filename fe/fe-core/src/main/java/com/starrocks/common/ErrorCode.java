@@ -341,9 +341,17 @@ public enum ErrorCode {
             "No files were found matching the pattern(s) or path(s): '%s'"),
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
-    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'")
-    ;
-    
+    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+    ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
+            "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
+                    "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
+                    "to ensure such load jobs can succeed"),
+    ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
+            "Inserted target column count: %d doesn't match select/value column count: %d"),
+    ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
+    ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
+            "Current error rows: %d is more than max error num: %d. Check the 'TrackingSQL' field for detailed information");
+
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
         this.sqlState = sqlState;

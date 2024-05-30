@@ -49,7 +49,9 @@ import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -129,6 +131,7 @@ import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
@@ -203,7 +206,6 @@ import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -212,7 +214,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -1582,8 +1583,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
             Range<PartitionKey> partitionRange = null;
-            if (partitionInfo instanceof RangePartitionInfo && partition != null) {
-                partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+            if (partition != null) {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
+                if (partitionInfo instanceof RangePartitionInfo) {
+                    partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                }
             }
             olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             if (olapTable instanceof MaterializedView) {
@@ -2127,6 +2131,8 @@ public class LocalMetastore implements ConnectorMetadata {
             table.onReload();
         } catch (Throwable e) {
             LOG.error("replay create table failed: {}", table, e);
+            // Rethrow, we should not eat the exception when replaying editlog.
+            throw e;
         } finally {
             db.writeUnlock();
         }
@@ -2568,6 +2574,46 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        for (long tabletId : info.getTablets()) {
+            TabletMeta meta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+            if (meta == null) {
+                continue;
+            }
+            Database db = getDbIncludeRecycleBin(meta.getDbId());
+            if (db == null) {
+                LOG.warn("replay delete replica failed, db is null, meta: {}", meta);
+                continue;
+            }
+            db.writeLock();
+            try {
+                OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, meta.getTableId());
+                if (olapTable == null) {
+                    LOG.warn("replay delete replica failed, table is null, meta: {}", meta);
+                    continue;
+                }
+                Partition partition = getPartitionIncludeRecycleBin(olapTable, meta.getPartitionId());
+                if (partition == null) {
+                    LOG.warn("replay delete replica failed, partition is null, meta: {}", meta);
+                    continue;
+                }
+                MaterializedIndex materializedIndex = partition.getIndex(meta.getIndexId());
+                if (materializedIndex == null) {
+                    LOG.warn("replay delete replica failed, materializedIndex is null, meta: {}", meta);
+                    continue;
+                }
+                LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(tabletId);
+                if (tablet == null) {
+                    LOG.warn("replay delete replica failed, tablet is null, meta: {}", meta);
+                    continue;
+                }
+                tablet.deleteReplicaByBackendId(info.getBackendId());
+            } finally {
+                db.writeUnlock();
+            }
+        }
+    }
+
     @Override
     public Table getTable(String dbName, String tblName) {
         Database database = getDb(dbName);
@@ -2997,17 +3043,17 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,
                 shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
 
-        // validate optHints
-        Map<String, String> optHints = null;
-        QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
-        if (queryRelation instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) queryRelation;
-            optHints = selectRelation.getSelectList().getOptHints();
-            if (optHints != null && !optHints.isEmpty()) {
-                SessionVariable sessionVariable = VariableMgr.newSessionVariable();
-                for (String key : optHints.keySet()) {
-                    VariableMgr.setSystemVariable(sessionVariable,
-                            new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+        // validate hint
+        Map<String, String> optHints = Maps.newHashMap();
+        if (stmt.isExistQueryScopeHint()) {
+            SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+            for (HintNode hintNode : stmt.getAllQueryScopeHints()) {
+                if (hintNode instanceof SetVarHint) {
+                    for (Map.Entry<String, String> entry : hintNode.getValue().entrySet()) {
+                        VariableMgr.setSystemVariable(sessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                        optHints.put(entry.getKey(), entry.getValue());
+                    }
                 }
             }
         }
@@ -3239,6 +3285,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
                         materializedView.isCloudNativeMaterializedView());
             }
+
+            // ORDER BY() -> sortKeys
+            if (CollectionUtils.isNotEmpty(materializedView.getTableProperty().getMvSortKeys())) {
+                materializedView.getTableProperty().putMvSortKeys();
+            }
+
             // lake storage info
             if (materializedView.isCloudNativeMaterializedView()) {
                 String volume = "";
@@ -4411,10 +4463,12 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
 
                     origPartitions.put(partName, partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                 }
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
                     origPartitions.put(partition.getName(), partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(partition.getId());
                 }
             }
 
@@ -4738,6 +4792,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 
+            partitionNames.stream().forEach(e ->
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(olapTable.getPartition(e).getId()));
             olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
 
             // write log

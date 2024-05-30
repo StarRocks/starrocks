@@ -74,6 +74,7 @@ import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -118,6 +119,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
 import org.apache.thrift.TException;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -736,6 +738,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
         }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
+        List<Long> deleteTablets = new ArrayList<>();
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
             Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
@@ -822,10 +825,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         break DB_TRAVERSE;
                     } else if (diskInfo == null) {
                         LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
-                                tableId, backendId, replica.getPathHash());
+                                replica.getPathHash(), tabletId, backendId);
                     } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
                         LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
-                                tableId, backendId, replica.getPathHash());
+                                replica.getPathHash(), tabletId, backendId);
                     }
 
                     ReplicaState state = replica.getState();
@@ -895,12 +898,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                         // remove replica related tasks
                         AgentTaskQueue.removeReplicaRelatedTasks(backendId, tabletId);
-
-                        // write edit log
-                        ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(dbId, tableId, partitionId,
-                                indexId, tabletId, backendId);
-
-                        GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info);
+                        deleteTablets.add(tabletId);
                         LOG.warn("delete replica[{}] with state[{}] in tablet[{}] from meta. backend[{}]," +
                                         " report version: {}, current report version: {}",
                                 replica.getId(), replica.getState().name(), tabletId, backendId, backendReportVersion,
@@ -918,6 +916,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 db.writeUnlock();
             }
         } // end for dbs
+
+        if (deleteTablets.size() > 0) {
+            // no need to be protected by db lock, if the related meta is dropped, the replay code will ignore that tablet
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logBatchDeleteReplica(new BatchDeleteReplicaInfo(backendId, deleteTablets));
+        }
 
         if (Config.recover_with_empty_tablet && createReplicaBatchTask.getTaskNum() > 0) {
             // must add to queue, so that when task finish report, the task can be found in queue.

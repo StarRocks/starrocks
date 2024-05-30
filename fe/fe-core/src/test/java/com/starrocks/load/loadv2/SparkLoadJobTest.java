@@ -53,6 +53,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -613,5 +614,22 @@ public class SparkLoadJobTest {
         if (file.exists()) {
             file.delete();
         }
+    }
+
+    @Test
+    public void testNoPartitionsHaveDataLoad(@Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
+                                             @Injectable Database db) throws Exception {
+        new Expectations() {
+            {
+                globalStateMgr.getDb(dbId);
+                result = db;
+            }
+        };
+
+        SparkLoadJob job = getEtlStateJob(originStmt);
+        job.state = JobState.LOADING;
+        Deencapsulation.setField(job, "tableToLoadPartitions", Maps.newHashMap());
+        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No partitions have data available for loading",
+                () -> Deencapsulation.invoke(job, "submitPushTasks"));
     }
 }

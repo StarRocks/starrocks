@@ -42,13 +42,14 @@ using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
-    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder)
-            : _update_mgr(update_mgr), _pk_builder(pk_builder) {}
+    LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder, bool fill_cache)
+            : _update_mgr(update_mgr), _pk_builder(pk_builder), _fill_cache(fill_cache) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
 
 private:
     UpdateManager* _update_mgr = nullptr;
     const MetaFileBuilder* _pk_builder = nullptr;
+    bool _fill_cache = false;
 };
 
 class UpdateManager {
@@ -78,11 +79,11 @@ public:
                              vector<std::unique_ptr<Column>>* columns,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
-    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
+    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder, bool fill_cache,
                        DelVectorPtr* pdelvec);
 
     // get delvec from tablet meta file
-    Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec);
+    Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache, DelVector* delvec);
     // set delvec cache
     Status set_cached_del_vec(const std::vector<std::pair<TabletSegmentId, DelVectorPtr>>& cache_delvec_updates,
                               int64_t version);
@@ -93,6 +94,10 @@ public:
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                       const TabletMetadata& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
+
+    Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                            const TabletMetadata& metadata, Tablet* tablet, IndexEntry* index_entry,
+                                            MetaFileBuilder* builder, int64_t base_version);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
@@ -127,6 +132,8 @@ public:
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
+
+    MemTracker* index_mem_tracker() const { return _index_cache_mem_tracker.get(); }
 
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadata& metadata, Tablet* tablet,
@@ -180,6 +187,9 @@ private:
     PkIndexShard& _get_pk_index_shard(int64_t tabletId) {
         return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
     }
+
+    // decide whether use light publish compaction stategy or not
+    bool _use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

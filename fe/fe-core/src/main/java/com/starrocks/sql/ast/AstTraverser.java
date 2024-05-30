@@ -32,7 +32,10 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
 
     @Override
     public R visitInsertStatement(InsertStmt statement, C context) {
-        return visit(statement.getQueryStatement());
+        if (statement.getQueryStatement() != null) {
+            visit(statement.getQueryStatement());
+        }
+        return null;
     }
 
     @Override
@@ -49,6 +52,28 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
         //Delete Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
         if (statement.getQueryStatement() != null) {
             visit(statement.getQueryStatement());
+        }
+        return null;
+    }
+
+    @Override
+    public R visitSubmitTaskStatement(SubmitTaskStmt statement, C context) {
+        if (statement.getInsertStmt() != null) {
+            visit(statement.getInsertStmt());
+        }
+        if (statement.getCreateTableAsSelectStmt() != null) {
+            visit(statement.getCreateTableAsSelectStmt());
+        }
+        return null;
+    }
+
+    @Override
+    public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
+        if (statement.getQueryStatement() != null) {
+            visit(statement.getQueryStatement());
+        }
+        if (statement.getInsertStmt() != null) {
+            visit(statement.getInsertStmt());
         }
         return null;
     }
@@ -108,6 +133,9 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
 
     @Override
     public R visitSetOp(SetOperationRelation node, C context) {
+        if (node.hasWithClause()) {
+            node.getCteRelations().forEach(this::visit);
+        }
         node.getRelations().forEach(this::visit);
         return null;
     }

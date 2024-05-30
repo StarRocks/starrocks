@@ -44,8 +44,12 @@ public class PaimonConnector implements Connector {
     private static final String PAIMON_CATALOG_TYPE = "paimon.catalog.type";
     private static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+    private static final String DLF_CATGALOG_ID = "dlf.catalog.id";
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
+    private final String catalogType;
+    private final String metastoreUris;
+    private final String warehousePath;
     private final String catalogName;
     private final Options paimonOptions;
 
@@ -54,9 +58,9 @@ public class PaimonConnector implements Connector {
         this.catalogName = context.getCatalogName();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
-        String catalogType = properties.get(PAIMON_CATALOG_TYPE);
-        String metastoreUris = properties.get(HIVE_METASTORE_URIS);
-        String warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
+        this.catalogType = properties.get(PAIMON_CATALOG_TYPE);
+        this.metastoreUris = properties.get(HIVE_METASTORE_URIS);
+        this.warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
 
         this.paimonOptions = new Options();
         if (Strings.isNullOrEmpty(catalogType)) {
@@ -70,8 +74,15 @@ public class PaimonConnector implements Connector {
                 throw new StarRocksConnectorException("The property %s must be set if paimon catalog is hive.",
                         HIVE_METASTORE_URIS);
             }
+        } else if (catalogType.equalsIgnoreCase("dlf")) {
+            String dlfCatalogId = properties.get(DLF_CATGALOG_ID);
+            if (null != dlfCatalogId && !dlfCatalogId.isEmpty()) {
+                paimonOptions.setString(DLF_CATGALOG_ID, dlfCatalogId);
+            }
         }
-        if (Strings.isNullOrEmpty(warehousePath)) {
+        if (Strings.isNullOrEmpty(warehousePath)
+                && !catalogType.equals("hive")
+                && !catalogType.equalsIgnoreCase("dlf")) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);

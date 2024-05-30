@@ -56,6 +56,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -341,6 +342,9 @@ public class PlanFragmentBuilder {
         }
         Collections.reverse(fragments);
 
+        for (PlanFragment fragment : fragments) {
+            fragment.removeRfOnRightOffspringsOfBroadcastJoin();
+        }
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -366,18 +370,6 @@ public class PlanFragmentBuilder {
         }
 
         return execPlan;
-    }
-
-    private static void maybeClearOlapScanNodePartitions(PlanFragment fragment) {
-        List<OlapScanNode> olapScanNodes = fragment.collectOlapScanNodes();
-        long numNodesWithBucketColumns =
-                olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
-        // Either all OlapScanNode use bucketColumns for local shuffle, or none of them do.
-        // Therefore, clear bucketColumns if only some of them contain bucketColumns.
-        boolean needClear = numNodesWithBucketColumns > 0 && numNodesWithBucketColumns < olapScanNodes.size();
-        if (needClear) {
-            clearOlapScanNodePartitions(fragment.getPlanRoot());
-        }
     }
 
     /**
@@ -1361,6 +1353,12 @@ public class PlanFragmentBuilder {
             if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
                     && scanNode.getJobId() == null) {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
+            }
+
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
+                Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+                scanNode.setFrontendIP(ipPort.first);
+                scanNode.setFrontendPort(ipPort.second.intValue());
             }
 
             if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {

@@ -35,6 +35,7 @@ import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
@@ -69,7 +70,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.ResourceMgr.NEED_MAPPING_CATALOG_RESOURCES;
@@ -81,7 +81,7 @@ public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
     private final Map<String, Catalog> catalogs = Maps.newConcurrentMap();
     private final ConnectorMgr connectorMgr;
-    private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock catalogLock = new FairReentrantReadWriteLock();
 
     public static final ImmutableList<String> CATALOG_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Catalog").add("Type").add("Comment")
@@ -116,7 +116,7 @@ public class CatalogMgr {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
             Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
             if (null == connector) {
-                LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+                LOG.error("{} connector [{}] create failed", type, catalogName);
                 throw new DdlException("connector create failed");
             }
             long id = isResourceMappingCatalog(catalogName) ?
@@ -259,7 +259,7 @@ public class CatalogMgr {
 
         Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
         if (null == connector) {
-            LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+            LOG.error("{} connector [{}] create failed.", type, catalogName);
             throw new DdlException("connector create failed");
         }
 
@@ -515,15 +515,15 @@ public class CatalogMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try {
-            int serializedCatalogsSize = reader.readInt();
-            for (int i = 0; i < serializedCatalogsSize; ++i) {
-                Catalog catalog = reader.readJson(Catalog.class);
+        int serializedCatalogsSize = reader.readInt();
+        for (int i = 0; i < serializedCatalogsSize; ++i) {
+            Catalog catalog = reader.readJson(Catalog.class);
+            try {
                 replayCreateCatalog(catalog);
+            } catch (Exception e) {
+                LOG.error("Failed to load catalog {}, ignore the error, continue load", catalog.getName(), e);
             }
-            loadResourceMappingCatalog();
-        } catch (DdlException e) {
-            throw new IOException(e);
         }
+        loadResourceMappingCatalog();
     }
 }

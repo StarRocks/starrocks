@@ -162,6 +162,9 @@ void FragmentContext::set_final_status(const Status& status) {
     Status* old_status = nullptr;
     if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
         _s_status = status;
+
+        _driver_token.reset();
+
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
             std::stringstream ss;

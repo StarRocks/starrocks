@@ -151,13 +151,9 @@ public:
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
             const uint32_t i = indexes[idx];
             RowIdPack4 v(base + i);
-            auto p = _map.find(keys[i]);
-            if (p != _map.end()) {
-                p->second = v;
-            } else {
-                std::string msg = strings::Substitute("replace not exist key=$0", keys[i]);
-                LOG(ERROR) << msg;
-                return Status::NotFound(msg);
+            auto p = _map.insert({keys[i], v});
+            if (!p.second) {
+                p.first->second = v;
             }
         }
         return Status::OK();
@@ -357,14 +353,9 @@ public:
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
             const uint32_t i = indexes[idx];
-            auto p = _map.find(FixSlice<S>(keys[i]));
-            if (p != _map.end()) {
-                // matched, can replace
-                p->second.value = base + i;
-            } else {
-                std::string msg = strings::Substitute("replace not exist key=$0", keys[i].to_string());
-                LOG(ERROR) << msg;
-                return Status::NotFound(msg);
+            auto p = _map.emplace(FixSlice<S>(keys[i]), base + i);
+            if (!p.second) {
+                p.first->second = base + i;
             }
         }
         return Status::OK();
@@ -594,7 +585,7 @@ public:
         }
         return dump->finish_pindex_kvs(dump_pb);
     }
-};
+}; // namespace starrocks
 
 struct StringHasher1 {
     size_t operator()(const string& v) const { return XXH3_64bits(v.data(), v.length()); }
@@ -668,14 +659,11 @@ public:
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
             const uint32_t i = indexes[idx];
-            auto p = _map.find(keys[i].to_string());
-            if (p != _map.end()) {
-                // matched, can replace
-                p->second = base + i;
+            auto p = _map.insert({keys[i].to_string(), base + i});
+            if (!p.second) {
+                p.first->second = base + i;
             } else {
-                std::string msg = strings::Substitute("replace not exist key=$0", keys[i].to_string());
-                LOG(ERROR) << msg;
-                return Status::NotFound(msg);
+                _total_length += keys[i].size;
             }
         }
         return Status::OK();
@@ -758,7 +746,7 @@ public:
         }
         return dump->finish_pindex_kvs(dump_pb);
     }
-};
+}; // namespace starrocks
 
 class ShardByLengthSliceHashIndex : public HashIndex {
 private:
@@ -896,7 +884,7 @@ public:
                                     ->replace(rssid, rowid_start, indexes, idx_begin, idx_end, pks));
         }
         return Status::OK();
-    }
+    } // namespace starrocks
 
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
