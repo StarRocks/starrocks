@@ -46,7 +46,7 @@ import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
@@ -836,7 +836,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         // That is, we may need to use 2 clone tasks to create a new replica. It is inefficient,
         // but there is no other way now.
         TBackend tSrcBe = new TBackend(srcBe.getHost(), srcBe.getBePort(), srcBe.getHttpPort());
-        cloneTask = new CloneTask(destBackendId, destBe.getHost(), dbId, tblId, partitionId, indexId,
+        cloneTask = new CloneTask(destBackendId, destBe.getHost(), dbId, tblId, physicalPartitionId, indexId,
                 tabletId, schemaHash, Lists.newArrayList(tSrcBe), storageMedium,
                 visibleVersion, (int) (taskTimeoutMs / 1000));
         cloneTask.setPathHash(srcPathHash, destPathHash);
@@ -955,7 +955,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setNodeId(destBackendId)
                     .setDbId(dbId)
                     .setTableId(tblId)
-                    .setPartitionId(partitionId)
+                    .setPartitionId(physicalPartitionId)
                     .setIndexId(indexId)
                     .setTabletId(tabletId)
                     .setVersion(visibleVersion)
@@ -1018,14 +1018,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         // check task report
         if (dbId != cloneTask.getDbId() || tblId != cloneTask.getTableId()
-                || partitionId != cloneTask.getPartitionId() || indexId != cloneTask.getIndexId()
+                || physicalPartitionId != cloneTask.getPartitionId() || indexId != cloneTask.getIndexId()
                 || tabletId != cloneTask.getTabletId() || destBackendId != cloneTask.getBackendId()) {
             String msg = String.format("clone task does not match the tablet info"
                             + ". clone task %d-%d-%d-%d-%d-%d"
                             + ", tablet info: %d-%d-%d-%d-%d-%d",
                     cloneTask.getDbId(), cloneTask.getTableId(), cloneTask.getPartitionId(),
                     cloneTask.getIndexId(), cloneTask.getTabletId(), cloneTask.getBackendId(),
-                    dbId, tblId, partitionId, indexId, tablet.getId(), destBackendId);
+                    dbId, tblId, physicalPartitionId, indexId, tablet.getId(), destBackendId);
             throw new SchedException(Status.UNRECOVERABLE, msg);
         }
 
@@ -1042,7 +1042,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
 
-            Partition partition = globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId);
+            PhysicalPartition partition = globalStateMgr.getLocalMetastore()
+                    .getPhysicalPartitionIncludeRecycleBin(olapTable, physicalPartitionId);
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
             }
@@ -1113,7 +1114,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         replica.updateVersion(reportedTablet.version);
     }
 
-    private String unprotectedFinishClone(TFinishTaskRequest request, Partition partition,
+    private String unprotectedFinishClone(TFinishTaskRequest request, PhysicalPartition partition,
                                           short replicationNum, Multimap<String, String> location) throws SchedException {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         Pair<TabletHealthStatus, TabletSchedCtx.Priority> pair = TabletChecker.getTabletHealthStatusWithPriority(
@@ -1165,7 +1166,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             replica.setNeedFurtherRepair(false);
         }
 
-        ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tblId, partitionId, indexId,
+        ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tblId, physicalPartitionId, indexId,
                 tabletId, destBackendId, replica.getId(),
                 replica.getVersion(),
                 reportedTablet.getSchema_hash(),
@@ -1257,8 +1258,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public TTabletSchedule toTabletScheduleThrift() {
         TTabletSchedule result = new TTabletSchedule();
-        result.setTablet_id(tblId);
-        result.setPartition_id(partitionId);
+        result.setTable_id(tblId);
+        result.setPartition_id(physicalPartitionId);
         result.setTablet_id(tabletId);
         result.setType(type.name());
         result.setPriority(dynamicPriority != null ? dynamicPriority.name() : "");

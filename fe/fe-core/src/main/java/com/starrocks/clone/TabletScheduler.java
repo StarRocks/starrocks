@@ -1372,7 +1372,7 @@ public class TabletScheduler extends FrontendDaemon {
         // write edit log
         ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(tabletCtx.getDbId(),
                 tabletCtx.getTblId(),
-                tabletCtx.getPartitionId(),
+                tabletCtx.getPhysicalPartitionId(),
                 tabletCtx.getIndexId(),
                 tabletCtx.getTabletId(),
                 replica.getBackendId());
@@ -1844,7 +1844,7 @@ public class TabletScheduler extends FrontendDaemon {
         replica.setState(ReplicaState.NORMAL);
         TabletMeta meta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
         ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(meta.getDbId(),
-                meta.getTableId(), meta.getPartitionId(), meta.getIndexId(),
+                meta.getTableId(), meta.getPhysicalPartitionId(), meta.getIndexId(),
                 tabletId, replica.getBackendId(), replica.getId(), replica.getVersion(),
                 replica.getSchemaHash(), replica.getDataSize(), replica.getRowCount(),
                 replica.getLastFailedVersion(), replica.getLastSuccessVersion(),
