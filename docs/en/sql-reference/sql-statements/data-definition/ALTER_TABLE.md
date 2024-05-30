@@ -91,7 +91,7 @@ Currently, column comments cannot be modified.
 
 #### Add a partition
 
-You can choose to add Range partitions or List partitions.
+You can choose to add range partitions or list partitions.
 
 Syntax：
 
@@ -106,7 +106,7 @@ Syntax：
 
     partition_key_desc ::=
         { LESS THAN [MAXVALUE | value_list]
-        | [ value_list , value_list ) } -- Note that [ represents a left-closed interval
+        | [ value_list , value_list ) } -- Note that [ represents a left-closed interval.
 
     value_list ::=
         ( <value> [, ...] )
@@ -116,7 +116,7 @@ Syntax：
         | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values specified by START and END are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
     ```
 
-- List Partitions
+- List partitions
 
     ```SQL
     ALTER TABLE
@@ -131,12 +131,12 @@ Syntax：
 
 Parameters:
 
-- partition-related parameters:
+- Partition-related parameters:
 
-  - Range partitions support adding a single partition (`single_range_partition`) or creating multiple partitions in batch (`multi_range_partitions`).
-  - List partitions only support adding a single partition.
+  - For range partitions, you can add a single range partition (`single_range_partition`) or multiple range partitions in batch (`multi_range_partitions`).
+  - For list partitions, you can only add a single list partition.
 
-- `distributionDesc`:
+- `distribution_desc`:
 
    You can set the number of buckets for the new partition separately, but you cannot set the bucketing method separately.
 
