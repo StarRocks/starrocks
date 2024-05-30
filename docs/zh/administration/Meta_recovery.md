@@ -672,6 +672,6 @@ jstat -gcutil pid 1000 1000
 
 :::
 
-- [bdbje_reset_election_group](./management/FE_configuration.md#bdbje_reset_election_group)
-- [metadata_enable_recovery_mode](./management/FE_configuration.md#metadata_enable_recovery_mode)
-- [ignore_unknown_log_id](./management/FE_configuration.md#ignore_unknown_log_id)
+- `bdbje_reset_election_group`
+- `metadata_enable_recovery_mode`
+- `ignore_unknown_log_id`
