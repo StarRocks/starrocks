@@ -71,7 +71,8 @@ Status AsyncFlushOutputStream::write(const uint8_t* data, int64_t size) {
                     }
                     auto task = _task_queue.front();
                     _task_queue.pop();
-                    DCHECK(_io_executor->offer(task));
+                    bool ok = _io_executor->offer(task);
+                    DCHECK(ok);
                 }
             };
             to_enqueue_tasks.push_back(task);
@@ -112,7 +113,8 @@ Status AsyncFlushOutputStream::close() {
                 }
                 auto task = _task_queue.front();
                 _task_queue.pop();
-                DCHECK(_io_executor->offer(task));
+                bool ok = _io_executor->offer(task);
+                DCHECK(ok);
             }
         };
         to_enqueue_tasks.push_back(task);
@@ -146,6 +148,7 @@ void AsyncFlushOutputStream::enqueue_tasks_and_maybe_submit_task(std::vector<Tas
     auto task = _task_queue.front();
     _task_queue.pop();
     _has_in_flight_io = true;
-    DCHECK(_io_executor->offer(task));
+    bool ok = _io_executor->offer(task);
+    DCHECK(ok);
 }
 } // namespace starrocks::io
