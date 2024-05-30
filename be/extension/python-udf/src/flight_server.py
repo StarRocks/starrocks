@@ -1,3 +1,19 @@
+# encoding: utf-8
+
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import pyarrow as pa
 import pyarrow.flight as flight
@@ -68,7 +84,7 @@ class ScalarCallStub(CallStub):
     def __init__(self, symbol, output_type, location, content):
         CallStub.__init__(self, symbol, output_type, location, content)
 
-    def evaluate(self, batch: pa.RecordBatch):
+    def evaluate(self, batch: pa.RecordBatch) -> pa.Array:
         num_rows = batch.num_rows
         num_cols = len(batch.columns)
         result_list = []
@@ -86,13 +102,12 @@ class VectorizeArrowCallStub(CallStub):
     def __init__(self, symbol, output_type, location, content):
         CallStub.__init__(self, symbol, output_type, location, content)
 
-    def evaluate(self, batch: pa.RecordBatch):
+    def evaluate(self, batch: pa.RecordBatch) -> pa.Array:
         num_rows = batch.num_rows
         num_cols = len(batch.columns)
         result_list = []
         params = [batch.columns[j] for j in range(num_cols)]
         res = self.eval_func(*params)
-        # TODO: check result type
         return res
 
 def get_call_stub(desc):
@@ -117,13 +132,12 @@ class EchoFlightServer(flight.FlightServerBase):
         stub = get_call_stub(func_desc)
         started = False
         for chunk in reader:
-            if not started and chunk.data:
-                writer.begin(chunk.data.schema)
-                started = True
-            
             if chunk.data:
                 result_column = stub.evaluate(chunk.data)
                 result_batch = pa.RecordBatch.from_arrays([result_column], ["result"])
+                if not started:
+                    writer.begin(result_batch.schema)
+                    started = True
                 writer.write_batch(result_batch)
 
 def main(unix_socket_path):

@@ -31,6 +31,7 @@ struct PythonEnv {
     std::string get_python_path() const { return fmt::format("{}/bin/python3", home); }
 };
 
+// TODO: support config PYTHONPATH
 class PythonEnvManager {
 public:
     Status init(const std::vector<std::string>& envs) {

@@ -1316,5 +1316,6 @@ CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
 CONF_mInt32(create_child_worker_timeout_ms, "1000");
 CONF_Strings(python_envs, "");
+CONF_Bool(report_python_worker_error, "true");
 
 } // namespace starrocks::config

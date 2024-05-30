@@ -230,19 +230,23 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<ChildProcess>* child_pro
         return Status::InternalError(fmt::format("fork worker error:{}", std::strerror(errno)));
     } else if (cpid == 0) {
         dup2(pipefd[1], STDOUT_FILENO);
-        dup2(pipefd[1], STDERR_FILENO);
+        if (config::report_python_worker_error) {
+            dup2(pipefd[1], STDERR_FILENO);
+        }
         // change dir
         if (chdir(config::local_library_dir.c_str()) != 0) {
             std::cout << "change dir failed:" << std::strerror(errno) << std::endl;
             exit(-1);
         }
         // run child process
+        // close all resource
         std::unordered_set<int> reserved_fd{0, 1, 2, pipefd[0]};
         auto status = close_all_fd_except(reserved_fd);
         if (!status.ok()) {
             std::cout << "close fd failed:" << status.to_string() << std::endl;
             exit(-1);
         }
+
         pid_t self_pid = getpid();
         std::string str_pid = std::to_string(self_pid);
         char command[] = "python3";
@@ -251,6 +255,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<ChildProcess>* child_pro
         std::string python_home_env = fmt::format("PYTHONHOME={}", py_env.home);
         char* const args[] = {command, script.data(), unix_socket.data(), nullptr};
         char* const envs[] = {python_home_env.data(), nullptr};
+        // exec flight server
         if (execvpe(python_path.c_str(), args, envs)) {
             std::cout << "execvp failed:" << std::strerror(errno) << std::endl;
             exit(-1);
