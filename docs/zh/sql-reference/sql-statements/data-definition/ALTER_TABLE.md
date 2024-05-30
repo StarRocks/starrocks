@@ -109,42 +109,42 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
     ```SQL
     ALTER TABLE
-        ADD { single_rangePartition | PARTITIONS multiRangePartition } [distributionDesc] ["key"="value"];
+        ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
     
-    singleRangePartition ::=
-        PARTITION [IF NOT EXISTS] <partition_name> VALUES partitionKeyDesc
+    single_range_partition ::=
+        PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
 
-    partitionKeyDesc ::=
-        { LESS THAN (MAXVALUE | partitionValueList)
-        | [ partitionValueList , partitionValueList ) } -- 注意此处的 [ 代表左闭合区间
+    partition_key_desc ::=
+        { LESS THAN [MAXVALUE | value_list]
+        | [ value_list , value_list ) } -- 注意此处的 [ 代表左闭合区间
 
-    partitionValueList ::=
-        ( partitionValue [, ...] )
+    value_list ::=
+        ( <value> [, ...] )
 
-    multiRangePartition ::=
-        { START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
-        | START ("<start_integer>") END ("<end_integer>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+    multi_range_partitions ::=
+        { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+        | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
     ```
 
 - List 分区
 
     ```SQL
     ALTER TABLE
-        ADD PARTITION <partition_name> VALUES IN (value_list) [distributionDesc] ["key"="value"];
+        ADD PARTITION <partition_name> VALUES IN (value_list) [distribution_desc] ["key"="value"];
 
     value_list ::=
-        value_item [, ...] -- 如果存在多个枚举值，则枚举值之间用英文逗号分隔。
+        value_item [, ...]
 
     value_item ::=
-        { <value> | ( <value> [, ...] ) } -- 如果存在多个分区列，则每个分区列的值之间以英文逗号分隔，并且包裹在英文括号中。
+        { <value> | ( <value> [, ...] ) }
     ```
 
 参数：
 
-- 分区描述相关参数
+- 分区相关参数
 
-  - Range 分区支持新增单个分区或者批量创建分区 `singleRangePartition` 和 `multiRangePartition`。
-  - List 分区支持新增单个分区。
+  - Range 分区支持新增单个分区 `single_range_partition` 或者批量创建分区 `multi_range_partition`。
+  - List 分区仅支持新增单个分区。
 
 - `distributionDesc`：
 
