@@ -2662,7 +2662,10 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         return Status::OK();
     }
 
-    if (config::enable_pindex_read_by_page) {
+    // uncompressed_size == 0: upgrade from old version and no compression
+    // uncompressed_size != 0 && page_off.back() > 0: new version, compress by page
+    if (config::enable_pindex_read_by_page && 
+                (shard_info.uncompressed_size == 0 || shard_info.page_off.back() > 0)) {
         std::map<size_t, std::vector<KeyInfo>> keys_info_by_page;
         RETURN_IF_ERROR(_split_keys_info_by_page(shard_idx, check_keys_info, keys_info_by_page));
         return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page, stat);
