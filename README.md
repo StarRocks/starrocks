@@ -87,12 +87,7 @@ Starting from version 3.0, StarRocks supports a new shared-data architecture, wh
 
 | Section | Description |
 |-|-|
-<<<<<<< HEAD
-| [Deploy](https://docs.starrocks.io/en-us/latest/quick_start/Deploy) | Learn how to run and configure StarRocks.|
-=======
 | [Deploy](https://docs.starrocks.io/docs/deployment/deployment_overview/) | Learn how to run and configure StarRocks.|
-| [Articles](https://github.com/StarRocks/starrocks/discussions/categories/how-tos-tutorials-best-practices-and-architecture-articles)| How-tos, Tutorials, Best Practices and Architecture Articles. |
->>>>>>> f8b3c3f40a ([Doc] Update image and link in README (#46458))
 | [Docs](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro)| Full documentation. |
 | [Blogs](https://starrocks.io/blog) | StarRocks deep dive and user stories.  |
 
