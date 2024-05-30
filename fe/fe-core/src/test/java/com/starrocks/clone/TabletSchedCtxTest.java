@@ -46,6 +46,7 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchedule;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -177,6 +178,10 @@ public class TabletSchedCtxTest {
         AgentTask recoverTask = agentBatchTask.getAllTasks().get(0);
         Assert.assertEquals(be2.getId(), recoverTask.getBackendId());
         Assert.assertEquals(TABLET_ID_1, recoverTask.getTabletId());
+
+        TTabletSchedule res = ctx.toTabletScheduleThrift();
+        Assert.assertNotNull(res);
+        Assert.assertEquals(TABLET_ID_1, res.getTablet_id());
     }
 
     @Test
