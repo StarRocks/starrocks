@@ -94,8 +94,7 @@ public class KuduConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         Optional<IHiveMetastore> hiveMetastore = Optional.empty();
-        if (HIVE.equals(catalogType) || GLUE.equals(catalogType)) {
-            Util.validateMetastoreUris(metastoreUris);
+        if (isHiveOrGlueCatalogType()) {
             MetastoreType metastoreType = MetastoreType.get(catalogType);
             HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(this.hdfsEnvironment, properties);
             hiveMetastore = Optional.of(new HiveMetastore(metaClient, catalogName, metastoreType));
@@ -103,5 +102,13 @@ public class KuduConnector implements Connector {
         }
         return new KuduMetadata(catalogName, hdfsEnvironment, kuduMaster, schemaEmulationEnabled, schemaEmulationPrefix,
                 hiveMetastore);
+    }
+
+    private boolean isHiveOrGlueCatalogType() {
+        if (HIVE.equals(catalogType)) {
+            Util.validateMetastoreUris(metastoreUris);
+            return true;
+        }
+        return GLUE.equals(catalogType);
     }
 }

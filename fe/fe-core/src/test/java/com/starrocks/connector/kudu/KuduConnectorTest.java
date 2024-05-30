@@ -62,6 +62,17 @@ public class KuduConnectorTest {
     }
 
     @Test
+    public void testCreateGlueKuduConnectorWithoutUris() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("kudu.master", "localhost:7051");
+        properties.put("kudu.catalog.type", "glue");
+        KuduConnector connector = new KuduConnector(new ConnectorContext("kudu_catalog", "kudu", properties));
+
+        ConnectorMetadata metadata = connector.getMetadata();
+        Assert.assertTrue(metadata instanceof KuduMetadata);
+    }
+
+    @Test
     public void testGetMetadata() {
         Map<String, String> properties = new HashMap<>();
         properties.put("kudu.master", "localhost:7051");
