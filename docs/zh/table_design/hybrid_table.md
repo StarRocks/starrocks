@@ -112,7 +112,7 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
    SHOW VARIABLES LIKE '%enable_short_circuit%';
    ```
 
-   如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`，设置变量 [`enable_short_circuit`](../reference/System_variable.md#enable_short_circuit323-及以后) 为 `true`。
+   如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`，设置变量 [`enable_short_circuit`](../reference/System_variable.md#enable_short_circuit) 为 `true`。
 
 2. 查询数据。如果查询满足本条件：WHERE 子句的条件列必须包含所有主键列，并且运算符为  `=` 或者 `IN`，该查询才会走短路径。
 
