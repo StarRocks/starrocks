@@ -31,6 +31,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,6 +40,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
@@ -50,7 +52,7 @@ public class Utils {
     }
 
     public static Long chooseNodeId(ShardInfo shardInfo) {
-        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllBackendIdsByShard(shardInfo, true);
+        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
         if (!ids.isEmpty()) {
             return ids.iterator().next();
         }
@@ -203,5 +205,15 @@ public class Utils {
                 throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
             }
         }
+    }
+
+    public static Optional<Long> getWarehouseIdByNodeId(SystemInfoService systemInfo, long nodeId) {
+        ComputeNode node = systemInfo.getBackendOrComputeNode(nodeId);
+        if (node == null) {
+            LOG.warn("failed to get warehouse id by node id: {}", nodeId);
+            return Optional.empty();
+        }
+
+        return Optional.of(node.getWarehouseId());
     }
 }

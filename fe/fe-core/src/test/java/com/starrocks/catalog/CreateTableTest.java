@@ -57,7 +57,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -1057,9 +1056,9 @@ public class CreateTableTest {
         Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
 
         // ** test load from image(simulate restart)
-        localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
-        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+        LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        olapTable = (OlapTable) localMetastoreLeader.getDb("test")
                 .getTable("test_location_persist_t1");
         System.out.println(olapTable.getLocation());
         Assert.assertEquals(1, olapTable.getLocation().size());
@@ -1383,32 +1382,6 @@ public class CreateTableTest {
         Assert.assertTrue(table.isBinlogEnabled());
         Assert.assertEquals(0, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
-    }
-
-    @Test
-    public void testTemporaryTable() throws Exception {
-        Config.enable_experimental_temporary_table = true;
-        createTable(
-                "CREATE TABLE test.base_tbl (\n" +
-                        "k1 INT,\n" +
-                        "k2 VARCHAR(20)\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(k1)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ")"
-        );
-
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
-                "create temporary table test.temp_table select * from test.base_tbl",
-                connectContext);
-        // String sql = stmt.toSql();
-        // Assert.assertEquals("hehe", sql);
-
-        // drop table
-        UtFrameUtils.parseStmtWithNewParser("drop temporary table test.base_tbl", connectContext);
     }
 
     @Test

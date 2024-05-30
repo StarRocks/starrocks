@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.google.gson.Gson;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -69,9 +68,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -97,6 +98,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -109,9 +111,6 @@ public class ConnectProcessor {
 
     protected StmtExecutor executor = null;
 
-    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
-
-    private static final Gson GSON = new Gson();
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -316,11 +315,7 @@ public class ConnectProcessor {
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
         }
-
-        if (Config.enable_profile_log) {
-            String jsonString = GSON.toJson(queryDetail);
-            PROFILE_LOG.info(jsonString);
-        }
+        queryDetail.setCatalog(ctx.getCurrentCatalog());
 
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
@@ -348,7 +343,8 @@ public class ConnectProcessor {
                 ctx.getDatabase(),
                 sql,
                 ctx.getQualifiedUser(),
-                Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""));
+                Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
+                ctx.getCurrentCatalog());
         ctx.setQueryDetail(queryDetail);
         // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addQueryDetail(queryDetail.copy());
@@ -418,6 +414,14 @@ public class ConnectProcessor {
 
                 ctx.setIsLastStmt(i == stmts.size() - 1);
 
+                //Build View SQL without Policy Rewrite
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitRelation(Relation relation, Void context) {
+                        relation.setNeedRewrittenByPolicy(true);
+                        return null;
+                    }
+                }.visit(parsedStmt);
                 executor.execute();
 
                 // do not execute following stmt when current stmt failed, this is consistent with mysql server
@@ -537,7 +541,7 @@ public class ConnectProcessor {
         packetBuf.get(nullBitmap);
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
-            
+
             // new_params_bind_flag
             if (packetBuf.hasRemaining() && (int) packetBuf.get() != 0) {
                 // parse params types
@@ -766,6 +770,22 @@ public class ConnectProcessor {
             ctx.setCurrentRoleIds(new HashSet<>());
         }
 
+        // after https://github.com/StarRocks/starrocks/pull/43162, we support temporary tables.
+        // DDL/DML operations related to temporary tables are bound to a specific session,
+        // so the request forwarded by the follower needs to specifically set the session id.
+
+        //  During the grayscale upgrade process,
+        //  if the leader is a new version and the follower is an old version,
+        //  the forwarded request won't have a session id.
+        //  Considering that the old version FE does not support operations related to temporary tables,
+        //  the session id is not necessary at this time.
+        //  in this case, we just set a random session id to ensure that subsequent processing can be processed normally.
+        if (request.isSetSession_id()) {
+            ctx.setSessionId(UUID.fromString(request.getSession_id()));
+        } else {
+            ctx.setSessionId(UUIDUtil.genUUID());
+        }
+
         if (request.isSetIsLastStmt()) {
             ctx.setIsLastStmt(request.isIsLastStmt());
         } else {
@@ -845,6 +865,15 @@ public class ConnectProcessor {
 
             List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
             StatementBase statement = stmts.get(idx);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(statement);
+
             executor = new StmtExecutor(ctx, statement);
             executor.setProxy();
             executor.execute();

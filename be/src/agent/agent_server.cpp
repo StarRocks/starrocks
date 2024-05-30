@@ -70,6 +70,17 @@ const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
 const uint32_t REPORT_DATACACHE_METRICS_WORKER_COUNT = 1;
 
+static int calc_max_replication_threads(int replication_threads) {
+    if (replication_threads == 0) {
+        replication_threads = -4;
+    }
+    if (replication_threads < 0) {
+        replication_threads = -replication_threads;
+        replication_threads *= CpuInfo::num_cores();
+    }
+    return replication_threads;
+}
+
 class AgentServer::Impl {
 public:
     explicit Impl(ExecEnv* exec_env, bool is_compute_node) : _exec_env(exec_env), _is_compute_node(is_compute_node) {}
@@ -130,7 +141,7 @@ private:
     std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
     std::unique_ptr<ReportDataCacheMetricsTaskWorkerPool> _report_datacache_metrics_workers;
 
-    // Compute node only need _report_resource_usage_workers.
+    // Compute node only need _report_resource_usage_workers and _report_task_workers
     const bool _is_compute_node;
 };
 
@@ -235,9 +246,8 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL(
-                "replication", 0, config::replication_threads > 0 ? config::replication_threads : CpuInfo::num_cores(),
-                std::numeric_limits<int>::max(), _thread_pool_replication);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("replication", 0, calc_max_replication_threads(config::replication_threads),
+                                       std::numeric_limits<int>::max(), _thread_pool_replication);
 
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
@@ -255,7 +265,6 @@ void AgentServer::Impl::init_or_die() {
                               config::push_worker_count_high_priority + config::push_worker_count_normal_priority)
         CREATE_AND_START_POOL(_delete_workers, DeleteTaskWorkerPool,
                               config::delete_worker_count_normal_priority + config::delete_worker_count_high_priority)
-        CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_disk_state_workers, ReportDiskStateTaskWorkerPool, REPORT_DISK_STATE_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_tablet_workers, ReportOlapTableTaskWorkerPool, REPORT_OLAP_TABLE_WORKER_COUNT)
         CREATE_AND_START_POOL(_report_workgroup_workers, ReportWorkgroupTaskWorkerPool, REPORT_WORKGROUP_WORKER_COUNT)
@@ -264,6 +273,7 @@ void AgentServer::Impl::init_or_die() {
                           REPORT_RESOURCE_USAGE_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_datacache_metrics_workers, ReportDataCacheMetricsTaskWorkerPool,
                           REPORT_DATACACHE_METRICS_WORKER_COUNT)
+    CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
 }
 
@@ -297,13 +307,13 @@ void AgentServer::Impl::stop() {
         // Both PUSH and REALTIME_PUSH type use _push_workers
         STOP_POOL(PUSH, _push_workers);
         STOP_POOL(DELETE, _delete_workers);
-        STOP_POOL(REPORT_TASK, _report_task_workers);
         STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
         STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
         STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
     }
     STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
     STOP_POOL(REPORT_DATACACHE_METRICS, _report_datacache_metrics_workers);
+    STOP_POOL(REPORT_TASK, _report_task_workers);
 #undef STOP_POOL
 }
 
@@ -577,7 +587,7 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         break;
     case TTaskType::REMOTE_SNAPSHOT:
     case TTaskType::REPLICATE_SNAPSHOT:
-        st = _thread_pool_replication->update_max_threads(new_val > 0 ? new_val : CpuInfo::num_cores());
+        st = _thread_pool_replication->update_max_threads(calc_max_replication_threads(new_val));
         break;
     default:
         break;

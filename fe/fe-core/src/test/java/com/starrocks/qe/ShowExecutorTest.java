@@ -72,6 +72,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
@@ -108,6 +109,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
@@ -116,6 +118,8 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TDataCacheMetrics;
+import com.starrocks.thrift.TDataCacheStatus;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
@@ -375,7 +379,7 @@ public class ShowExecutorTest {
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {
             {
-                scheduler.listConnection("testUser");
+                scheduler.listConnection("testUser", null);
                 minTimes = 0;
                 result = Lists.newArrayList(ctx.toThreadInfo());
             }
@@ -440,15 +444,23 @@ public class ShowExecutorTest {
         listPartitionInfoTest.setUp();
         OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();
         Database db = new Database();
+
         new Expectations(db) {
             {
                 db.getTable(anyString);
                 minTimes = 0;
                 result = olapTable;
 
-                db.getTable(0);
-                minTimes = 0;
+                db.getTable(1000);
+                minTimes = 1;
                 result = olapTable;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext ctx, Database db, TableName tableName) {
+                return olapTable;
             }
         };
 
@@ -459,6 +471,7 @@ public class ShowExecutorTest {
                 result = db;
             }
         };
+
 
         // Ok to test
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
@@ -749,7 +762,7 @@ public class ShowExecutorTest {
                 minTimes = 1;
                 result = tabletNum;
 
-                starosAgent.getWorkerIdByBackendId(anyLong);
+                starosAgent.getWorkerIdByNodeId(anyLong);
                 minTimes = 1;
                 result = workerId;
 
@@ -797,6 +810,11 @@ public class ShowExecutorTest {
 
         ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
         node.updateResourceUsage(10, 100L, 1L, 30);
+        TDataCacheMetrics tDataCacheMetrics = new TDataCacheMetrics();
+        tDataCacheMetrics.setStatus(TDataCacheStatus.NORMAL);
+        tDataCacheMetrics.setDisk_quota_bytes(1024 * 1024 * 1024);
+        tDataCacheMetrics.setMem_quota_bytes(1024 * 1024 * 1024);
+        node.updateDataCacheMetrics(DataCacheMetrics.buildFromThrift(tDataCacheMetrics));
         clusterInfo.addComputeNode(node);
 
         NodeMgr nodeMgr = new NodeMgr();
@@ -872,7 +890,8 @@ public class ShowExecutorTest {
         Assert.assertEquals("10", resultSet.getString(14));
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
-        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(21));
+        Assert.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(17));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(22));
     }
 
     @Test

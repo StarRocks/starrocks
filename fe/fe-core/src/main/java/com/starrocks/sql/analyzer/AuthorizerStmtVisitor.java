@@ -37,6 +37,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
@@ -87,6 +88,7 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -455,6 +457,10 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             } else {
                 table = ((ViewRelation) tableToBeChecked.getValue()).getView();
             }
+            if (table instanceof MetadataTable) {
+                return;
+            }
+
             if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
                 try {
                     Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -468,8 +474,14 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
             } else {
                 if (table instanceof View) {
                     try {
-                        Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                tableName, PrivilegeType.SELECT);
+                        // for privilege checking, treat hive view as table
+                        if (table.getType() == Table.TableType.HIVE_VIEW) {
+                            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    tableName, PrivilegeType.SELECT);
+                        } else {
+                            Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    tableName, PrivilegeType.SELECT);
+                        }
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -2210,6 +2222,19 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                 }
             }
         });
+        return null;
+    }
+
+    @Override
+    public Void visitCleanTemporaryTableStatement(CleanTemporaryTableStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
         return null;
     }
 

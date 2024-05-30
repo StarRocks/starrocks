@@ -398,8 +398,14 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
             ok = false;
         }
         if (!ok) {
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            string msg;
+            if (_opt.partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+                msg = "partial update on table with sort key must provide all sort key columns";
+            } else {
+                msg = "column mode partial update on table with sort key cannot update sort key column";
+            }
+            LOG(WARNING) << msg;
+            return Status::NotSupported(msg);
         }
     }
     return Status::OK();
@@ -619,12 +625,14 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
         if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(i).has_column_param() &&
             ptable_schema_param.indexes(i).column_param().columns_desc_size() != 0 &&
             ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
-            ptable_schema_param.version() > ori_tablet_schema->schema_version()) {
+            ptable_schema_param.version() != ori_tablet_schema->schema_version()) {
             ASSIGN_OR_RETURN(
-                    auto tablet_schema,
+                    _tablet_schema,
                     TabletSchema::create(*ori_tablet_schema, ptable_schema_param.indexes(i).schema_id(),
                                          ptable_schema_param.version(), ptable_schema_param.indexes(i).column_param()));
-            _tablet_schema = _tablet->update_max_version_schema(tablet_schema);
+            if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
+                _tablet->update_max_version_schema(_tablet_schema);
+            }
             return Status::OK();
         }
     }

@@ -62,6 +62,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.RoutineLoadDesc;
@@ -117,6 +118,8 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
 
 /**
  * Routine load job is a function which stream load data from streaming medium to starrocks.
@@ -315,7 +318,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
-    protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+    protected ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
     // TODO(ml): error sample
 
     // save the latest 3 error log urls
@@ -805,7 +808,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     // remove all of task in jobs and change job state to paused
                     updateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                    "current error rows of job is more than max error num"),
+                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
                             isReplay);
                 }
             }
@@ -827,13 +830,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     .add("current_total_rows", currentTotalRows)
                     .add("current_error_rows", currentErrorRows)
                     .add("max_error_num", maxErrorNum)
-                    .add("msg", "current error rows is more than max error rows, begin to pause job")
+                    .add("msg", "current error rows is more than max error num, begin to pause job")
                     .build());
             if (!isReplay) {
                 // remove all of task in jobs and change job state to paused
                 updateState(JobState.PAUSED,
                         new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                "current error rows is more than max error num"),
+                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
                         isReplay);
             }
             // reset currentTotalNum and currentErrorNum
@@ -1532,11 +1535,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(otherMsg);
 
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                if (warehouse != null) {
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                     row.add(warehouse.getName());
-                } else {
-                    row.add("");
+                } catch (Exception e) {
+                    row.add(e.getMessage());
                 }
             }
             row.add(getSourceProgressString());

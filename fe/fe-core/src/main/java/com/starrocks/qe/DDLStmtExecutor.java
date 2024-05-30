@@ -18,9 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -70,6 +68,7 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -88,6 +87,8 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
@@ -106,6 +107,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -148,7 +150,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public class DDLStmtExecutor {
 
@@ -275,6 +276,14 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitCreateTemporaryTableStatement(CreateTemporaryTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().createTemporaryTable(stmt);
+            });
+            return null;
+        }
+
+        @Override
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getMetadataMgr().createTableLike(stmt);
@@ -283,9 +292,42 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitCreateTemporaryTableLikeStatement(
+                CreateTemporaryTableLikeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr()
+                        .createTemporaryTable((CreateTemporaryTableStmt) stmt.getCreateTableStmt());
+            });
+            return null;
+        }
+
+        @Override
         public ShowResultSet visitDropTableStatement(DropTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
+                if (stmt.getTemporaryTableMark()) {
+                    DropTemporaryTableStmt dropTemporaryTableStmt = new DropTemporaryTableStmt(
+                            stmt.isSetIfExists(), stmt.getTbl(), stmt.isForceDrop());
+                    dropTemporaryTableStmt.setSessionId(context.getSessionId());
+                    context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
+                } else {
+                    context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropTemporaryTableStatement(DropTemporaryTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().dropTemporaryTable(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCleanTemporaryTableStatement(CleanTemporaryTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getMetadataMgr().cleanTemporaryTables(stmt);
             });
             return null;
         }
@@ -656,7 +698,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().truncateTable(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().truncateTable(stmt, context);
             });
             return null;
         }
@@ -1022,29 +1064,15 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
-            Optional<DataCacheSelectMetrics> metrics = Optional.empty();
-            String errorMsg = "N/A";
+            DataCacheSelectMetrics metrics = null;
             try {
                 metrics = DataCacheSelectExecutor.cacheSelect(statement, context);
             } catch (Exception e) {
                 LOG.warn(e);
-                errorMsg = e.getMessage();
+                throw new RuntimeException(e.getMessage());
             }
 
-            if (metrics.isPresent()) {
-                return metrics.get().getShowResultSet(statement.isVerbose());
-            } else {
-                List<List<String>> rows = Lists.newArrayList();
-                List<String> row = Lists.newArrayList();
-                ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                        .addColumn(new Column("STATUS", ScalarType.createVarcharType()))
-                        .addColumn(new Column("ERROR_MSG", ScalarType.createVarcharType()))
-                        .build();
-                row.add("FAILED");
-                row.add(errorMsg);
-                rows.add(row);
-                return new ShowResultSet(metaData, rows);
-            }
+            return metrics.getShowResultSet(statement.isVerbose());
         }
 
         //=========================================== Dictionary Statement ==================================================

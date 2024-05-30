@@ -488,6 +488,10 @@ public class ScalarOperatorToExpr {
                             "",
                             ((ConstantOperator) call.getChild(0)).getBigint());
                     break;
+                case "session_id":
+                    callExpr = new InformationFunction(fnName,
+                            ((ConstantOperator) call.getChild(0)).getVarchar(), 0);
+                    break;
                 default:
                     List<Expr> arg = call.getChildren().stream()
                             .map(expr -> buildExpr.build(expr, context))

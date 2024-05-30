@@ -37,12 +37,14 @@ Status SysFeMemoryUsage::start(RuntimeState* state) {
     RETURN_IF(!_param->ip || !_param->port, Status::InternalError("IP or port not exists"));
 
     RETURN_IF_ERROR(SchemaScanner::start(state));
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
 
     TAuthInfo auth = build_auth_info();
     TFeMemoryReq request;
     request.__set_auth_info(auth);
 
-    return (SchemaHelper::list_fe_memory_usage(*(_param->ip), _param->port, request, &_result));
+    return SchemaHelper::list_fe_memory_usage(_ss_state, request, &_result);
 }
 
 Status SysFeMemoryUsage::_fill_chunk(ChunkPtr* chunk) {

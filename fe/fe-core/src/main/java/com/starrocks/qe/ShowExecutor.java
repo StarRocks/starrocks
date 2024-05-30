@@ -144,7 +144,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.service.InformationSchemaDataSource;
+import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -227,6 +229,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -259,6 +262,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -321,7 +325,7 @@ public class ShowExecutor {
 
                         AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                         mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
-                            Table baseTable = baseTableInfo.getTable();
+                            Table baseTable = MvUtils.getTableChecked(baseTableInfo);
                             // TODO: external table should check table action after AuthorizationManager support it.
                             if (baseTable != null && baseTable.isNativeTableOrMaterializedView()) {
                                 try {
@@ -515,6 +519,51 @@ public class ShowExecutor {
         }
 
         @Override
+        public ShowResultSet visitShowTemporaryTablesStatement(ShowTemporaryTableStmt statement, ConnectContext context) {
+            statement.setSessionId(context.getSessionId());
+
+            ShowTemporaryTableStmt showTemporaryTableStmt = statement;
+            List<List<String>> rows = Lists.newArrayList();
+            String catalogName = showTemporaryTableStmt.getCatalogName();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+
+            String dbName = showTemporaryTableStmt.getDb();
+            UUID sessionId = showTemporaryTableStmt.getSessionId();
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+
+            PatternMatcher matcher = null;
+            if (showTemporaryTableStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showTemporaryTableStmt.getPattern(),
+                        CaseSensibility.TABLE.getCaseSensibility());
+            }
+
+            Map<String, String> tableMap = Maps.newTreeMap();
+            MetaUtils.checkDbNullAndReport(db, showTemporaryTableStmt.getDb());
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                List<String> tableNames = temporaryTableMgr.listTemporaryTables(sessionId, db.getId());
+                for (String tableName : tableNames) {
+                    if (matcher != null && !matcher.match(tableName)) {
+                        continue;
+                    }
+                    rows.add(Lists.newArrayList(tableName));
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+
+            for (Map.Entry<String, String> entry : tableMap.entrySet()) {
+                rows.add(Lists.newArrayList(entry.getKey()));
+            }
+            return new ShowResultSet(showTemporaryTableStmt.getMetaData(), rows);
+        }
+
+        @Override
         public ShowResultSet visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getDb());
@@ -621,7 +670,7 @@ public class ShowExecutor {
             createSqlBuilder.append("CREATE DATABASE `").append(statement.getDb()).append("`");
             if (!Strings.isNullOrEmpty(db.getLocation())) {
                 createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-            } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
+            } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase() && Strings.isNullOrEmpty(db.getCatalogName())) {
                 String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
                 createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
             }
@@ -637,20 +686,20 @@ public class ShowExecutor {
                 catalogName = context.getCurrentCatalog();
             }
             if (CatalogMgr.isInternalCatalog(catalogName)) {
-                return showCreateInternalCatalogTable(statement);
+                return showCreateInternalCatalogTable(statement, context);
             } else {
                 return showCreateExternalCatalogTable(statement, tbl, catalogName);
             }
         }
 
-        private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) {
+        private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt, ConnectContext connectContext) {
             Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = db.getTable(showStmt.getTable());
+                Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
                 if (table == null) {
                     if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
@@ -795,7 +844,7 @@ public class ShowExecutor {
             List<List<String>> rowSet = Lists.newArrayList();
 
             List<ConnectContext.ThreadInfo> threadInfos = context.getConnectScheduler()
-                    .listConnection(context.getQualifiedUser());
+                    .listConnection(context.getQualifiedUser(), statement.getForUser());
             long nowMs = System.currentTimeMillis();
             for (ConnectContext.ThreadInfo info : threadInfos) {
                 List<String> row = info.toRow(nowMs, statement.showFull());
@@ -1640,7 +1689,8 @@ public class ShowExecutor {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    Table table = db.getTable(statement.getTableName());
+                    Table table = MetaUtils.getSessionAwareTable(
+                            context, db, new TableName(statement.getDbName(), statement.getTableName()));
                     if (table == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
                     }
@@ -1657,6 +1707,7 @@ public class ShowExecutor {
                                 PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
                     }
                     Boolean hideIpPort = privResult.second;
+                    statement.setTable(table);
 
                     OlapTable olapTable = (OlapTable) table;
                     long sizeLimit = -1;
@@ -2106,7 +2157,7 @@ public class ShowExecutor {
                                 olapTable.getDefaultReplicationNum() : RunMode.defaultReplicationNum();
                         rows.add(Lists.newArrayList(
                                 tableName,
-                                String.valueOf(dynamicPartitionProperty.getEnable()),
+                                String.valueOf(dynamicPartitionProperty.isEnabled()),
                                 dynamicPartitionProperty.getTimeUnit().toUpperCase(),
                                 String.valueOf(dynamicPartitionProperty.getStart()),
                                 String.valueOf(dynamicPartitionProperty.getEnd()),
@@ -2123,7 +2174,8 @@ public class ShowExecutor {
                                 dynamicPartitionScheduler
                                         .getRuntimeInfo(tableName, DynamicPartitionScheduler.CREATE_PARTITION_MSG),
                                 dynamicPartitionScheduler
-                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG)));
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG),
+                                String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
                     }
                 } finally {
                     locker.unLockDatabase(db, LockType.READ);
@@ -2142,7 +2194,7 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = db.getTable(statement.getTableName().getTbl());
+                Table table = MetaUtils.getSessionAwareTable(context, db, statement.getTableName());
                 if (table == null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
                             db.getOriginName() + "." + statement.getTableName().toString());

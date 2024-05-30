@@ -56,6 +56,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -87,13 +88,6 @@ public class OlapTableFactory implements AbstractTableFactory {
     private OlapTableFactory() {
     }
 
-    private void analyzeLocationOnCreateTable(OlapTable table, Map<String, String> properties) {
-        String location = PropertyAnalyzer.analyzeLocation(properties, true);
-        if (location != null) {
-            table.setLocation(location);
-        }
-    }
-
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database db, CreateTableStmt stmt) throws DdlException {
@@ -101,7 +95,12 @@ public class OlapTableFactory implements AbstractTableFactory {
         ColocateTableIndex colocateTableIndex = metastore.getColocateTableIndex();
         String tableName = stmt.getTableName();
 
-        LOG.debug("begin create olap table: {}", tableName);
+        if (stmt instanceof CreateTemporaryTableStmt) {
+            LOG.debug("begin create temp table {}.{} in session {}",
+                    db.getFullName(), tableName, ((CreateTemporaryTableStmt) stmt).getSessionId());
+        } else {
+            LOG.debug("begin create olap table: {}", tableName);
+        }
 
         // create columns
         List<Column> baseSchema = stmt.getColumns();
@@ -234,6 +233,13 @@ public class OlapTableFactory implements AbstractTableFactory {
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
+            // set session id for temporary table
+            if (stmt instanceof CreateTemporaryTableStmt) {
+                CreateTemporaryTableStmt createTemporaryTableStmt = (CreateTemporaryTableStmt) stmt;
+                Preconditions.checkArgument(createTemporaryTableStmt.getSessionId() != null,
+                        "temporary table must set session id");
+                table.setSessionId(createTemporaryTableStmt.getSessionId());
+            }
         } else {
             throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
         }
@@ -307,7 +313,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             // analyze location property
-            analyzeLocationOnCreateTable(table, properties);
+            PropertyAnalyzer.analyzeLocation(table, properties);
 
             // set in memory
             boolean isInMemory =
@@ -623,7 +629,8 @@ public class OlapTableFactory implements AbstractTableFactory {
 
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
-                    Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet);
+                    Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet,
+                            warehouseId);
                     metastore.buildPartitions(db, table, partition.getSubPartitions().stream().collect(Collectors.toList()),
                             warehouseId);
                     table.addPartition(partition);
@@ -661,7 +668,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
                         Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
-                                tabletIdSet);
+                                tabletIdSet, warehouseId);
                         partitions.add(partition);
                     }
                     // It's ok if partitions is empty.

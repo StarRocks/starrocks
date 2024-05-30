@@ -57,6 +57,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -139,7 +140,7 @@ public class Database extends MetaObject implements Writable {
         if (this.fullQualifiedName == null) {
             this.fullQualifiedName = "";
         }
-        this.rwLock = new QueryableReentrantReadWriteLock(true);
+        this.rwLock = new QueryableReentrantReadWriteLock();
         this.idToTable = new ConcurrentHashMap<>();
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
@@ -288,14 +289,21 @@ public class Database extends MetaObject implements Writable {
         if (table == null) {
             return false;
         }
-        String tableName = table.getName();
-        if (nameToTable.containsKey(tableName)) {
-            return false;
+        if (table.isTemporaryTable()) {
+            long tableId = table.getId();
+            if (idToTable.containsKey(tableId)) {
+                return false;
+            }
+            idToTable.put(tableId, table);
         } else {
+            String tableName = table.getName();
+            if (nameToTable.containsKey(tableName)) {
+                return false;
+            }
             idToTable.put(table.getId(), table);
             nameToTable.put(table.getName(), table);
-            return true;
         }
+        return true;
     }
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
@@ -333,6 +341,27 @@ public class Database extends MetaObject implements Writable {
                 tableName, fullQualifiedName, table.getId(), table.getType(), isForce);
     }
 
+    public void dropTemporaryTable(long tableId, String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
+        Table table;
+        Locker locker = new Locker();
+        locker.lockDatabase(this, LockType.WRITE);
+        try {
+            table = getTable(tableId);
+            if (table == null) {
+                if (isSetIfExists) {
+                    return;
+                }
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+            }
+            unprotectDropTemporaryTable(tableId, isForce, false);
+            DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
+        } finally {
+            locker.unLockDatabase(this, LockType.WRITE);
+        }
+    }
+
+
     /**
      * Drop a table from this database.
      *
@@ -358,6 +387,16 @@ public class Database extends MetaObject implements Writable {
         return table;
     }
 
+    public Table unprotectDropTemporaryTable(long tableId, boolean isForceDrop, boolean isReplay) {
+        Table table = dropTemporaryTable(tableId);
+        if (table != null) {
+            table.onDrop(this, isForceDrop, isReplay);
+            LOG.info("Finished drop temporary table '{}' from database '{}', tableId: {}, sessionId: {}",
+                    table.getName(), getOriginName(), tableId, ((OlapTable) table).getSessionId());
+        }
+        return table;
+    }
+
     public Table dropTable(long tableId) {
         Table table = this.idToTable.get(tableId);
         if (table != null) {
@@ -376,12 +415,25 @@ public class Database extends MetaObject implements Writable {
         return table;
     }
 
+    public Table dropTemporaryTable(long tableId) {
+        Table table = this.idToTable.get(tableId);
+        if (table != null) {
+            Preconditions.checkArgument(table.isTemporaryTable(), "table should be temporary table");
+            this.idToTable.remove(tableId);
+        }
+        return table;
+    }
+
     public List<Table> getTables() {
-        return new ArrayList<Table>(idToTable.values());
+        return new ArrayList<>(idToTable.values());
     }
 
     public int getTableNumber() {
         return idToTable.size();
+    }
+
+    public List<Table> getTemporaryTables() {
+        return idToTable.values().stream().filter(t -> t.isTemporaryTable()).collect(Collectors.toList());
     }
 
     public List<Table> getViews() {
@@ -727,6 +779,10 @@ public class Database extends MetaObject implements Writable {
     public boolean isSystemDatabase() {
         return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
                 fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
+    }
+
+    public boolean isStatisticsDatabase() {
+        return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
     }
 
     // the invoker should hold db's writeLock

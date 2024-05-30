@@ -94,6 +94,7 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -466,6 +467,8 @@ public class GlobalStateMgr {
     private MemoryUsageTracker memoryUsageTracker;
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+    private TemporaryTableMgr temporaryTableMgr;
+    private TemporaryTableCleaner temporaryTableCleaner;
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -538,6 +541,10 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
+    public TemporaryTableMgr getTemporaryTableMgr() {
+        return temporaryTableMgr;
+    }
+
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
     }
@@ -597,7 +604,7 @@ public class GlobalStateMgr {
         this.exportMgr = new ExportMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
-        this.lock = new QueryableReentrantLock(true);
+        this.lock = new QueryableReentrantLock();
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
         this.deleteMgr = new DeleteMgr();
@@ -674,10 +681,11 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
+        this.temporaryTableMgr = new TemporaryTableMgr();
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
+        this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
 
         this.taskManager = new TaskManager();
@@ -747,6 +755,7 @@ public class GlobalStateMgr {
         this.authorizer = new Authorizer(accessControlProvider);
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
+        this.temporaryTableCleaner = new TemporaryTableCleaner();
     }
 
     public static void destroyCheckpoint() {
@@ -1327,6 +1336,8 @@ public class GlobalStateMgr {
             LOG.info("run system in recovery mode");
             metaRecoveryDaemon.start();
         }
+        temporaryTableCleaner.start();
+
     }
 
     // start threads that should run on all FE
@@ -1823,17 +1834,16 @@ public class GlobalStateMgr {
                 editLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
-                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
-                            replayedJournalId.incrementAndGet(),
-                            entity == null ? null : GsonUtils.GSON.toJson(entity.getData()),
-                            e);
+                    LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
+                            replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
                     if (!readSucc) {
                         cursor.skipNext();
                     }
                     continue;
                 }
                 // handled in outer loop
-                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                LOG.warn("catch exception when replaying journal, id: {}, data: {},",
+                        replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
                 throw e;
             }
 
@@ -1869,6 +1879,19 @@ public class GlobalStateMgr {
             return true;
         }
         return false;
+    }
+
+    private String journalEntityToReadableString(JournalEntity entity) {
+        if (entity == null) {
+            return "null";
+        }
+        Writable data = entity.getData();
+        try {
+            return GsonUtils.GSON.toJson(data);
+        } catch (Exception e) {
+            // In older version, data may not be json, here we just return the class name.
+            return data.getClass().getName();
+        }
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
@@ -2167,6 +2190,7 @@ public class GlobalStateMgr {
     @VisibleForTesting
     public void clear() {
         localMetastore.clear();
+        temporaryTableMgr.clear();
     }
 
     public void triggerNewImage() {

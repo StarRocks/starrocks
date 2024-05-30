@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -174,6 +175,12 @@ public:
 
     int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
     int64_t get_scan_dop() const { return scan_dop; }
+
+    // possible physical distribution optimize of data source
+    virtual bool sorted_by_keys_per_tablet() const { return false; }
+    virtual bool output_chunk_by_bucket() const { return false; }
+    virtual bool is_asc_hint() const { return true; }
+    virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
 
 protected:
     std::vector<ExprContext*> _partition_exprs;

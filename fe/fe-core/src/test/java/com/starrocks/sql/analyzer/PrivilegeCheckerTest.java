@@ -68,6 +68,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
@@ -76,6 +77,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetPassVar;
@@ -486,7 +488,8 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCatalogStatement() throws Exception {
-        starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         ConnectContext ctx = starRocksAssert.getCtx();
 
         // Anyone can use default_catalog, but can't use other external catalog without any action on it
@@ -524,7 +527,8 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the DROP privilege(s)");
 
         // check show catalogs only show catalog where the user has any privilege on
-        starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on catalog test_ex_catalog3 to test", ctx), ctx);
@@ -538,7 +542,8 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testExternalDBAndTablePEntryObject() throws Exception {
-        starRocksAssert.withCatalog("create external catalog test_iceberg properties (\"type\"=\"iceberg\")");
+        starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
         DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
         TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
@@ -3773,6 +3778,14 @@ public class PrivilegeCheckerTest {
             String sql = "select * from db_for_ranger.tbl1";
 
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
             Analyzer.analyze(stmt, context);
 
             QueryStatement queryStatement = (QueryStatement) stmt;
@@ -3790,6 +3803,14 @@ public class PrivilegeCheckerTest {
 
             sql = "select k1 from db_for_ranger.tbl1";
             stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
             Analyzer.analyze(stmt, context);
             queryStatement = (QueryStatement) stmt;
             Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);

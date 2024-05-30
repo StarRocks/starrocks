@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -225,7 +226,8 @@ public class InsertAnalyzer {
         }
 
         if (query.getRelationFields().size() != mentionedColumnSize) {
-            throw new SemanticException("Column count doesn't match value count");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INSERTED_COLUMN_MISMATCH, mentionedColumnSize,
+                    query.getRelationFields().size());
         }
         // check default value expr
         if (query instanceof ValuesRelation) {
@@ -320,7 +322,11 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(

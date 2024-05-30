@@ -497,6 +497,7 @@ public class FunctionSet {
     public static final String UNNEST = "unnest";
 
     public static final String CONNECTION_ID = "connection_id";
+    public static final String SESSION_ID = "session_id";
 
     public static final String CATALOG = "catalog";
 
@@ -702,6 +703,7 @@ public class FunctionSet {
 
     public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
             .add(CONNECTION_ID)
+            .add(SESSION_ID)
             .add(CATALOG)
             .add(DATABASE)
             .add(SCHEMA)

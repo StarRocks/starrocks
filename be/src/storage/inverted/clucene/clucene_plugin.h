@@ -29,6 +29,14 @@ public:
         return instance;
     }
 
+    static bool is_index_files(const std::string& file) {
+        return (file.find(".fdt", 0) != std::string::npos || file.find(".fdx", 0) != std::string::npos ||
+                file.find(".fnm", 0) != std::string::npos || file.find(".frq", 0) != std::string::npos ||
+                file.find(".nrm", 0) != std::string::npos || file.find(".prx", 0) != std::string::npos ||
+                file.find(".tii", 0) != std::string::npos || file.find(".tis", 0) != std::string::npos ||
+                file.find("null_bitmap", 0) != std::string::npos || file.find("segments", 0) != std::string::npos);
+    }
+
     CLucenePlugin(CLucenePlugin const&) = delete;
     void operator=(CLucenePlugin const&) = delete;
 
