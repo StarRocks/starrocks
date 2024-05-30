@@ -2,11 +2,7 @@
 [UC]shell: avro_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/avro_format/"
 -- result:
 0
-<<<<<<< HEAD
 oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/72f84dfe715b4e158515869b23e1a137/avro_format/
-=======
-oss://starrocks-env-s3-unit-test/test_hive_format/f81c141277504324a587846c0c566663/avro_format/
->>>>>>> b6ca919bf7 ([Feature] Optimize `count(1)` in hdfs scanner by rewriting plan to `sum` (#43616))
 -- !result
 shell: ossutil64 mkdir ${avro_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -96,11 +92,7 @@ shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/nul
 [UC]shell: rcbinary_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rcbinary_format/"
 -- result:
 0
-<<<<<<< HEAD
 oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/a631ad7675f14bd5949392e0d451448a/rcbinary_format/
-=======
-oss://starrocks-env-s3-unit-test/test_hive_format/744f2c100abf4fa0af69da7b4824ad02/rcbinary_format/
->>>>>>> b6ca919bf7 ([Feature] Optimize `count(1)` in hdfs scanner by rewriting plan to `sum` (#43616))
 -- !result
 shell: ossutil64 mkdir ${rcbinary_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -190,11 +182,7 @@ shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev
 [UC]shell: rctext_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/rctext_format/"
 -- result:
 0
-<<<<<<< HEAD
 oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/ad2a44020e2846f9a3203d3807df43d8/rctext_format/
-=======
-oss://starrocks-env-s3-unit-test/test_hive_format/aead1b6eaffd4516999a69b52092962a/rctext_format/
->>>>>>> b6ca919bf7 ([Feature] Optimize `count(1)` in hdfs scanner by rewriting plan to `sum` (#43616))
 -- !result
 shell: ossutil64 mkdir ${rctext_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -279,11 +267,7 @@ shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/n
 [UC]shell: sequence_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/sequence_format/"
 -- result:
 0
-<<<<<<< HEAD
 oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/7dc6bfb193c844aeb129116a9a09145a/sequence_format/
-=======
-oss://starrocks-env-s3-unit-test/test_hive_format/c42ab996c96f4035a7e2b04d1edb39ea/sequence_format/
->>>>>>> b6ca919bf7 ([Feature] Optimize `count(1)` in hdfs scanner by rewriting plan to `sum` (#43616))
 -- !result
 shell: ossutil64 mkdir ${sequence_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -368,11 +352,7 @@ shell: ossutil64 rm -rf ${sequence_prefix[1]}  >/dev/null || echo "exit 0" >/dev
 [UC]shell: struct_prefix=echo "oss://${oss_bucket}/test_hive_format/${uuid0}/strcut/"
 -- result:
 0
-<<<<<<< HEAD
 oss://starrocks-sql-data-zhangjiakou/jiangyangjun/test_hive_format/2701710810464b19a0aab8fa2d6e9310/strcut/
-=======
-oss://starrocks-env-s3-unit-test/test_hive_format/e15c6685c54140d497cb5453dd4e4765/strcut/
->>>>>>> b6ca919bf7 ([Feature] Optimize `count(1)` in hdfs scanner by rewriting plan to `sum` (#43616))
 -- !result
 shell: ossutil64 mkdir ${struct_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 -- result:

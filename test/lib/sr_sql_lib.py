@@ -1168,28 +1168,6 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-<<<<<<< HEAD
-    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
-        """
-        wait async materialized view job finish and return status
-        """
-        show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='" + mv_name + "'"
-        count = 0
-        is_all_ok = False
-        def is_all_finished(results):
-            for res in results:
-                if res[0] != "SUCCESS":
-                    return False
-            return True
-        while count < check_count:
-            res = self.execute_sql(show_sql, True)
-            is_all_ok = is_all_finished(res["result"])
-            if is_all_ok:
-                # sleep another 5s to avoid FE's async action.
-                break
-            time.sleep(3)
-            count += 1
-=======
     def wait_materialized_view_cancel(self, check_count=60):
         """
         wait materialized view job cancel and return status
@@ -1264,7 +1242,6 @@ class StarrocksSQLApiLib(object):
                     break
                 time.sleep(2)
                 count += 1
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
         tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
