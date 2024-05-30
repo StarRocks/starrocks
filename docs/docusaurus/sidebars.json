@@ -218,6 +218,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/Meta_recovery",
         "administration/User_privilege",
         "administration/Authentication",
         {
@@ -768,6 +769,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/Meta_recovery",
         "administration/User_privilege",
         "administration/Authentication",
         {
