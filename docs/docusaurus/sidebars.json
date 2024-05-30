@@ -47,6 +47,242 @@
     },
     {
       "type": "category",
+      "label": "Table Design",
+      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "items": [
+        {
+          "type": "category",
+          "label": "Table types",
+          "link": {"type": "doc", "id": "table_design/table_types/table_types"},
+          "items": ["table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
+        },
+        {
+          "type": "category",
+          "label": "Data distribution",
+          "link": {"type": "doc", "id": "table_design/Data_distribution"},
+          "items": ["table_design/automatic_partitioning", "table_design/dynamic_partitioning", "table_design/Temporary_partition"]
+        },
+        "table_design/data_compression",
+        "table_design/Sort_key"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Data Loading",
+      "link": {"type": "doc", "id": "loading/Loading_intro"},
+      "items": [
+        {
+          "type": "category",
+          "label": "Concepts",
+          "link": { "type": "generated-index" },
+          "items": ["loading/load_concept/strict_mode"]
+        },
+        "loading/StreamLoad",
+        "loading/BrokerLoad",
+        {
+          "type": "category",
+          "label": "Load data from Apache Kafka",
+          "link": {"type": "doc", "id": "cover_pages/loading_kafka"},
+          "items": ["loading/Kafka-connector-starrocks", "loading/RoutineLoad"]
+        },
+        {
+          "type": "category",
+          "label": "Load data from Apache Spark",
+          "link": {"type": "doc", "id": "cover_pages/loading_spark"},
+          "items": ["loading/Spark-connector-starrocks", "loading/SparkLoad"]
+        },
+        "loading/InsertInto",
+        "loading/Stream_Load_transaction_interface",
+        "loading/Flink_cdc_load",
+        "loading/Flink-connector-starrocks",
+        "loading/Load_to_Primary_Key_tables",
+        "loading/Etl_in_loading",
+        "loading/load_concept/strict_mode"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Data Unloading",
+      "link": { "type": "generated-index" },
+      "items": [
+        "unloading/Export",
+        "unloading/Spark_connector",
+        "unloading/Flink_connector"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Query Data Lakes",
+      "link": {"type": "doc", "id": "data_source/data_lakes"},
+      "items": [
+        {
+          "type": "category",
+          "label": "Catalog",
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/query_external_data" ]
+        },
+        "data_source/External_table",
+        "data_source/file_external_table",
+        "data_source/data_cache",
+        "data_source/datalake_faq"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Query Acceleration",
+      "link": {"type": "doc", "id": "cover_pages/query_acceleration"},
+      "items": [
+        "using_starrocks/Cost_based_optimizer",
+        "using_starrocks/Materialized_view-single_table",
+        {
+          "type": "category",
+          "label": "Asynchronous materialized views",
+          "link": {"type": "doc", "id": "using_starrocks/Materialized_view"},
+          "items": [ 
+            {
+              "type": "category",
+              "label": "Use cases",
+              "link": {"type": "doc", "id": "using_starrocks/data_modeling_with_materialized_views"},
+              "items": [ 
+                "using_starrocks/data_modeling_with_materialized_views",
+                "using_starrocks/query_rewrite_with_materialized_views",
+                "using_starrocks/data_lake_query_acceleration_with_materialized_views"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Usage",
+              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW"},
+              "items": [ 
+                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
+                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
+                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
+                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
+                { "type": "link", "label": "Information schema",  "href": "/docs/administration/information_schema#materialized_views" },
+                "using_starrocks/troubleshooting_asynchronous_materialized_views"
+              ]
+            }
+          ]
+        },
+        "using_starrocks/Colocate_join",
+        "using_starrocks/Lateral_join",
+        "using_starrocks/query_cache",
+        {
+          "type": "category",
+          "label": "Index",
+          "link": { "type": "generated-index" },
+          "items": [ "using_starrocks/Bitmap_index", "using_starrocks/Bloomfilter_index" ]
+        },
+        {
+          "type": "category",
+          "label": "Computing the number of distinct values",
+          "link": { "type": "generated-index" },
+          "items": [ "using_starrocks/Using_bitmap", "using_starrocks/Using_HLL" ]
+        },
+        "using_starrocks/sorted_aggregate",
+        "using_starrocks/query_acceleration_with_auto_increment"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Integrations",
+      "link": {"type": "doc", "id": "integrations/integrations"},
+      "items": [
+        "integrations/authenticate_to_aws_resources",
+        "integrations/authenticate_to_azure_storage",
+        "integrations/authenticate_to_gcs",
+        {
+          "type": "category",
+          "label": "BI Tools",
+          "link": {"type": "doc", "id": "cover_pages/bi_tools"},
+          "items": [
+            "integrations/BI_integrations/Superset",
+            "integrations/BI_integrations/FineBI",
+            "integrations/BI_integrations/Hex",
+            "integrations/BI_integrations/Querybook",
+            "integrations/BI_integrations/QuickBI",
+            "integrations/BI_integrations/Tableau_Desktop"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "IDE Tools",
+          "link": {"type": "doc", "id": "cover_pages/ide_tools"},
+          "items": [
+            "integrations/IDE_integrations/DataGrip",
+            "integrations/IDE_integrations/DBeaver",
+            "integrations/IDE_integrations/jupysql"
+          ]
+        },
+        "integrations/hive_bitmap_udf",
+        "integrations/other_integrations/intro"   
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Administration",
+      "link": {"type": "doc", "id": "administration/administration"},
+      "items": [
+        {
+          "type": "category",
+          "label": "Management",
+          "link": {"type": "doc", "id": "cover_pages/management"},
+          "items": [
+            "administration/Scale_up_down",
+            "administration/Backup_and_restore",
+            "administration/Configuration",
+            "administration/Monitor_and_Alert",
+            "administration/audit_loader",
+            "administration/enable_fqdn",
+            "administration/timezone",
+            "administration/information_schema",
+            "administration/monitor_manage_big_queries",
+            {
+              "type": "category",
+              "label": "Resource management",
+              "link": {"type": "doc", "id": "cover_pages/resource_management"},
+              "items": [ 
+                "administration/resource_group",
+                "administration/query_queues",
+                "administration/Query_management",
+                "administration/Memory_management",
+                "administration/spill_to_disk",
+                "administration/Load_balance",
+                "administration/Replica",
+                "administration/Blacklist",
+                "administration/filemanager"
+              ]
+
+            }
+          ]
+        },
+        "administration/Data_recovery",
+        "administration/Meta_recovery",
+        {
+          "type": "category",
+          "label": "User Privileges and Authentication",
+          "link": {"type": "doc", "id": "administration/privilege_overview"},
+          "items": [
+            "administration/privilege_item",
+            "administration/User_privilege",
+            "administration/privilege_faq",
+            "administration/Authentication"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Performance Tuning",
+          "link": {"type": "doc", "id": "cover_pages/performance_tuning"},
+          "items": [
+            "administration/Query_planning",
+            "administration/query_profile",
+            "administration/Profiling"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
       "label": "Reference",
       "link": {"type": "doc", "id": "reference/reference"},
       "items": [
