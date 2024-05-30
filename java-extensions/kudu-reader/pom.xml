@@ -15,7 +15,7 @@
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <kudu.version>1.15.0</kudu.version>
+        <kudu.version>1.17.0</kudu.version>
         <slf4j.version>1.7.32</slf4j.version>
         <hive.version>2.3.9</hive.version>
         <hadoop.version>3.4.0</hadoop.version>
