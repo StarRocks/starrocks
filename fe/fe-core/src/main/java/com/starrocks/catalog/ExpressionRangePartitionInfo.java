@@ -105,28 +105,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                 LOG.warn("Unknown expr type: {}", expr.toSql());
                 continue;
             }
-<<<<<<< HEAD
-
-            // TODO: Later, for automatically partitioned tables,
-            //  partitions of materialized views (also created automatically),
-            //  and partition by expr tables will use ExpressionRangePartitionInfoV2
-            for (Column partitionColumn : partitionColumns) {
-                if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
-                    slotRef.setType(partitionColumn.getType());
-                    slotRef.setNullable(partitionColumn.isAllowNull());
-                    try {
-                        PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
-                    } catch (SemanticException ex) {
-                        LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
-                    }
-                }
-=======
             // FIXME: use the slot ref's column name to find the partition column which maybe not the same as the slot ref's
             //  column name.
             String slotRefName = slotRef.getColumnName();
             if (!partitionNameColumnMap.containsKey(slotRefName)) {
                 continue;
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
             }
             Column partitionColumn = partitionNameColumnMap.get(slotRefName);
             // analyze partition expression

@@ -879,12 +879,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         List<PartitionCommitInfo> txnPartitionCommitInfos = getPartitionCommitInfos(transactionState, tableId);
                         LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-<<<<<<< HEAD
-                                        "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
-=======
                                 "db:{}, mv:{}, transaction state:{}", table.getName(), mvDb.getFullName(),
                                 materializedView.getName(), txnPartitionCommitInfos);
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
