@@ -34,6 +34,7 @@
 #include "arrow/flight/client.h"
 #include "arrow/type.h"
 #include "butil/fd_guard.h"
+#include "butil/fd_utility.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -233,6 +234,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
     if (pipe(pipefd) == -1) {
         return Status::InternalError(fmt::format("create pipe error:{}", std::strerror(errno)));
     }
+    butil::make_non_blocking(pipefd[0]);
 
     pid_t cpid = fork();
     if (cpid == -1) {
@@ -280,17 +282,25 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
         fds[0].events = POLLIN;
 
         // wait util worker start
-        int ret = poll(fds, 1, config::create_child_worker_timeout_ms);
+        int32_t poll_timeout = config::create_child_worker_timeout_ms;
+        int ret = poll(fds, 1, poll_timeout);
         if (ret == -1) {
             return Status::InternalError(fmt::format("poll error:{}", std::strerror(errno)));
         } else if (ret == 0) {
             (*child_process)->terminate_and_wait();
-            return Status::InternalError("create worker timeout");
+            return Status::InternalError(fmt::format("create worker timeout, cost {}ms", poll_timeout));
         }
 
         char buffer[4096];
-        ssize_t n = read(pipefd[0], buffer, sizeof(buffer));
-        Slice result(buffer, n);
+        size_t buffer_size = sizeof(buffer);
+        char* cursor = buffer;
+        while (buffer_size > 0) {
+            ssize_t n = read(pipefd[0], cursor, buffer_size);
+            // -1 errorno should be EAGAIN
+            if (n == 0 || n == -1) break;
+            buffer_size = buffer_size - n;
+        }
+        Slice result(buffer, sizeof(buffer) - buffer_size);
         if (result != Slice("Pywork start success\n")) {
             (*child_process)->terminate_and_wait();
             return Status::InternalError(fmt::format("worker start failed:{}", result.to_string()));
