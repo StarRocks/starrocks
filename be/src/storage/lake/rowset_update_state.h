@@ -183,6 +183,8 @@ private:
 
     std::vector<std::unique_ptr<Column>> _auto_increment_delete_pks;
 
+    // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
+    RowsetMetadataPtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
 
     // to be destructed after segment iters
