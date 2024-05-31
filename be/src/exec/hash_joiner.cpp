@@ -54,8 +54,9 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     build_buckets_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile, "BuildBuckets", TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE);
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
-}
 
+    partial_runtime_bloom_filter_bytes = ADD_COUNTER(runtime_profile, "PartialRuntimeBloomFilterBytes", TUnit::BYTES);
+}
 HashJoiner::HashJoiner(const HashJoinerParam& param)
         : _hash_join_node(param._hash_join_node),
           _pool(param._pool),
