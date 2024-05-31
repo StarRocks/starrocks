@@ -13,7 +13,7 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <paimon.version>0.8-20240223-e4cd14-SNAPSHOT</paimon.version>
+        <paimon.version>0.9-20240531-9615fc-SNAPSHOT</paimon.version>
     </properties>
 
     <dependencies>

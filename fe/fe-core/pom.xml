@@ -41,7 +41,8 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.8</jacoco.version>
-        <paimon.ali.dlf.version>0.8-ali-1-SNAPSHOT</paimon.ali.dlf.version>
+        <jacoco.version>0.8.7</jacoco.version>
+        <paimon.ali.dlf.version>0.9-ali-2-SNAPSHOT</paimon.ali.dlf.version>
         <python>python</python>
     </properties>
 

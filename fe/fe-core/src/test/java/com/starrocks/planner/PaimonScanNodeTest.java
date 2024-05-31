@@ -139,8 +139,8 @@ public class PaimonScanNodeTest {
         meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
 
-        DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
-                .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build();
+        DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).
+                withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build();
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         new Expectations() {
             {
@@ -150,7 +150,9 @@ public class PaimonScanNodeTest {
         };
         desc.setTable(table);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-        scanNode.splitRawFileScanRangeLocations(rawFile, null);
+
+        DeletionFile deletionFile = new DeletionFile("dummy", 1, 2, 2L);
+        scanNode.splitRawFileScanRangeLocations(rawFile, deletionFile);
         scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024, null);
         scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024);
         Assertions.assertEquals(6, scanNode.getScanRangeLocations(10).size());
