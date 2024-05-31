@@ -6,6 +6,8 @@ displayed_sidebar: "English"
 
 Release date: May 30, 2024
 
+## 3.1.12
+
 ### New Features
 
 - Flink connector supports reading complex data types ARRAY, MAP, and STRUCT from StarRocks. [#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
