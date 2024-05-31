@@ -55,6 +55,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -68,7 +69,9 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.FieldDef;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -706,6 +709,48 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     }
                 }
             }
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Add field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        FieldDef fieldDef = clause.getFieldDef();
+        try {
+            fieldDef.analyze(baseColumn, false);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Drop field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        FieldDef fieldDef = new FieldDef(clause.getFieldName(), clause.getNestedFieldName(), null, null);
+        try {
+            fieldDef.analyze(baseColumn, true);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
         }
         return null;
     }
