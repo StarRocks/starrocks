@@ -80,11 +80,9 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
 
 #### 增加分区 (ADD PARTITION)
 
-增加分区时支持使用 Range 分区和 List 分区。
+支持增加 Range 分区。
 
 语法：
-
-- Range 分区
 
     ```SQL
     ALTER TABLE
@@ -105,25 +103,11 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
         | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
     ```
 
-- List 分区
-
-    ```SQL
-    ALTER TABLE
-        ADD PARTITION <partition_name> VALUES IN (value_list) [distribution_desc] ["key"="value"];
-
-    value_list ::=
-        value_item [, ...]
-
-    value_item ::=
-        { <value> | ( <value> [, ...] ) }
-    ```
-
 参数：
 
 - 分区相关参数
 
-  - Range 分区支持新增单个分区 `single_range_partition` 或者批量创建分区 `multi_range_partition`。
-  - List 分区仅支持新增单个分区。
+  Range 分区支持新增单个分区 `single_range_partition` 或者批量创建分区 `multi_range_partition`。
 
 - `distribution_desc`：
 
@@ -135,41 +119,17 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
 
 示例：
 
-- Range 分区
-
-  - 如果建表时指定分区列为 `event_day`，例如 `PARTITION BY RANGE(event_day)`，并且建表后需要新增一个分区，则可以执行：
+- 如果建表时指定分区列为 `event_day`，例如 `PARTITION BY RANGE(event_day)`，并且建表后需要新增一个分区，则可以执行：
 
     ```sql
     ALTER TABLE site_access ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
     ```
 
-  - 如果建表时指定分区列为 `datekey`，例如 `PARTITION BY RANGE (datekey)`，并且建表后需要批量新增多个分区，则可以执行：
+- 如果建表时指定分区列为 `datekey`，例如 `PARTITION BY RANGE (datekey)`，并且建表后需要批量新增多个分区，则可以执行：
 
     ```sql
     ALTER TABLE site_access
         ADD PARTITIONS START ("2021-01-05") END ("2021-01-10") EVERY (INTERVAL 1 DAY);
-    ```
-
-- List 分区
-
-  - 如果建表时指定单个分区列，例如 `PARTITION BY LIST (city)`，并且建表后需要新增一个分区，则可以执行：
-
-    ```sql
-    ALTER TABLE t_recharge_detail2
-    ADD PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego");
-    ```
-
-  - 如果建表时指定多个分区列，例如 `PARTITION BY LIST (dt,city)`，并且建表后需要新增一个分区，则可以执行：
-
-    ```sql
-    ALTER TABLE t_recharge_detail4 
-    ADD PARTITION p202204_California VALUES IN
-    (
-        ("2022-04-01", "Los Angeles"),
-        ("2022-04-01", "San Francisco"),
-        ("2022-04-02", "Los Angeles"),
-        ("2022-04-02", "San Francisco")
-    );
     ```
 
 #### 删除分区 (DROP PARTITION)
