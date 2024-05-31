@@ -5183,6 +5183,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
+        if (context.inlineProperties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.inlineProperties().inlineProperty(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
         String inlineContent = null;
         if (context.inlineFunction() != null) {
             String content = context.inlineFunction().ATTACHMENT().getText();
@@ -7130,6 +7137,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitProperty(StarRocksParser.PropertyContext context) {
         return new Property(
                 ((StringLiteral) visit(context.key)).getStringValue(),
+                ((StringLiteral) visit(context.value)).getStringValue(),
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitInlineProperty(StarRocksParser.InlinePropertyContext context) {
+        return new Property(
+                ((Identifier) visit(context.key)).getValue(),
                 ((StringLiteral) visit(context.value)).getStringValue(),
                 createPos(context));
     }

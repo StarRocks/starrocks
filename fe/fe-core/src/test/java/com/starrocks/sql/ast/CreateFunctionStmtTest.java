@@ -66,6 +66,33 @@ public class CreateFunctionStmtTest {
     }
 
     @Test
+    public void testInlinePropertiesUDF() throws Exception {
+        String createFunctionSql = "CREATE FUNCTION get_typeb(INT) RETURNS \n" +
+                "STRING\n" +
+                " type = 'Python'\n" +
+                " symbol = 'echo'\n" +
+                "AS  \n" +
+                "$$ \n" +
+                "def echo(x):\n" +
+                "    return str(type(x))  \n" +
+                "$$;";
+        CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+        Assert.assertEquals("Python", stmt.getProperties().get("type"));
+        Assert.assertEquals("echo", stmt.getProperties().get("symbol"));
+
+        createFunctionSql = "CREATE FUNCTION get_type(INT) RETURNS\n" +
+                "STRING\n" +
+                " type = 'Python'\n" +
+                " symbol = 'echo'\n" +
+                " file = 'http://localhost:8000/echo.py.zip';";
+        stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+        Assert.assertEquals(stmt.getProperties().get("file"), "http://localhost:8000/echo.py.zip");
+
+    }
+
+    @Test
     public void testCreateUDFWithContent() {
         String createFunctionSql = "CREATE FUNCTION echo(int) \n"
                 + "RETURNS int \n"
