@@ -57,7 +57,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -1873,7 +1872,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             AddPartitionClause alterPartition = new AddPartitionClause(rangePartitionDesc, distributionDesc,
                     partitionProperties, false);
             try {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(Util.getOrCreateConnectContext(),
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
                         database, materializedView.getName(), alterPartition);
             } catch (Exception e) {
                 throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
@@ -1896,7 +1895,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MultiItemListPartitionDesc multiItemListPartitionDesc =
                     new MultiItemListPartitionDesc(false, mvPartitionName, partitionKeyList, partitionProperties);
             try {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(Util.getOrCreateConnectContext(),
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
                         database, materializedView.getName(), new AddPartitionClause(
                                 multiItemListPartitionDesc, distributionDesc,
                                 partitionProperties, false));
