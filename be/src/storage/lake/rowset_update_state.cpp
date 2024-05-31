@@ -78,8 +78,9 @@ Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateSt
                                        bool need_resolve_conflict, bool need_lock) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segment_us");
     if (_rowset_ptr == nullptr) {
-        _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(),
-                                               &params.op_write.rowset(), -1 /*unused*/, params.tablet_schema);
+        _rowset_meta_ptr = std::make_unique<const RowsetMetadata>(params.op_write.rowset());
+        _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
+                                               -1 /*unused*/, params.tablet_schema);
     }
     _upserts.resize(_rowset_ptr->num_segments());
     _base_versions.resize(_rowset_ptr->num_segments());

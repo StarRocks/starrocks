@@ -139,7 +139,7 @@ public:
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid,
                                    std::vector<uint32_t>* idxes);
 
-    const std::unique_ptr<Column>& auto_increment_deletes(uint32_t segment_id) const;
+    const ColumnUniquePtr& auto_increment_deletes(uint32_t segment_id) const;
 
     static StatusOr<bool> file_exist(const std::string& full_path);
 
@@ -181,8 +181,10 @@ private:
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 
-    std::vector<std::unique_ptr<Column>> _auto_increment_delete_pks;
+    std::vector<ColumnUniquePtr> _auto_increment_delete_pks;
 
+    // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
+    RowsetMetadataUniquePtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
 
     // to be destructed after segment iters
