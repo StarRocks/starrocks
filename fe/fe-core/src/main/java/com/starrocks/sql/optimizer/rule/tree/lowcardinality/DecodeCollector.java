@@ -136,7 +136,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     }
 
     public boolean isValidMatchChildren() {
-        if (matchChildren.size() == 0) {
+        if (matchChildren.isEmpty()) {
             return true;
         }
 
