@@ -105,7 +105,7 @@ Syntax：
         PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
 
     partition_key_desc ::=
-        { LESS THAN [MAXVALUE | value_list]
+        { LESS THAN { MAXVALUE | value_list }
         | [ value_list , value_list ) } -- Note that [ represents a left-closed interval.
 
     value_list ::=
