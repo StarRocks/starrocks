@@ -77,24 +77,24 @@ You can choose to add range partitions.
 
 Syntax：
 
-    ```SQL
-    ALTER TABLE
-        ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
+```SQL
+ALTER TABLE
+    ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
 
-    single_range_partition ::=
-        PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
+single_range_partition ::=
+    PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
 
-    partition_key_desc ::=
-        { LESS THAN { MAXVALUE | value_list }
-        | [ value_list , value_list ) } -- Note that [ represents a left-closed interval.
+partition_key_desc ::=
+    { LESS THAN { MAXVALUE | value_list }
+    | [ value_list , value_list ) } -- Note that [ represents a left-closed interval.
 
-    value_list ::=
-        ( <value> [, ...] )
+value_list ::=
+    ( <value> [, ...] )
 
-    multi_range_partitions ::=
-        { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
-        | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values specified by START and END are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
-    ```
+multi_range_partitions ::=
+    { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values specified by START and END are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
+```
 
 Parameters:
 
