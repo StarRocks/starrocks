@@ -1167,9 +1167,6 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-<<<<<<< HEAD
-    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
-=======
     def wait_materialized_view_cancel(self, check_count=60):
         """
         wait materialized view job cancel and return status
@@ -1190,7 +1187,6 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
 
     def wait_async_materialized_view_finish(self, mv_name, check_count=None):
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
         """
         wait async materialized view job finish and return status
         """
