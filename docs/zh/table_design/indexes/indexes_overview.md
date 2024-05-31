@@ -37,12 +37,20 @@ ZoneMap 索引存储了每块数据统计信息，统计信息包括 Min 最大�
 
 ## 手动创建的索引
 
-如果查询条件中的列不是前缀字段，您可以为这一列手动创建 Bitmap 索引或者 Bloom filter 索引来提高查询效率。
+如果查询条件中的列不是前缀字段，您可以根据数据和查询特点，为该列手动创建索引来提高查询效率。
 
 ### [Bitmap 索引](./Bitmap_index.md)
 
-Bitmap 索引一般适用于高基数列，基于列构建的 Bitmap 索引的选择性高，使用 Bitmap 索引后能筛选出较少数据行的场景。
+Bitmap 索引适用于较高基数列的查询和多个低基数列的组合查询，并且此时 Bitmap 索引对查询的过滤效果比较好，至少可以过滤掉 999/1000 的数据。
 
 ### [Bloom filter 索引](./Bloomfilter_index.md)
 
 Bloom filter 索引适用于基数较高的列，比如 ID 列，但是存在一定的误判率。
+
+### [N-Gram bloomfilter 索引](./Ngram_Bloom_Filter_Index.md)
+
+N-Gram bloom filter 索引是一种特殊的 Bloom filter 索引，通常用于加速 `LIKE` 查询或 `ngram_search` 和 `ngram_search_case_insensitive` 函数的运算速度。
+
+### [全文倒排索引](./inverted_index.md)
+
+全文倒排索引可以快速定位到与关键词匹配的数据行，能够加速全文检索。
