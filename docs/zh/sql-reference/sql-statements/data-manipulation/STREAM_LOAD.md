@@ -99,8 +99,6 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | partitions   | 否           | 指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。 |
 | temporary_partitions | 否           | 指定要把数据导入哪些[临时分区](../../../table_design/Temporary_partition.md)。|
 | columns      | 否           | 指定源数据文件和 StarRocks 表之间的列对应关系。如果源数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定 `columns` 参数。您可以通过 `columns` 参数实现数据转换。例如，要导入一个 CSV 格式的数据文件，文件中有两列，分别可以对应到目标 StarRocks 表的 `id` 和 `city` 两列。如果要实现把数据文件中第一列的数据乘以 100 以后再落入 StarRocks 表的转换，可以指定 `"columns: city,tmp_id, id = tmp_id * 100"`。具体请参见本文“[列映射](#列映射)”章节。 |
-| partial_update | 否 |是否使用部分列更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。|
-| partial_update_mode | 否 | 指定部分更新的模式，取值包括 `auto` 和 `column`。<ul><li>auto（默认值），表示由系统通过分析更新语句以及其涉及的列，自动判断执行部分更新时使用的模式。</li><li>`column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。</li></ul>|
 
 #### CSV 适用参数
 
@@ -145,6 +143,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 -H "strict_mode: true | false"
 -H "timezone: <string>"
 -H "load_mem_limit: <num>"
+-H "partial_update: true | false"
+-H "partial_update_mode: auto | column"
 -H "merge_condition: <column_name>"
 ```
 
@@ -160,6 +160,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | strict_mode      | 否           | 用于指定是否开严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。<br />关于该模式的介绍，参见 [严格模式](../../../loading/load_concept/strict_mode.md)。|
 | timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br />该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/management/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/management/timezone.md)”中所述的会话级时区。 |
 | load_mem_limit   | 否           | 导入作业的内存限制，最大不超过 BE（或 CN）的内存限制。单位：字节。默认内存限制为 2 GB。 |
+| partial_update | 否 |是否使用部分列更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。|
+| partial_update_mode | 否 | 指定部分更新的模式，取值包括 `auto` 和 `column`。<ul><li>`auto`（默认值），表示由系统通过分析更新语句以及其涉及的列，自动判断执行部分更新时使用的模式。如果满足如下标准，则系统自动使用列模式：</li><ul><li>更新的列数占所有列数的百分比小于 30%，并且更新的列数少于 4 个。</li><li>更新语句中没有使用 WHERE 条件。反之，则系统不会使用列模式。</li></ul><li>`column`，指定使用列模式执行部分更新，比较适用于涉及少数列并且大量行的部分列更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>|
 | merge_condition  | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。StarRocks v2.5 起支持条件更新。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。 <br/>**说明**<br/>指定的列必须为非主键列，且仅主键表支持条件更新。  |
 
 ## 列映射
