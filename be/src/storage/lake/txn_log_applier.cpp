@@ -120,6 +120,13 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+        // still need prepre primary index even there is an empty compaction
+        if (_index_entry == nullptr && _has_empty_compaction) {
+            // get lock to avoid gc
+            _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
+            DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+            RETURN_IF_ERROR(prepare_primary_index());
+        }
         // Must call `commit` before `finalize`,
         // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
@@ -169,17 +176,22 @@ private:
         return ret;
     }
 
+    // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
+    // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
+    Status prepare_primary_index() {
+        if (_index_entry == nullptr) {
+            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
+                                                   _metadata, &_builder, _base_version, _new_version, _guard));
+        }
+        return Status::OK();
+    }
+
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         // get lock to avoid gc
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
-        // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
-        if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
-                                                   _metadata, &_builder, _base_version, _new_version, _guard));
-        }
+        RETURN_IF_ERROR(prepare_primary_index());
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
@@ -198,12 +210,7 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
-        // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
-        if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
-                                                   _metadata, &_builder, _base_version, _new_version, _guard));
-        }
+        RETURN_IF_ERROR(prepare_primary_index());
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             return Status::OK();

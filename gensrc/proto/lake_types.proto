@@ -182,3 +182,12 @@ message TxnLogPB {
 }
 
 message TabletMetadataLockPB {}
+
+message TxnInfoPB {
+    optional int64 txn_id = 1;
+    optional int64 commit_time = 2;
+    // Does the transaction generated a combined txn log
+    optional bool combined_txn_log = 3;
+    optional TxnTypePB txn_type = 4;
+    optional bool force_publish = 5; // only used for compaction
+};
