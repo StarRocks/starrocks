@@ -26,12 +26,11 @@ Release date: May 30, 2024
 Fixed the following issues:
 
 - If a materialized view definition includes multiple self-joins of the same table and incremental refreshes by partitions based on that table, incorrect results would occur due to wrong partition selection. [#45936](https://github.com/StarRocks/starrocks/pull/45936)
-- FEs crash when a Bitmap index is created in a materialized view in shared-data clusters causes . [#45665](https://github.com/StarRocks/starrocks/pull/45665)
+- FEs crash when a Bitmap index is created in a materialized view in shared-data clusters. [#45665](https://github.com/StarRocks/starrocks/pull/45665)
 - BEs crash due to null pointer issues when FE follower is connected via ODBC and CREATE TABLE is executed. [#45043](https://github.com/StarRocks/starrocks/pull/45043)
 - Querying `information_schema.task_runs` fails frequently when many asynchronous tasks exist. [#45520](https://github.com/StarRocks/starrocks/pull/45520)
 - When a SQL statement contains multiple COUNT DISTINCT and includes LIMIT, LIMIT is wrongly processed, resulting in inconsistent data returned each time the statement is executed. [#44749](https://github.com/StarRocks/starrocks/pull/44749)
-- Queries with ORDER BY LIMIT clauses on Duplicate Key tables and Aggregate tables produce incorrect results. -  [#45037](https://github.com/StarRocks/starrocks/pull/45037)
-
+- Queries with ORDER BY LIMIT clauses on Duplicate Key tables and Aggregate tables produce incorrect results. [#45037](https://github.com/StarRocks/starrocks/pull/45037)
 
 ## 3.1.11
 
