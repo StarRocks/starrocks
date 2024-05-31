@@ -27,15 +27,20 @@ public class CreateCatalogStmt extends DdlStmt {
     private final Map<String, String> properties;
     private String catalogType;
 
-    public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties) {
-        this(catalogName, comment, properties, NodePosition.ZERO);
+    private final boolean ifNotExists;
+
+
+    public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties, boolean ifNotExists) {
+        this(catalogName, comment, properties, NodePosition.ZERO, ifNotExists);
     }
 
-    public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties, NodePosition pos) {
+    public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties,
+                             NodePosition pos, boolean ifNotExists) {
         super(pos);
         this.catalogName = catalogName;
         this.comment = comment;
         this.properties = properties;
+        this.ifNotExists = ifNotExists;
     }
 
     public String getCatalogName() {
@@ -58,6 +63,10 @@ public class CreateCatalogStmt extends DdlStmt {
         this.catalogType = catalogType;
     }
 
+    public boolean isIfNotExists() {
+        return ifNotExists;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateCatalogStatement(this, context);
@@ -68,6 +77,9 @@ public class CreateCatalogStmt extends DdlStmt {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE EXTERNAL CATALOG '");
         sb.append(catalogName).append("' ");
+        if (ifNotExists) {
+            sb.append("IF NOT EXISTS \"");
+        }
         if (comment != null) {
             sb.append("COMMENT \"").append(comment).append("\" ");
         }
