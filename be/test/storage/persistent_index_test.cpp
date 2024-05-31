@@ -167,7 +167,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
         ignore_values[i] = i * 4;
         idxes.emplace_back(i);
     }
-    vector<IndexValue> ignore_old_values(ignore_keys.size());
+    vector<IndexValue> ignore_old_values(ignore_keys.size(), IndexValue(NullIndexValue));
     KeysInfo ignore_not_found;
     size_t ignore_num_found = 0;
     ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
@@ -296,7 +296,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
         ignore_values[i] = i * 4;
         idxes.emplace_back(i);
     }
-    vector<IndexValue> ignore_old_values(ignore_keys.size());
+    vector<IndexValue> ignore_old_values(ignore_keys.size(), IndexValue(NullIndexValue));
     KeysInfo ignore_not_found;
     size_t ignore_num_found = 0;
     ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
@@ -411,7 +411,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index) {
         ignore_values[i] = i * 4;
         idxes.emplace_back(i);
     }
-    vector<IndexValue> ignore_old_values(ignore_keys.size());
+    vector<IndexValue> ignore_old_values(ignore_keys.size(), IndexValue(NullIndexValue));
     KeysInfo ignore_not_found;
     size_t ignore_num_found = 0;
     ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,

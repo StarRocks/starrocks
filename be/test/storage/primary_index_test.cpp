@@ -377,7 +377,7 @@ void test_binary_pk(int key_size) {
     // ignore all the even numbers in range [0, 2 * kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
-        pk_col->append(strings::Substitute("binary_pk_$0", i * 2));
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, i * 2));
     }
     deletes.clear();
     pk_index->upsert(5, 0, *pk_col, &deletes, InsertMode::IGNORE_MODE);
@@ -393,7 +393,7 @@ void test_binary_pk(int key_size) {
     // ignore half of the numbers in range [2 * kSegmentSize, 3 * kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
-        pk_col->append(strings::Substitute("binary_pk_$0", kSegmentSize * 2 + i));
+        pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, kSegmentSize * 2 + i));
     }
     deletes.clear();
     pk_index->upsert(6, 0, *pk_col, &deletes, InsertMode::IGNORE_MODE);

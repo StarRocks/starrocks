@@ -4234,7 +4234,6 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
         writer_context.schema_change_sorting = true;
         writer_context.gtid = src_rowset->rowset_meta()->gtid();
-        writer_context.insert_mode = InsertMode::UPSERT_MODE;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
