@@ -73,11 +73,9 @@ RENAME PARTITION <old_partition_name> <new_partition_name>
 
 #### Add a partition
 
-You can choose to add range partitions or list partitions.
+You can choose to add range partitions.
 
 Syntax：
-
-- Range partitions
 
     ```SQL
     ALTER TABLE
@@ -98,31 +96,11 @@ Syntax：
         | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values specified by START and END are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
     ```
 
-<<<<<<< HEAD
-2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
-3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
-4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
-=======
-- List partitions
-
-    ```SQL
-    ALTER TABLE
-        ADD PARTITION <partition_name> VALUES IN (value_list) [distribution_desc] ["key"="value"];
-
-    value_list ::=
-        value_item [, ...]
-
-    value_item ::=
-        { <value> | ( <value> [, ...] ) }
-    ```
-
 Parameters:
 
 - Partition-related parameters:
 
-  - For range partitions, you can add a single range partition (`single_range_partition`) or multiple range partitions in batch (`multi_range_partitions`).
-  - For list partitions, you can only add a single list partition.
+  You can add a single range partition (`single_range_partition`) or multiple range partitions in batch (`multi_range_partitions`).
 
 - `distribution_desc`:
 
@@ -134,43 +112,18 @@ Parameters:
 
 Examples:
 
-- Range partitions
-
-  - If the partition column is specified as `event_day` at table creation, for example `PARTITION BY RANGE(event_day)`, and a new partition needs to be added after table creation, you can execute:
+- If the partition column is specified as `event_day` at table creation, for example `PARTITION BY RANGE(event_day)`, and a new partition needs to be added after table creation, you can execute:
 
     ```sql
     ALTER TABLE site_access ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
     ```
 
-  - If the partition column is specified as `datekey` at table creation, for example `PARTITION BY RANGE (datekey)`, and multiple partitions need to be added in batch after table creation, you can execute:
+- If the partition column is specified as `datekey` at table creation, for example `PARTITION BY RANGE (datekey)`, and multiple partitions need to be added in batch after table creation, you can execute:
 
     ```sql
     ALTER TABLE site_access
         ADD PARTITIONS START ("2021-01-05") END ("2021-01-10") EVERY (INTERVAL 1 DAY);
     ```
-
-- List partitions
-
-  - If a single partition column is specified at table creation, for example `PARTITION BY LIST (city)`, and a new partition needs to be added after table creation, you can execute:
-
-    ```sql
-    ALTER TABLE t_recharge_detail2
-    ADD PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego");
-    ```
-
-  - If multiple partition columns are specified at table creation, for example `PARTITION BY LIST (dt,city)`, and a new partition needs to be added after table creation, you can execute:
-
-    ```sql
-    ALTER TABLE t_recharge_detail4 
-    ADD PARTITION p202204_California VALUES IN
-    (
-        ("2022-04-01", "Los Angeles"),
-        ("2022-04-01", "San Francisco"),
-        ("2022-04-02", "Los Angeles"),
-        ("2022-04-02", "San Francisco")
-    );
-    ```
->>>>>>> f46e8a5667 ([Doc] update partition desc in alter table (#46362))
 
 #### Drop a partition
 
