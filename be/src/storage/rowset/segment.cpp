@@ -434,10 +434,21 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     }
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,
+                                                                       ColumnAccessPath* path) {
+    auto id = column.unique_id();
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
-        return iter->second->new_iterator(path);
+        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path));
+        if (iter->second->column_type() == column.type()) {
+            return source_iter;
+        } else {
+            auto nullable = iter->second->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(iter->second->column_type());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
+                                                                 column.scale());
+            return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+        }
     } else {
         return Status::NotFound(fmt::format("{} does not contain column of id {}", _segment_file_info.path, id));
     }

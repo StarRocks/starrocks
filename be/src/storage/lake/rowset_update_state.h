@@ -77,7 +77,7 @@ struct AutoIncrementPartialUpdateState {
 struct RowsetUpdateStateParams {
     const TxnLogPB_OpWrite& op_write;
     const TabletSchemaPtr& tablet_schema;
-    const TabletMetadata& metadata;
+    const TabletMetadataPtr& metadata;
     const Tablet* tablet;
     const RssidFileInfoContainer& container;
 };

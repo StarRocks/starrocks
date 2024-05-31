@@ -243,6 +243,7 @@ add_library(Storage STATIC
     lake/local_pk_index_manager.cpp
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
+    lake/column_mode_partial_update_handler.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp

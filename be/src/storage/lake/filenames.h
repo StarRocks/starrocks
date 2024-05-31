@@ -39,6 +39,10 @@ inline bool is_del(std::string_view file_name) {
     return HasSuffixString(file_name, ".del");
 }
 
+inline bool is_upt(std::string_view file_name) {
+    return HasSuffixString(file_name, ".upt");
+}
+
 inline bool is_delvec(std::string_view file_name) {
     return HasSuffixString(file_name, ".delvec");
 }
@@ -106,6 +110,10 @@ inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t vers
 
 inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
+}
+
+inline std::string gen_cols_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.cols", txn_id, generate_uuid_string());
 }
 
 inline std::string gen_del_filename(int64_t txn_id) {

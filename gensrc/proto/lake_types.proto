@@ -20,6 +20,7 @@ option java_package = "com.starrocks.proto";
 import "types.proto";
 import "tablet_schema.proto";
 import "olap_file.proto";
+import "olap_common.proto";
 
 message DelvecDataPB {
     optional int64 version = 1;
@@ -51,6 +52,17 @@ message DelvecMetadataPB {
     map<int64, FileMetaPB> version_to_file = 1;
     // from segment id to delvec page
     map<uint32, DelvecPagePB> delvecs = 2;
+}
+
+message DeltaColumnGroupVerPB {
+    repeated DeltaColumnGroupColumnIdsPB column_ids = 1;
+    repeated string column_files = 2;
+    repeated int64 versions = 3;
+}
+
+message DeltaColumnGroupMetadataPB {
+    // from segment id to delta column group
+    map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
 message RowsetMetadataPB {
@@ -104,6 +116,7 @@ message TabletMetadataPB {
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
     optional TabletSchemaPB source_schema = 14;
     optional PersistentIndexSstableMetaPB sstable_meta = 15;
+    optional DeltaColumnGroupMetadataPB dcg_meta = 16;
 }
 
 message MetadataUpdateInfoPB {
@@ -127,6 +140,7 @@ message TxnLogPB {
         optional RowsetMetadataPB output_rowset = 2;
         repeated PersistentIndexSstablePB input_sstables = 3;
         optional PersistentIndexSstablePB output_sstable = 4;
+        optional int64 compact_version = 5;
     }
 
     message OpSchemaChange {

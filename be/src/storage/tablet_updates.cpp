@@ -2300,9 +2300,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_compaction_commit finish tablet:" << tablet_id
               << " version:" << version_info.version.to_string() << " total del/row:" << _cur_total_dels << "/"
-              << _cur_total_rows << " " << del_percent << "%"
-              << " rowset:" << rowset_id << " #row:" << total_rows << " #del:" << total_deletes
-              << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
+              << _cur_total_rows << " " << del_percent << "%" << " rowset:" << rowset_id << " #row:" << total_rows
+              << " #del:" << total_deletes << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
               << strings::Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
@@ -2327,8 +2326,7 @@ std::string TabletUpdates::_debug_compaction_stats(const std::vector<uint32_t>& 
     for (auto rowset_id : input_rowsets) {
         auto iter = _rowset_stats.find(rowset_id);
         if (iter == _rowset_stats.end()) {
-            ss << rowset_id << ":"
-               << "NA";
+            ss << rowset_id << ":" << "NA";
         } else {
             ss << rowset_id << ":" << iter->second->num_dels << "/" << iter->second->num_rows;
         }
@@ -2337,8 +2335,7 @@ std::string TabletUpdates::_debug_compaction_stats(const std::vector<uint32_t>& 
     ss << "output:";
     auto iter = _rowset_stats.find(output_rowset);
     if (iter == _rowset_stats.end()) {
-        ss << output_rowset << ":"
-           << "NA";
+        ss << output_rowset << ":" << "NA";
     } else {
         ss << output_rowset << ":" << iter->second->num_dels << "/" << iter->second->num_rows;
     }
@@ -3756,8 +3753,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
             if (dcgs.size() != new_rowset_info.num_segments) {
                 std::stringstream ss;
                 ss << "The size of dcgs and segment file in src rowset is different, "
-                   << "base tablet id: " << base_tablet->tablet_id() << " "
-                   << "new tablet id: " << _tablet.tablet_id();
+                   << "base tablet id: " << base_tablet->tablet_id() << " " << "new tablet id: " << _tablet.tablet_id();
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
@@ -4964,18 +4960,18 @@ static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext&
 static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDeltaColumnContext& ctx,
                                                                          const std::shared_ptr<FileSystem>& fs,
                                                                          ColumnIteratorOptions& iter_opts,
-                                                                         uint32_t ucid,
+                                                                         const TabletColumn& column,
                                                                          const TabletSchemaCSPtr& read_tablet_schema) {
     // build column iter from delta column group
     int32_t col_index = 0;
-    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, ucid, &col_index, read_tablet_schema));
+    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, column.unique_id(), &col_index, read_tablet_schema));
     if (dcg_segment != nullptr) {
         if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
             ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_info()));
             ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
         }
         iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
-        return dcg_segment->new_column_iterator(ucid, nullptr);
+        return dcg_segment->new_column_iterator(column, nullptr);
     }
     return nullptr;
 }
@@ -5078,12 +5074,12 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                                                              *full_row_column, column_ids, columns));
         } else {
             for (auto i = 0; i < column_ids.size(); ++i) {
+                const auto& column = read_tablet_schema->column(column_ids[i]);
                 // try to build iterator from delta column file first
                 ASSIGN_OR_RETURN(auto col_iter,
-                                 new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
+                                 new_dcg_column_iterator(ctx, fs, iter_opts, column, read_tablet_schema));
                 if (col_iter == nullptr) {
                     // not found in delta column file, build iterator from main segment
-                    const auto& column = read_tablet_schema->column(column_ids[i]);
                     ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
                     iter_opts.read_file = read_file.get();
                 }
@@ -5118,9 +5114,9 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         iter_opts.stats = &stats;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_info()));
         for (auto i = 0; i < column_ids.size(); ++i) {
+            const auto& column = read_tablet_schema->column(column_ids[i]);
             // try to build iterator from delta column file first
-            ASSIGN_OR_RETURN(auto col_iter,
-                             new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
+            ASSIGN_OR_RETURN(auto col_iter, new_dcg_column_iterator(ctx, fs, iter_opts, column, read_tablet_schema));
             if (col_iter == nullptr) {
                 // not found in delta column file, build iterator from main segment
                 // use partial segment column offset id to get the column

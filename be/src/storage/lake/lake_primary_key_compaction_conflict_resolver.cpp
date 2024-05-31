@@ -44,7 +44,7 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
                                    const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
     OlapReaderStatistics stats;
     auto pkey_schema = generate_pkey_schema();
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_each_segment_iterator(pkey_schema, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_each_segment_iterator(pkey_schema, false, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments());
     // init delvec loader
     auto delvec_loader = std::make_unique<LakeDelvecLoader>(_update_manager, _builder, false /* fill cache */);
