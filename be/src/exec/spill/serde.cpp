@@ -156,7 +156,8 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
         memcpy(serialize_buffer.data(), header_buffer, HEADER_SIZE);
     }
     size_t written_bytes = serialize_buffer.size();
-    RETURN_IF_ERROR(output->append(state, {Slice(serialize_buffer.data(), written_bytes)}, written_bytes));
+    RETURN_IF_ERROR(
+            output->append(state, {Slice(serialize_buffer.data(), written_bytes)}, written_bytes, chunk->num_rows()));
     return Status::OK();
 }
 

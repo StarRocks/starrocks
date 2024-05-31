@@ -37,6 +37,7 @@
 #include <atomic>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -79,6 +80,9 @@ using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
 }
+
+#define EXTRACE_SPILL_PARAM(query_option, spill_option, var) \
+    spill_option.has_value() ? spill_option->var : query_option.var
 
 constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
 
@@ -341,47 +345,62 @@ public:
 
     int num_per_fragment_instances() const { return _num_per_fragment_instances; }
 
-    TSpillMode::type spill_mode() const {
-        DCHECK(_query_options.__isset.spill_mode);
-        return _query_options.spill_mode;
+    TSpillMode::type spill_mode() const { return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mode); }
+    int64_t spillable_operator_mask() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spillable_operator_mask);
     }
 
     bool enable_spill() const { return _query_options.enable_spill; }
 
     bool enable_hash_join_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::HASH_JOIN);
+        return spillable_operator_mask() & (1LL << TSpillableOperatorType::HASH_JOIN);
     }
 
-    bool enable_agg_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::AGG);
-    }
+    bool enable_agg_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG); }
     bool enable_agg_distinct_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::AGG_DISTINCT);
+        return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG_DISTINCT);
     }
-    bool enable_sort_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::SORT);
+    bool enable_sort_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::SORT); }
+    bool enable_nl_join_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::NL_JOIN); }
+
+    int32_t spill_mem_table_size() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }
-    bool enable_nl_join_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::NL_JOIN);
+
+    int32_t spill_mem_table_num() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_num);
     }
 
-    int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
+    bool enable_agg_spill_preaggregation() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, enable_agg_spill_preaggregation);
+    }
 
-    int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
+    double spill_mem_limit_threshold() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_limit_threshold);
+    }
 
-    bool enable_agg_spill_preaggregation() const { return _query_options.enable_agg_spill_preaggregation; }
+    int64_t spill_operator_min_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_min_bytes);
+    }
 
-    double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
+    int64_t spill_operator_max_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_max_bytes);
+    }
 
-    int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
-    int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
-    int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+    int64_t spill_revocable_max_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_revocable_max_bytes);
+    }
     bool spill_enable_direct_io() const {
-        return _query_options.__isset.spill_enable_direct_io && _query_options.spill_enable_direct_io;
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_enable_direct_io);
     }
-    double spill_rand_ratio() const { return _query_options.spill_rand_ratio; }
+    double spill_rand_ratio() const { return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_rand_ratio); }
 
-    int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
+    int32_t spill_encode_level() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_encode_level);
+    }
+    bool spill_enable_compaction() const {
+        return _spill_options.has_value() ? _spill_options->spill_enable_compaction : false;
+    }
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
@@ -641,6 +660,8 @@ private:
 
     std::unordered_set<int32_t> _shuffle_hash_bucket_rf_ids;
     BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
+
+    std::optional<TSpillOptions> _spill_options;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

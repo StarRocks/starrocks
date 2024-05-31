@@ -214,12 +214,6 @@ Status FileBlockReader::read_fully(void* data, int64_t count) {
 FileBlockManager::FileBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
         : _query_id(query_id), _dir_mgr(dir_mgr) {}
 
-FileBlockManager::~FileBlockManager() {
-    for (auto& container : _containers) {
-        container.reset();
-    }
-}
-
 Status FileBlockManager::open() {
     return Status::OK();
 }
@@ -242,7 +236,6 @@ Status FileBlockManager::release_block(const BlockPtr& block) {
     auto container = file_block->container();
     TRACE_SPILL_LOG << "release block: " << block->debug_string();
     RETURN_IF_ERROR(container->close());
-    _containers.emplace_back(std::move(container));
     return Status::OK();
 }
 

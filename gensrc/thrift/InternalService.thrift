@@ -144,6 +144,30 @@ struct TSpillToRemoteStorageOptions {
   3: optional bool disable_spill_to_local_disk;
 }
 
+// spill options
+struct TSpillOptions {
+  1: optional i32 spill_mem_table_size;
+  2: optional i32 spill_mem_table_num;
+  3: optional double spill_mem_limit_threshold;
+  4: optional i64 spill_operator_min_bytes;
+  5: optional i64 spill_operator_max_bytes;
+  6: optional i32 spill_encode_level;
+  7: optional i64 spill_revocable_max_bytes;
+  8: optional bool spill_enable_direct_io;
+  9: optional bool spill_enable_compaction;
+  // only used in spill_mode="random"
+  // probability of triggering operator spill
+  // (0.0,1.0)
+  10: optional double spill_rand_ratio;
+  11: optional TSpillMode spill_mode;
+  // used to identify which operators allow spill, only meaningful when enable_spill=true
+  12: optional i64 spillable_operator_mask;
+  13: optional bool enable_agg_spill_preaggregation;
+
+  21: optional bool enable_spill_to_remote_storage;
+  22: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   2: optional i32 max_errors = 0
@@ -211,7 +235,9 @@ struct TQueryOptions {
 
   72: optional i64 rpc_http_min_size;
 
+  // Deprecated
   // some experimental parameter for spill
+  // TODO: remove in 3.4.x
   73: optional i32 spill_mem_table_size;
   74: optional i32 spill_mem_table_num;
   75: optional double spill_mem_limit_threshold;
@@ -220,12 +246,10 @@ struct TQueryOptions {
   78: optional i32 spill_encode_level;
   79: optional i64 spill_revocable_max_bytes;
   80: optional bool spill_enable_direct_io;
-  // only used in spill_mode="random"
-  // probability of triggering operator spill
-  // (0.0,1.0)
   81: optional double spill_rand_ratio;
-
   85: optional TSpillMode spill_mode;
+
+  82: optional TSpillOptions spill_options;
   
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
@@ -240,6 +264,7 @@ struct TQueryOptions {
   93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
   94: optional double scan_use_query_mem_ratio = 0.25;
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
+  // Deprecated
   // used to identify which operators allow spill, only meaningful when enable_spill=true
   96: optional i64 spillable_operator_mask;
   // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
@@ -254,7 +279,7 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
-
+  // Deprecated
   106: optional bool enable_agg_spill_preaggregation;
   107: optional i64 global_runtime_filter_build_max_size;
   108: optional i64 runtime_filter_rpc_http_min_size;
@@ -273,9 +298,6 @@ struct TQueryOptions {
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
 
   116: optional string sql_dialect;
-
-  117: optional bool enable_spill_to_remote_storage;
-  118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
 
   119: optional bool enable_result_sink_accumulate;
   120: optional bool enable_connector_split_io_tasks = false;

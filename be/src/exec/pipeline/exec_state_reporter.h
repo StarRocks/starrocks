@@ -31,11 +31,10 @@ class ExecStateReporter {
 public:
     ExecStateReporter();
 
-    static TReportExecStatusParams create_report_exec_status_params(QueryContext* query_ctx,
-                                                                    FragmentContext* fragment_ctx,
-                                                                    RuntimeProfile* profile,
-                                                                    RuntimeProfile* load_channel_profile,
-                                                                    const Status& status, bool done);
+    static std::unique_ptr<TReportExecStatusParams> create_report_exec_status_params(
+            QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
+            RuntimeProfile* load_channel_profile, const Status& status, bool done);
+
     static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                      const TNetworkAddress& fe_addr);
 
