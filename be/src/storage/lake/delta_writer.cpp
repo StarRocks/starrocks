@@ -98,7 +98,13 @@ public:
 
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
+<<<<<<< HEAD
     Status finish(DeltaWriter::FinishMode mode);
+=======
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode);
+
+    Status finish();
+>>>>>>> ca50a63fd3 ([BugFix] no need to create TxnLog and preload pk state when schema change (#46485))
 
     void close();
 
@@ -405,11 +411,21 @@ Status DeltaWriterImpl::init_write_schema() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
+=======
+Status DeltaWriterImpl::finish() {
+>>>>>>> ca50a63fd3 ([BugFix] no need to create TxnLog and preload pk state when schema change (#46485))
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
+    return Status::OK();
+}
+
+StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mode) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(finish());
 
     if (mode == DeltaWriter::kDontWriteTxnLog) {
         return Status::OK();
@@ -619,9 +635,18 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return _impl->write(chunk, indexes, indexes_size);
 }
 
+<<<<<<< HEAD
 Status DeltaWriter::finish(FinishMode mode) {
+=======
+StatusOr<TxnLogPtr> DeltaWriter::finish_with_txnlog(DeltaWriterFinishMode mode) {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish_with_txnlog() in a bthread";
+    return _impl->finish_with_txnlog(mode);
+}
+
+Status DeltaWriter::finish() {
+>>>>>>> ca50a63fd3 ([BugFix] no need to create TxnLog and preload pk state when schema change (#46485))
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
-    return _impl->finish(mode);
+    return _impl->finish();
 }
 
 void DeltaWriter::close() {

@@ -60,7 +60,14 @@ public:
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
+<<<<<<< HEAD
     Status finish(FinishMode mode = kWriteTxnLog);
+=======
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
+>>>>>>> ca50a63fd3 ([BugFix] no need to create TxnLog and preload pk state when schema change (#46485))
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.

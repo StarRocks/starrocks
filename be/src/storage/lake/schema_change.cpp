@@ -287,7 +287,11 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         RETURN_IF_ERROR(writer->write(*_new_chunk, _selective->data(), _new_chunk->num_rows()));
     }
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(writer->finish(DeltaWriter::kDontWriteTxnLog));
+=======
+    RETURN_IF_ERROR(writer->finish());
+>>>>>>> ca50a63fd3 ([BugFix] no need to create TxnLog and preload pk state when schema change (#46485))
 
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));

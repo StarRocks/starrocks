@@ -124,9 +124,32 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
             LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id: " << delta_writer->tablet_id()
                                     << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
+<<<<<<< HEAD
         if (st.ok() && iter->flush_after_write) {
             flush_after_write = true;
             continue;
+=======
+        case kFlushTask: {
+            auto flush_task = std::static_pointer_cast<FlushTask>(task_ptr);
+            if (st.ok()) {
+                st.update(delta_writer->flush());
+            }
+            flush_task->cb(st);
+            break;
+        }
+        case kFinishTask: {
+            auto finish_task = std::static_pointer_cast<FinishTask>(task_ptr);
+            if (st.ok()) {
+                auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);
+                st.update(res.status());
+                LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
+                                        << " txn_id: " << delta_writer->txn_id() << ": " << st;
+                finish_task->cb(std::move(res));
+            } else {
+                finish_task->cb(st);
+            }
+            break;
+>>>>>>> ca50a63fd3 ([BugFix] no need to create TxnLog and preload pk state when schema change (#46485))
         }
         if (st.ok() && iter->finish_after_write) {
             st = delta_writer->finish();
