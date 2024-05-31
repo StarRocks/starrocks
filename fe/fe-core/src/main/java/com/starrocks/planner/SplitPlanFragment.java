@@ -1,5 +1,3 @@
-package com.starrocks.planner;
-
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,6 +26,7 @@ import java.util.stream.Collectors;
 public class SplitPlanFragment extends PlanFragment {
     private final List<ExchangeNode> destNodeList = Lists.newArrayList();
     private final List<Expr> splitExprs = Lists.newArrayList();
+    private final List<DataPartition> outputPartitions = Lists.newArrayList();
 
     public List<ExchangeNode> getDestNodeList() {
         return destNodeList;
