@@ -115,7 +115,8 @@ Examples:
 - If the partition column is specified as `event_day` at table creation, for example `PARTITION BY RANGE(event_day)`, and a new partition needs to be added after table creation, you can execute:
 
     ```sql
-    ALTER TABLE site_access ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
+    ALTER TABLE site_access
+        ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
     ```
 
 - If the partition column is specified as `datekey` at table creation, for example `PARTITION BY RANGE (datekey)`, and multiple partitions need to be added in batch after table creation, you can execute:
