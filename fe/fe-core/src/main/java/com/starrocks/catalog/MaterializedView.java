@@ -1546,7 +1546,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // for single ref base table, recover from serializedPartitionRefTableExprs
         partitionRefTableExprs = new ArrayList<>();
-        partitionExprMaps = Maps.newHashMap();
         if (serializedPartitionRefTableExprs != null) {
             for (GsonUtils.ExpressionSerializedObject serializedObject : serializedPartitionRefTableExprs) {
                 Expr partitionExpr = parsePartitionExpr(serializedObject.expressionSql, partitionCol);
@@ -1555,30 +1554,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     continue;
                 }
                 partitionRefTableExprs.add(partitionExpr);
-                // for compatibility
-                SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
-                partitionExprMaps.put(partitionExpr, partitionSlotRef);
             }
         }
-<<<<<<< HEAD
-=======
-
-        // for multi ref base tables, recover from serializedPartitionExprMaps
-        if (serializedPartitionExprMaps != null) {
-            for (Map.Entry<GsonUtils.ExpressionSerializedObject, GsonUtils.ExpressionSerializedObject> entry :
-                    serializedPartitionExprMaps.entrySet()) {
-                if (entry.getKey() != null && entry.getValue() != null) {
-                    Expr partitionExpr = parsePartitionExpr(entry.getKey().expressionSql, partitionCol);
-                    if (partitionExpr == null) {
-                        LOG.warn("parse partition expr failed, sql: {}", entry.getKey().expressionSql);
-                        continue;
-                    }
-                    SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
-                    partitionExprMaps.put(partitionExpr, partitionSlotRef);
-                }
-            }
-        }
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
     }
 
     /**

@@ -704,13 +704,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.get(tableId);
-<<<<<<< HEAD
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
-=======
-            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
             LOG.info("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
-                    materializedView.getName(), snapshotTable.getName(), partitionInfoMap, currentTablePartitionInfo);
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
+                    materializedView.getName(), partitionTable.getName(), partitionInfoMap, currentTablePartitionInfo);
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
             // remove partition info of not-exist partition for snapshot table from version map
@@ -753,18 +749,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 continue;
             }
             currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
-<<<<<<< HEAD
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.get(baseTableInfo);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
-=======
-            Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentVersionMap.get(baseTableInfo);
-            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
             LOG.info("Update materialized view {} meta for external base table {} with partitions info: {}, " +
-                            "old partition infos:{}", materializedView.getName(), snapshotTable.getName(),
+                            "old partition infos:{}", materializedView.getName(), baseTableInfo.getTableId(),
                     partitionInfoMap, currentTablePartitionInfo);
             // overwrite old partition names
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
             // remove partition info of not-exist partition for snapshot table from version map
@@ -1054,86 +1045,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     // if non partition table changed, should refresh all partitions of materialized view
                     return mvRangePartitionNames;
                 } else {
-<<<<<<< HEAD
-=======
-                    if (isAutoRefresh) {
-                        // If this refresh comes from PERIODIC/EVENT_TRIGGER, it should not respect the config to do the
-                        // refresh rather than only checking the ref table's update.
-                        // eg:
-                        //  MV: SELECT t2.k1 as k1, t2.k2 as k2, t1.k1 as k3, t1.k2 as k4 FROM t1 join t2 on t1.k1=t2.k1;
-                        //  RefTable    : t1, Partition: p0,p1,p2
-                        //  NonRefTable : t2, Partition: p0,p1,p2
-                        // when t2 is updated, it will trigger refresh of ref-table's all partitions.
-                        // if `partition_refresh_number` is 1, then:
-                        // - The 1th TaskRun: start=null,end=null,  ref-table refresh partition: p0
-                        // - The 2th TaskRun: start=p1,end=p2,      ref-table refresh partition: p1
-                        // - The 3th TaskRun: start=p2,end=p2,      ref-table refresh partition: p2
-                        // if use method below, it will break in the 2th TaskRun because ref-table has not updated in the
-                        // specific start and end ranges.
-                        return mvRangePartitionNames;
-                    } else {
-                        // If the user specifies the start and end ranges, and the non-partitioned table still changes,
-                        // it should be refreshed according to the user-specified range, not all partitions.
-                        return getMvPartitionNamesToRefresh(refBaseTable,
-                                mvRangePartitionNames, true);
-                    }
-                }
-            }
-
-            Map<Table, Column> partitionTablesAndColumn = materializedView.getRelatedPartitionTableAndColumn();
-            if (partitionExpr instanceof SlotRef) {
-                // check related partition table
-                for (Table table : partitionTablesAndColumn.keySet()) {
-                    needRefreshMvPartitionNames.addAll(getMvPartitionNamesToRefresh(
-                            table, mvRangePartitionNames, force));
-                }
-            } else if (partitionExpr instanceof FunctionCallExpr) {
-                // check related partition table
-                for (Table table : partitionTablesAndColumn.keySet()) {
-                    needRefreshMvPartitionNames.addAll(getMvPartitionNamesToRefresh(
-                            table, mvRangePartitionNames, force));
-                }
-
-                Map<Table, Set<String>> baseChangedPartitionNames =
-                        getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
-                if (baseChangedPartitionNames.isEmpty()) {
-                    return needRefreshMvPartitionNames;
-                }
-
-                List<TableWithPartitions> baseTableWithPartitions = baseChangedPartitionNames.keySet().stream()
-                        .map(x -> new TableWithPartitions(x, baseChangedPartitionNames.get(x)))
-                        .collect(Collectors.toList());
-                Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap =
-                        mvContext.getRefBaseTableRangePartitionMap();
-                Map<String, Range<PartitionKey>> mvRangePartitionMap = mvContext.getMvRangePartitionMap();
-                if (materializedView.isCalcPotentialRefreshPartition(baseTableWithPartitions,
-                        refBaseTableRangePartitionMap, needRefreshMvPartitionNames, mvRangePartitionMap)) {
-                    // because the relation of partitions between materialized view and base partition table is n : m,
-                    // should calculate the candidate partitions recursively.
-                    LOG.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
-                            " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
-                    SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
-                            mvContext.getRefBaseTableMVIntersectedPartitions(),
-                            mvContext.getMvRefBaseTableIntersectedPartitions(),
-                            mvPotentialPartitionNames);
-                    LOG.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
-                            " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
-                }
-            }
-        } else if (mvPartitionInfo instanceof ListPartitionInfo) {
-            // list partitioned materialized view
-            Table partitionTable = mvContext.getRefBaseTable();
-            boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
-            Set<String> mvListPartitionNames = SyncPartitionUtils.getPartitionNamesByListWithPartitionLimit(
-                    materializedView, start, end, partitionTTLNumber, isAutoRefresh);
-
-            // check non-ref base tables
-            if (isPartitionedMVNeedToRefreshBaseOnNonRefTables(partitionTable)) {
-                if (start == null && end == null) {
-                    // if non partition table changed, should refresh all partitions of materialized view
-                    return mvListPartitionNames;
-                } else {
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.
                     return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
@@ -1177,15 +1088,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         // step1: check updated partition names in the ref base table and add it to the refresh candidate
-<<<<<<< HEAD
         Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(refBaseTable, false);
         if (updatePartitionNames == null) {
-=======
-        MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(materializedView, refBaseTable, false, false);
-        if (mvBaseTableUpdateInfo == null) {
             LOG.warn("Cannot find the updated partition info of ref base table {} of mv: {}",
                     refBaseTable.getName(), materializedView.getName());
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
             return mvRangePartitionNames;
         }
 
@@ -1274,7 +1180,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return insertStmt;
     }
 
-<<<<<<< HEAD
     /**
      * Collect all deduplicated databases of the materialized view's base tables.
      * @param materializedView: the materialized view to check
@@ -1293,12 +1198,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         return Lists.newArrayList(databaseMap.values());
     }
-=======
-    private boolean checkBaseTablePartitionHasChanged(TableSnapshotInfo snapshotInfo) {
-        try {
-            BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
-            Table snapshotTable = snapshotInfo.getBaseTable();
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
 
     private boolean checkBaseTableSnapshotInfoChanged(BaseTableInfo baseTableInfo,
                                                       Table snapshotTable) {
@@ -1339,12 +1238,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
                         return false;
                     }
-<<<<<<< HEAD
                     Pair<Table, Column> partitionTableAndColumn =
                             getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-=======
-                    Pair<Table, Column> partitionTableAndColumn = materializedView.getDirectTableAndPartitionColumn();
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
                     Column partitionColumn = partitionTableAndColumn.second;
                     // For Non-partition based base table, it's not necessary to check the partition changed.
                     if (!snapshotTable.equals(partitionTableAndColumn.first)
@@ -1378,11 +1273,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     .map(Database::getFullName).collect(Collectors.toList())));
         }
         try {
-<<<<<<< HEAD
             if (snapshotBaseTables.values().stream().anyMatch(t -> checkBaseTableSnapshotInfoChanged(t.first, t.second))) {
-=======
-            if (snapshotBaseTables.values().stream().anyMatch(this::checkBaseTablePartitionHasChanged)) {
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
                 return true;
             }
         } finally {
@@ -1423,40 +1314,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Collect all deduplicated databases of the materialized view's base tables.
-     * @param materializedView: the materialized view to check
-     * @return: the deduplicated databases of the materialized view's base tables,
-     * throw exception if the database do not exist.
-     */
-    List<Database> collectDatabases(MaterializedView materializedView) {
-        Map<Long, Database> databaseMap = Maps.newHashMap();
-        for (BaseTableInfo baseTableInfo : materializedView.getBaseTableInfos()) {
-            Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
-            if (dbOpt.isEmpty()) {
-                LOG.warn("database {} do not exist when refreshing materialized view:{}",
-                        baseTableInfo.getDbInfoStr(), materializedView.getName());
-                throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
-            }
-            Database db = dbOpt.get();
-            databaseMap.put(db.getId(), db);
-        }
-        return Lists.newArrayList(databaseMap.values());
-    }
-
-    /**
-     * Collect all base table snapshot infos for the materialized view which the snapshot infos are kept and used in the final
-     * update meta phase.
-     * </p>
-     * NOTE:
-     * 1. deep copy of the base table's metadata may be time costing, we can optimize it later.
-     * 2. no needs to lock the base table's metadata since the metadata is not changed during the refresh process.
-     * @param materializedView the materialized view to collect
-     * @return the base table and its snapshot info map
-     */
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
     @VisibleForTesting
     public Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
         Map<Long, Pair<BaseTableInfo, Table>> tables = Maps.newHashMap();
@@ -1467,12 +1324,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new LockTimeoutException("Failed to lock databases: " + Joiner.on(",").join(dbs.stream()
                     .map(Database::getFullName).collect(Collectors.toList())));
         }
-<<<<<<< HEAD
-        try  {
-=======
         Stopwatch stopwatch = Stopwatch.createStarted();
         try {
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Table table = baseTableInfo.getTable();
                 if (table == null) {
@@ -1480,16 +1333,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             baseTableInfo.getTableInfoStr(), materializedView.getName());
                     throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
                 }
-<<<<<<< HEAD
 
-                if (table.isOlapTable()) {
-                    Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
-                    if (copied == null) {
-                        throw new DmlException("Failed to copy olap table: %s", table.getName());
-                    }
-                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-=======
-                Table table = tableOpt.get();
                 if (table.isView()) {
                     // skip to collect snapshots for views
                 } else if (table.isOlapTable()) {
@@ -1497,35 +1341,28 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (copied == null) {
                         throw new DmlException("Failed to copy olap table: %s", table.getName());
                     }
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
                 } else if (table.isOlapMaterializedView()) {
                     MaterializedView copied = DeepCopy.copyWithGson(table, MaterializedView.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy materialized view: %s", table.getName());
                     }
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
+                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
                 } else if (table.isCloudNativeTable()) {
                     LakeTable copied = DeepCopy.copyWithGson(table, LakeTable.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy lake table: %s", table.getName());
                     }
-<<<<<<< HEAD
                     tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else {
-                    tables.put(table.getId(), Pair.create(baseTableInfo, table));
-=======
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
                 } else if (table.isCloudNativeMaterializedView()) {
                     LakeMaterializedView copied = DeepCopy.copyWithGson(table, LakeMaterializedView.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy lake materialized view: %s", table.getName());
                     }
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, copied));
+                    tables.put(table.getId(), Pair.create(baseTableInfo, copied));
                 } else {
                     // for other table types, use the table directly which needs to lock if visits the table metadata.
-                    tables.put(table.getId(), new TableSnapshotInfo(baseTableInfo, table));
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
+                    tables.put(table.getId(), Pair.create(baseTableInfo, table));
                 }
             }
         } finally {
@@ -1673,26 +1510,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 for (String mvPartitionName : mvToRefreshedPartitions) {
                     needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(mvPartitionName));
                 }
-<<<<<<< HEAD
                 refTableAndPartitionNames.put(table, needRefreshTablePartitionNames);
                 return refTableAndPartitionNames;
-=======
-                Map<Table, Set<String>> mvToBaseNameRef = mvToBaseNameRefs.get(mvPartitionName);
-                if (mvToBaseNameRef.containsKey(snapshotTable)) {
-                    if (needRefreshTablePartitionNames == null) {
-                        needRefreshTablePartitionNames = Sets.newHashSet();
-                    }
-                    // The table in this map has related partition with mv
-                    // It's ok to add empty set for a table, means no partition corresponding to this mv partition
-                    needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(snapshotTable));
-                } else {
-                    LOG.info("MV {}'s refTable {} is not found in `mvRefBaseTableIntersectedPartitions` " +
-                                    "because of empty update", materializedView.getName(), snapshotTable.getName());
-                }
-            }
-            if (needRefreshTablePartitionNames != null) {
-                refTableAndPartitionNames.put(snapshotInfo, needRefreshTablePartitionNames);
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
             }
         }
         return refTableAndPartitionNames;
@@ -1740,23 +1559,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             partition.getId(), partition.getVisibleVersion(), partition.getVisibleVersionTime());
                     partitionInfos.put(partition.getName(), basePartitionInfo);
                 }
+                LOG.info("Collect olap base table {}'s refreshed partition infos: {}", olapTable.getName(), partitionInfos);
                 changedOlapTablePartitionInfos.put(olapTable.getId(), partitionInfos);
             }
-<<<<<<< HEAD
-=======
-            LOG.info("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
-            return partitionInfos;
-        } else if (baseTable.isHiveTable() || baseTable.isIcebergTable() || baseTable.isJDBCTable() ||
-                baseTable.isPaimonTable()) {
-            return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames),
-                    baseTableInfo);
-        } else {
-            // FIXME: base table does not support partition-level refresh and does not update the meta
-            //  in materialized view.
-            LOG.warn("Refresh materialized view {} with non-supported-partition-level refresh base table {}",
-                    materializedView.getName(), baseTable.getName());
-            return Maps.newHashMap();
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
         }
         return changedOlapTablePartitionInfos;
     }

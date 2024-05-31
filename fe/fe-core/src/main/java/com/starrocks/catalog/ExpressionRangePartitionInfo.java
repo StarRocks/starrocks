@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
@@ -35,6 +36,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.collections.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,6 +44,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import static java.util.stream.Collectors.toList;
 
@@ -88,28 +91,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             }
         }
 
-<<<<<<< HEAD
-        for (Expr expr : partitionExprs) {
-            if (expr instanceof FunctionCallExpr) {
-                SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
-                // TODO: Later, for automatically partitioned tables,
-                //  partitions of materialized views (also created automatically),
-                //  and partition by expr tables will use ExpressionRangePartitionInfoV2
-                for (Column partitionColumn : partitionColumns) {
-                    if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
-                        slotRef.setType(partitionColumn.getType());
-                        slotRef.setNullable(partitionColumn.isAllowNull());
-                        try {
-                            PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
-                        } catch (SemanticException ex) {
-                            LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
-                        }
-                    }
-                }
-=======
         // Analyze partition expr
-        Map<String, Column> partitionNameColumnMap = partitionColumns.stream()
-                .collect(toMap(x -> x.getName(), Function.identity(), (e1, e2) -> e1, CaseInsensitiveMap::new));
+        Map<String, Column> partitionNameColumnMap = new CaseInsensitiveMap();
+        for (Column column : partitionColumns) {
+            partitionNameColumnMap.put(column.getName(), column);
+        }
         for (Expr expr : partitionExprs) {
             SlotRef slotRef = getPartitionExprSlotRef(expr);
             if (slotRef == null) {
@@ -121,7 +107,6 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             String slotRefName = slotRef.getColumnName();
             if (!partitionNameColumnMap.containsKey(slotRefName)) {
                 continue;
->>>>>>> eb29b9d1b8 ([Refactor] Fix refresh bugs with nested mvs (#46035))
             }
             Column partitionColumn = partitionNameColumnMap.get(slotRefName);
             // analyze partition expression
