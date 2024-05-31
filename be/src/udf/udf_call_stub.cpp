@@ -72,7 +72,6 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, 
     }
     auto awColArray = result_batch->column(0);
     const auto& f = result_batch->schema()->field(0);
-    LOG(INFO) << "result column type: " << awColArray->ToString();
     return _convert_arrow_to_native(*awColArray, *f);
 }
 
