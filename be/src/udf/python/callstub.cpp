@@ -14,28 +14,13 @@
 
 #include "udf/python/callstub.h"
 
-#include <dirent.h>
-#include <fmt/core.h>
-#include <fmt/format.h>
-#include <poll.h>
-#include <sys/poll.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include <cstring>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 
 #include "arrow/buffer.h"
 #include "arrow/flight/client.h"
 #include "arrow/type.h"
-#include "butil/fd_guard.h"
-#include "butil/fd_utility.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/base64.h"
@@ -47,8 +32,6 @@
 #include "udf/python/env.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/utils.h"
-#include "util/defer_op.h"
-#include "util/slice.h"
 
 #define RETURN_IF_ARROW_ERROR(expr)    \
     do {                               \
@@ -59,42 +42,6 @@
     } while (0)
 
 namespace starrocks {
-
-class PyWorker {
-public:
-    PyWorker(pid_t pid) : _pid(pid) {}
-    ~PyWorker() { terminate_and_wait(); }
-
-    void terminate() {
-        if (_pid != -1) {
-            kill(_pid, SIGKILL);
-        }
-    }
-
-    void wait() {
-        if (_pid != -1) {
-            waitpid(_pid, nullptr, 0);
-            remove_unix_socket();
-            _pid = -1;
-        }
-    }
-
-    void terminate_and_wait() {
-        if (_pid != -1) {
-            terminate();
-            wait();
-            remove_unix_socket();
-        }
-    }
-    void remove_unix_socket();
-
-    const std::string url() { return _url; }
-    void set_url(std::string url) { _url = std::move(url); }
-
-private:
-    std::string _url;
-    pid_t _pid = -1;
-};
 
 using ArrowFlightClient = arrow::flight::FlightClient;
 
@@ -147,73 +94,14 @@ void ArrowFlightWithRW::close() {
     }
 }
 
-class PyWorkerManager {
-public:
-    using WorkerClientPtr = std::shared_ptr<ArrowFlightWithRW>;
-
-    static PyWorkerManager& getInstance() {
-        static PyWorkerManager instance;
-        return instance;
+StatusOr<std::shared_ptr<arrow::RecordBatch>> ArrowFlightFuncCallStub::do_evaluate(RecordBatch&& batch) {
+    size_t num_rows = batch.num_rows();
+    ASSIGN_OR_RETURN(auto result_batch, _client->rpc(batch));
+    if (result_batch->num_rows() != num_rows) {
+        return Status::InternalError(
+                fmt::format("unexpected result batch rows from UDF:{} expect:{}", result_batch->num_rows(), num_rows));
     }
-
-    StatusOr<WorkerClientPtr> get_client(const PyFunctionDescriptor& func_desc);
-
-    static std::string unix_socket(pid_t pid) {
-        std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
-        return unix_socket;
-    }
-
-    static std::string unix_socket_path(pid_t pid) {
-        std::string unix_socket_path = fmt::format("{}/pyworker_{}", config::local_library_dir, pid);
-        return unix_socket_path;
-    }
-
-    static std::string bootstrap() {
-        const char* server_main = "flight_server.py";
-        return fmt::format("{}/lib/py-packages/{}", getenv("STARROCKS_HOME"), server_main);
-    }
-
-private:
-    Status _fork_py_worker(std::unique_ptr<PyWorker>* child_process);
-    StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
-
-    const size_t max_worker_per_driver = 2;
-    std::mutex _mutex;
-    std::unordered_map<int32_t, std::vector<std::shared_ptr<PyWorker>>> _processes;
-};
-
-static Status close_all_fd_except(const std::unordered_set<int>& fds) {
-    DIR* dir = opendir("/proc/self/fd");
-    auto defer = DeferOp([&dir]() {
-        if (dir != nullptr) {
-            closedir(dir);
-        }
-    });
-
-    if (dir == nullptr) {
-        return Status::InternalError(fmt::format("open /proc/self/fd error {}", std::strerror(errno)));
-    }
-
-    int dir_fd = dirfd(dir);
-    if (dir_fd < 0) {
-        return Status::InternalError(fmt::format("syscall dirfd error {}", std::strerror(errno)));
-    }
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (entry->d_type == DT_LNK) {
-            int fd = atoi(entry->d_name);
-            if (fd >= 0 && fd != dir_fd && fds.count(fd) == 0) {
-                close(fd);
-            }
-        }
-    }
-
-    return Status::OK();
-}
-
-void PyWorker::remove_unix_socket() {
-    unlink(PyWorkerManager::unix_socket_path(_pid).c_str());
+    return result_batch;
 }
 
 auto PyWorkerManager::get_client(const PyFunctionDescriptor& func_desc) -> StatusOr<WorkerClientPtr> {
@@ -223,137 +111,6 @@ auto PyWorkerManager::get_client(const PyFunctionDescriptor& func_desc) -> Statu
     auto arrow_client = std::make_unique<ArrowFlightWithRW>();
     RETURN_IF_ERROR(arrow_client->init(url, func_desc, std::move(handle)));
     return arrow_client;
-}
-
-Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process) {
-    ASSIGN_OR_RETURN(auto py_env, PythonEnvManager::getInstance().getDefault());
-
-    std::string python_path = py_env.get_python_path();
-    int pipefd[2];
-
-    if (pipe(pipefd) == -1) {
-        return Status::InternalError(fmt::format("create pipe error:{}", std::strerror(errno)));
-    }
-    butil::make_non_blocking(pipefd[0]);
-
-    pid_t cpid = fork();
-    if (cpid == -1) {
-        return Status::InternalError(fmt::format("fork worker error:{}", std::strerror(errno)));
-    } else if (cpid == 0) {
-        dup2(pipefd[1], STDOUT_FILENO);
-        if (config::report_python_worker_error) {
-            dup2(pipefd[1], STDERR_FILENO);
-        }
-        // change dir
-        if (chdir(config::local_library_dir.c_str()) != 0) {
-            std::cout << "change dir failed:" << std::strerror(errno) << std::endl;
-            exit(-1);
-        }
-        // run child process
-        // close all resource
-        std::unordered_set<int> reserved_fd{0, 1, 2, pipefd[0]};
-        auto status = close_all_fd_except(reserved_fd);
-        if (!status.ok()) {
-            std::cout << "close fd failed:" << status.to_string() << std::endl;
-            exit(-1);
-        }
-
-        pid_t self_pid = getpid();
-        std::string str_pid = std::to_string(self_pid);
-        char command[] = "python3";
-        std::string script = PyWorkerManager::bootstrap();
-        std::string unix_socket = PyWorkerManager::unix_socket(self_pid);
-        std::string python_home_env = fmt::format("PYTHONHOME={}", py_env.home);
-        char* const args[] = {command, script.data(), unix_socket.data(), nullptr};
-        char* const envs[] = {python_home_env.data(), nullptr};
-        // exec flight server
-        if (execvpe(python_path.c_str(), args, envs)) {
-            std::cout << "execvp failed:" << std::strerror(errno) << std::endl;
-            exit(-1);
-        }
-
-    } else {
-        close(pipefd[1]);
-        butil::fd_guard guard(pipefd[0]);
-        *child_process = std::make_unique<PyWorker>(cpid);
-
-        pollfd fds[1];
-        fds[0].fd = pipefd[0];
-        fds[0].events = POLLIN;
-
-        // wait util worker start
-        int32_t poll_timeout = config::create_child_worker_timeout_ms;
-        int ret = poll(fds, 1, poll_timeout);
-        if (ret == -1) {
-            return Status::InternalError(fmt::format("poll error:{}", std::strerror(errno)));
-        } else if (ret == 0) {
-            (*child_process)->terminate_and_wait();
-            return Status::InternalError(fmt::format("create worker timeout, cost {}ms", poll_timeout));
-        }
-
-        char buffer[4096];
-        size_t buffer_size = sizeof(buffer);
-        char* cursor = buffer;
-        while (buffer_size > 0) {
-            ssize_t n = read(pipefd[0], cursor, buffer_size);
-            // -1 errorno should be EAGAIN
-            if (n == 0 || n == -1) break;
-            buffer_size = buffer_size - n;
-        }
-        Slice result(buffer, sizeof(buffer) - buffer_size);
-        if (result != Slice("Pywork start success\n")) {
-            (*child_process)->terminate_and_wait();
-            return Status::InternalError(fmt::format("worker start failed:{}", result.to_string()));
-        }
-        (*child_process)->set_url(PyWorkerManager::unix_socket(cpid));
-    }
-    return Status::OK();
-}
-
-StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t driver_id, size_t reusable,
-                                                                     std::string* url) {
-    if (!reusable) {
-        std::unique_ptr<PyWorker> child_process;
-        RETURN_IF_ERROR(_fork_py_worker(&child_process));
-        *url = child_process->url();
-        return child_process;
-    }
-    std::shared_ptr<PyWorker> worker;
-    {
-        // try to find a worker from pool
-        std::lock_guard guard(_mutex);
-        auto& workers = _processes[driver_id];
-        if (workers.size() > max_worker_per_driver) {
-            worker = workers[rand() % max_worker_per_driver];
-        }
-    }
-    if (worker != nullptr) {
-        *url = worker->url();
-        return worker;
-    }
-
-    std::unique_ptr<PyWorker> uniq_worker;
-    RETURN_IF_ERROR(_fork_py_worker(&uniq_worker));
-    *url = uniq_worker->url();
-    worker = std::move(uniq_worker);
-
-    {
-        // add to pool
-        std::lock_guard guard(_mutex);
-        _processes[driver_id].push_back(worker);
-    }
-
-    return worker;
-}
-
-StatusOr<std::shared_ptr<arrow::RecordBatch>> ArrowFlightFuncCallStub::do_evaluate(RecordBatch&& batch) {
-    size_t num_rows = batch.num_rows();
-    ASSIGN_OR_RETURN(auto result_batch, _client->rpc(batch));
-    if (result_batch->num_rows() != num_rows) {
-        return Status::InternalError(
-                fmt::format("unexpected result batch rows from UDF:{} expect:{}", result_batch->num_rows(), num_rows));
-    }
-    return result_batch;
 }
 
 StatusOr<std::shared_ptr<arrow::Schema>> convert_type_to_schema(const TypeDescriptor& typedesc) {

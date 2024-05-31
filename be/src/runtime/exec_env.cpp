@@ -571,6 +571,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
 
     RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
+    PythonEnvManager::getInstance().start_background_cleanup_thread();
 
     return Status::OK();
 }
@@ -672,6 +673,8 @@ void ExecEnv::stop() {
 #ifndef BE_TEST
     close_s3_clients();
 #endif
+
+    PythonEnvManager::getInstance().close();
 }
 
 void ExecEnv::destroy() {

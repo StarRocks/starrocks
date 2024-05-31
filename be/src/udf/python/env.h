@@ -16,14 +16,18 @@
 
 #include <fmt/format.h>
 
+#include <atomic>
+#include <condition_variable>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
+#include "common/config.h"
 #include "common/statusor.h"
 
 namespace starrocks {
@@ -31,6 +35,76 @@ namespace starrocks {
 struct PythonEnv {
     std::string home;
     std::string get_python_path() const { return fmt::format("{}/bin/python3", home); }
+};
+
+class ArrowFlightWithRW;
+class PyFunctionDescriptor;
+
+class PyWorker {
+public:
+    PyWorker(pid_t pid) : _pid(pid) {}
+    ~PyWorker() { terminate_and_wait(); }
+
+    void terminate();
+
+    void wait();
+
+    void terminate_and_wait() {
+        if (_pid != -1) {
+            terminate();
+            wait();
+            remove_unix_socket();
+        }
+    }
+    void remove_unix_socket();
+
+    const std::string url() { return _url; }
+    void set_url(std::string url) { _url = std::move(url); }
+
+    void touch() { _last_touch_time = MonotonicSeconds(); }
+    bool expired() { return MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec; }
+
+private:
+    std::string _url;
+    pid_t _pid = -1;
+    int64_t _last_touch_time = 0;
+};
+
+class PyWorkerManager {
+public:
+    using WorkerClientPtr = std::shared_ptr<ArrowFlightWithRW>;
+
+    static PyWorkerManager& getInstance() {
+        static PyWorkerManager instance;
+        return instance;
+    }
+
+    StatusOr<WorkerClientPtr> get_client(const PyFunctionDescriptor& func_desc);
+
+    static std::string unix_socket(pid_t pid) {
+        std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
+        return unix_socket;
+    }
+
+    static std::string unix_socket_path(pid_t pid) {
+        std::string unix_socket_path = fmt::format("{}/pyworker_{}", config::local_library_dir, pid);
+        return unix_socket_path;
+    }
+
+    static std::string bootstrap() {
+        const char* server_main = "flight_server.py";
+        return fmt::format("{}/lib/py-packages/{}", getenv("STARROCKS_HOME"), server_main);
+    }
+
+    void cleanup_expired_worker();
+
+private:
+    Status _fork_py_worker(std::unique_ptr<PyWorker>* child_process);
+    StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
+
+    const size_t max_worker_per_driver = 2;
+    std::mutex _mutex;
+    std::unordered_map<int32_t, std::vector<std::shared_ptr<PyWorker>>> _processes;
 };
 
 // TODO: support config PYTHONPATH
@@ -66,7 +140,14 @@ public:
         return _envs.begin()->second;
     }
 
+    void start_background_cleanup_thread();
+    void close();
+
 private:
+    bool _running = false;
+    std::mutex _mutex;
+    std::condition_variable _cv;
+    std::unique_ptr<std::thread> _cleanup_thread;
     // readyonly after init
     std::unordered_map<std::string, PythonEnv> _envs;
 };
