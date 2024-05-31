@@ -93,11 +93,9 @@ static std::unique_ptr<DataStreamSender> create_data_stream_sink(
             params.__isset.enable_exchange_pass_through && params.enable_exchange_pass_through;
     bool enable_exchange_perf = params.__isset.enable_exchange_perf && params.enable_exchange_perf;
 
-    // TODO: figure out good buffer size based on size of output row
-    auto ret = std::make_unique<DataStreamSender>(state, sender_id, row_desc, data_stream_sink, destinations, 16 * 1024,
-                                                  send_query_statistics_with_every_batch, enable_exchange_pass_through,
-                                                  enable_exchange_perf);
-    return ret;
+    return std::make_unique<DataStreamSender>(state, sender_id, row_desc, data_stream_sink, destinations,
+                                              send_query_statistics_with_every_batch, enable_exchange_pass_through,
+                                              enable_exchange_perf);
 }
 
 Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
