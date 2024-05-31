@@ -74,6 +74,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
@@ -170,6 +172,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     private ReentrantReadWriteLock lock;
 
+    private final AtomicInteger beginChannelNum;
+    private final AtomicBoolean isStopGroup = new AtomicBoolean(false);
+    private final AtomicBoolean prepareFlag = new AtomicBoolean(false);
+    private final AtomicBoolean isScheduleManual = new AtomicBoolean(false);
+
     private void writeLock() {
         lock.writeLock().lock();
     }
@@ -222,6 +229,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.txnId = -1;
         this.errorMsg = null;
         this.warehouseId = warehouseId;
+        this.beginChannelNum = new AtomicInteger(0);
 
         init();
     }
@@ -239,6 +247,23 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.streamLoadParam = null;
         this.streamLoadInfo = null;
         this.isCommitting = false;
+    }
+
+    public int getChannelNum() {
+        return channelNum;
+    }
+
+    public int allocateChannel() {
+        int channelId = beginChannelNum.getAndIncrement();
+        return channelId >= channelNum ? -1 : channelId;
+    }
+
+    public int getNumAllocateChannels() {
+        return Math.min(channelNum, beginChannelNum.get());
+    }
+
+    public boolean setPrepareFlag() {
+        return prepareFlag.compareAndSet(false, true);
     }
 
     public void beginTxn(int channelId, int channelNum, TransactionResult resp) {
@@ -262,6 +287,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     resp.addResultEntry("Label", this.label);
                     resp.addResultEntry("TxnId", this.txnId);
                     resp.addResultEntry("BeginChannel", channelNum);
+                    resp.addResultEntry("ChannelId", channelId);
                     resp.addResultEntry("BeginTxnTimeMs", this.beforeLoadTimeMs - this.createTimeMs);
                     LOG.info("stream load {} channel_id {} begin. db: {}, tbl: {}, txn_id: {}",
                             label, channelId, dbName, tableName, txnId);
@@ -277,6 +303,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                     }
                     this.channels.set(channelId, State.BEFORE_LOAD);
                     resp.addResultEntry("BeginChannel", channelNum);
+                    resp.addResultEntry("Label", this.label);
+                    resp.addResultEntry("TxnId", this.txnId);
+                    resp.addResultEntry("ChannelId", channelId);
                     LOG.info("stream load {} channel_id {} begin. db: {}, tbl: {}, txn_id: {}",
                             label, channelId, dbName, tableName, txnId);
                     break;
@@ -389,6 +418,29 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             resp.setErrorMsg(this.errorMsg);
         }
         return null;
+    }
+
+    public void stopGroup() {
+        writeLock();
+        try {
+            isStopGroup.set(true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public boolean tryScheduleManualChannel() {
+        writeLock();
+        try {
+            if (beginChannelNum.get() < channelNum && isStopGroup.get()
+                    && !isScheduleManual.get() && !channelIdToBEHTTPAddress.isEmpty()) {
+                isScheduleManual.set(true);
+                return true;
+            }
+            return false;
+        } finally {
+            writeUnlock();
+        }
     }
 
     public TNetworkAddress executeTask(int channelId, HttpHeaders headers, TransactionResult resp) {
@@ -877,6 +929,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 }
                 this.state = State.CANCELLED;
                 writeUnlock();
+                LOG.info("Set state to cancel", new Exception());
             }
         } catch (Exception e) {
             LOG.warn("stream load " + label + " abort txn fail, errmsg: " + e.getMessage());
@@ -1128,6 +1181,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             errorMsg = txnState.getReason();
             gcObject();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            LOG.info("Set state to cancel", new Exception());
         } finally {
             writeUnlock();
             // sync stream load related query info should unregister here
@@ -1148,6 +1202,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             state = State.CANCELLED;
             endTimeMs = txnState.getFinishTime();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            LOG.info("Set state to cancel", new Exception());
         } finally {
             writeUnlock();
         }
@@ -1205,6 +1260,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
         endTimeMs = System.currentTimeMillis();
         state = State.CANCELLED;
+        LOG.info("Set state to cancel", new Exception());
     }
 
     private void replayTxnAttachment(TransactionState txnState) {
@@ -1260,6 +1316,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     public boolean isFinalState() {
         return state == State.CANCELLED || state == State.COMMITED || state == State.FINISHED;
+    }
+
+    public boolean isFinalStateWithLock() {
+        readLock();
+        try {
+            return state == State.CANCELLED || state == State.COMMITED || state == State.FINISHED;
+        } finally {
+            readUnlock();
+        }
     }
 
     public boolean isDurableLoadState() {

@@ -54,6 +54,10 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -69,6 +73,11 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
     private ReentrantReadWriteLock lock;
+
+    private StreamLoadTask activeLoadTask;
+
+    private final ScheduledExecutorService executorService =
+            Executors.newScheduledThreadPool(Config.stream_load_mgr_thread_pool_size);
 
     private void writeLock() {
         lock.writeLock().lock();
@@ -106,6 +115,11 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
                               int channelNum, int channelId, TransactionResult resp, long warehouseId) throws UserException {
+        if (label == null) {
+            beginLoadBatchTask(dbName, tableName, timeoutMillis, channelNum, resp, warehouseId);
+            return;
+        }
+
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -142,6 +156,106 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
         if (createTask) {
             GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob(task);
+        }
+    }
+
+    public void beginLoadBatchTask(String dbName, String tableName, long timeoutMillis,
+                              int channelNum, TransactionResult resp, long warehouseId) throws UserException {
+        Database db = checkDbName(dbName);
+        StreamLoadTask task = null;
+        int channelId = -1;
+        readLock();
+        try {
+            if (activeLoadTask != null && !activeLoadTask.isFinalStateWithLock()) {
+                channelId = activeLoadTask.allocateChannel();
+                if (channelId >= 0) {
+                    task = activeLoadTask;
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+        if (task != null) {
+            activeLoadTask.beginTxn(channelId, channelNum, resp);
+            return;
+        }
+
+        boolean createTask = false;
+        writeLock();
+        try {
+            if (activeLoadTask != null && activeLoadTask.isFinalStateWithLock()) {
+                channelId = activeLoadTask.allocateChannel();
+                if (channelId >= 0) {
+                    task = activeLoadTask;
+                }
+            }
+
+            if (task == null) {
+                String label = UUID.randomUUID().toString();
+                task = createLoadTask(db, tableName, label, timeoutMillis, channelNum, 0, warehouseId);
+                channelId = task.allocateChannel();
+                addLoadTask(task);
+                activeLoadTask = task;
+                createTask = true;
+            }
+            LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
+                    .add("msg", "create load task").build());
+        } finally {
+            writeUnlock();
+        }
+
+        task.beginTxn(channelId, channelNum, resp);
+        if (createTask) {
+            final StreamLoadTask scheduleTask = task;
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob(scheduleTask);
+            executorService.schedule(() -> stopGroup(scheduleTask),
+                    Config.stream_load_group_latency_ms, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void stopGroup(final StreamLoadTask task) {
+        readLock();
+        try {
+            if (activeLoadTask != task) {
+                return;
+            }
+        } finally {
+            readUnlock();
+        }
+
+        writeLock();
+        try {
+            if (activeLoadTask != task) {
+                return;
+            }
+            activeLoadTask = null;
+        } finally {
+            writeUnlock();
+        }
+        task.stopGroup();
+        scheduleManualLoad(task);
+    }
+
+    private void scheduleManualLoad(StreamLoadTask task) {
+        if (!task.tryScheduleManualChannel()) {
+            return;
+        }
+        for (int i = task.getNumAllocateChannels(); i < task.getChannelNum(); i++) {
+            final int channelId = i;
+            executorService.submit(() -> manualLoadChannel(task, channelId));
+        }
+    }
+
+    private void manualLoadChannel(StreamLoadTask task, int channelId) {
+        try {
+            LOG.info("Manual load channel, label: {}, channelId: {}", task.getLabel(), channelId);
+            TransactionResult beginResult = new TransactionResult();
+            task.beginTxn(channelId, task.getChannelNum(), beginResult);
+            TransactionResult prepareResult = new TransactionResult();
+            task.prepareChannel(channelId, null, prepareResult);
+            tryPrepareLoadTaskTxnAsync(task.getLabel());
+        } catch (Exception e) {
+            LOG.error("Failed to load channel manually, label: {}", task.getLabel(), e);
         }
     }
 
@@ -310,7 +424,9 @@ public class StreamLoadMgr implements MemoryTrackable {
             if (redirectAddress != null || !resp.stateOK() || resp.containMsg()) {
                 return redirectAddress;
             }
-            return task.executeTask(channelId, headers, resp);
+            TNetworkAddress address = task.executeTask(channelId, headers, resp);
+            scheduleManualLoad(task);
+            return address;
         } finally {
             if (needUnLock) {
                 readUnlock();
@@ -337,7 +453,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
     }
 
-    public void tryPrepareLoadTaskTxn(String label, TransactionResult resp)
+    public boolean tryPrepareLoadTaskTxn(String label, TransactionResult resp)
             throws UserException {
         boolean needUnLock = true;
         readLock();
@@ -346,16 +462,37 @@ public class StreamLoadMgr implements MemoryTrackable {
                 throw new UserException("stream load task " + label + " does not exist");
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
+            if (!task.checkNeedPrepareTxn()) {
+                return false;
+            }
+            if (!task.setPrepareFlag()) {
+                return false;
+            }
             readUnlock();
             needUnLock = false;
-            if (task.checkNeedPrepareTxn()) {
-                task.waitCoordFinishAndPrepareTxn(resp);
-            }
+            task.waitCoordFinishAndPrepareTxn(resp);
+            return true;
         } finally {
             if (needUnLock) {
                 readUnlock();
             }
         }
+    }
+
+    public void tryPrepareLoadTaskTxnAsync(final String label) throws UserException {
+        executorService.submit(() -> {
+            LOG.info("Prepare load task async, label: {}", label);
+            try {
+                TransactionResult prepareResult = new TransactionResult();
+                if (!tryPrepareLoadTaskTxn(label, prepareResult)) {
+                    return;
+                }
+                TransactionResult commitResult = new TransactionResult();
+                commitLoadTask(label, commitResult);
+            } catch (Exception e) {
+                LOG.error("Failed to prepare and commit load: {}", label, e);
+            }
+        });
     }
 
     public void commitLoadTask(String label, TransactionResult resp)

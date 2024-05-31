@@ -315,10 +315,6 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         String label = request.getRequest().headers().get(LABEL_KEY);
-        if (StringUtils.isBlank(label)) {
-            throw new UserException("Empty label.");
-        }
-
         TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
                 .orElseThrow(() -> new UserException(
                         "Unknown transaction operation: " + request.getSingleParameter(TXN_OP_KEY)));
@@ -337,14 +333,6 @@ public class TransactionLoadAction extends RestBaseAction {
                 .ofNullable(request.getRequest().headers().get(CHANNEL_NUM_STR))
                 .map(Integer::parseInt)
                 .orElse(null);
-
-        if (channelNum != null && channelId == null) {
-            throw new DdlException("Must provide channel_id when stream load begin.");
-        }
-
-        if (channelNum == null && channelId != null) {
-            throw new DdlException("Must provide channel_num when stream load begin.");
-        }
 
         Channel channel = new Channel(channelId, channelNum);
         if (LoadJobSourceType.BYPASS_WRITE.equals(sourceType) && channel.notNull()) {

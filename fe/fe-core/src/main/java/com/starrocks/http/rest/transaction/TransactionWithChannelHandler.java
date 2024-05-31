@@ -14,7 +14,6 @@
 
 package com.starrocks.http.rest.transaction;
 
-import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -53,13 +52,9 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
         TransactionResult result = new TransactionResult();
         switch (txnOperation) {
             case TXN_BEGIN:
-                if (channel.getId() >= channel.getNum() || channel.getId() < 0) {
-                    throw new DdlException(String.format(
-                            "Channel ID should be between [0, %d].", (channel.getNum() - 1)));
-                }
-
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
-                        dbName, tableName, label, timeoutMillis, channel.getNum(), channel.getId(), result);
+                        dbName, tableName, label, timeoutMillis, channel.getNum(),
+                        channel.getId() == null ? -1 : channel.getId(), result);
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
@@ -67,7 +62,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 if (!result.stateOK() || result.containMsg()) {
                     return new ResultWrapper(result);
                 }
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().tryPrepareLoadTaskTxn(label, result);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().tryPrepareLoadTaskTxnAsync(label);
                 return new ResultWrapper(result);
             case TXN_COMMIT:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(label, result);

@@ -2993,4 +2993,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+
+    @ConfField(mutable = false)
+    public static int stream_load_mgr_thread_pool_size = 32;
+
+    @ConfField(mutable = true)
+    public static int stream_load_group_latency_ms = 2000;
 }
