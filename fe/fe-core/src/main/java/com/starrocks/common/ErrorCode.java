@@ -207,6 +207,8 @@ public enum ErrorCode {
             "Unknown resource group '%s' "),
     ERR_BAD_CATALOG_AND_DB_ERROR(5080, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown catalog.db '%s'"),
+    ERR_CATALOG_EXISTED_ERROR(5607, new byte[] {'4', '2', '0', '0', '0'},
+            "catalog existed '%s'"),
     ERR_UNSUPPORTED_SQL_PATTERN(5081, new byte[] {'4', '2', '0', '0', '0'},
             "Only support like 'function_pattern' syntax."),
     ERR_WRONG_LABEL_NAME(5082, new byte[] {'4', '2', '0', '0', '0'},

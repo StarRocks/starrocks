@@ -61,6 +61,9 @@ public class CatalogStmtTest {
         String sql_6 = "CREATE EXTERNAL CATALOG catalog_5 properties(\"type\"=\"hive\")";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql_6);
         Assert.assertEquals("CREATE EXTERNAL CATALOG 'catalog_5' PROPERTIES(\"type\"  =  \"hive\")", stmt2.toSql());
+        String sql_7 = "CREATE EXTERNAL CATALOG catalog_6 IF NOT EXISTS PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        StatementBase stmt3 = AnalyzeTestUtil.analyzeSuccess(sql_7);
+        Assert.assertEquals("CREATE EXTERNAL CATALOG 'catalog_6' IF NOT EXISTS \"PROPERTIES(\"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\", \"type\"  =  \"hive\")", stmt3.toSql());
     }
 
     @Test
