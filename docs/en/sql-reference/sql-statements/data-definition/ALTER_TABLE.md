@@ -73,28 +73,58 @@ RENAME PARTITION <old_partition_name> <new_partition_name>
 
 #### Add a partition
 
-Syntax:
+You can add a singele range partition or multiple range partitions.
+
+Syntax：
 
 ```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
-[DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
+ALTER TABLE
+    ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
+
+single_range_partition ::=
+    PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
+
+partition_key_desc ::=
+    { LESS THAN { MAXVALUE | value_list }
+    | [ value_list , value_list ) } -- Note that [ represents a left-closed interval.
+
+value_list ::=
+    ( <value> [, ...] )
+
+multi_range_partitions ::=
+    { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values specified by START and END are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
 ```
 
-Note:
+Parameters:
 
-1. Partition_desc supports the following two expressions:
+- Partition-related parameters:
 
-    ```plain
-    VALUES LESS THAN [MAXVALUE|("value1", ...)]
-    VALUES ("value1", ...), ("value1", ...)
+  You can add a single range partition (`single_range_partition`) or multiple range partitions in batch (`multi_range_partitions`).
+
+- `distribution_desc`:
+
+   You can set the number of buckets for the new partition separately, but you cannot set the bucketing method separately.
+
+- `"key"="value"`:
+
+   You can set properties for the new partition. For details, see [CREATE TABLE](./CREATE_TABLE.md#properties).
+
+Examples:
+
+- If the partition column is specified as `event_day` at table creation, for example `PARTITION BY RANGE(event_day)`, and a new partition needs to be added after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE site_access
+        ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
     ```
 
-2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
-3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
-4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
+- If the partition column is specified as `datekey` at table creation, for example `PARTITION BY RANGE (datekey)`, and multiple partitions need to be added in batch after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE site_access
+        ADD PARTITIONS START ("2021-01-05") END ("2021-01-10") EVERY (INTERVAL 1 DAY);
+    ```
 
 #### Drop a partition
 
