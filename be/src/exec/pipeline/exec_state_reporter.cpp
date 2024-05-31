@@ -17,6 +17,8 @@
 #include <thrift/Thrift.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include <memory>
+
 #include "agent/master_info.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
@@ -41,12 +43,11 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
     return url.str();
 }
 
-TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
-                                                                            FragmentContext* fragment_ctx,
-                                                                            RuntimeProfile* profile,
-                                                                            RuntimeProfile* load_channel_profile,
-                                                                            const Status& status, bool done) {
-    TReportExecStatusParams params;
+std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_status_params(
+        QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
+        RuntimeProfile* load_channel_profile, const Status& status, bool done) {
+    auto res = std::make_unique<TReportExecStatusParams>();
+    TReportExecStatusParams& params = *res;
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
     DCHECK(profile != nullptr);
@@ -146,7 +147,7 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
     if (backend_id.has_value()) {
         params.__set_backend_id(backend_id.value());
     }
-    return params;
+    return res;
 }
 
 using apache::thrift::TException;

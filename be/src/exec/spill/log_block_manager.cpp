@@ -274,6 +274,7 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
                                                                    opts.name, opts.direct_io));
     auto res = std::make_shared<LogBlock>(block_container, block_container->size());
     res->set_is_remote(dir->is_remote());
+    res->set_exclusive(opts.exclusive);
     return res;
 }
 
@@ -290,7 +291,7 @@ Status LogBlockManager::release_block(const BlockPtr& block) {
     if (is_full) {
         TRACE_SPILL_LOG << "mark container as full: " << container->path();
         _full_containers.emplace_back(container);
-    } else {
+    } else if (!log_block->exclusive()) {
         TRACE_SPILL_LOG << "return container to the pool: " << container->path();
         auto dir = container->dir();
         int32_t plan_node_id = container->plan_node_id();

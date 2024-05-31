@@ -21,19 +21,21 @@
 #include "exec/spill/file_block_manager.h"
 #include "exec/spill/hybird_block_manager.h"
 #include "exec/spill/log_block_manager.h"
+#include "gen_cpp/InternalService_types.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::spill {
 
 Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options) {
+    const TSpillOptions& spill_options = query_options.spill_options;
     bool enable_spill_to_remote_storage =
-            query_options.__isset.enable_spill_to_remote_storage && query_options.enable_spill_to_remote_storage;
+            spill_options.__isset.enable_spill_to_remote_storage && spill_options.enable_spill_to_remote_storage;
     if (!enable_spill_to_remote_storage) {
         _block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
         return Status::OK();
     }
-    DCHECK(query_options.__isset.spill_to_remote_storage_options);
-    const auto& options = query_options.spill_to_remote_storage_options;
+    DCHECK(spill_options.__isset.spill_to_remote_storage_options);
+    const auto& options = spill_options.spill_to_remote_storage_options;
 
     if (!options.__isset.remote_storage_paths || !options.__isset.remote_storage_conf) {
         DCHECK(false) << "enable spill_to_remote_storage but remote_storage_paths or remote_storage_conf "

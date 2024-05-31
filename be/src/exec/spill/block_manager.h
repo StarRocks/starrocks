@@ -42,14 +42,22 @@ public:
     virtual std::string debug_string() const = 0;
 
     size_t size() const { return _size; }
+    size_t num_rows() const { return _num_rows; }
     bool is_remote() const { return _is_remote; }
     void set_is_remote(bool is_remote) { _is_remote = is_remote; }
 
     virtual bool preallocate(size_t write_size) = 0;
 
+    bool exclusive() const { return _exclusive; }
+    void set_exclusive(bool exclusive) { _exclusive = exclusive; }
+
+    void inc_num_rows(size_t num_rows) { _num_rows += num_rows; }
+
 protected:
+    size_t _num_rows{};
     size_t _size{};
     bool _is_remote = false;
+    bool _exclusive{};
 };
 
 using BlockPtr = std::shared_ptr<Block>;
@@ -76,6 +84,8 @@ struct AcquireBlockOptions {
     int32_t plan_node_id;
     std::string name;
     bool direct_io = false;
+    // The block will occupy the entire container, making it easier to remove the block.
+    bool exclusive = false;
     size_t block_size = 0;
 };
 
