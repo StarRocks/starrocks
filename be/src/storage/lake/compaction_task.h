@@ -31,7 +31,7 @@ class CompactionTask {
 public:
     // CancelFunc is a function that used to tell the compaction task whether the task
     // should be cancelled.
-    using CancelFunc = std::function<bool()>;
+    using CancelFunc = std::function<Status()>;
 
     explicit CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
                             CompactionTaskContext* context);
@@ -39,8 +39,8 @@ public:
 
     virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
 
-    inline static const CancelFunc kNoCancelFn = []() { return false; };
-    inline static const CancelFunc kCancelledFn = []() { return true; };
+    inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
+    inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
 
 protected:
     int64_t _txn_id;
