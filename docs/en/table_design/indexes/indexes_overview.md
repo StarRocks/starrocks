@@ -43,7 +43,7 @@ The bitmap index is suitable for queries on high cardinality columns or combinat
 
 ### [Bloom filter indexes](./Bloomfilter_index.md)
 
-The bloom filter index is suitable for columns with relatively high cardinality, such as ID columns, but they may incur a certain rate of misjudgment.
+The bloom filter index is suitable for columns with relatively high cardinality, such as ID columns, but it may incur a certain rate of misjudgment.
 
 ### [N-Gram bloom filter indexes](./Ngram_Bloom_Filter_Index.md)
 
