@@ -124,6 +124,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     // operators which are the children of Match operator
     private final ColumnRefSet matchChildren = new ColumnRefSet();
 
+    private final ColumnRefSet physicalOlapScanColumns = new ColumnRefSet();
+
     public DecodeCollector(SessionVariable session) {
         this.sessionVariable = session;
     }
@@ -131,6 +133,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     public void collect(OptExpression root, DecodeContext context) {
         collectImpl(root, null);
         initContext(context);
+    }
+
+    public boolean isValidMatchChildren() {
+        if (matchChildren.size() == 0) {
+            return true;
+        }
+
+        return physicalOlapScanColumns.containsAll(matchChildren);
     }
 
     private void initContext(DecodeContext context) {
@@ -482,6 +492,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             scanStringColumns.add(column.getId());
             expressionStringRefCounter.put(column.getId(), 0);
             globalDicts.put(column.getId(), dict.get());
+            physicalOlapScanColumns.union(column.getId());
         }
 
         if (info.outputStringColumns.isEmpty()) {
