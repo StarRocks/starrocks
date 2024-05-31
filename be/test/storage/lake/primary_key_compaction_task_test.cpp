@@ -195,7 +195,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -267,7 +267,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -334,7 +334,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
         } else {
             ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         }
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -391,7 +391,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -441,7 +441,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes_list[i].data(), indexes_list[i].size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -459,7 +459,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -516,7 +516,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
                                           indexes_list[chunk_index].size()));
             chunk_index++;
         }
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -534,7 +534,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -587,7 +587,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -657,7 +657,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -711,7 +711,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[chunk_write_without_order[i]], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -788,7 +788,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -833,7 +833,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -870,7 +870,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -940,7 +940,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1004,7 +1004,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1200,7 +1200,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1273,7 +1273,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1296,7 +1296,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
     }
 
@@ -1361,7 +1361,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1421,7 +1421,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -1456,7 +1456,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
                                                        .build());
             ASSERT_OK(delta_writer->open());
             ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-            ASSERT_OK(delta_writer->finish());
+            ASSERT_OK(delta_writer->finish_with_txnlog());
             delta_writer->close();
             // Publish version
             ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());

@@ -59,7 +59,10 @@ public:
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    StatusOr<TxnLogPtr> finish(DeltaWriterFinishMode mode = kWriteTxnLog);
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.

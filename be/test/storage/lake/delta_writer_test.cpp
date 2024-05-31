@@ -189,7 +189,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     // Write
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -276,7 +276,7 @@ TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
     // Write
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -348,7 +348,7 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
 
     // write()
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-    ASSERT_OK(delta_writer->finish(DeltaWriterFinishMode::kDontWriteTxnLog));
+    ASSERT_OK(delta_writer->finish_with_txnlog(DeltaWriterFinishMode::kDontWriteTxnLog));
     delta_writer->close();
 
     // TxnLog should not exist
@@ -377,7 +377,7 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
                                                .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     delta_writer->close();
 
     // Check TxnLog
@@ -406,7 +406,7 @@ TEST_F(LakeDeltaWriterTest, test_negative_txn_id) {
                                                .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
-    ASSERT_ERROR(delta_writer->finish());
+    ASSERT_ERROR(delta_writer->finish_with_txnlog());
     delta_writer->close();
 }
 
@@ -437,7 +437,7 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -488,7 +488,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -540,7 +540,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
@@ -591,7 +591,7 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     // close
     delta_writer->close();
 
