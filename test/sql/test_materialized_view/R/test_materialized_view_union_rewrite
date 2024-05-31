@@ -58,9 +58,8 @@ select * from t1 order by k1;
 -- result:
 2020-01-01	2020-01-01 01:00:00	1	1	1	1	1	1	1	1	1.0	1.0	1.000000000
 -- !result
-insert into unique_par_table_with_null values ('2023-01-02', '2020-01-01 01:00:00', '1', '1', 1, 1, 1, 1, 1, 1, 1, 1, 1.0);
+insert into t1 values ('2023-01-02', '2020-01-01 01:00:00', '1', '1', 1, 1, 1, 1, 1, 1, 1, 1, 1.0);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table unique_par_table_with_null is not found.')
 -- !result
 function: check_hit_materialized_view("select count(*) from t1", "test_mv0")
 -- result:
@@ -72,11 +71,12 @@ None
 -- !result
 select count(*) from t1;
 -- result:
-1
+2
 -- !result
 select * from t1 order by k1;
 -- result:
 2020-01-01	2020-01-01 01:00:00	1	1	1	1	1	1	1	1	1.0	1.0	1.000000000
+2023-01-02	2020-01-01 01:00:00	1	1	1	1	1	1	1	1	1.0	1.0	1.000000000
 -- !result
 drop materialized view test_mv0;
 -- result:
