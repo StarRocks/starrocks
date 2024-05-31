@@ -90,4 +90,4 @@ Status StatisticsHelper::decode_value_into_column(ColumnPtr column, const std::v
     return Status::OK();
 }
 
-} // starrocks::parquet
+} // namespace starrocks::parquet

@@ -16,8 +16,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "runtime/types.h"
 #include "formats/parquet/schema.h"
+#include "runtime/types.h"
 
 namespace starrocks::parquet {
 
@@ -27,6 +27,5 @@ public:
                                            const TypeDescriptor& type, const ParquetField* field,
                                            const std::string& timezone);
 };
-
 
 } // namespace starrocks::parquet
