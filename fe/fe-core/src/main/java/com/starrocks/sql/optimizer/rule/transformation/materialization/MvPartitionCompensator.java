@@ -500,9 +500,7 @@ public class MvPartitionCompensator {
             OptExpression optExpression,
             List<ColumnRefOperator> outputColumns,
             List<ColumnRefOperator> expectOutputColumns) {
-        if (outputColumns.size() != expectOutputColumns.size()) {
-            return null;
-        }
+        Preconditions.checkState(outputColumns.size() == expectOutputColumns.size());
         int len = outputColumns.size();
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         List<ColumnRefOperator> newChildOutputs = new ArrayList<>();

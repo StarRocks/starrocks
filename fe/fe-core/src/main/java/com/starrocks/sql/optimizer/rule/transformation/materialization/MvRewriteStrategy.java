@@ -131,4 +131,15 @@ public class MvRewriteStrategy {
         // cbo strategies
         strategy.enableMultiTableRewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
     }
+
+    @Override
+    public String toString() {
+        return "MvRewriteStrategy{" +
+                "enableMaterializedViewRewrite=" + enableMaterializedViewRewrite +
+                ", enableForceRBORewrite=" + enableForceRBORewrite +
+                ", enableViewBasedRewrite=" + enableViewBasedRewrite +
+                ", enableSingleTableRewrite=" + enableSingleTableRewrite +
+                ", enableMultiTableRewrite=" + enableMultiTableRewrite +
+                '}';
+    }
 }

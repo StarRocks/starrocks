@@ -813,7 +813,7 @@ public class Utils {
             return input;
         }
         Operator newOp = input.getOp();
-        if (newOp.getProjection() == null) {
+        if (newOp.getProjection() == null || newOp.getProjection().getColumnRefMap().isEmpty()) {
             newOp.setProjection(new Projection(newProjectionMap));
         } else {
             // merge two projections
