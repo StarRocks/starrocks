@@ -601,7 +601,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                             String plan = getFragmentPlan(query, "MV");
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
-                       }
+                        }
                     });
         });
     }
