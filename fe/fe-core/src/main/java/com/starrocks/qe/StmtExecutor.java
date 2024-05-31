@@ -382,6 +382,9 @@ public class StmtExecutor {
             sb.append(SessionVariable.RUNTIME_PROFILE_REPORT_INTERVAL).append("=")
                     .append(variables.getRuntimeProfileReportInterval())
                     .append(",");
+            sb.append(SessionVariable.ENABLE_PIPELINE_ENGINE).append("=")
+                    .append(variables.isEnablePipelineEngine())
+                    .append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
                         .append(",");
