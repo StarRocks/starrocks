@@ -115,12 +115,6 @@ Syntax：
         | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values specified by START and END are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
     ```
 
-<<<<<<< HEAD
-2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
-3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
-4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
-=======
 - List partitions
 
     ```SQL
@@ -187,7 +181,6 @@ Examples:
         ("2022-04-02", "San Francisco")
     );
     ```
->>>>>>> f46e8a5667 ([Doc] update partition desc in alter table (#46362))
 
 #### Drop a partition
 
