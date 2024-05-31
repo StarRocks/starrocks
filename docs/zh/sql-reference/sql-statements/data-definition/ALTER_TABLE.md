@@ -84,24 +84,24 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
 
 语法：
 
-    ```SQL
-    ALTER TABLE
-        ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
-    
-    single_range_partition ::=
-        PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
+```sql
+ALTER TABLE
+    ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
 
-    partition_key_desc ::=
-        { LESS THAN { MAXVALUE | value_list }
-        | [ value_list , value_list ) } -- 注意此处的 [ 代表左闭合区间
+single_range_partition ::=
+    PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
 
-    value_list ::=
-        ( <value> [, ...] )
+partition_key_desc ::=
+    { LESS THAN { MAXVALUE | value_list }
+    | [ value_list , value_list ) } -- 注意此处的 [ 代表左闭合区间
 
-    multi_range_partitions ::=
-        { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
-        | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
-    ```
+value_list ::=
+    ( <value> [, ...] )
+
+multi_range_partitions ::=
+    { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+```
 
 参数：
 
@@ -122,7 +122,8 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
 - 如果建表时指定分区列为 `event_day`，例如 `PARTITION BY RANGE(event_day)`，并且建表后需要新增一个分区，则可以执行：
 
     ```sql
-    ALTER TABLE site_access ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
+    ALTER TABLE site_access
+        ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
     ```
 
 - 如果建表时指定分区列为 `datekey`，例如 `PARTITION BY RANGE (datekey)`，并且建表后需要批量新增多个分区，则可以执行：
