@@ -91,28 +91,97 @@ Currently, column comments cannot be modified.
 
 #### Add a partition
 
-Syntax:
+You can choose to add range partitions or list partitions.
 
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
-[DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
-```
+Syntax：
 
-Note:
+- Range partitions
 
-1. Partition_desc supports the following two expressions:
+    ```SQL
+    ALTER TABLE
+        ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
 
-    ```plain
-    VALUES LESS THAN [MAXVALUE|("value1", ...)]
-    VALUES ("value1", ...), ("value1", ...)
+    single_range_partition ::=
+        PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
+
+    partition_key_desc ::=
+        { LESS THAN { MAXVALUE | value_list }
+        | [ value_list , value_list ) } -- Note that [ represents a left-closed interval.
+
+    value_list ::=
+        ( <value> [, ...] )
+
+    multi_range_partitions ::=
+        { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+        | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values specified by START and END are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
     ```
 
-2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
-3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
-4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. The user can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
+- List partitions
+
+    ```SQL
+    ALTER TABLE
+        ADD PARTITION <partition_name> VALUES IN (value_list) [distribution_desc] ["key"="value"];
+
+    value_list ::=
+        value_item [, ...]
+
+    value_item ::=
+        { <value> | ( <value> [, ...] ) }
+    ```
+
+Parameters:
+
+- Partition-related parameters:
+
+  - For range partitions, you can add a single range partition (`single_range_partition`) or multiple range partitions in batch (`multi_range_partitions`).
+  - For list partitions, you can only add a single list partition.
+
+- `distribution_desc`:
+
+   You can set the number of buckets for the new partition separately, but you cannot set the bucketing method separately.
+
+- `"key"="value"`:
+
+   You can set properties for the new partition. For details, see [CREATE TABLE](./CREATE_TABLE.md#properties).
+
+Examples:
+
+- Range partitions
+
+  - If the partition column is specified as `event_day` at table creation, for example `PARTITION BY RANGE(event_day)`, and a new partition needs to be added after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE site_access ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
+    ```
+
+  - If the partition column is specified as `datekey` at table creation, for example `PARTITION BY RANGE (datekey)`, and multiple partitions need to be added in batch after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE site_access
+        ADD PARTITIONS START ("2021-01-05") END ("2021-01-10") EVERY (INTERVAL 1 DAY);
+    ```
+
+- List partitions
+
+  - If a single partition column is specified at table creation, for example `PARTITION BY LIST (city)`, and a new partition needs to be added after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE t_recharge_detail2
+    ADD PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego");
+    ```
+
+  - If multiple partition columns are specified at table creation, for example `PARTITION BY LIST (dt,city)`, and a new partition needs to be added after table creation, you can execute:
+
+    ```sql
+    ALTER TABLE t_recharge_detail4 
+    ADD PARTITION p202204_California VALUES IN
+    (
+        ("2022-04-01", "Los Angeles"),
+        ("2022-04-01", "San Francisco"),
+        ("2022-04-02", "Los Angeles"),
+        ("2022-04-02", "San Francisco")
+    );
+    ```
 
 #### Drop a partition
 
