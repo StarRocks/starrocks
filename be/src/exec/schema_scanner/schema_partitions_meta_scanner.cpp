@@ -106,7 +106,7 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
     const TPartitionMetaInfo& info = _partitions_meta_response.partitions_meta_infos[_partitions_meta_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
-        if (slot_id < 1 || slot_id > 25) {
+        if (slot_id < 1 || slot_id > 28) {
             return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
         }
         ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -262,6 +262,22 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             // STORAGE_PATH
             Slice storage_path = Slice(info.storage_path);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&storage_path);
+            break;
+        }
+        case 26: {
+            // DATA_VERSION
+            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.data_version);
+            break;
+        }
+        case 27: {
+            // VERSION_EPOCH
+            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.version_epoch);
+            break;
+        }
+        case 28: {
+            // VERSION_TXN_TYPE
+            Slice version_txn_type = Slice(to_string(info.version_txn_type));
+            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&version_txn_type);
             break;
         }
         default:

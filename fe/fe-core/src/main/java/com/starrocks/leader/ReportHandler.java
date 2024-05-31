@@ -121,9 +121,9 @@ import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
+import com.starrocks.transaction.TransactionType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1276,7 +1276,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         new PublishVersionTask(backendId, txnId, gtid.orElse((long) 0), dbId, commitTime,
                                 map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
                                 createPublishVersionTaskTime, null,
-                                Config.enable_sync_publish, TTxnType.TXN_NORMAL);
+                                Config.enable_sync_publish, TransactionType.TXN_NORMAL);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);
@@ -1739,7 +1739,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         AgentBatchTask batchTask = new AgentBatchTask();
         for (Long transactionId : transactionsToClear.keySet()) {
             ClearTransactionTask clearTransactionTask = new ClearTransactionTask(backendId,
-                    transactionId, transactionsToClear.get(transactionId), TTxnType.TXN_NORMAL);
+                    transactionId, transactionsToClear.get(transactionId), TransactionType.TXN_NORMAL);
             batchTask.addTask(clearTransactionTask);
         }
 

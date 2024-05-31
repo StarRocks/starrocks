@@ -55,6 +55,9 @@ public class PartitionsMetaSystemTable {
                         .column("P50_CS", ScalarType.createType(PrimitiveType.DOUBLE))
                         .column("MAX_CS", ScalarType.createType(PrimitiveType.DOUBLE))
                         .column("STORAGE_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("DATA_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("VERSION_EPOCH", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("VERSION_TXN_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }
