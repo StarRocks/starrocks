@@ -35,11 +35,11 @@ Each data chunk can be a segment, or a data page of a column. So correspondingly
 
 ## Manually created indexes
 
-If the column in the query condition is not a prefix field, you can manually create indexes to this column based on the characteristics of data and queries to improve query efficiency.
+If the column in the query condition is not a prefix field, you can manually create an index to this column based on the characteristics of data and queries to improve query efficiency.
 
 ### [Bitmap indexes](./Bitmap_index.md)
 
-The bitmap index is suitable for queries on high cardinality columns or combinations of multiple low cardinality columns. Also, bitmap indexes exhibit ideal filtering performance, and can filter out at least 999 out of 1000 rows.
+The bitmap index is suitable for queries on high cardinality columns or combinations of multiple low cardinality columns. And the bitmap index can exhibit ideal filtering performance for those queries, filtering out at least 999 out of 1000 rows.
 
 ### [Bloom filter indexes](./Bloomfilter_index.md)
 
