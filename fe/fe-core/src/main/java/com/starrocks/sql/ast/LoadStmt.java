@@ -150,10 +150,10 @@ public class LoadStmt extends DdlStmt {
             .add(PARTIAL_UPDATE_MODE)
             .add(SPARK_LOAD_SUBMIT_TIMEOUT)
             .add(MERGE_CONDITION)
-            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .add(STRIP_OUTER_ARRAY)
             .add(JSONPATHS)
             .add(JSONROOT)
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,
