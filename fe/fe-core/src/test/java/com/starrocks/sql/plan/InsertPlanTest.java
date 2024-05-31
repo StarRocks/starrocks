@@ -1025,7 +1025,7 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testInsertIgnoreForPrimaryTable() throws Exception {
+    public void testInsertIgnore() throws Exception {
         String sql = "explain insert ignore into tprimary select * from tprimary";
         String plan = getInsertExecPlan(sql);
         assertContains(plan, "  OLAP TABLE SINK\n" +
@@ -1038,10 +1038,17 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testInsertIgnoreForDupTable() throws Exception {
-        String sql = "explain insert ignore into t0 select * from t0";
+    public void testInsertIgnoreCheck() {
+        // check olap table
         try {
-            getInsertExecPlan(sql);
+            getInsertExecPlan("insert ignore into test.mysql_table select v1,v2 from t0");
+            Assert.fail();
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "Only support insert ignore for olap table");
+        }
+        // check primary key engine
+        try {
+            getInsertExecPlan("explain insert ignore into t0 select * from t0");
             Assert.fail();
         } catch (Exception e) {
             assertContains(e.getMessage(), "Only support insert ignore for primary key olap table");
