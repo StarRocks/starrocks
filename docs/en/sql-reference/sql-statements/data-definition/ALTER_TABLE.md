@@ -73,7 +73,7 @@ RENAME PARTITION <old_partition_name> <new_partition_name>
 
 #### Add a partition
 
-You can choose to add range partitions.
+You can add a singele range partition or multiple range partitions.
 
 Syntax：
 
