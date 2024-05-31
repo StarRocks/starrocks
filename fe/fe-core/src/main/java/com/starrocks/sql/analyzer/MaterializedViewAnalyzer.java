@@ -41,6 +41,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -311,6 +312,8 @@ public class MaterializedViewAnalyzer {
                 Preconditions.checkState(pair.second < outputExpressions.size());
                 columnExprMap.put(pair.first, outputExpressions.get(pair.second));
             }
+
+            checkBaseTablePartitionType(aliasTableMap);
             // some check if partition exp exists
             if (statement.getPartitionExpDesc() != null) {
                 // check partition expression all in column list and
@@ -753,6 +756,18 @@ public class MaterializedViewAnalyzer {
                             functionName + " check failed: " + expr.toSqlWithoutTbl(), functionCallExpr.getPos());
                 }
             }
+        }
+
+        private void checkBaseTablePartitionType(Map<TableName, Table> tableNameTableMap) {
+            tableNameTableMap.forEach((tableName, table) -> {
+                if (table.isNativeTableOrMaterializedView()) {
+                    PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
+                    if (partitionInfo instanceof ListPartitionInfo) {
+                        throw new SemanticException(String.format("Materialized view related base table:%s " +
+                                "partition type:%s not supports", table.getName(), partitionInfo.getType().name()));
+                    }
+                }
+            });
         }
 
         private void checkPartitionColumnWithBaseTable(CreateMaterializedViewStatement statement,
