@@ -121,10 +121,12 @@ TEST_F(LakeRowsetTest, test_load_segments) {
 
     ASSIGN_OR_ABORT(auto rowsets, tablet.get_rowsets(2));
     ASSERT_EQ(1, rowsets.size());
-    auto& rowset = rowsets[0];
+    auto rowset = rowsets[0];
 
     // fill cache: false
-    ASSIGN_OR_ABORT(auto segments1, rowset->segments(false));
+    auto io_options = LakeIOOptions{.fill_data_cache = false};
+    auto fill_meta_cache = false;
+    ASSIGN_OR_ABORT(auto segments1, rowset->segments(io_options, fill_meta_cache));
     ASSERT_EQ(2, segments1.size());
     for (const auto& seg : segments1) {
         auto segment = cache->lookup_segment(seg->file_name());
@@ -132,6 +134,8 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     }
 
     // fill data cache: false, fill metadata cache: true
+    ASSIGN_OR_ABORT(rowsets, tablet.get_rowsets(2));
+    rowset = rowsets[0];
     LakeIOOptions lake_io_opts{.fill_data_cache = false};
     ASSIGN_OR_ABORT(auto segments2, rowset->segments(lake_io_opts, true));
     ASSERT_EQ(2, segments2.size());
@@ -144,9 +148,11 @@ TEST_F(LakeRowsetTest, test_load_segments) {
 TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     create_rowsets_for_testing();
 
+    auto io_options = LakeIOOptions{.fill_data_cache = false};
+    auto fill_meta_cache = false;
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     ASSIGN_OR_ABORT(auto rowsets, tablet.get_rowsets(2));
-    ASSIGN_OR_ABORT(auto segments, rowsets[0]->segments(false));
+    ASSIGN_OR_ABORT(auto segments, rowsets[0]->segments(io_options, fill_meta_cache));
 
     auto* cache = _tablet_mgr->metacache();
 

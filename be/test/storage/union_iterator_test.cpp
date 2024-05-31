@@ -125,7 +125,7 @@ TEST_F(UnionIteratorTest, union_two) {
 
     std::vector<RowSourceMask> source_masks;
     st = iter->get_next(chunk.get(), &source_masks, &rssid_rowids);
-    ASSERT_TRUE(st.is_not_supported());
+    ASSERT_TRUE(st.is_end_of_file());
 }
 
 // NOLINTNEXTLINE

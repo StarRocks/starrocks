@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <bvar/bvar.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -23,8 +24,8 @@
 #include "column/schema.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/prof/heap_prof.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/tablet_manager.h"
@@ -35,14 +36,51 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/init_test_env.h"
+#include "util/random.h"
 
 namespace starrocks::lake {
 
 using namespace starrocks;
 
+namespace {
+struct CompactionParam {
+    CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
+    uint32_t vertical_compaction_max_columns_per_group = 5;
+    int64_t num_segments = 0; // Only used in performance test
+    int64_t max_merge_ways = 0;
+};
+
+static std::string to_string_param_name(const testing::TestParamInfo<CompactionParam>& info) {
+    std::stringstream ss;
+    ss << CompactionUtils::compaction_algorithm_to_string(info.param.algorithm) << "_"
+       << info.param.vertical_compaction_max_columns_per_group << "_" << info.param.num_segments << "_"
+       << info.param.max_merge_ways;
+    return ss.str();
+}
+} // namespace
+
 class LakeCompactionTest : public TestBase, testing::WithParamInterface<CompactionParam> {
 public:
-    LakeCompactionTest(std::string test_dir) : TestBase(test_dir) {}
+    LakeCompactionTest(std::string test_dir) : TestBase(std::move(test_dir)) {}
+
+    void SetUp() override {
+        config::enable_size_tiered_compaction_strategy = false;
+
+        _config_backup_lake_compaction_max_merge_way_count = config::lake_compaction_max_merge_way_count;
+        config::lake_compaction_max_merge_way_count = GetParam().max_merge_ways;
+
+        _config_backup_vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+        config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+
+        clear_and_init_test_dir();
+    }
+
+    void TearDown() override {
+        config::lake_compaction_max_merge_way_count = _config_backup_lake_compaction_max_merge_way_count;
+        config::vertical_compaction_max_columns_per_group = _config_backup_vertical_compaction_max_columns_per_group;
+        config::enable_size_tiered_compaction_strategy = true;
+        remove_test_dir_ignore_error();
+    }
 
     void check_task(CompactionTaskPtr& task) {
         if (GetParam().algorithm == HORIZONTAL_COMPACTION) {
@@ -52,6 +90,10 @@ public:
             ASSERT_TRUE(dynamic_cast<VerticalCompactionTask*>(task.get()) != nullptr);
         }
     }
+
+private:
+    int64_t _config_backup_lake_compaction_max_merge_way_count{};
+    int64_t _config_backup_vertical_compaction_max_columns_per_group{};
 };
 
 class LakeDuplicateKeyCompactionTest : public LakeCompactionTest {
@@ -67,12 +109,11 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        config::enable_size_tiered_compaction_strategy = false;
-        clear_and_init_test_dir();
+        LakeCompactionTest::SetUp();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override { LakeCompactionTest::TearDown(); }
 
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
@@ -119,7 +160,6 @@ protected:
 };
 
 TEST_P(LakeDuplicateKeyCompactionTest, test1) {
-    config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -164,12 +204,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
-INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
-                         to_string_param_name);
-
-TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
+TEST_P(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     auto version = 1;
     ASSERT_EQ(0, read(version));
 
@@ -184,6 +219,13 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     ASSERT_EQ(0, read(version));
 }
 
+INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, 0, 0},
+                                           CompactionParam{HORIZONTAL_COMPACTION, 5, 0, 2},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, 0, 0},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, 0, 2}),
+                         to_string_param_name);
+
 class LakeDuplicateKeyOverlapSegmentsCompactionTest : public LakeCompactionTest {
 public:
     LakeDuplicateKeyOverlapSegmentsCompactionTest() : LakeCompactionTest(kTestDirectory) {
@@ -197,11 +239,11 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        clear_and_init_test_dir();
+        LakeCompactionTest::SetUp();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override { LakeCompactionTest::TearDown(); }
 
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
@@ -248,7 +290,6 @@ protected:
 };
 
 TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
-    config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -330,8 +371,10 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, LakeDuplicateKeyOverlapSegmentsCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, 0, 0},
+                                           CompactionParam{HORIZONTAL_COMPACTION, 5, 0, 2},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, 0, 0},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, 0, 2}),
                          to_string_param_name);
 
 class LakeUniqueKeyCompactionTest : public LakeCompactionTest {
@@ -347,11 +390,11 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        clear_and_init_test_dir();
+        LakeCompactionTest::SetUp();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override { LakeCompactionTest::TearDown(); }
 
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
@@ -398,7 +441,6 @@ protected:
 };
 
 TEST_P(LakeUniqueKeyCompactionTest, test1) {
-    config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -444,8 +486,10 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionTest, LakeUniqueKeyCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, 0, 0},
+                                           CompactionParam{HORIZONTAL_COMPACTION, 5, 0, 2},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, 0, 0},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, 0, 2}),
                          to_string_param_name);
 
 class LakeUniqueKeyCompactionWithDeleteTest : public LakeCompactionTest {
@@ -461,11 +505,11 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        clear_and_init_test_dir();
+        LakeCompactionTest::SetUp();
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override { LakeCompactionTest::TearDown(); }
 
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
@@ -512,7 +556,6 @@ protected:
 };
 
 TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
-    config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -582,8 +625,10 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionWithDeleteTest, LakeUniqueKeyCompactionWithDeleteTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, 0, 0},
+                                           CompactionParam{HORIZONTAL_COMPACTION, 5, 0, 2},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, 0, 0},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, 0, 2}),
                          to_string_param_name);
 
 } // namespace starrocks::lake

@@ -47,11 +47,6 @@ protected:
             return Status::OK();
         }
 
-        // 10 elements at most every time.
-        Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override {
-            return do_get_next(chunk);
-        }
-
         void close() override {}
 
         static Schema new_schema() {

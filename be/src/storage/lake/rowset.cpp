@@ -54,6 +54,9 @@ Rowset::~Rowset() {
         DCHECK_EQ(_metadata, &_tablet_metadata->rowsets(_index))
                 << "tablet metadata been modified during rowset been destroyed";
     }
+    if (_metadata_ownership == kTakesOwnership) {
+        delete _metadata;
+    }
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
@@ -115,9 +118,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         options.stats->segments_read_count += num_segments();
     }
 
-    std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, options.lake_io_opts.fill_data_cache, options.lake_io_opts.buffer_size));
-    for (auto& seg_ptr : segments) {
+    RETURN_IF_ERROR(load_segments(options.lake_io_opts, -1));
+    for (auto& seg_ptr : _segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
@@ -159,11 +161,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 }
 
 StatusOr<size_t> Rowset::get_read_iterator_num() {
-    std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .buffer_size = -1};
+    RETURN_IF_ERROR(load_segments(lake_io_opts, false));
 
     size_t segment_num = 0;
-    for (auto& seg_ptr : segments) {
+    for (auto& seg_ptr : _segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
@@ -179,15 +181,15 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema,
                                                                           OlapReaderStatistics* stats) {
-    std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    LakeIOOptions options{.fill_data_cache = false, .buffer_size = -1};
+    RETURN_IF_ERROR(load_segments(options, false));
     std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(segments.size());
+    seg_iterators.reserve(_segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
-    for (auto& seg_ptr : segments) {
+    for (auto& seg_ptr : _segments) {
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -204,11 +206,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
                                                                                       int64_t version,
                                                                                       const MetaFileBuilder* builder,
                                                                                       OlapReaderStatistics* stats) {
-    std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    LakeIOOptions options{.fill_data_cache = false, .buffer_size = -1};
+    RETURN_IF_ERROR(load_segments(options, false));
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(segments.size());
+    seg_iterators.reserve(_segments.size());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
@@ -218,7 +220,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.version = version;
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
-    for (auto& seg_ptr : segments) {
+    for (auto& seg_ptr : _segments) {
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -238,44 +240,33 @@ RowsetId Rowset::rowset_id() const {
 }
 
 std::vector<SegmentSharedPtr> Rowset::get_segments() {
-    if (!_segments.empty()) {
-        return _segments;
-    }
-
-    auto segments_or = segments(true);
-    if (!segments_or.ok()) {
+    auto io_opts = LakeIOOptions{.fill_data_cache = true};
+    auto fill_meta_cache = true;
+    auto st = load_segments(io_opts, fill_meta_cache);
+    if (!st.ok()) {
+        // FIXME: should return error
         return {};
     }
-    _segments = std::move(segments_or.value());
     return _segments;
 }
 
-StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
-    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache};
-    return segments(lake_io_opts, fill_cache);
-}
-
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache) {
-    std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, lake_io_opts, fill_metadata_cache));
-    return segments;
+    RETURN_IF_ERROR(load_segments(lake_io_opts, fill_metadata_cache));
+    return _segments;
 }
 
-Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {
-    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache, .buffer_size = buffer_size};
-    return load_segments(segments, lake_io_opts, fill_cache);
-}
-
-Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
-                             bool fill_metadata_cache) {
+Status Rowset::load_segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache) {
+    if (!_segments.empty()) {
+        return Status::OK();
+    }
 #ifndef BE_TEST
     RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
 #endif
-
-    segments->reserve(segments->size() + metadata().segments_size());
+    std::vector<SegmentSharedPtr> segments;
+    segments.reserve(metadata().segments_size());
 
     size_t footer_size_hint = 16 * 1024;
-    uint32_t seg_id = 0;
+    uint32_t seg_id = _first_segment_id;
     bool ignore_lost_segment = config::experimental_lake_ignore_lost_segment;
 
     // RowsetMetaData upgrade from old version may not have the field of segment_size
@@ -292,7 +283,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
     std::vector<std::future<std::pair<StatusOr<SegmentPtr>, std::string>>> segment_futures;
     auto check_status = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name) -> Status {
         if (segment_or.ok()) {
-            segments->emplace_back(std::move(segment_or.value()));
+            segments.emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
             LOG(WARNING) << "Ignored lost segment " << seg_name;
         } else {
@@ -346,6 +337,9 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
             return status;
         }
     }
+
+    _segments = std::move(segments);
+
     return Status::OK();
 }
 

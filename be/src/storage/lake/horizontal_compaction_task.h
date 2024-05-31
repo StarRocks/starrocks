@@ -36,10 +36,12 @@ public:
 
     ~HorizontalCompactionTask() override = default;
 
-    Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
+protected:
+    StatusOr<RowsetPtr> compact(const RowsetList& input_rowsets, const CancelFunc& cancel_func,
+                                ThreadPool* flush_pool) override;
 
 private:
-    StatusOr<int32_t> calculate_chunk_size();
+    StatusOr<int32_t> calculate_chunk_size(const RowsetList& input_rowsets);
 };
 
 } // namespace starrocks::lake
