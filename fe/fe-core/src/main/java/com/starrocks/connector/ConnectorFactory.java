@@ -48,10 +48,24 @@ public class ConnectorFactory {
                 connector.bindConfig(connectorConfig);
             }
 
+<<<<<<< HEAD
             return connector;
         } catch (Exception e) {
             LOG.error("can't create connector for type: " + context.getType(), e);
             return null;
+=======
+            InformationSchemaConnector informationSchemaConnector =
+                    new InformationSchemaConnector(context.getCatalogName());
+            TableMetaConnector tableMetaConnector = new TableMetaConnector(context.getCatalogName());
+            return new CatalogConnector(connector, informationSchemaConnector, tableMetaConnector);
+        } catch (InvocationTargetException e) {
+            LOG.error(String.format("create [%s] connector failed", context.getType()), e);
+            Throwable rootCause = ExceptionUtils.getCause(e);
+            throw new StarRocksConnectorException(rootCause.getMessage(), rootCause);
+        } catch (Exception e1) {
+            LOG.error(String.format("create [%s] connector failed", context.getType()), e1);
+            throw new StarRocksConnectorException(e1.getMessage(), e1);
+>>>>>>> 53e85d1ce7 ([Enhancement] Throw exception when create connector failed (#46443))
         }
     }
 }
