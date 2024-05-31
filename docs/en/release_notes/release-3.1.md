@@ -4,6 +4,34 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+Release date: May 30, 2024
+
+## 3.1.12
+
+### New Features
+
+- Flink connector supports reading complex data types ARRAY, MAP, and STRUCT from StarRocks. [#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+
+### Improvements
+
+- Previously, when BE failed to communicate with FE via RPC, FE would return a generic error message: `call frontend service failed reason=xxx`, making it unclear what the specific issue was. The error messages are now optimized to include specific reasons, such as timeout or server busy. [#44153](https://github.com/StarRocks/starrocks/pull/44153)
+- Improved error messages to indicate specific issues during data loading, such as the number of error data rows exceeding limits, mismatched column numbers, invalid column names, and no data in any partition.
+
+### Security
+
+- Upgraded Kafka client dependency to v3.4.0 to fix the CVE-2023-25194 security issue. [#45382](https://github.com/StarRocks/starrocks/pull/45382)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- If a materialized view definition includes multiple self-joins of the same table and incremental refreshes by partitions based on that table, incorrect results would occur due to wrong partition selection. [#45936](https://github.com/StarRocks/starrocks/pull/45936)
+- FEs crash when a Bitmap index is created in a materialized view in shared-data clusters. [#45665](https://github.com/StarRocks/starrocks/pull/45665)
+- BEs crash due to null pointer issues when FE follower is connected via ODBC and CREATE TABLE is executed. [#45043](https://github.com/StarRocks/starrocks/pull/45043)
+- Querying `information_schema.task_runs` fails frequently when many asynchronous tasks exist. [#45520](https://github.com/StarRocks/starrocks/pull/45520)
+- When a SQL statement contains multiple COUNT DISTINCT and includes LIMIT, LIMIT is wrongly processed, resulting in inconsistent data returned each time the statement is executed. [#44749](https://github.com/StarRocks/starrocks/pull/44749)
+- Queries with ORDER BY LIMIT clauses on Duplicate Key tables and Aggregate tables produce incorrect results. [#45037](https://github.com/StarRocks/starrocks/pull/45037)
+
 ## 3.1.11
 
 Release date: April 28, 2024
