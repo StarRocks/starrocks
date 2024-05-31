@@ -155,6 +155,10 @@ public:
     void set_prober_finished();
     Columns string_key_columns() { return _string_key_columns; }
 
+    void update_partial_runtime_bloom_filter_bytes(int64_t total_bytes) {
+        COUNTER_UPDATE(_partial_runtime_bloom_filter_bytes, total_bytes);
+    }
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
@@ -384,6 +388,7 @@ private:
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
     RuntimeProfile::Counter* _build_buckets_counter = nullptr;
     RuntimeProfile::Counter* _runtime_filter_num = nullptr;
+    RuntimeProfile::Counter* _partial_runtime_bloom_filter_bytes = nullptr;
 
     // Profile for hash join prober.
     RuntimeProfile::Counter* _search_ht_timer = nullptr;

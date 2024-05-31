@@ -88,6 +88,15 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         auto&& in_filters = _partial_rf_merger->get_total_in_filters();
         auto&& bloom_filters = _partial_rf_merger->get_total_bloom_filters();
 
+        {
+            size_t total_bf_bytes = std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
+                                                    [](size_t total, RuntimeBloomFilter* desc) -> size_t {
+                                                        auto rf = desc->runtime_filter();
+                                                        total += (rf == nullptr ? 0 : rf->bf_alloc_size());
+                                                        return total;
+                                                    });
+            _join_builder->update_partial_runtime_bloom_filter_bytes(total_bf_bytes);
+        }
         // publish runtime bloom-filters
         state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
         // move runtime filters into RuntimeFilterHub.
