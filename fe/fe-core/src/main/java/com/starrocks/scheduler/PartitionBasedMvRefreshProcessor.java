@@ -706,7 +706,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     currentVersionMap.get(tableId);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
             LOG.info("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
-                    materializedView.getName(), partitionTable.getName(), partitionInfoMap, currentTablePartitionInfo);
+                    materializedView.getName(), tableId, partitionInfoMap, currentTablePartitionInfo);
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
             // remove partition info of not-exist partition for snapshot table from version map
