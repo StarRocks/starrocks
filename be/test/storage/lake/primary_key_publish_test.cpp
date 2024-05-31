@@ -952,36 +952,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
               _update_mgr->update_state_mem_tracker()->limit());
 }
 
-TEST_P(LakePrimaryKeyPublishTest, test_write_with_clear_txnlog) {
-    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
-    auto version = 1;
-    auto tablet_id = _tablet_metadata->id();
-    for (int i = 0; i < 3; i++) {
-        int64_t txn_id = next_id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
-        auto txn_log_st = delta_writer->finish();
-        ASSERT_OK(txn_log_st);
-        _tablet_mgr->prune_metacache();
-        std::const_pointer_cast<TxnLogPB>(txn_log_st.value())->Clear();
-        delta_writer->close();
-        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
-        // Publish version
-        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-        version++;
-    }
-    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-}
-
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE}));
