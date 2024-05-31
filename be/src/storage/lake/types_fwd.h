@@ -30,6 +30,7 @@ class RowsetMetadataPB;
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 using RowsetMetadata = RowsetMetadataPB;
 using RowsetMetadataPtr = std::shared_ptr<const RowsetMetadata>;
+using RowsetMetadataUniquePtr = std::unique_ptr<const RowsetMetadata>;
 
 namespace lake {
 
