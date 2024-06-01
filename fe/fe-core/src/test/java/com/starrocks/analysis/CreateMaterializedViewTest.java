@@ -3721,7 +3721,6 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("list_partition_tbl1");
     }
 
-
     @Test
     public void testCreateMaterializedViewOnListPartitionTables2() throws Exception {
         String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
