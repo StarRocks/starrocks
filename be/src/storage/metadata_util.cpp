@@ -346,6 +346,27 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                 properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
                 std::string str = to_json(properties_map);
                 index_pb->set_index_properties(str);
+            } else if (index.index_type == TIndexType::type::VECTOR) {
+                RETURN_IF(index.columns.size() != 1,
+                          Status::Cancelled("VECTOR index " + index.index_name +
+                                            " do not support to build with more than one column"));
+                index_pb->set_index_type(IndexType::VECTOR);
+
+                const auto& index_col_name = index.columns[0];
+                const auto& mit = column_map.find(boost::to_lower_copy(index_col_name));
+
+                if (mit != column_map.end()) {
+                    index_pb->add_col_unique_id(mit->second->unique_id());
+                } else {
+                    return Status::Cancelled(
+                            strings::Substitute("index column $0 can not be found in table columns", index.columns[0]));
+                }
+
+                std::map<std::string, std::map<std::string, std::string>> properties_map;
+                properties_map.emplace(COMMON_PROPERTIES, index.common_properties);
+                properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
+                properties_map.emplace(SEARCH_PROPERTIES, index.search_properties);
+                properties_map.emplace(EXTRA_PROPERTIES, index.extra_properties);
             } else {
                 std::string index_type;
                 EnumToString(TIndexType, index.index_type, index_type);

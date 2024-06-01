@@ -35,10 +35,9 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
-import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
-import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
-import com.starrocks.common.NgramBfIndexParamsKey;
+import com.starrocks.common.IndexParams;
+import com.starrocks.common.IndexParams.IndexParamItem;
+import com.starrocks.common.IndexParams.IndexParamType;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
@@ -263,61 +262,36 @@ public class Index implements Writable {
             Map<String, String> indexProperties = new HashMap<>();
             Map<String, String> searchProperties = new HashMap<>();
             Map<String, String> extraProperties = new HashMap<>();
-            Set<String> commonIndexParamKeySet;
-            Set<String> indexIndexParamKeySet;
-            Set<String> searchIndexParamKeySet;
-            if (indexType == IndexType.GIN) {
-                commonIndexParamKeySet = Arrays.stream(CommonIndexParamKey.values())
-                        .map(e -> e.name().toUpperCase(Locale.ROOT))
-                        .collect(Collectors.toSet());
-                indexIndexParamKeySet = Arrays.stream(IndexParamsKey.values())
-                        .map(e -> e.name().toUpperCase(Locale.ROOT))
-                        .collect(Collectors.toSet());
-                searchIndexParamKeySet = Arrays.stream(SearchParamsKey.values())
-                        .map(e -> e.name().toUpperCase(Locale.ROOT))
-                        .collect(Collectors.toSet());
-            } else if (indexType == IndexType.NGRAMBF) {
-                commonIndexParamKeySet = Collections.emptySet();
-                indexIndexParamKeySet = Arrays.stream(NgramBfIndexParamsKey.values())
-                        .map(e -> e.name().toUpperCase(Locale.ROOT))
-                        .collect(Collectors.toSet());
-                searchIndexParamKeySet = Collections.emptySet();
-            } else {
-                commonIndexParamKeySet = Collections.emptySet();
-                indexIndexParamKeySet = Collections.emptySet();
-                searchIndexParamKeySet = Collections.emptySet();
-            }
 
-            // only keep valid properties
+            IndexParams indexParams = IndexParams.getInstance();
+            Map<String, IndexParamItem> commonIndexParams = indexParams.getKeySet(indexType, IndexParamType.COMMON);
+            Map<String, IndexParamItem> indexIndexParams = indexParams.getKeySet(indexType, IndexParamType.INDEX);
+            Map<String, IndexParamItem> searchIndexParams = indexParams.getKeySet(indexType, IndexParamType.SEARCH);
             for (Entry<String, String> propEntry : properties.entrySet()) {
                 String key = propEntry.getKey();
                 String value = propEntry.getValue();
                 String upperKey = key.toUpperCase(Locale.ROOT);
-                if (commonIndexParamKeySet.contains(upperKey)) {
+                if (commonIndexParams.containsKey(upperKey)) {
                     commonProperties.put(key, value);
-                } else if (indexIndexParamKeySet.contains(upperKey)) {
+                    commonIndexParams.remove(upperKey);
+                } else if (indexIndexParams.containsKey(upperKey)) {
                     indexProperties.put(key, value);
-                } else if (searchIndexParamKeySet.contains(upperKey)) {
+                    indexIndexParams.remove(upperKey);
+                } else if (searchIndexParams.containsKey(upperKey)) {
                     searchProperties.put(key, value);
+                    searchIndexParams.remove(upperKey);
                 } else {
                     extraProperties.put(key, value);
                 }
             }
 
-            // Add default values for missing properties
-            if (indexType == IndexType.GIN) {
-                Arrays.stream(CommonIndexParamKey.values())
-                        .filter(k -> !commonProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) &&
-                                k.needDefault())
-                        .forEach(k -> commonProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-                Arrays.stream(IndexParamsKey.values())
-                        .filter(k -> !indexProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) && k.needDefault())
-                        .forEach(k -> indexProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-                Arrays.stream(SearchParamsKey.values())
-                        .filter(k -> !searchProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) &&
-                                k.needDefault())
-                        .forEach(k -> searchProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-            }
+            // set default value
+            commonIndexParams.entrySet().stream().filter(p -> p.getValue().needDefault())
+                    .forEach(p -> commonProperties.put(p.getKey().toLowerCase(Locale.ROOT), p.getValue().getDefaultValue()));
+            indexIndexParams.entrySet().stream().filter(p -> p.getValue().needDefault())
+                    .forEach(p -> indexProperties.put(p.getKey().toLowerCase(Locale.ROOT), p.getValue().getDefaultValue()));
+            searchIndexParams.entrySet().stream().filter(p -> p.getValue().needDefault())
+                    .forEach(p -> searchProperties.put(p.getKey().toLowerCase(Locale.ROOT), p.getValue().getDefaultValue()));
 
             tIndex.setCommon_properties(commonProperties);
             tIndex.setIndex_properties(indexProperties);

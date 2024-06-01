@@ -15,12 +15,8 @@
 package com.starrocks.common.io;
 
 public interface ParamsKey {
-    String defaultValue();
-
-    default boolean needDefault() {
-        return false;
-    }
-
-    // auto implemented by Enum.name()
     String name();
+
+    default void check(String value) {
+    }
 }
