@@ -241,7 +241,6 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
     for (int i = 0; i < op_compaction.output_rowset().segments_size(); i++) {
         FileMetaPB file_meta;
         file_meta.set_name(op_compaction.output_rowset().segments(i));
-        file_meta.set_size(op_compaction.output_rowset().segment_size(i));
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }

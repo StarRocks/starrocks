@@ -39,10 +39,6 @@ inline bool is_del(std::string_view file_name) {
     return HasSuffixString(file_name, ".del");
 }
 
-inline bool is_upt(std::string_view file_name) {
-    return HasSuffixString(file_name, ".upt");
-}
-
 inline bool is_delvec(std::string_view file_name) {
     return HasSuffixString(file_name, ".delvec");
 }

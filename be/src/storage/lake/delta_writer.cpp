@@ -439,7 +439,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     auto op_write = txn_log->mutable_op_write();
 
     for (auto& f : _tablet_writer->files()) {
-        if (is_segment(f.path) || is_upt(f.path)) {
+        if (is_segment(f.path)) {
             op_write->mutable_rowset()->add_segments(std::move(f.path));
             op_write->mutable_rowset()->add_segment_size(f.size.value());
         } else if (is_del(f.path)) {
