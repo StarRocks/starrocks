@@ -3683,6 +3683,7 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("list_partition_tbl1");
     }
 
+    @Test
     public void testAsyncCreateMaterializedViewOnListPartitionTables1WithoutMvPartionExpr() throws Exception {
         String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
                 "      id BIGINT,\n" +
