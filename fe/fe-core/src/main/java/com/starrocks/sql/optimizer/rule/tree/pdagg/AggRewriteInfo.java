@@ -51,11 +51,25 @@ public class AggRewriteInfo {
         this.rewritten = rewritten;
     }
 
-    public Optional<AggColumnRefRemapping> getRemapping() {
-        if (!rewritten || remapping.isEmpty()) {
+    private Optional<AggColumnRefRemapping> getRemapping(boolean isStrict) {
+        if (!rewritten) {
+            return Optional.empty();
+        }
+        if (isStrict && remapping.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(remapping);
+    }
+
+    public Optional<AggColumnRefRemapping> getRemapping() {
+        return getRemapping(true);
+    }
+
+    /**
+     * Get remapping without checking if it is empty which may happen when query contains no aggregate functions
+     */
+    public Optional<AggColumnRefRemapping> getRemappingUnChecked() {
+        return getRemapping(false);
     }
 
     public void setRemapping(AggColumnRefRemapping remapping) {
