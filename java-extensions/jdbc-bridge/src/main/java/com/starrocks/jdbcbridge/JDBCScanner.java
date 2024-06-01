@@ -98,13 +98,18 @@ public class JDBCScanner {
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
             resultColumnClassNames.add(resultSetMetaData.getColumnClassName(i));
             Class<?> clazz = classLoader.loadClass(resultSetMetaData.getColumnClassName(i));
-            if (isGeneralJDBCClassType(clazz)) {
-                resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
-            } else if (null != mapEngineSpecificClassType(clazz)) {
-                Class targetClass = mapEngineSpecificClassType(clazz);
-                resultChunk.add((Object[]) Array.newInstance(targetClass, scanContext.getStatementFetchSize()));
+            if (isByteArrayType(resultSetMetaData.getColumnClassName(i))) {
+                resultChunk.add((Object[]) Array.newInstance(byte[].class, scanContext.getStatementFetchSize()));
             } else {
-                resultChunk.add((Object[]) Array.newInstance(String.class, scanContext.getStatementFetchSize()));
+                Class<?> clazz = classLoader.loadClass(resultSetMetaData.getColumnClassName(i));
+                if (isGeneralJDBCClassType(clazz)) {
+                    resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
+                } else if (null != mapEngineSpecificClassType(clazz)) {
+                    Class targetClass = mapEngineSpecificClassType(clazz);
+                    resultChunk.add((Object[]) Array.newInstance(targetClass, scanContext.getStatementFetchSize()));
+                } else {
+                    resultChunk.add((Object[]) Array.newInstance(String.class, scanContext.getStatementFetchSize()));
+                }
             }
         }
     }
@@ -113,6 +118,10 @@ public class JDBCScanner {
             Arrays.asList(Boolean.class, Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class,
                     BigInteger.class, BigDecimal.class, java.sql.Date.class, Timestamp.class, LocalDate.class,
                     LocalDateTime.class, Time.class, String.class));
+
+    private static boolean isByteArrayType(String clazzName) {
+        return "[B".equalsIgnoreCase(clazzName);
+    }
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
@@ -168,6 +177,8 @@ public class JDBCScanner {
                 } else if (dataColumn instanceof String[] && resultObject instanceof String) {
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;
+                } else if (dataColumn.getClass().getCanonicalName().equals("java.lang.Byte[][]")) {
+                    dataColumn[resultNumRows] = resultSet.getBytes(i + 1);
                 } else if (!(dataColumn instanceof String[])) {
                     if (dataColumn instanceof BigInteger[] && resultObject instanceof Number) {
                         dataColumn[resultNumRows] = new BigInteger(resultObject.toString());

@@ -14,8 +14,6 @@
 
 package com.starrocks.udf;
 
-import com.starrocks.utils.Platform;
-
 import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -38,6 +36,8 @@ import java.util.TimeZone;
 
 import static com.starrocks.utils.NativeMethodHelper.getAddrs;
 import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
+
+import com.starrocks.utils.Platform;
 
 public class UDFHelper {
     public static final int TYPE_TINYINT = 1;
@@ -273,6 +273,37 @@ public class UDFHelper {
         getStringBoxedResult(numRows, results, columnAddr);
     }
 
+    private static void getStringBytesResult(int numRows, byte[][] column, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] offsets = new int[numRows];
+        byte[][] byteRes = new byte[numRows][];
+        int offset = 0;
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] == null) {
+                byteRes[i] = emptyBytes;
+                nulls[i] = 1;
+            } else {
+                byteRes[i] = column[i];
+            }
+            offset += byteRes[i].length;
+            offsets[i] = offset;
+        }
+        byte[] bytes = new byte[offsets[numRows - 1]];
+        int dst = 0;
+        for (int i = 0; i < numRows; i++) {
+            for (int j = 0; j < byteRes[i].length; j++) {
+                bytes[dst++] = byteRes[i][j];
+            }
+        }
+        final long bytesAddr = resizeStringData(columnAddr, offsets[numRows - 1]);
+        final long[] addrs = getAddrs(columnAddr);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+
+        Platform.copyMemory(offsets, Platform.INT_ARRAY_OFFSET, null, addrs[1] + 4, numRows * 4L);
+
+        Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, bytesAddr, offsets[numRows - 1]);
+    }
+
     private static void getStringBoxedResult(int numRows, String[] column, long columnAddr) {
         byte[] nulls = new byte[numRows];
         int[] offsets = new int[numRows];
@@ -353,6 +384,8 @@ public class UDFHelper {
                     getStringLargeIntResult(numRows, (BigInteger[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof String[]) {
                     getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof byte[][]) {
+                    getStringBytesResult(numRows, (byte[][]) boxedResult, columnAddr);
                 } else {
                     throw new UnsupportedOperationException("unsupported type:" + boxedResult);
                 }
