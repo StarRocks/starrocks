@@ -96,7 +96,7 @@ public class Config extends ConfigBase {
      * Log to file by default. set to `true` if you want to log to console
      */
     @ConfField
-    public static boolean sys_log_to_console = false;
+    public static boolean sys_log_to_console = System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1");
 
     /**
      * audit_log_dir:
