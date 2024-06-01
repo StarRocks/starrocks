@@ -3683,6 +3683,45 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("list_partition_tbl1");
     }
 
+    public void testAsyncCreateMaterializedViewOnListPartitionTables1WithoutMvPartionExpr() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view list_partition_mv1 " +
+                "distributed by hash(dt, province) buckets 10 " +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 SECOND)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(
+                    e.getMessage().contains("Materialized view related base table:list_partition_tbl1 partition type:LIST not supports"));
+        }
+        starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+
     @Test
     public void testCreateMaterializedViewOnListPartitionTables2() throws Exception {
         String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
