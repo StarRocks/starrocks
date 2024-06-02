@@ -35,6 +35,8 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
         const auto value = values[i];
         if (mode == InsertMode::IGNORE_MODE) {
             if (old_values[i].get_value() != NullIndexValue) {
+                old_values[i] = value;
+                nfound++;
                 continue;
             }
             auto it = _map.find(key);
