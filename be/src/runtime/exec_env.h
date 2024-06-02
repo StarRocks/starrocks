@@ -272,6 +272,7 @@ public:
     workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
     ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
     ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; };
+    ThreadPool* update_tablet_meta_thread_pool() { return _update_tablet_meta_pool; }
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
@@ -354,6 +355,7 @@ private:
 
     ThreadPool* _load_segment_thread_pool = nullptr;
     ThreadPool* _load_rowset_thread_pool = nullptr;
+    ThreadPool* _update_tablet_meta_pool = nullptr;
 
     workgroup::ScanExecutor* _scan_executor = nullptr;
     workgroup::ScanExecutor* _connector_scan_executor = nullptr;
