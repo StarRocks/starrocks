@@ -307,6 +307,30 @@ TEST_F(MetaFileTest, test_dcg) {
         // <4, 7> -> ccc.cols
     }
     {
+        metadata->set_version(14);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("ddd.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        std::vector<std::string> filenames;
+        filenames.push_back("ddd.cols");
+        std::vector<std::vector<ColumnUID>> unique_column_id_list;
+        unique_column_id_list.push_back({3, 5});
+        builder.append_dcg(110, filenames, unique_column_id_list);
+        builder.apply_column_mode_partial_update(op_write);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+        auto dcg_ver_iter = metadata->dcg_meta().dcgs().find(110);
+        EXPECT_TRUE(dcg_ver_iter != metadata->dcg_meta().dcgs().end());
+        EXPECT_TRUE(dcg_ver_iter->second.versions_size() == 3);
+        EXPECT_TRUE(dcg_ver_iter->second.column_files_size() == 3);
+        EXPECT_TRUE(dcg_ver_iter->second.column_ids_size() == 3);
+        // <3, 5> -> ddd.cols
+        // <6, 8> -> bbb.cols
+        // <4, 7> -> ccc.cols
+    }
+    {
         auto loader = std::make_unique<LakeDeltaColumnGroupLoader>(metadata);
         TabletSegmentId tsid;
         tsid.tablet_id = tablet_id;
@@ -315,11 +339,11 @@ TEST_F(MetaFileTest, test_dcg) {
         EXPECT_TRUE(loader->load(tsid, 1, &pdcgs).ok());
         EXPECT_TRUE(pdcgs.size() == 1);
         auto idx = pdcgs[0]->get_column_idx(3);
-        EXPECT_TRUE("tmp/aaa.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
         idx = pdcgs[0]->get_column_idx(4);
         EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
         idx = pdcgs[0]->get_column_idx(5);
-        EXPECT_TRUE("tmp/aaa.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
         idx = pdcgs[0]->get_column_idx(6);
         EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
         idx = pdcgs[0]->get_column_idx(7);
@@ -329,20 +353,6 @@ TEST_F(MetaFileTest, test_dcg) {
     }
     // 4. compact (conflict)
     {
-        metadata->set_version(14);
-        MetaFileBuilder builder(*tablet, metadata);
-        TxnLogPB_OpCompaction op_compaction;
-        op_compaction.add_input_rowsets(110);
-        RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ddd.dat");
-        op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
-        op_compaction.set_compact_version(12);
-        EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
-        Status st = builder.finalize(next_id());
-        EXPECT_TRUE(st.ok());
-    }
-    // 5. compact
-    {
         metadata->set_version(15);
         MetaFileBuilder builder(*tablet, metadata);
         TxnLogPB_OpCompaction op_compaction;
@@ -351,6 +361,20 @@ TEST_F(MetaFileTest, test_dcg) {
         rowset_metadata.add_segments("eee.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(13);
+        EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+    // 5. compact
+    {
+        metadata->set_version(16);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(110);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("fff.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
+        op_compaction.set_compact_version(14);
         EXPECT_FALSE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
         builder.apply_opcompaction(op_compaction, 1);
         Status st = builder.finalize(next_id());
@@ -371,9 +395,12 @@ TEST_F(MetaFileTest, test_dcg) {
         to_check_filenames.insert("aaa.cols");
         to_check_filenames.insert("bbb.cols");
         to_check_filenames.insert("ccc.cols");
+        to_check_filenames.insert("ddd.cols");
         to_check_filenames.insert("bbb.dat");
         to_check_filenames.insert("ccc.dat");
         to_check_filenames.insert("ddd.dat");
+        to_check_filenames.insert("eee.dat");
+        EXPECT_TRUE(metadata->orphan_files_size() == to_check_filenames.size());
         for (const auto& orphan_file : metadata->orphan_files()) {
             EXPECT_TRUE(to_check_filenames.count(orphan_file.name()) > 0);
         }
