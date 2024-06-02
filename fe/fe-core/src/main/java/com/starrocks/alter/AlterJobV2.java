@@ -107,6 +107,8 @@ public abstract class AlterJobV2 implements Writable {
     protected String errMsg = "";
     @SerializedName(value = "createTimeMs")
     protected long createTimeMs = -1;
+    @SerializedName(value = "rewriteFinishedTimeMs")
+    protected long rewriteFinishedTimeMs = -1;
     @SerializedName(value = "finishedTimeMs")
     protected long finishedTimeMs = -1;
     @SerializedName(value = "timeoutMs")
@@ -182,6 +184,14 @@ public abstract class AlterJobV2 implements Writable {
 
     public long getFinishedTimeMs() {
         return finishedTimeMs;
+    }
+
+    public long getRewriteFinishedTimeMs() {
+        return rewriteFinishedTimeMs;
+    }
+
+    public void setRewriteFinishedTimeMs(long rewriteFinishedTimeMs) {
+        this.rewriteFinishedTimeMs = rewriteFinishedTimeMs;
     }
 
     public void setFinishedTimeMs(long finishedTimeMs) {

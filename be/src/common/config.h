@@ -113,6 +113,7 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_mInt32(alter_tablet_worker_count, "3");
+CONF_mInt32(max_update_tablet_meta_threads, "4");
 // The count of parallel clone task per storage path
 CONF_mInt32(parallel_clone_task_per_path, "8");
 // The count of thread to clone. Deprecated
