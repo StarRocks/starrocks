@@ -977,7 +977,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_clear_txnlog) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
-        auto txn_log_st = delta_writer->finish();
+        auto txn_log_st = delta_writer->finish_with_txnlog();
         ASSERT_OK(txn_log_st);
         _tablet_mgr->prune_metacache();
         std::const_pointer_cast<TxnLogPB>(txn_log_st.value())->Clear();
