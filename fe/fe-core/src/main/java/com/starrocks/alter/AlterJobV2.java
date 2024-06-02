@@ -59,6 +59,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
@@ -107,6 +108,8 @@ public abstract class AlterJobV2 implements Writable {
     protected String errMsg = "";
     @SerializedName(value = "createTimeMs")
     protected long createTimeMs = -1;
+    @SerializedName(value = "rewriteFinishedTimeMs")
+    protected long rewriteFinishedTimeMs = -1;
     @SerializedName(value = "finishedTimeMs")
     protected long finishedTimeMs = -1;
     @SerializedName(value = "timeoutMs")
@@ -182,6 +185,14 @@ public abstract class AlterJobV2 implements Writable {
 
     public long getFinishedTimeMs() {
         return finishedTimeMs;
+    }
+
+    public long getRewriteFinishedTimeMs() {
+        return rewriteFinishedTimeMs;
+    }
+
+    public void setRewriteFinishedTimeMs(long rewriteFinishedTimeMs) {
+        this.rewriteFinishedTimeMs = rewriteFinishedTimeMs;
     }
 
     public void setFinishedTimeMs(long finishedTimeMs) {
@@ -317,6 +328,39 @@ public abstract class AlterJobV2 implements Writable {
 
     public abstract Optional<Long> getTransactionId();
 
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, type.name());
+        Text.writeString(out, jobState.name());
+
+        out.writeLong(jobId);
+        out.writeLong(dbId);
+        out.writeLong(tableId);
+        Text.writeString(out, tableName);
+
+        Text.writeString(out, errMsg);
+        out.writeLong(createTimeMs);
+        out.writeLong(rewriteFinishedTimeMs);
+        out.writeLong(finishedTimeMs);
+        out.writeLong(timeoutMs);
+    }
+
+    public void readFields(DataInput in) throws IOException {
+        // read common members as write in AlterJobV2.write().
+        // except 'type' member, which is read in AlterJobV2.read()
+        jobState = JobState.valueOf(Text.readString(in));
+
+        jobId = in.readLong();
+        dbId = in.readLong();
+        tableId = in.readLong();
+        tableName = Text.readString(in);
+
+        errMsg = Text.readString(in);
+        createTimeMs = in.readLong();
+        rewriteFinishedTimeMs = in.readLong();
+        finishedTimeMs = in.readLong();
+        timeoutMs = in.readLong();
+    }
 
     /**
      * Schema change will build a new MaterializedIndexMeta, we need rebuild it(add extra original meta)
