@@ -292,10 +292,16 @@ public class QueryTransformer {
         }
 
         final ExpressionMapping expressionMapping = subOpt.getExpressionMapping();
-        boolean allColumnRef = projectExpressions.stream()
-                .map(expression -> SqlToScalarOperatorTranslator.translate(expression, expressionMapping,
-                        columnRefFactory))
-                .allMatch(ScalarOperator::isColumnRef);
+        boolean allColumnRef = true;
+        for (Expr expression : projectExpressions) {
+            ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expression, expressionMapping,
+                    columnRefFactory);
+            if (!operator.isColumnRef()) {
+                allColumnRef = false;
+            } else {
+                expressionMapping.put(expression, (ColumnRefOperator) operator);
+            }
+        }
 
         /*
          * If there is no expression calculate in partition and order by,
