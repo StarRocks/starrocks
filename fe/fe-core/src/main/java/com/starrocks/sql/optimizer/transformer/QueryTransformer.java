@@ -293,14 +293,20 @@ public class QueryTransformer {
 
         final ExpressionMapping expressionMapping = subOpt.getExpressionMapping();
         boolean allColumnRef = true;
+        Map<Expr, ColumnRefOperator> tempMapping = new HashMap<>();
         for (Expr expression : projectExpressions) {
             ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expression, expressionMapping,
                     columnRefFactory);
             if (!operator.isColumnRef()) {
                 allColumnRef = false;
+                tempMapping.clear();
+                break;
             } else {
-                expressionMapping.put(expression, (ColumnRefOperator) operator);
+                tempMapping.put(expression, (ColumnRefOperator) operator);
             }
+        }
+        if (allColumnRef) {
+            expressionMapping.getExpressionToColumns().putAll(tempMapping);
         }
 
         /*
