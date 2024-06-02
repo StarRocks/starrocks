@@ -189,7 +189,7 @@ void test_integral_pk() {
         pk_data[i] = i * 2;
     }
     deletes.clear();
-    pk_index->upsert(5, 0, *pk_col, &deletes, InsertMode::IGNORE_MODE);
+    pk_index->upsert(5, 0, *pk_col, &deletes, nullptr, InsertMode::IGNORE_MODE);
     CHECK_EQ(1, deletes.size());
 
     CHECK(deletes.find(5) != deletes.end());
@@ -204,7 +204,7 @@ void test_integral_pk() {
         pk_data[i] = kSegmentSize * 2 + i;
     }
     deletes.clear();
-    pk_index->upsert(6, 0, *pk_col, &deletes, InsertMode::IGNORE_MODE);
+    pk_index->upsert(6, 0, *pk_col, &deletes, nullptr, InsertMode::IGNORE_MODE);
     CHECK_EQ(1, deletes.size());
 
     CHECK(deletes.find(6) != deletes.end());
@@ -380,7 +380,7 @@ void test_binary_pk(int key_size) {
         pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, i * 2));
     }
     deletes.clear();
-    pk_index->upsert(5, 0, *pk_col, &deletes, InsertMode::IGNORE_MODE);
+    pk_index->upsert(5, 0, *pk_col, &deletes, nullptr, InsertMode::IGNORE_MODE);
     CHECK_EQ(1, deletes.size());
 
     CHECK(deletes.find(5) != deletes.end());
@@ -396,7 +396,7 @@ void test_binary_pk(int key_size) {
         pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, kSegmentSize * 2 + i));
     }
     deletes.clear();
-    pk_index->upsert(6, 0, *pk_col, &deletes, InsertMode::IGNORE_MODE);
+    pk_index->upsert(6, 0, *pk_col, &deletes, nullptr, InsertMode::IGNORE_MODE);
     CHECK_EQ(1, deletes.size());
 
     CHECK(deletes.find(6) != deletes.end());
@@ -465,7 +465,7 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
     }
     // upsert ignore
     deletes.clear();
-    pk_index->upsert(2, 0, *pk_column, &deletes, InsertMode::IGNORE_MODE);
+    pk_index->upsert(2, 0, *pk_column, &deletes, nullptr, InsertMode::IGNORE_MODE);
     ASSERT_EQ(deletes.size(), 1);
     ASSERT_EQ(deletes[2].size(), kSegmentSize);
 

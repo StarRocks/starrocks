@@ -143,7 +143,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes, InsertMode::UPSERT_MODE)
+                            &upsert_num_found, idxes)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
@@ -272,7 +272,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes, InsertMode::UPSERT_MODE)
+                            &upsert_num_found, idxes)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
@@ -463,7 +463,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes, InsertMode::UPSERT_MODE)
+                            &upsert_num_found, idxes)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
@@ -547,14 +547,13 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         // flush l0 first
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(1, 0), N));
-        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), InsertMode::UPSERT_MODE));
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
         //std::vector<IndexValue> old_values(second_keys.size());
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
-        ASSERT_OK(index.upsert(second_n, second_key_slices.data(), second_values.data(), old_values.data(),
-                               InsertMode::UPSERT_MODE));
+        ASSERT_OK(index.upsert(second_n, second_key_slices.data(), second_values.data(), old_values.data()));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -607,7 +606,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
-                                    old_values.data(), InsertMode::UPSERT_MODE)
+                                    old_values.data())
                             .ok());
         ASSERT_TRUE(new_index.commit(&index_meta).ok());
         ASSERT_TRUE(new_index.on_commited().ok());
@@ -676,7 +675,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(i + 1, 0), one_time_num));
         ASSERT_OK(index.upsert(one_time_num, key_slices.data() + one_time_num * i, values.data() + one_time_num * i,
-                               old_values.data() + one_time_num * i, InsertMode::UPSERT_MODE));
+                               old_values.data() + one_time_num * i));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         ASSERT_TRUE(index_meta.l0_meta().wals().empty());
@@ -687,7 +686,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(i + 1, 0), one_time_num));
         ASSERT_OK(index.upsert(one_time_num, key_slices.data() + one_time_num * i, values.data() + one_time_num * i,
-                               old_values.data() + one_time_num * i, InsertMode::UPSERT_MODE));
+                               old_values.data() + one_time_num * i));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         ASSERT_TRUE(index_meta.l0_meta().snapshot().dumped_shard_idxes().empty());
@@ -700,7 +699,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(i + 1, 0), one_time_num));
         ASSERT_OK(index.upsert(one_time_num, key_slices.data() + loaded_num, values.data() + loaded_num,
-                               old_values.data() + loaded_num, InsertMode::UPSERT_MODE));
+                               old_values.data() + loaded_num));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         ASSERT_TRUE(index_meta.l0_meta().wals().empty());
@@ -970,8 +969,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
 
         std::vector<IndexValue> old_values(NUM_SNAPSHOT, IndexValue(NullIndexValue));
         ASSERT_OK(index.prepare(EditVersion(2, 0), NUM_SNAPSHOT));
-        ASSERT_OK(index.upsert(NUM_SNAPSHOT, snapshot_key_slices.data(), snapshot_values.data(), old_values.data(),
-                               InsertMode::UPSERT_MODE));
+        ASSERT_OK(index.upsert(NUM_SNAPSHOT, snapshot_key_slices.data(), snapshot_values.data(), old_values.data()));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -989,8 +987,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
         config::l0_l1_merge_ratio = 1;
         std::vector<IndexValue> wal_old_values(NUM_WAL, IndexValue(NullIndexValue));
         ASSERT_OK(index.prepare(EditVersion(3, 0), NUM_WAL));
-        ASSERT_OK(index.upsert(NUM_WAL, wal_key_slices.data(), wal_values.data(), wal_old_values.data(),
-                               InsertMode::UPSERT_MODE));
+        ASSERT_OK(index.upsert(NUM_WAL, wal_key_slices.data(), wal_values.data(), wal_old_values.data()));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
@@ -1076,9 +1073,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
 
         std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(2, 0), keys.size()).ok());
-        ASSERT_TRUE(
-                index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data(), InsertMode::UPSERT_MODE)
-                        .ok());
+        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
 
@@ -1120,7 +1115,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
-                                    old_values.data(), InsertMode::UPSERT_MODE)
+                                    old_values.data())
                             .ok());
         ASSERT_TRUE(new_index.commit(&index_meta).ok());
         ASSERT_TRUE(new_index.on_commited().ok());
@@ -1204,9 +1199,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
 
         std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(2, 0), keys.size()).ok());
-        ASSERT_TRUE(
-                index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data(), InsertMode::UPSERT_MODE)
-                        .ok());
+        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
 
@@ -1248,7 +1241,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
-                                    old_values.data(), InsertMode::UPSERT_MODE)
+                                    old_values.data())
                             .ok());
         ASSERT_TRUE(new_index.commit(&index_meta).ok());
         ASSERT_TRUE(new_index.on_commited().ok());
@@ -1798,6 +1791,227 @@ TEST_P(PersistentIndexTest, test_varlen_replace) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
+TEST_P(PersistentIndexTest, test_fixlen_ignore) {
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_fixlen_ignore";
+    const std::string kIndexFile = "./PersistentIndexTest_test_fixlen_ignore/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = uint64_t;
+    PersistentIndexMetaPB index_meta;
+    // insert
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    vector<IndexValue> values2;
+    const int N = 1000000;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        values.emplace_back(i * 2);
+        values2.emplace_back(i * 3);
+    }
+
+    ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+
+    EditVersion version(0, 0);
+    index_meta.set_key_size(sizeof(Key));
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+
+    PersistentIndex index(kPersistentIndexDir);
+
+    ASSERT_TRUE(index.load(index_meta).ok());
+    ASSERT_TRUE(index.prepare(EditVersion(1, 0), N).ok());
+    ASSERT_TRUE(index.insert(N, key_slices.data(), values.data(), false).ok());
+    ASSERT_TRUE(index.commit(&index_meta).ok());
+    ASSERT_TRUE(index.on_commited().ok());
+
+    std::vector<IndexValue> get_values(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), key_slices.data(), get_values.data()).ok());
+    ASSERT_EQ(keys.size(), get_values.size());
+    for (int i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+
+    // case1: all the value should be ignored
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+    ASSERT_OK(index.upsert(N, key_slices.data(), values2.data(), old_values.data(), nullptr, InsertMode::IGNORE_MODE));
+
+    std::vector<IndexValue> new_get_values1(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), key_slices.data(), new_get_values1.data()).ok());
+    ASSERT_EQ(keys.size(), new_get_values1.size());
+    // none new value is upsert
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values[i], new_get_values1[i]);
+    }
+    // all value2 marked as deleted values.
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values2[i], old_values[i]);
+    }
+
+    // case2: half of the value should be ignored
+    keys.clear();
+    keys.reserve(2 * N);
+    key_slices.clear();
+    key_slices.reserve(2 * N);
+    values2.clear();
+    values2.reserve(2 * N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        values2.emplace_back(i * 3);
+    }
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i + N);
+        key_slices.emplace_back((uint8_t*)(&keys[i + N]), sizeof(Key));
+        values2.emplace_back((i + N) * 3);
+    }
+    std::vector<IndexValue> old_values2(2 * N, IndexValue(NullIndexValue));
+    ASSERT_OK(index.upsert(2 * N, key_slices.data(), values2.data(), old_values2.data(), nullptr,
+                           InsertMode::IGNORE_MODE));
+
+    std::vector<IndexValue> new_get_values2(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), key_slices.data(), new_get_values2.data()).ok());
+    ASSERT_EQ(keys.size(), new_get_values2.size());
+    // [0 - N] ignore [n - 2N] insert
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values[i], new_get_values2[i]);
+    }
+    for (int i = N; i < 2 * N; i++) {
+        ASSERT_EQ(values2[i], new_get_values2[i]);
+    }
+
+    // [0 - N] old value, [N - 2N] NullIndexValue
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values2[i], old_values2[i]);
+    }
+    for (int i = N; i < 2 * N; i++) {
+        ASSERT_EQ(NullIndexValue, old_values2[i].get_value());
+    }
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+TEST_P(PersistentIndexTest, test_varlen_ignore) {
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_varlen_ignore";
+    const std::string kIndexFile = "./PersistentIndexTest_test_varlen_ignore/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = std::string;
+    PersistentIndexMetaPB index_meta;
+    const int N = 10;
+    vector<Key> twoNKeys(2 * N);
+    for (int i = 0; i < N; i++) {
+        twoNKeys[i] = gen_random_string_of_random_length(42, 128);
+        twoNKeys[i + N] = "A=" + twoNKeys[i];
+    }
+    // insert
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    vector<IndexValue> values2;
+
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(twoNKeys[i]);
+        key_slices.emplace_back(twoNKeys[i]);
+        values.emplace_back(i * 2);
+        values2.emplace_back(i * 4);
+    }
+
+    ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+
+    EditVersion version(0, 0);
+    index_meta.set_key_size(0);
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+
+    PersistentIndex index(kPersistentIndexDir);
+
+    ASSERT_TRUE(index.load(index_meta).ok());
+    ASSERT_TRUE(index.prepare(EditVersion(1, 0), N).ok());
+    ASSERT_TRUE(index.insert(N, key_slices.data(), values.data(), false).ok());
+    ASSERT_TRUE(index.commit(&index_meta).ok());
+    ASSERT_TRUE(index.on_commited().ok());
+
+    std::vector<IndexValue> get_values(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), key_slices.data(), get_values.data()).ok());
+
+    ASSERT_EQ(keys.size(), get_values.size());
+    for (int i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+    // case1: all the value should be ignored
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+    ASSERT_OK(index.upsert(N, key_slices.data(), values2.data(), old_values.data(), nullptr, InsertMode::IGNORE_MODE));
+
+    std::vector<IndexValue> new_get_values1(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), key_slices.data(), new_get_values1.data()).ok());
+    ASSERT_EQ(keys.size(), new_get_values1.size());
+
+    // none new value is upsert
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values[i], new_get_values1[i]);
+    }
+
+    // all value2 marked as deleted values.
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values2[i], old_values[i]);
+    }
+
+    // case2: half of the value should be ignored
+    keys.clear();
+    keys.reserve(2 * N);
+    key_slices.clear();
+    key_slices.reserve(2 * N);
+    values2.clear();
+    values2.reserve(2 * N);
+    for (int i = 0; i < 2 * N; i++) {
+        keys.emplace_back(twoNKeys[i]);
+        key_slices.emplace_back(twoNKeys[i]);
+        values2.emplace_back(i * 4);
+    }
+
+    std::vector<IndexValue> old_values2(2 * N, IndexValue(NullIndexValue));
+    ASSERT_OK(index.upsert(2 * N, key_slices.data(), values2.data(), old_values2.data(), nullptr,
+                           InsertMode::IGNORE_MODE));
+
+    std::vector<IndexValue> new_get_values2(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), key_slices.data(), new_get_values2.data()).ok());
+    ASSERT_EQ(keys.size(), new_get_values2.size());
+    // [0 - N] ignore [n - 2N] insert
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values[i], new_get_values2[i]);
+    }
+    for (int i = N; i < 2 * N; i++) {
+        ASSERT_EQ(values2[i], new_get_values2[i]);
+    }
+
+    // [0 - N] old value, [N - 2N] NullIndexValue
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(values2[i], old_values2[i]);
+    }
+    for (int i = N; i < 2 * N; i++) {
+        ASSERT_EQ(NullIndexValue, old_values2[i].get_value());
+    }
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
 TEST_P(PersistentIndexTest, test_get_move_buckets) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_get_move_buckets";
     PersistentIndex index(kPersistentIndexDir);
@@ -1914,7 +2128,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
                 values.emplace_back(i * j);
             }
             std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
-            ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), InsertMode::UPSERT_MODE));
+            ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
             std::vector<IndexValue> get_values(N);
             ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
             for (int j = 0; j < N; j++) {

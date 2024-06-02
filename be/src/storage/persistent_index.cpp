@@ -801,11 +801,10 @@ public:
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (mode == InsertMode::IGNORE_MODE) {
-                if (old_values[idx].get_value() != NullIndexValue) {
-                    continue;
-                }
                 auto it = _map.find(key, hash);
                 if (it != _map.end() && it->second.get_value() != NullIndexValue) {
+                if (old_values[idx].get_value() != NullIndexValue ||
+                    (it != _map.end() && it->second.get_value() != NullIndexValue)) {
                     old_values[idx] = value;
                     nfound++;
                     continue;
@@ -1124,6 +1123,8 @@ public:
             uint64_t hash = StringHasher2()(composite_key);
             if (mode == InsertMode::IGNORE_MODE) {
                 if (old_values[idx].get_value() != NullIndexValue) {
+                    old_values[idx] = value;
+                    nfound++;
                     continue;
                 }
                 auto it = _set.find(composite_key, hash);
