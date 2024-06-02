@@ -950,4 +950,64 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
             }
         });
     }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_WithMultiGroupByKeys() {
+        String mvAggArg = "LO_REVENUE";
+        String queryAggArg = "LO_REVENUE";
+        for (Map.Entry<String, String> e : REWRITE_ROLLUP_FUNCTION_MAP.entrySet()) {
+            String funcName = e.getKey();
+            String mvAggFunc = getAggFunction(funcName, mvAggArg);
+            String queryAggFunc = getAggFunction(funcName, queryAggArg);
+            String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                    "select LO_ORDERDATE, %s as revenue_sum\n" +
+                    "from lineorder l group by LO_ORDERDATE", mvAggFunc);
+            starRocksAssert.withMaterializedView(mv, () -> {
+                String query = String.format("select LO_ORDERDATE, d.d_date, %s as revenue_sum\n" +
+                        "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                        "   group by LO_ORDERDATE, d.d_date", queryAggFunc);
+                sql(query).contains("mv0");
+            });
+        }
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_WithPredicates() {
+        String mvAggArg = "LO_REVENUE";
+        String queryAggArg = "LO_REVENUE";
+        for (Map.Entry<String, String> e : REWRITE_ROLLUP_FUNCTION_MAP.entrySet()) {
+            String funcName = e.getKey();
+            String mvAggFunc = getAggFunction(funcName, mvAggArg);
+            String queryAggFunc = getAggFunction(funcName, queryAggArg);
+            String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                    "select LO_ORDERDATE, %s as revenue_sum\n" +
+                    "from lineorder l group by LO_ORDERDATE", mvAggFunc);
+            starRocksAssert.withMaterializedView(mv, () -> {
+                String query = String.format("select LO_ORDERDATE, d.d_date, %s as revenue_sum\n" +
+                        "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                        "   where d.d_date in ('2024-05-27') group by LO_ORDERDATE, d.d_date", queryAggFunc);
+                sql(query).contains("mv0");
+            });
+        }
+    }
+
+    @Test
+    public void testAggPushDown_WithoutFunctions_WithMultiGroupByKeys() {
+        String mvAggArg = "LO_REVENUE";
+        String queryAggArg = "LO_REVENUE";
+        setTracLogModule("MV");
+        for (Map.Entry<String, String> e : REWRITE_ROLLUP_FUNCTION_MAP.entrySet()) {
+            String funcName = e.getKey();
+            String mvAggFunc = getAggFunction(funcName, mvAggArg);
+            String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                    "select LO_ORDERDATE, %s as revenue_sum\n" +
+                    "from lineorder l group by LO_ORDERDATE", mvAggFunc);
+            starRocksAssert.withMaterializedView(mv, () -> {
+                String query = String.format("select LO_ORDERDATE, d.d_date \n" +
+                        "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                        "   group by LO_ORDERDATE, d.d_date");
+                sql(query).contains("mv0");
+            });
+        }
+    }
 }
