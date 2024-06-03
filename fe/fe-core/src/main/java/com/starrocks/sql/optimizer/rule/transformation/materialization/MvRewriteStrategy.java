@@ -31,6 +31,7 @@ public class MvRewriteStrategy {
     // Whether enable force rewrite for query plans with join operator by rule based mv rewrite
     public boolean enableForceRBORewrite = false;
 
+<<<<<<< HEAD
     // rbo config
     public boolean enableRBOViewBasedRewrite = false;
     public boolean enableRBOSingleTableRewrite = false;
@@ -38,6 +39,11 @@ public class MvRewriteStrategy {
     // cbo config
     public boolean enableCBORewrite = false;
     public boolean enableCBOSingleTableRewrite = false;
+=======
+    public boolean enableViewBasedRewrite = false;
+    public boolean enableSingleTableRewrite = false;
+    public boolean enableMultiTableRewrite = false;
+>>>>>>> 99b97eb2e3 ([BugFix] Add cast type for mv union rewrite to avoid type not match (#46494))
 
     static class MvStrategyArbitrator {
         private final OptimizerConfig optimizerConfig;
@@ -137,11 +143,26 @@ public class MvRewriteStrategy {
         strategy.enableForceRBORewrite = sessionVariable.isEnableForceRuleBasedMvRewrite();
 
         // rbo strategies
-        strategy.enableRBOViewBasedRewrite = arbitrator.isEnableRBOViewBasedRewrite();
-        strategy.enableRBOSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
+        strategy.enableViewBasedRewrite = arbitrator.isEnableRBOViewBasedRewrite();
+        strategy.enableSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
 
         // cbo strategies
+<<<<<<< HEAD
         strategy.enableCBORewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
         strategy.enableCBOSingleTableRewrite = arbitrator.isEnableCBOSingleTableRewrite();
+=======
+        strategy.enableMultiTableRewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
+    }
+
+    @Override
+    public String toString() {
+        return "MvRewriteStrategy{" +
+                "enableMaterializedViewRewrite=" + enableMaterializedViewRewrite +
+                ", enableForceRBORewrite=" + enableForceRBORewrite +
+                ", enableViewBasedRewrite=" + enableViewBasedRewrite +
+                ", enableSingleTableRewrite=" + enableSingleTableRewrite +
+                ", enableMultiTableRewrite=" + enableMultiTableRewrite +
+                '}';
+>>>>>>> 99b97eb2e3 ([BugFix] Add cast type for mv union rewrite to avoid type not match (#46494))
     }
 }
