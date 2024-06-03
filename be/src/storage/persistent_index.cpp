@@ -262,16 +262,27 @@ Status ImmutableIndexShard::decompress_pages(const CompressionTypePB& compressio
         return Status::Corruption(
                 fmt::format("invalid uncompressed shared size, {} / {}", _page_size * npage, uncompressed_size));
     }
-
-    const BlockCompressionCodec* codec = nullptr;
-    RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
-    std::vector<IndexPage> uncompressed_pages(npage * (_page_size) / kPageSize);
-    for (int i = 0; i < npage; i++) {
-        Slice compressed_body((uint8_t*)_pages.data() + pages_off[i], pages_off[i + 1] - pages_off[i]);
-        Slice decompressed_body((uint8_t*)uncompressed_pages.data() + i * _page_size, _page_size);
+    // if element in pages are all 0, the pindex file is generated in old file and compressed by page, so we need
+    // to decompress it by shard
+    if (pages_off.back() > 0) {
+        const BlockCompressionCodec* codec = nullptr;
+        RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
+        std::vector<IndexPage> uncompressed_pages(npage * (_page_size) / kPageSize);
+        for (int i = 0; i < npage; i++) {
+            Slice compressed_body((uint8_t*)_pages.data() + pages_off[i], pages_off[i + 1] - pages_off[i]);
+            Slice decompressed_body((uint8_t*)uncompressed_pages.data() + i * _page_size, _page_size);
+            RETURN_IF_ERROR(codec->decompress(compressed_body, &decompressed_body));
+        }
+        _pages.swap(uncompressed_pages);
+    } else {
+        const BlockCompressionCodec* codec = nullptr;
+        RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
+        Slice compressed_body((uint8_t*)_pages.data(), compressed_size);
+        std::vector<IndexPage> uncompressed_pages(npage * (_page_size) / kPageSize);
+        Slice decompressed_body((uint8_t*)uncompressed_pages.data(), uncompressed_size);
         RETURN_IF_ERROR(codec->decompress(compressed_body, &decompressed_body));
+        _pages.swap(uncompressed_pages);
     }
-    _pages.swap(uncompressed_pages);
     return Status::OK();
 }
 
@@ -3019,8 +3030,12 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         } else {
             dest.data_size = src.data_size();
         }
-        for (int i = 0; i < src.npage() + 1; i++) {
-            dest.page_off.emplace_back(src.page_off(i));
+        if (src.page_off().size() == 0) {
+            dest.page_off.emplace_back(0);
+        } else {
+            for (int i = 0; i < src.npage() + 1; i++) {
+                dest.page_off.emplace_back(src.page_off(i));
+            }
         }
     }
     size_t nlength = meta.shard_info_size();
