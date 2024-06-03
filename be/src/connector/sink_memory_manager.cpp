@@ -114,8 +114,8 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
 
     if (available_memory() <= low_watermark()) {
         LOG_EVERY_SECOND(WARNING) << "consumption: " << mem_tracker->consumption()
-                               << " releasable_memory: " << _total_releasable_memory()
-                               << " writer_allocated_memory: " << _total_writer_occupied_memory();
+                                  << " releasable_memory: " << _total_releasable_memory()
+                                  << " writer_allocated_memory: " << _total_writer_occupied_memory();
         // trigger early close
         while (exceed_urgent_space() && available_memory() + _total_releasable_memory() < high_watermark()) {
             bool found = child_manager->kill_victim();
