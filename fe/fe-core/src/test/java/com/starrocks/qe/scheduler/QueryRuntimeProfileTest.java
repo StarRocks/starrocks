@@ -69,7 +69,7 @@ public class QueryRuntimeProfileTest {
             }
         };
 
-        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, 1);
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, 1, false);
         TReportExecStatusParams reportExecStatusParams = buildReportStatus();
         profile.updateLoadChannelProfile(reportExecStatusParams);
         Optional<RuntimeProfile> optional = profile.mergeLoadChannelProfile();
