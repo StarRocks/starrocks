@@ -908,6 +908,7 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
              segment_id++) {
             st = state.load_segment(segment_id, params, metadata_ptr->version(), false /* resolve conflict*/,
                                     true /* need lock */);
+            _update_state_cache.update_object_size(state_entry, state.memory_usage());
             if (!st.ok()) {
                 break;
             }
@@ -924,7 +925,6 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
             // not return error even it fail, because we can load update state in publish again.
         } else {
             // just release it, will use it again in publish
-            _update_state_cache.update_object_size(state_entry, state.memory_usage());
             _update_state_cache.release(state_entry);
         }
     } else {
