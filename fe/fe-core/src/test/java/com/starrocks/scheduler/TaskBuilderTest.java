@@ -16,29 +16,30 @@ package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class TaskBuilderTest {
 
     @Test
-    public void testTaskBuilderForMv(@Mocked WarehouseManager warehouseManager) {
+    public void testTaskBuilderForMv() {
         // mock the warehouse of MaterializedView for creating task
         new MockUp<WarehouseManager>() {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
-                return new LocalWarehouse();
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
 
             @Mock
             public Warehouse getWarehouse(String warehouse) {
-                return new LocalWarehouse();
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
         };
 
