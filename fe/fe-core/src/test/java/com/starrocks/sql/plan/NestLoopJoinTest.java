@@ -356,17 +356,17 @@ public class NestLoopJoinTest extends PlanTestBase {
 
     @Test
     public void testNotAllowCrossJoin() throws Exception {
-        PlanTestBase.connectContext.getSessionVariable().setAllowCrossJoin(false);
+        PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(false);
         String sql = "select * from t0 a cross join t0 b;";
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
-        PlanTestBase.connectContext.getSessionVariable().setAllowCrossJoin(true);
+        PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(true);
     }
 
     @Test
     public void testNotAllowNestLoopJoin() throws Exception {
-        PlanTestBase.connectContext.getSessionVariable().setAllowNestedLoopJoin(false);
+        PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(false);
         String sql = "select count(a.v3) from t0 a join t0 b on a.v3 < b.v3;";
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
-        PlanTestBase.connectContext.getSessionVariable().setAllowNestedLoopJoin(true);
+        PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(true);
     }
 }

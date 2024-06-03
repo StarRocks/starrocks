@@ -707,9 +707,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
 
-    public static final String ALLOW_CROSS_JOIN = "allow_cross_join";
+    public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
 
-    public static final String ALLOW_NESTED_LOOP_JOIN = "allow_nested_loop_join";
+    public static final String ENABLE_NESTED_LOOP_JOIN = "enable_nested_loop_join";
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
@@ -1911,11 +1911,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
     private int scanHivePartitionNumLimit = 0;
 
-    @VarAttr(name = ALLOW_CROSS_JOIN)
-    private boolean allowCrossJoin = true;
+    @VarAttr(name = ENABLE_CROSS_JOIN)
+    private boolean enableCrossJoin = true;
 
-    @VarAttr(name = ALLOW_NESTED_LOOP_JOIN)
-    private boolean allowNestedLoopJoin = true;
+    @VarAttr(name = ENABLE_NESTED_LOOP_JOIN)
+    private boolean enableNestedLoopJoin = true;
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
@@ -3707,20 +3707,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
     }
 
-    public boolean isAllowCrossJoin() {
-        return allowCrossJoin;
+    public boolean isEnableCrossJoin() {
+        return enableCrossJoin;
     }
 
-    public void setAllowCrossJoin(boolean allowCrossJoin) {
-        this.allowCrossJoin = allowCrossJoin;
+    public void setEnableCrossJoin(boolean enableCrossJoin) {
+        this.enableCrossJoin = enableCrossJoin;
     }
 
-    public boolean isAllowNestedLoopJoin() {
-        return allowNestedLoopJoin;
+    public boolean isEnableNestedLoopJoin() {
+        return enableNestedLoopJoin;
     }
 
-    public void setAllowNestedLoopJoin(boolean allowNestedLoopJoin) {
-        this.allowNestedLoopJoin = allowNestedLoopJoin;
+    public void setEnableNestedLoopJoin(boolean enableNestedLoopJoin) {
+        this.enableNestedLoopJoin = enableNestedLoopJoin;
     }
 
     public boolean enableCboDeriveRangeJoinPredicate() {

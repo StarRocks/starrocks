@@ -770,7 +770,7 @@ public class Optimizer {
             }
         }
 
-        if (!sessionVariable.isAllowCrossJoin() && Utils.isCrossJoin(tree.getOp())) {
+        if (!sessionVariable.isEnableCrossJoin() && Utils.isCrossJoin(tree.getOp())) {
             throw new SemanticException("Cross join is not allowed, please check the join logic in the query");
         }
 

@@ -56,7 +56,7 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
             if (!supportJoinType(joinType)) {
                 throw new SemanticException(UNSUPPORTED_JOIN_CLAUSE, joinType, joinOperator.getOnPredicate());
             }
-            if (!context.getSessionVariable().isAllowNestedLoopJoin()) {
+            if (!context.getSessionVariable().isEnableNestedLoopJoin()) {
                 throw new SemanticException("NestLoopJoin is not allowed. " +
                         "Please check whether there are non-equal join conditions in the query.");
             }
