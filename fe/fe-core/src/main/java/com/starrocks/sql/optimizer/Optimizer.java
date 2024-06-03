@@ -769,6 +769,11 @@ public class Optimizer {
             }
         }
 
+        if (!sessionVariable.isAllowCrossJoin() && Utils.isCrossJoin(tree.getOp())) {
+            throw new UnsupportedOperationException("Cross join is not allowed, " +
+                    "please check the join logic in the query");
+        }
+
         if (!sessionVariable.isDisableJoinReorder() && sessionVariable.isEnableOuterJoinReorder()
                 && Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
             context.getRuleSet().addOuterJoinTransformationRules();

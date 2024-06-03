@@ -356,6 +356,13 @@ public class Utils {
         return false;
     }
 
+    public static boolean isCrossJoin(Operator operator) {
+        if (operator instanceof LogicalJoinOperator) {
+            return ((LogicalJoinOperator) operator).getJoinType() == JoinOperator.CROSS_JOIN;
+        }
+        return false;
+    }
+
     public static boolean capableOuterReorder(OptExpression root, int threshold) {
         boolean[] hasOuterOrSemi = {false};
         int totalJoinNodes = countJoinNode(root, hasOuterOrSemi);
