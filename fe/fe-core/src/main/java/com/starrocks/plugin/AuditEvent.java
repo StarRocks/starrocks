@@ -115,9 +115,9 @@ public class AuditEvent {
     @AuditField(value = "Digest")
     public String digest = "";
     @AuditField(value = "PlanCpuCost")
-    public double planCpuCosts = -1;
+    public long planCpuCosts = -1;
     @AuditField(value = "PlanMemCost")
-    public double planMemCosts = -1;
+    public long planMemCosts = -1;
     @AuditField(value = "PendingTimeMs")
     public long pendingTimeMs = -1;
     @AuditField(value = "BigQueryLogCPUSecondThreshold")
@@ -267,12 +267,12 @@ public class AuditEvent {
             return this;
         }
 
-        public AuditEventBuilder setPlanCpuCosts(double cpuCosts) {
+        public AuditEventBuilder setPlanCpuCosts(long cpuCosts) {
             auditEvent.planCpuCosts = cpuCosts;
             return this;
         }
 
-        public AuditEventBuilder setPlanMemCosts(double memCosts) {
+        public AuditEventBuilder setPlanMemCosts(long memCosts) {
             auditEvent.planMemCosts = memCosts;
             return this;
         }

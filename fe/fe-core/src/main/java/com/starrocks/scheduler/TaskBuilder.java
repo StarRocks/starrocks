@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -48,6 +49,7 @@ public class TaskBuilder {
         Task task = new Task(desc.getUniqueTaskName());
         task.setSource(Constants.TaskSource.PIPE);
         task.setCreateTime(System.currentTimeMillis());
+        task.setCatalogName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         task.setDbName(desc.getDbName());
         task.setDefinition(desc.getSqlTask());
         task.setProperties(desc.getVariables());
@@ -130,6 +132,7 @@ public class TaskBuilder {
     public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName) {
         OptimizeTask task = new OptimizeTask(name);
         task.setSource(Constants.TaskSource.INSERT);
+        task.setCatalogName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         task.setDbName(dbName);
         task.setProperties(properties);
         task.setDefinition(sql);
@@ -139,28 +142,14 @@ public class TaskBuilder {
     }
 
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
-        Task task = new Task(getMvTaskName(materializedView.getId()));
-        task.setSource(Constants.TaskSource.MV);
-        task.setDbName(dbName);
-        Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
-                String.valueOf(materializedView.getId()));
-        taskProperties.putAll(materializedView.getProperties());
-        task.setProperties(taskProperties);
-        task.setDefinition(materializedView.getTaskDefinition());
-        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
-        task.setExpireTime(0L);
-        if (ConnectContext.get() != null) {
-            task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
-        }
-        handleSpecialTaskProperties(task);
-        return task;
+        return rebuildMvTask(materializedView, dbName, materializedView.getProperties());
     }
 
     public static Task rebuildMvTask(MaterializedView materializedView, String dbName,
                                      Map<String, String> previousTaskProperties) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
+        task.setCatalogName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         task.setDbName(dbName);
         String mvId = String.valueOf(materializedView.getId());
         previousTaskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID, mvId);
@@ -168,7 +157,9 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
-        task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        if (ConnectContext.get() != null) {
+            task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        }
         handleSpecialTaskProperties(task);
         return task;
     }
