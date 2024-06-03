@@ -227,12 +227,6 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: 0<br/>
 **Description**: The maximum error tolerance of the Stream Load. It's the maximum percentage of data records that can be filtered out due to inadequate data quality. Valid values: `0` to `1`. Default value: `0`. See [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) for details.
 
-### sink.parallelism
-
-**Required**: No<br/>
-**Default value**: NONE<br/>
-**Description**: The parallelism of the connector. Only available for Flink SQL. If not set, Flink planner will decide the parallelism. In the scenario of multi-parallelism, users need to guarantee data is written in the correct order.
-
 ### sink.properties.strict_mode
 
 **Required**: No<br/>
