@@ -310,6 +310,18 @@ The data is successfully loaded when the above result is returned.
 **Default value**: json<br/>
 **Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters) and [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters).
 
+### sink.properties.partial_update
+
+**Required**:  NO<br/>
+**Default value**: `FALSE`<br/>
+**Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
+
+### sink.properties.partial_update_mode
+
+**Required**:  NO<br/>
+**Default value**: `row`<br/>
+**Description**: Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul>
+
 ## Limits
 
 - It is not supported to flatten a single message from a Kafka topic into multiple data rows and load into StarRocks.

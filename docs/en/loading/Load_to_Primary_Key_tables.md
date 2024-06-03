@@ -465,11 +465,13 @@ As shown in the preceding query result, the record whose `id` is `101` in `examp
 
 ## Partial updates
 
-Since v2.2, StarRocks supports updating only the specified columns of a Primary Key table. This section uses CSV as an example to describe how to perform partial updates.
+Primary Key tables also support partial updates, and provide two modes of partial updates, row mode and column mode, for different data update scenarios. These two modes of partial updates can minimize the overhead of partial updates as much as possible while guaranteeing query performance, ensuring real-time updates. Row mode is more suitable for real-time update scenarios involving many columns and small batches. Column mode is suitable for batch processing update scenarios involving a few columns and a large number of rows.
 
 > **NOTICE**
 >
 > When you perform a partial update, if the row to be updated does not exist, StarRocks inserts a new row, and fills default values in fields that are empty because no data updates are inserted into them.
+
+This section uses CSV as an example to describe how to perform partial updates.
 
 ### Data examples
 
@@ -530,7 +532,7 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 
   > **NOTE**
   >
-  > If you choose Stream Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `columns` parameter to specify the columns you want to update.
+  > If you choose Stream Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. The default is partial updates in row mode. If you need to perform partial updates in column mode, you need to set `partial_update_mode` to `column`. Additionally, you must use the `columns` parameter to specify the columns you want to update.
 
 - Run a Broker Load job:
 
@@ -551,7 +553,7 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 
   > **NOTE**
   >
-  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `column_list` parameter to specify the columns you want to update.
+  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. The default is partial updates in row mode. If you need to perform partial updates in column mode, you need to set `partial_update_mode` to `column`. Additionally, you must use the `column_list` parameter to specify the columns you want to update.
 
 - Run a Routine Load job:
 
@@ -573,7 +575,8 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 
   > **NOTE**
   >
-  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `COLUMNS` parameter to specify the columns you want to update.
+  > - If you choose Routine Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `COLUMNS` parameter to specify the columns you want to update.
+  > - Routine Load only supports partial updates in row modes and does not support partial updates in column mode.
 
 ### Query data
 

@@ -212,6 +212,8 @@ MySQL [example_db]> select * from test_tbl;
 | connect.timeoutms                   | 否       | 1000                                                         | 连接 http-url 的超时时间。取值范围：[100, 60000]。           |
 | sink.properties.*                   |          |                                                              | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `sink.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
 | sink.properties.format              | 否       | json                                                         | Stream Load 导入时的数据格式。取值为 CSV 或者 JSON。默认为JSON。更多参数说明，参见 [CSV 适用参数](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-适用参数)和 [JSON 适用参数](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-适用参数)。 |
+| sink.properties.partial_update      | 否      | `FALSE` | 是否使用部分更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。                                                                                                                                                                                             |
+| sink.properties.partial_update_mode | 否      | `row` | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>  |
 
 ## 使用限制
 
