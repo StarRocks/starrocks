@@ -38,6 +38,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -48,6 +49,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -59,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -69,6 +72,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -187,21 +191,21 @@ public class MvPartitionCompensator {
         }
 
         if (refScanOperator instanceof LogicalOlapScanOperator) {
-            return getMvCompensationForOlap(sessionVariable, refBaseTable, refTablePartitionNameToRefresh,
+            return getMvCompensationForOlap(mvContext, refBaseTable, refTablePartitionNameToRefresh,
                     (LogicalOlapScanOperator) refScanOperator);
         } else if (SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES.contains(refScanOperator.getOpType())) {
-            return getMvCompensationForExternal(sessionVariable, refTablePartitionNameToRefresh, refScanOperator);
+            return getMvCompensationForExternal(mvContext, refTablePartitionNameToRefresh, refScanOperator);
         } else {
             return MVCompensation.createUnkownState(sessionVariable);
         }
     }
 
-    private static MVCompensation getMvCompensationForOlap(SessionVariable sessionVariable,
+    private static MVCompensation getMvCompensationForOlap(MaterializationContext mvContext,
                                                            Table refBaseTable,
                                                            Set<String> refTablePartitionNameToRefresh,
                                                            LogicalOlapScanOperator olapScanOperator) {
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
-
+        SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
         List<Long> selectPartitionIds = olapScanOperator.getSelectedPartitionId();
         if (Objects.isNull(selectPartitionIds) || selectPartitionIds.size() == 0) {
             return MVCompensation.createNoCompensateState(sessionVariable);
@@ -222,6 +226,8 @@ public class MvPartitionCompensator {
         }
 
         if (Sets.newHashSet(toRefreshRefTablePartitions).containsAll(selectPartitionIds)) {
+            logMVRewrite(mvContext, "All table {}'s selected partitions {} need to refresh, no rewrite",
+                    refBaseTable.getName(), selectPartitionIds);
             return MVCompensation.createNoRewriteState(sessionVariable);
         }
 
@@ -229,9 +235,10 @@ public class MvPartitionCompensator {
                 toRefreshRefTablePartitions, null);
     }
 
-    private static MVCompensation getMvCompensationForExternal(SessionVariable sessionVariable,
+    private static MVCompensation getMvCompensationForExternal(MaterializationContext mvContext,
                                                                Set<String> refTablePartitionNamesToRefresh,
                                                                LogicalScanOperator refScanOperator) {
+        SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
         try {
             ScanOperatorPredicates scanOperatorPredicates = refScanOperator.getScanOperatorPredicates();
             Collection<Long> selectPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
@@ -256,7 +263,10 @@ public class MvPartitionCompensator {
             if (toRefreshRefTablePartitions == null) {
                 return MVCompensation.createUnkownState(sessionVariable);
             }
+            Table table = refScanOperator.getTable();
             if (Sets.newHashSet(toRefreshRefTablePartitions).containsAll(selectPartitionKeys)) {
+                logMVRewrite(mvContext, "All table {}'s selected partitions {} need to refresh, no rewrite",
+                        table.getName(), selectPartitionIds);
                 return MVCompensation.createNoRewriteState(sessionVariable);
             }
             return new MVCompensation(sessionVariable, MVTransparentState.COMPENSATE, null,
@@ -448,11 +458,17 @@ public class MvPartitionCompensator {
             logMVRewrite(mvContext, "Get mv scan transparent plan failed");
             return null;
         }
+
         Pair<OptExpression, List<ColumnRefOperator>> mvQueryPlans = getMvQueryPlan(mvContext, mvCompensation);
         if (mvQueryPlans == null) {
             logMVRewrite(mvContext, "Get mv query transparent plan failed");
             return null;
         }
+        // Adjust query output columns to mv's output columns to make sure the output columns are the same as
+        // expectOutputColumns which are mv scan operator's output columns.
+        mvQueryPlans = adjustOptExpressionOutputColumnType(mvContext.getQueryRefFactory(),
+                mvQueryPlans.first, mvQueryPlans.second, originalOutputColumns);
+
         LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
                 .setOutputColumnRefOp(originalOutputColumns)
                 .setChildOutputColumns(Lists.newArrayList(mvScanPlans.second, mvQueryPlans.second))
@@ -461,6 +477,56 @@ public class MvPartitionCompensator {
         OptExpression result = OptExpression.create(unionOperator, mvScanPlans.first, mvQueryPlans.first);
         deriveLogicalProperty(result);
         return result;
+    }
+
+    /**
+     * In some cases, need add cast project to make sure the output columns are the same as expectOutputColumns.
+     * <p>
+     * eg: table t1: k1 date, v1 int, v2 char(20)
+     * mv: create mv mv1 as select k1, v1, v2 from t1.
+     * mv's schema will be: k1 date, v1 int, v2 varchar(20)
+     * </p>
+     * It needs to add a cast project in generating the union operator, which is the same as
+     * {@link com.starrocks.sql.optimizer.transformer.RelationTransformer#processSetOperation(SetOperationRelation)}
+     * </p>
+     * @param columnRefFactory column ref factory to generate the new query column ref
+     * @param optExpression the original opt expression
+     * @param curOutputColumns the original output columns of the opt expression
+     * @param expectOutputColumns the expected output columns
+     * @return the new opt expression and the new output columns if it needs to cast, otherwise return the original
+     */
+    private static Pair<OptExpression, List<ColumnRefOperator>> adjustOptExpressionOutputColumnType(
+            ColumnRefFactory columnRefFactory,
+            OptExpression optExpression,
+            List<ColumnRefOperator> curOutputColumns,
+            List<ColumnRefOperator> expectOutputColumns) {
+        Preconditions.checkState(curOutputColumns.size() == expectOutputColumns.size());
+        Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+        List<ColumnRefOperator> newChildOutputs = new ArrayList<>();
+        int len = curOutputColumns.size();
+        boolean isNeedCast = false;
+        for (int i = 0; i < len; i++) {
+            ColumnRefOperator outOp = curOutputColumns.get(i);
+            Type outputType = outOp.getType();
+            ColumnRefOperator expectOp = expectOutputColumns.get(i);
+            Type expectType = expectOp.getType();
+            if (!outputType.equals(expectType)) {
+                isNeedCast = true;
+                ColumnRefOperator newColRef = columnRefFactory.create("cast", expectType, expectOp.isNullable());
+                ScalarOperator cast = new CastOperator(outputType, outOp, true);
+                projections.put(newColRef, cast);
+                newChildOutputs.add(newColRef);
+            } else {
+                projections.put(outOp, outOp);
+                newChildOutputs.add(outOp);
+            }
+        }
+        if (isNeedCast) {
+            OptExpression newOptExpression = Utils.mergeProjection(optExpression, projections);
+            return Pair.create(newOptExpression, newChildOutputs);
+        } else {
+            return Pair.create(optExpression, curOutputColumns);
+        }
     }
 
     /**

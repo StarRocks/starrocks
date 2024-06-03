@@ -148,6 +148,11 @@ public class Optimizer {
         return context;
     }
 
+    @VisibleForTesting
+    public MvRewriteStrategy getMvRewriteStrategy() {
+        return mvRewriteStrategy;
+    }
+
     public OptExpression optimize(ConnectContext connectContext,
                                   OptExpression logicOperatorTree,
                                   PhysicalPropertySet requiredProperty,
@@ -378,14 +383,19 @@ public class Optimizer {
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
-        if (mvRewriteStrategy.enableRBOViewBasedRewrite) {
+        if (mvRewriteStrategy.enableViewBasedRewrite) {
             // try view based mv rewrite first, then try normal mv rewrite rules
             viewBasedMvRuleRewrite(tree, rootTaskContext);
         }
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
-            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
-        } else if (mvRewriteStrategy.enableRBOSingleTableRewrite) {
+            if (mvRewriteStrategy.enableMultiTableRewrite) {
+                ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_TABLE_MV_REWRITE);
+            }
+            if (mvRewriteStrategy.enableSingleTableRewrite) {
+                ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            }
+        } else if (mvRewriteStrategy.enableSingleTableRewrite) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
@@ -618,8 +628,13 @@ public class Optimizer {
             OptExpression treeWithView = queryMaterializationContext.getLogicalTreeWithView();
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
-            deriveLogicalProperty(treeWithView);
-            ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
+            if (mvRewriteStrategy.enableMultiTableRewrite) {
+                ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.MULTI_TABLE_MV_REWRITE);
+            }
+            if (mvRewriteStrategy.enableSingleTableRewrite) {
+                ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            }
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
             List<Operator> viewScanOperators = Lists.newArrayList();
             MvUtils.collectViewScanOperator(treeWithView, viewScanOperators);
 
@@ -775,7 +790,7 @@ public class Optimizer {
             context.getRuleSet().addRealtimeMVRules();
         }
 
-        if (mvRewriteStrategy.enableCBORewrite) {
+        if (mvRewriteStrategy.enableMultiTableRewrite) {
             context.getRuleSet().addSingleTableMvRewriteRule();
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
