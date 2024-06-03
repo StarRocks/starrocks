@@ -3448,9 +3448,9 @@ public class LocalMetastore implements ConnectorMetadata {
                         storageInfo == null ? null : storageInfo.getDataCacheInfo());
                 Long version = Partition.PARTITION_INIT_VERSION;
                 Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet,
-                        ConnectContext.get().getCurrentWarehouseId());
+                        materializedView.getWarehouseId());
                 buildPartitions(db, materializedView, new ArrayList<>(partition.getSubPartitions()),
-                        ConnectContext.get().getCurrentWarehouseId());
+                        materializedView.getWarehouseId());
                 materializedView.addPartition(partition);
             } else {
                 Expr partitionExpr = stmt.getPartitionExpDesc().getExpr();
