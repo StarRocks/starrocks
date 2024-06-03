@@ -248,8 +248,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
     std::shared_ptr<TabletSchema> modified_columns_schema = nullptr;
     if (has_partial_update_state(params)) {
-        std::vector<ColumnUID> update_column_ids(txn_meta.partial_update_column_unique_ids().begin(),
-                                                 txn_meta.partial_update_column_unique_ids().end());
+        std::vector<uint32_t> update_column_ids(txn_meta.partial_update_column_unique_ids().begin(),
+                                                txn_meta.partial_update_column_unique_ids().end());
         modified_columns_schema = TabletSchema::create_with_uid(params.tablet_schema, update_column_ids);
     } else {
         std::vector<int32_t> all_column_ids;
@@ -444,8 +444,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
         if (!skip_rewrite) {
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                    &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
-                    unmodified_column_ids,
+                    params.tablet->segment_location(src_path), &file_info, params.tablet_schema,
+                    _auto_increment_partial_update_states[segment_id], unmodified_column_ids,
                     has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
                     params.op_write, params.tablet));
         } else {
