@@ -160,7 +160,7 @@ TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_cl
                     scan_node->convert_scan_range_to_morsel_queue_factory(
                             scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
-    ASSERT_FALSE(morsel_queue_factory->is_shared());
+    ASSERT_TRUE(morsel_queue_factory->is_shared());
 
     // dop is 2 and so much morsels
     pipeline_dop = 2;

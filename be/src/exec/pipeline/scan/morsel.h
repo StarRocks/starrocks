@@ -558,7 +558,9 @@ public:
     explicit DynamicMorselQueue(Morsels&& morsels) {
         append_morsels(std::move(morsels));
         _size = _num_morsels = _queue.size();
+        _degree_of_parallelism = _num_morsels;
     }
+
     ~DynamicMorselQueue() override = default;
     bool empty() const override { return _size.load(std::memory_order_relaxed) == 0; }
     StatusOr<MorselPtr> try_get() override;
@@ -571,11 +573,15 @@ public:
     bool could_attch_ticket_checker() const override { return true; }
     Type type() const override { return DYNAMIC; }
 
+    void set_max_degree_of_parallelism(size_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
+
 private:
     std::atomic<int64_t> _size = 0;
     std::deque<MorselPtr> _queue;
     std::mutex _mutex;
     query_cache::TicketCheckerPtr _ticket_checker;
+    size_t _degree_of_parallelism;
 };
 
 MorselQueuePtr create_empty_morsel_queue();
