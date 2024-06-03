@@ -147,10 +147,7 @@ public:
         _desc_tbl = desc_tbl;
     }
 
-    DescriptorTbl* desc_tbl() {
-        DCHECK(_desc_tbl != nullptr);
-        return _desc_tbl;
-    }
+    DescriptorTbl* desc_tbl() { return _desc_tbl; }
 
     size_t total_fragments() { return _total_fragments; }
     /// Initialize the mem_tracker of this query.
