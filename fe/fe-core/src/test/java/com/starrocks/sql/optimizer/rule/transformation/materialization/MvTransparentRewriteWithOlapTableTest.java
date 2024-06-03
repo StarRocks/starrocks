@@ -637,7 +637,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testTransparentRewriteWithCharType() {
+    public void testTransparentRewriteWithCharType1() {
         starRocksAssert.withTable(m3, () -> {
             cluster.runSql("test", "insert into m3 values (1,1,1,1,1,2), (4,2,1,1,1,1), (10,10,10,10,10,10);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
@@ -683,6 +683,132 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
                                         "     TABLE: m3\n" +
                                         "     PREAGGREGATION: ON\n" +
                                         "     PREDICATES: 19: k1 = 1"
+                        };
+                        int len = sqls.length;
+                        for (int i = 0; i < len; i++) {
+                            String query = sqls[i];
+                            String plan = getFragmentPlan(query, "MV");
+                            System.out.println(plan);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, expects[i]);
+                        }
+                    });
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteWithCharType2() {
+        starRocksAssert.withTable(m3, () -> {
+            cluster.runSql("test", "insert into m3 values (1,1,1,1,1,2), (4,2,1,1,1,1), (10,10,10,10,10,10);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS select * from m3 where v1 > 2;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1]", mvNames.toString());
+                        String[] sqls = {
+                                "SELECT * from mv0",
+                                "SELECT * from mv0 where v1 > 1",
+                        };
+                        String[] expects = {
+                                "  4:Project\n" +
+                                        "  |  <slot 19> : 19: k1\n" +
+                                        "  |  <slot 20> : 20: k2\n" +
+                                        "  |  <slot 21> : 21: v1\n" +
+                                        "  |  <slot 22> : 22: v2\n" +
+                                        "  |  <slot 24> : 24: v4\n" +
+                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  \n" +
+                                        "  3:OlapScanNode\n" +
+                                        "     TABLE: m3\n" +
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 21: v1 > 2\n" +
+                                        "     partitions=2/3",
+                                "  4:Project\n" +
+                                        "  |  <slot 19> : 19: k1\n" +
+                                        "  |  <slot 20> : 20: k2\n" +
+                                        "  |  <slot 21> : 21: v1\n" +
+                                        "  |  <slot 22> : 22: v2\n" +
+                                        "  |  <slot 24> : 24: v4\n" +
+                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  \n" +
+                                        "  3:OlapScanNode\n" +
+                                        "     TABLE: m3\n" +
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 21: v1 > 2\n" +
+                                        "     partitions=2/3"
+                        };
+                        int len = sqls.length;
+                        for (int i = 0; i < len; i++) {
+                            String query = sqls[i];
+                            String plan = getFragmentPlan(query, "MV");
+                            System.out.println(plan);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, expects[i]);
+                        }
+                    });
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteWithCharTypeWithUnionRewrite() {
+        starRocksAssert.withTable(m3, () -> {
+            cluster.runSql("test", "insert into m3 values (1,1,1,1,1,2), (4,2,1,1,1,1), (10,10,10,10,10,10);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'false'" +
+                            " ) " +
+                            " AS select * from m3 where v1 > 2;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1]", mvNames.toString());
+                        String[] sqls = {
+                                "SELECT * from m3",
+                                "SELECT * from m3 where v1 > 1",
+                        };
+                        String[] expects = {
+                                "  4:Project\n" +
+                                        "  |  <slot 19> : 19: k1\n" +
+                                        "  |  <slot 20> : 20: k2\n" +
+                                        "  |  <slot 21> : 21: v1\n" +
+                                        "  |  <slot 22> : 22: v2\n" +
+                                        "  |  <slot 24> : 24: v4\n" +
+                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  \n" +
+                                        "  3:OlapScanNode\n" +
+                                        "     TABLE: m3\n" +
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 21: v1 > 2\n" +
+                                        "     partitions=2/3",
+                                "  4:Project\n" +
+                                        "  |  <slot 19> : 19: k1\n" +
+                                        "  |  <slot 20> : 20: k2\n" +
+                                        "  |  <slot 21> : 21: v1\n" +
+                                        "  |  <slot 22> : 22: v2\n" +
+                                        "  |  <slot 24> : 24: v4\n" +
+                                        "  |  <slot 25> : CAST(23: v3 AS CHAR(20))\n" +
+                                        "  |  \n" +
+                                        "  3:OlapScanNode\n" +
+                                        "     TABLE: m3\n" +
+                                        "     PREAGGREGATION: ON\n" +
+                                        "     PREDICATES: 21: v1 > 2\n" +
+                                        "     partitions=2/3"
                         };
                         int len = sqls.length;
                         for (int i = 0; i < len; i++) {

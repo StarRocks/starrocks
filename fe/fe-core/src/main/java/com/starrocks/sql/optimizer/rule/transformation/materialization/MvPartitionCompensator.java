@@ -458,15 +458,15 @@ public class MvPartitionCompensator {
             logMVRewrite(mvContext, "Get mv scan transparent plan failed");
             return null;
         }
-        mvScanPlans = addCastProjectIfNeeded(mvContext.getQueryRefFactory(),
-                mvScanPlans.first, mvScanPlans.second, originalOutputColumns);
 
         Pair<OptExpression, List<ColumnRefOperator>> mvQueryPlans = getMvQueryPlan(mvContext, mvCompensation);
         if (mvQueryPlans == null) {
             logMVRewrite(mvContext, "Get mv query transparent plan failed");
             return null;
         }
-        mvQueryPlans = addCastProjectIfNeeded(mvContext.getQueryRefFactory(),
+        // Adjust query output columns to mv's output columns to make sure the output columns are the same as
+        // expectOutputColumns which are mv scan operator's output columns.
+        mvQueryPlans = adjustOptExpressionOutputColumnType(mvContext.getQueryRefFactory(),
                 mvQueryPlans.first, mvQueryPlans.second, originalOutputColumns);
 
         LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
@@ -491,22 +491,22 @@ public class MvPartitionCompensator {
      * </p>
      * @param columnRefFactory column ref factory to generate the new query column ref
      * @param optExpression the original opt expression
-     * @param outputColumns the original output columns of the opt expression
+     * @param curOutputColumns the original output columns of the opt expression
      * @param expectOutputColumns the expected output columns
      * @return the new opt expression and the new output columns if it needs to cast, otherwise return the original
      */
-    private static Pair<OptExpression, List<ColumnRefOperator>> addCastProjectIfNeeded(
+    private static Pair<OptExpression, List<ColumnRefOperator>> adjustOptExpressionOutputColumnType(
             ColumnRefFactory columnRefFactory,
             OptExpression optExpression,
-            List<ColumnRefOperator> outputColumns,
+            List<ColumnRefOperator> curOutputColumns,
             List<ColumnRefOperator> expectOutputColumns) {
-        Preconditions.checkState(outputColumns.size() == expectOutputColumns.size());
-        int len = outputColumns.size();
+        Preconditions.checkState(curOutputColumns.size() == expectOutputColumns.size());
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         List<ColumnRefOperator> newChildOutputs = new ArrayList<>();
+        int len = curOutputColumns.size();
         boolean isNeedCast = false;
         for (int i = 0; i < len; i++) {
-            ColumnRefOperator outOp = outputColumns.get(i);
+            ColumnRefOperator outOp = curOutputColumns.get(i);
             Type outputType = outOp.getType();
             ColumnRefOperator expectOp = expectOutputColumns.get(i);
             Type expectType = expectOp.getType();
@@ -525,7 +525,7 @@ public class MvPartitionCompensator {
             OptExpression newOptExpression = Utils.mergeProjection(optExpression, projections);
             return Pair.create(newOptExpression, newChildOutputs);
         } else {
-            return Pair.create(optExpression, outputColumns);
+            return Pair.create(optExpression, curOutputColumns);
         }
     }
 
