@@ -188,7 +188,10 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
             worker = workers[rand() % max_worker_per_driver];
         }
     }
-    if (worker != nullptr) {
+    if (worker->is_dead()) {
+        worker->terminate_and_wait();
+    }
+    if (worker != nullptr && !worker->is_dead()) {
         *url = worker->url();
         worker->touch();
         return worker;
@@ -217,7 +220,7 @@ void PyWorkerManager::cleanup_expired_worker() {
             auto& workers = pair.second;
             workers.erase(std::remove_if(workers.begin(), workers.end(),
                                          [](const std::shared_ptr<PyWorker>& worker) {
-                                             if (worker->expired()) {
+                                             if (worker->expired() || worker->is_dead()) {
                                                  return true;
                                              }
                                              return false;

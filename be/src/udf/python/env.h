@@ -64,7 +64,11 @@ public:
     void touch() { _last_touch_time = MonotonicSeconds(); }
     bool expired() { return MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec; }
 
+    void mark_dead() { _is_dead = true; }
+    bool is_dead() { return _is_dead; }
+
 private:
+    bool _is_dead{};
     std::string _url;
     pid_t _pid = -1;
     int64_t _last_touch_time = 0;

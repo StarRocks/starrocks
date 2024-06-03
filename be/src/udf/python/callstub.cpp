@@ -78,14 +78,22 @@ Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDe
 }
 
 StatusOr<std::shared_ptr<arrow::RecordBatch>> ArrowFlightWithRW::rpc(arrow::RecordBatch& batch) {
-    if (!_begin) {
-        RETURN_IF_ARROW_ERROR(_writer->Begin(batch.schema()));
-        _begin = true;
+    auto do_rpc = [this](arrow::RecordBatch& batch) -> StatusOr<std::shared_ptr<arrow::RecordBatch>> {
+        if (!_begin) {
+            RETURN_IF_ARROW_ERROR(_writer->Begin(batch.schema()));
+            _begin = true;
+        }
+        RETURN_IF_ARROW_ERROR(_writer->WriteRecordBatch(batch));
+        arrow::flight::FlightStreamChunk stream_chunk;
+        RETURN_IF_ARROW_ERROR(_reader->Next(&stream_chunk));
+        return stream_chunk.data;
+    };
+    auto result_with_st = do_rpc(batch);
+
+    if (!result_with_st.status().ok()) {
+        _process->mark_dead();
     }
-    RETURN_IF_ARROW_ERROR(_writer->WriteRecordBatch(batch));
-    arrow::flight::FlightStreamChunk stream_chunk;
-    RETURN_IF_ARROW_ERROR(_reader->Next(&stream_chunk));
-    return stream_chunk.data;
+    return result_with_st;
 }
 
 void ArrowFlightWithRW::close() {
