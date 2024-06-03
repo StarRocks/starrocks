@@ -32,6 +32,7 @@ std::pair<Status, bool> AsyncFlushStreamPoller::poll() {
             break;
         }
         status.update(f.async_status.get());
+        CHECK(f.stream->releasable_memory() == 0);
         _queue.pop_front();
     }
 
