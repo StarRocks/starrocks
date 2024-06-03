@@ -4,6 +4,34 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.12
+
+发布日期：2024 年 5 月 30 日
+
+### 新增特性
+
+- 支持从 StarRocks 读取 ARRAY、MAP 和 STRUCT 等复杂类型的数据，并以 Arrow 格式可提供给 Flink connector 读取使用。[#43514](https://github.com/StarRocks/starrocks/pull/43514) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+
+### 功能优化
+
+- 在 BE 通过 RPC 与 FE 通信失败时，FE 只会统一返回报错信息 `call frontend service failed reason=xxx`，导致具体出错原因不明。优化后报错信息中会提示具体的出错原因，例如超时或服务器繁忙。 [#44153](https://github.com/StarRocks/starrocks/pull/44153)
+- 优化导入中报错信息，例如错误数据行超限、列数不对应、无效列名、所有分区中没有数据。
+
+### 安全
+
+- 升级 Kafka client 依赖包为 v3.4.0，以修复 [CVE-2023-25194](https://github.com/advisories/GHSA-26f8-x7cc-wqpc) 安全问题。[#45382](https://github.com/StarRocks/starrocks/pull/45382)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果一个物化视图定义中包含多个相同的表的 self join，且根据该表进行分区增量刷新，会因分区选择错误而导致结果错误。[#45936](https://github.com/StarRocks/starrocks/pull/45936)
+- 存算分离模式下在物化视图中创建 Bitmap 索引，会导致 FE crash。[#45665](https://github.com/StarRocks/starrocks/pull/45665)
+- 通过 ODBC 连接 FE follower 并执行 CREATE TABLE 时因空指针问题导致 BE crash。[#45043](https://github.com/StarRocks/starrocks/pull/45043)
+- 如果有较多异步任务，查询 information_schema.task_runs 会频繁失败。[#45520](https://github.com/StarRocks/starrocks/pull/45520)
+- SQL 语句中包含多个 COUNT DISTINCT 且包含 LIMIT，则 LIMIT 处理出现问题，导致每次执行语句返回数据不一致。[#44749](https://github.com/StarRocks/starrocks/pull/44749)
+- 查询明细表和聚合表的语句中包含 ORDER BY LIMIT 子句时，查询结果错误。[#45037](https://github.com/StarRocks/starrocks/pull/45037)
+
 ## 3.1.11
 
 发布日期：2024 年 4 月 28 日

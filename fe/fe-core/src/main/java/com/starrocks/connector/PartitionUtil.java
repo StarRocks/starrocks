@@ -309,6 +309,10 @@ public class PartitionUtil {
         return ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
     }
 
+    public static Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table table, List<String> partitionNames) {
+        return ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo(partitionNames);
+    }
+
     // Get partition name generated for mv from hive/hudi/iceberg partition name,
     // external table partition name like this :
     // col_date=2023-01-01,

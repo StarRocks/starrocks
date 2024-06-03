@@ -455,7 +455,8 @@ public class LockManager {
             return hasCycleInternal(rootLocker, rid, rootLockType, null);
         }
 
-        private boolean hasCycleInternal(Locker checkedLocker, Long requestLockRid, LockType requestLockType, LockType ownLockType) {
+        private boolean hasCycleInternal(Locker checkedLocker, Long requestLockRid, LockType requestLockType,
+                                         LockType ownLockType) {
             Lock requestLock;
             Set<LockHolder> ownersForCheckedLock;
 

@@ -310,24 +310,34 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         query_exec_wall_time->set(query_ctx->lifetime());
     }
 
-    // Load channel profile will be merged on FE
-    auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
-    auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
-                                                                      load_channel_profile, status, done);
-    auto fe_addr = fragment_ctx->fe_addr();
+    const auto& fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {
         // query executed by external connectors, like spark and flink connector,
         // does not need to report exec state to FE, so return if fe addr is empty.
         return;
     }
 
+    // Load channel profile will be merged on FE
+    auto* load_channel_profile = fragment_ctx->runtime_state()->load_channel_profile();
+    std::shared_ptr<TReportExecStatusParams> params;
+    {
+        // move profile memory to process, similar with SinkBuffer. the params will be released in ExecStateReporter
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile,
+                                                                     load_channel_profile, status, done);
+        int64_t delta = CurrentThread::current().get_consumed_bytes() - before_bytes;
+
+        CurrentThread::current().mem_release(delta);
+        GlobalEnv::GetInstance()->process_mem_tracker()->consume(delta);
+    }
+
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
-    auto report_task = [=]() {
+    auto report_task = [params, exec_env, fe_addr, fragment_id]() {
         int retry_times = 0;
         while (retry_times++ < 3) {
-            auto status = ExecStateReporter::report_exec_status(params, exec_env, fe_addr);
+            auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
             if (!status.ok()) {
                 if (status.is_not_found()) {
                     LOG(INFO) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
@@ -336,13 +346,13 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                     LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
                                  << ", status: " << status.to_string() << ", retry_times=" << retry_times;
                     // if it is done exec state report, we should retry
-                    if (params.__isset.done && params.done) {
+                    if (params->__isset.done && params->done) {
                         continue;
                     }
                 }
             } else {
                 LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                          << ", is_done=" << params.done;
+                          << ", is_done=" << params->done;
             }
             break;
         }

@@ -622,6 +622,14 @@ public class StmtExecutor {
                                         ProfilingExecPlan.buildFrom(execPlan), profile, null));
                             }
                         }
+
+                        if (context.getState().isError()) {
+                            RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+                            Tracers.toRuntimeProfile(plannerProfile);
+                            LOG.warn("Query {} failed. Planner profile : {}",
+                                    context.getQueryId().toString(), plannerProfile);
+                        }
+
                         if (isAsync) {
                             QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
                                     context.getSessionVariable().getProfileTimeout() * 1000L);

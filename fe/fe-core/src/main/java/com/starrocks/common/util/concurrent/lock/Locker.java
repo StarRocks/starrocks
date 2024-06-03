@@ -75,7 +75,9 @@ public class Locker {
         }
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        LOG.debug(this + " | LockManager request lock : rid " + rid + ", lock type " + lockType);
         lockManager.lock(rid, this, lockType, timeout);
+        LOG.debug(this + " | LockManager acquire lock : rid " + rid + ", lock type " + lockType);
     }
 
     public void lock(long rid, LockType lockType) throws IllegalLockStateException {
@@ -90,6 +92,7 @@ public class Locker {
      */
     public void release(long rid, LockType lockType) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        LOG.debug(this + " | LockManager release lock : rid " + rid + ", lock type " + lockType);
         lockManager.release(rid, this, lockType);
     }
 

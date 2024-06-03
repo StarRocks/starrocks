@@ -23,12 +23,11 @@
 #include "common/statusor.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
-#include "gen_cpp/types.pb.h"
+#include "exec/spill/spill_fwd.h"
 #include "gutil/macros.h"
 #include "util/raw_container.h"
 
 namespace starrocks::spill {
-class ChunkBuilder;
 
 enum class SerdeType {
     BY_COLUMN,
@@ -87,7 +86,6 @@ private:
 struct SerdeContext {
     raw::RawString serialize_buffer;
 };
-class Spiller;
 // Serde is used to serialize and deserialize spilled data.
 class Serde;
 using SerdePtr = std::shared_ptr<Serde>;
