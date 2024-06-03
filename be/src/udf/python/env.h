@@ -40,6 +40,14 @@ struct PythonEnv {
 class ArrowFlightWithRW;
 class PyFunctionDescriptor;
 
+template <typename Callable>
+void lock_free_call_once(std::atomic<bool>& once, Callable&& func) {
+    bool expected = false;
+    if (once.compare_exchange_strong(expected, true)) {
+        func();
+    }
+}
+
 class PyWorker {
 public:
     PyWorker(pid_t pid) : _pid(pid) {}
@@ -50,11 +58,11 @@ public:
     void wait();
 
     void terminate_and_wait() {
-        if (_pid != -1) {
+        lock_free_call_once(_once, [this]() {
             terminate();
             wait();
             remove_unix_socket();
-        }
+        });
     }
     void remove_unix_socket();
 
@@ -68,6 +76,7 @@ public:
     bool is_dead() { return _is_dead; }
 
 private:
+    std::atomic<bool> _once{};
     bool _is_dead{};
     std::string _url;
     pid_t _pid = -1;

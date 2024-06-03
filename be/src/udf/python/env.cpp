@@ -188,7 +188,7 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
             worker = workers[rand() % max_worker_per_driver];
         }
     }
-    if (worker->is_dead()) {
+    if (worker && worker->is_dead()) {
         worker->terminate_and_wait();
     }
     if (worker != nullptr && !worker->is_dead()) {
