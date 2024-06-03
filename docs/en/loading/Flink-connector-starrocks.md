@@ -227,13 +227,13 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: 0<br/>
 **Description**: The maximum error tolerance of the Stream Load. It's the maximum percentage of data records that can be filtered out due to inadequate data quality. Valid values: `0` to `1`. Default value: `0`. See [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) for details.
 
-### starrocks.write.properties.partial_update
+### sink.properties.partial_update
 
 **Required**: NO<br/>
 **Default value**: `FALSE`<br/>
 **Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
 
-### starrocks.write.properties.partial_update_mode
+### sink.properties.partial_update_mode
 
 **Required**:  NO<br/>
 **Default value**: `row`<br/>

@@ -310,13 +310,13 @@ The data is successfully loaded when the above result is returned.
 **Default value**: json<br/>
 **Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters) and [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters).
 
-### starrocks.write.properties.partial_update
+### sink.properties.partial_update
 
 **Required**:  NO<br/>
 **Default value**: `FALSE`<br/>
 **Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
 
-### starrocks.write.properties.partial_update_mode
+### sink.properties.partial_update_mode
 
 **Required**:  NO<br/>
 **Default value**: `row`<br/>
