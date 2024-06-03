@@ -16,6 +16,8 @@
 package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -54,6 +56,7 @@ import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -84,12 +87,15 @@ public class StarOSAgent {
     // The value of this map is the id of backends or compute nodes
     protected Map<Long, Long> workerToNode;
     protected ReentrantReadWriteLock rwLock;
+    protected Cache<Long, List<Long>> clientWorkerGroupCache;
 
     public StarOSAgent() {
         serviceId = "";
         workerToId = Maps.newHashMap();
         workerToNode = Maps.newHashMap();
         rwLock = new FairReentrantReadWriteLock();
+        clientWorkerGroupCache =
+                CacheBuilder.newBuilder().maximumSize(16).expireAfterWrite(Duration.ofMinutes(10)).build();
     }
 
     public boolean init(StarManagerServer server) {
@@ -330,6 +336,7 @@ public class StarOSAgent {
                     LOG.info("worker {} already added in starMgr", workerId);
                 }
             }
+            clientWorkerGroupCache.invalidate(workerGroupId);
             tryRemovePreviousWorker(nodeId);
             workerToId.put(workerIpPort, workerId);
             workerToNode.put(workerId, nodeId);
@@ -368,7 +375,7 @@ public class StarOSAgent {
                 throw new DdlException("Failed to remove worker. error: " + e.getMessage());
             }
         }
-
+        clientWorkerGroupCache.invalidate(workerGroupId);
         removeWorkerFromMap(workerId, workerIpPort);
     }
 
@@ -682,6 +689,10 @@ public class StarOSAgent {
     }
 
     public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+        List<Long> cachedIds = clientWorkerGroupCache.getIfPresent(workerGroupId);
+        if (cachedIds != null) {
+            return new ArrayList<>(cachedIds);
+        }
         List<Long> nodeIds = new ArrayList<>();
         prepare();
         try {
@@ -691,7 +702,8 @@ public class StarOSAgent {
                 detailInfo.getWorkersInfoList()
                         .forEach(x -> getOrUpdateNodeIdByWorkerInfo(x).ifPresent(nodeIds::add));
             }
-            return nodeIds;
+            clientWorkerGroupCache.put(workerGroupId, nodeIds);
+            return new ArrayList<>(nodeIds);
         } catch (StarClientException e) {
             throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
         }
