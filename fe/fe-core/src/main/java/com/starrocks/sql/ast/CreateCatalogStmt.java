@@ -31,11 +31,11 @@ public class CreateCatalogStmt extends DdlStmt {
 
 
     public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties, boolean ifNotExists) {
-        this(catalogName, comment, properties, NodePosition.ZERO, ifNotExists);
+        this(catalogName, comment, properties, ifNotExists, NodePosition.ZERO);
     }
 
     public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties,
-                             NodePosition pos, boolean ifNotExists) {
+                             boolean ifNotExists, NodePosition pos) {
         super(pos);
         this.catalogName = catalogName;
         this.comment = comment;

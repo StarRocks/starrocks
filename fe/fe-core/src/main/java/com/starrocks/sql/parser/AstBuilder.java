@@ -1885,7 +1885,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new CreateCatalogStmt(catalogName, comment, properties, createPos(context), ifNotExists);
+        return new CreateCatalogStmt(catalogName, comment, properties,  ifNotExists, createPos(context));
     }
 
     @Override
