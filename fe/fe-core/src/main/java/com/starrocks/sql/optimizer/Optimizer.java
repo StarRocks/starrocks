@@ -785,15 +785,8 @@ public class Optimizer {
             context.getRuleSet().addRealtimeMVRules();
         }
 
-<<<<<<< HEAD
-        if (mvRewriteStrategy.enableCBORewrite) {
-            if (mvRewriteStrategy.enableCBOSingleTableRewrite) {
-                context.getRuleSet().addSingleTableMvRewriteRule();
-            }
-=======
         if (mvRewriteStrategy.enableMultiTableRewrite) {
             context.getRuleSet().addSingleTableMvRewriteRule();
->>>>>>> 99b97eb2e3 ([BugFix] Add cast type for mv union rewrite to avoid type not match (#46494))
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 

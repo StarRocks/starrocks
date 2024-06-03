@@ -31,19 +31,9 @@ public class MvRewriteStrategy {
     // Whether enable force rewrite for query plans with join operator by rule based mv rewrite
     public boolean enableForceRBORewrite = false;
 
-<<<<<<< HEAD
-    // rbo config
-    public boolean enableRBOViewBasedRewrite = false;
-    public boolean enableRBOSingleTableRewrite = false;
-
-    // cbo config
-    public boolean enableCBORewrite = false;
-    public boolean enableCBOSingleTableRewrite = false;
-=======
     public boolean enableViewBasedRewrite = false;
     public boolean enableSingleTableRewrite = false;
     public boolean enableMultiTableRewrite = false;
->>>>>>> 99b97eb2e3 ([BugFix] Add cast type for mv union rewrite to avoid type not match (#46494))
 
     static class MvStrategyArbitrator {
         private final OptimizerConfig optimizerConfig;
@@ -147,10 +137,6 @@ public class MvRewriteStrategy {
         strategy.enableSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
 
         // cbo strategies
-<<<<<<< HEAD
-        strategy.enableCBORewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
-        strategy.enableCBOSingleTableRewrite = arbitrator.isEnableCBOSingleTableRewrite();
-=======
         strategy.enableMultiTableRewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
     }
 
@@ -163,6 +149,5 @@ public class MvRewriteStrategy {
                 ", enableSingleTableRewrite=" + enableSingleTableRewrite +
                 ", enableMultiTableRewrite=" + enableMultiTableRewrite +
                 '}';
->>>>>>> 99b97eb2e3 ([BugFix] Add cast type for mv union rewrite to avoid type not match (#46494))
     }
 }
