@@ -162,7 +162,12 @@ public:
     void add_sub_column(const TabletColumn& sub_column);
     void add_sub_column(TabletColumn&& sub_column);
     uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
-    const TabletColumn& subcolumn(uint32_t i) const { return _extra_fields->sub_columns[i]; }
+    const TabletColumn& subcolumn(uint32_t i) const {
+        if (i >= subcolumn_count()) {
+            throw std::out_of_range("Index i is out of range");
+        }
+        return _extra_fields->sub_columns[i];
+    }
     const TabletColumn* subcolumn_ptr(uint32_t i) const {
         if (i >= subcolumn_count()) {
             return nullptr;

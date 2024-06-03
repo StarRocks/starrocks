@@ -260,7 +260,14 @@ private:
 
     using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
     std::unique_ptr<SubReaderList> _sub_readers;
-    // only used for struct column right now
+    // Only used for struct column right now
+    // Use column names and unique IDs to distinguish sub-columns.
+    // The unnique id is always -1 for historical data, so the column name is needed.
+    // After support add/drop field for struct column, the following scenarios might occur:
+    //   1. Drop field v1
+    //   2. Add field v1
+    // The field `v1` in step 2 is different from the `v1` in step 1 and needs to be distinguished,
+    // So we also need to unqiue id.
     struct SubReaderId {
         std::string name;
         int32_t id;
