@@ -194,6 +194,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     public static final String ENABLE_AGG_SPILL_PREAGGREGATION = "enable_agg_spill_preaggregation";
+    public static final String ENABLE_SPILL_BUFFER_READ = "enable_spill_buffer_read";
+    public static final String MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER = "max_spill_read_buffer_bytes_per_driver";
     // enable table pruning(RBO) in cardinality-preserving joins
     public static final String ENABLE_RBO_TABLE_PRUNE = "enable_rbo_table_prune";
 
@@ -1134,6 +1136,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
+
+    @VarAttr(name = ENABLE_SPILL_BUFFER_READ, flag = VariableMgr.INVISIBLE)
+    public boolean enableSpillBufferRead = true;
+
+    @VarAttr(name = MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER, flag = VariableMgr.INVISIBLE)
+    public long maxSpillReadBufferBytesPerDriver = 1024 * 1024 * 16;
 
     @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
     private boolean enableRboTablePrune = false;
@@ -3898,7 +3906,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             spillOptions.setSpill_rand_ratio(spillRandRatio);
             spillOptions.setSpill_enable_compaction(spillEnableCompaction);
             spillOptions.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
-
+            spillOptions.setEnable_spill_buffer_read(enableSpillBufferRead);
+            spillOptions.setMax_spill_read_buffer_bytes_per_driver(maxSpillReadBufferBytesPerDriver);
             if (enableSpillToRemoteStorage && !spillStorageVolume.isEmpty()) {
                 // find storage volume config
                 GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
