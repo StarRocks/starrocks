@@ -289,4 +289,8 @@ public abstract class OptExpressionVisitor<R, C> {
     public R visitPhysicalSplitProducer(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
+
+    public R visitPhysicalSplitConsumer(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
 }

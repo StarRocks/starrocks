@@ -110,6 +110,7 @@ import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.SelectNode;
 import com.starrocks.planner.SetOperationNode;
 import com.starrocks.planner.SortNode;
+import com.starrocks.planner.SplitPlanFragment;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.planner.stream.StreamAggNode;
@@ -176,6 +177,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
@@ -334,6 +336,7 @@ public class PlanFragmentBuilder {
 
         ExchangeNode exchangeNode =
                 new ExchangeNode(execPlan.getNextNodeId(), inputFragment.getPlanRoot(), DataPartition.UNPARTITIONED);
+        exchangeNode.setNumInstances(1);
         PlanFragment exchangeFragment =
                 new PlanFragment(execPlan.getNextFragmentId(), exchangeNode, DataPartition.UNPARTITIONED);
         inputFragment.setDestination(exchangeNode);
@@ -458,6 +461,8 @@ public class PlanFragmentBuilder {
 
             if (projection != null) {
                 fragment = buildProjectNode(optExpression, projection, fragment, context);
+                // push project to the same group
+                currentExecGroup.add(fragment.getPlanRoot());
             }
             PlanNode planRoot = fragment.getPlanRoot();
             if (!(optExpression.getOp() instanceof PhysicalProjectOperator) && planRoot instanceof ProjectNode) {
@@ -700,7 +705,6 @@ public class PlanFragmentBuilder {
 
             projectNode.setLimit(inputFragment.getPlanRoot().getLimit());
             inputFragment.setPlanRoot(projectNode);
-            currentExecGroup.add(projectNode);
             return inputFragment;
         }
 
@@ -1419,7 +1423,6 @@ public class PlanFragmentBuilder {
                 }
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
-                icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
                 icebergScanNode.setupScanRangeLocations(context.getDescTbl());
 
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
@@ -2345,27 +2348,8 @@ public class PlanFragmentBuilder {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
                     inputFragment.getPlanRoot(), distribution.getDistributionSpec().getType());
             currentExecGroup.add(exchangeNode, true);
-            DataPartition dataPartition;
-            if (DistributionSpec.DistributionType.GATHER.equals(distribution.getDistributionSpec().getType())) {
-                dataPartition = DataPartition.UNPARTITIONED;
-            } else if (DistributionSpec.DistributionType.BROADCAST
-                    .equals(distribution.getDistributionSpec().getType())) {
-                dataPartition = DataPartition.UNPARTITIONED;
-            } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distribution.getDistributionSpec().getType())) {
-                List<ColumnRefOperator> partitionColumns =
-                        getShuffleColumns((HashDistributionSpec) distribution.getDistributionSpec());
-                List<Expr> distributeExpressions =
-                        partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                .collect(Collectors.toList());
-                dataPartition = DataPartition.hashPartitioned(distributeExpressions);
-            } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(
-                    distribution.getDistributionSpec().getType())) {
-                dataPartition = DataPartition.RANDOM;
-            } else {
-                throw new StarRocksPlannerException("Unsupport exchange type : "
-                        + distribution.getDistributionSpec().getType(), INTERNAL_ERROR);
-            }
+            DataPartition dataPartition =
+                    translateDistributionToDataPartition(distribution.getDistributionSpec(), context);
             exchangeNode.setDataPartition(dataPartition);
 
             PlanFragment fragment =
@@ -2405,6 +2389,7 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     DistributionSpec.DistributionType.GATHER);
 
+            exchangeNode.setNumInstances(1);
             DataPartition dataPartition = DataPartition.UNPARTITIONED;
             exchangeNode.setDataPartition(dataPartition);
 
@@ -2763,8 +2748,7 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.setProbePartitionByExprs(probePartitionByExprs);
-            joinNode.setEnableLateMaterialization(
-                    ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
+            joinNode.setEnableLateMaterialization(ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
             // enable group execution for colocate join
             currentExecGroup = leftExecGroup;
             if (ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
@@ -2773,15 +2757,13 @@ public class PlanFragmentBuilder {
                     currentExecGroup.setColocateGroup();
                     currentExecGroup.merge(rightExecGroup);
                     execGroups.remove(rightExecGroup);
-                } else if (!leftExecGroup.isDisableColocateGroup() &&
-                        (distributionMode.equals(JoinNode.DistributionMode.BROADCAST) ||
-                                (distributionMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET) &&
-                                        !joinOperator.isRightJoin()))) {
-                    // case 1: broadcast join
-                    // case 2: local bucket shuffle (no-right) join
+                } else if ((distributionMode.equals(JoinNode.DistributionMode.BROADCAST) || distributionMode.equals(
+                        JoinNode.DistributionMode.LOCAL_HASH_BUCKET)) &&
+                        !leftExecGroup.isDisableColocateGroup()) {
                     // do nothing
                 } else {
                     // we don't support group execution for other join
+                    currentExecGroup = execGroups.newExecGroup();
                     currentExecGroup.setDisableColocateGroup();
                 }
             }
@@ -3256,6 +3238,7 @@ public class PlanFragmentBuilder {
                     // use merge-exchange
                     ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(), child.getPlanRoot(),
                             DistributionSpec.DistributionType.GATHER);
+                    exchangeNode.setNumInstances(1);
                     exchangeNode.setDataPartition(DataPartition.UNPARTITIONED);
                     this.currentExecGroup.add(exchangeNode, true);
 
@@ -3295,6 +3278,8 @@ public class PlanFragmentBuilder {
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
+
+            exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
@@ -3780,16 +3765,86 @@ public class PlanFragmentBuilder {
             PlanFragment child = visit(optExpression.inputAt(0), context);
             int splitId = ((PhysicalSplitProduceOperator) optExpression.getOp()).getSplitId();
             context.getFragments().remove(child);
-            MultiCastPlanFragment cteProduce = new MultiCastPlanFragment(child);
+            SplitPlanFragment splitProduce = new SplitPlanFragment(child);
 
-            List<Expr> outputs = Lists.newArrayList();
-            optExpression.getOutputColumns().getStream()
-                    .forEach(i -> outputs.add(context.getColRefToExpr().get(columnRefFactory.getColumnRef(i))));
+            // output expr seems useless for exchange sink/source
+            //            List<Expr> outputs = Lists.newArrayList();
+            //            optExpression.getOutputColumns().getStream()
+            //                    .forEach(i -> outputs.add(context.getColRefToExpr().get(columnRefFactory.getColumnRef(i))));
+            //
+            //            cteProduce.setOutputExprs(outputs);
+            context.getSplitProduceFragments().put(splitId, splitProduce);
+            context.getFragments().add(splitProduce);
 
-            cteProduce.setOutputExprs(outputs);
-            context.getCteProduceFragments().put(splitId, cteProduce);
-            context.getFragments().add(cteProduce);
-            return child;
+            return null;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalSplitConsumer(OptExpression optExpression, ExecPlan context) {
+            PhysicalSplitConsumeOperator consumerOperator = (PhysicalSplitConsumeOperator) optExpression.getOp();
+            int splitId = consumerOperator.getSplitId();
+
+            SplitPlanFragment splitProduceFragment =
+                    (SplitPlanFragment) context.getSplitProduceFragments().get(splitId);
+            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
+                    splitProduceFragment.getPlanRoot(), consumerOperator.getDistributionSpec().getType());
+
+            DataPartition dataPartition =
+                    translateDistributionToDataPartition(consumerOperator.getDistributionSpec(), context);
+
+            // is this correct?
+            this.currentExecGroup.add(exchangeNode, true);
+
+            exchangeNode.setDataPartition(dataPartition);
+            PlanFragment splitConsumeFragment =
+                    new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
+            splitConsumeFragment.setQueryGlobalDicts(splitProduceFragment.getQueryGlobalDicts());
+            splitConsumeFragment.setQueryGlobalDictExprs(splitProduceFragment.getQueryGlobalDictExprs());
+            splitConsumeFragment.setLoadGlobalDicts(splitProduceFragment.getLoadGlobalDicts());
+
+            // set limit, do wee need this?
+            if (consumerOperator.hasLimit()) {
+                splitConsumeFragment.getPlanRoot().setLimit(consumerOperator.getLimit());
+            }
+
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+
+            splitProduceFragment.getDestNodeList().add(exchangeNode);
+            splitProduceFragment.getOutputPartitions().add(dataPartition);
+
+            splitProduceFragment.getSplitExprs()
+                    .add(ScalarOperatorToExpr.buildExecExpression(consumerOperator.getSplitPredicate(),
+                            formatterContext));
+            splitConsumeFragment.addChild(splitProduceFragment);
+            context.getFragments().add(splitConsumeFragment);
+            return splitConsumeFragment;
+        }
+
+        private DataPartition translateDistributionToDataPartition(DistributionSpec distributionSpec,
+                                                                   ExecPlan context) {
+            DataPartition dataPartition;
+            if (DistributionSpec.DistributionType.GATHER.equals(distributionSpec.getType())) {
+                dataPartition = DataPartition.UNPARTITIONED;
+            } else if (DistributionSpec.DistributionType.BROADCAST
+                    .equals(distributionSpec.getType())) {
+                dataPartition = DataPartition.UNPARTITIONED;
+            } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distributionSpec.getType())) {
+                List<ColumnRefOperator> partitionColumns =
+                        getShuffleColumns((HashDistributionSpec) distributionSpec);
+                List<Expr> distributeExpressions =
+                        partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                .collect(Collectors.toList());
+                dataPartition = DataPartition.hashPartitioned(distributeExpressions);
+            } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(
+                    distributionSpec.getType())) {
+                dataPartition = DataPartition.RANDOM;
+            } else {
+                throw new StarRocksPlannerException("Unsupport exchange type : "
+                        + distributionSpec.getType(), INTERNAL_ERROR);
+            }
+            return dataPartition;
         }
     }
 }

@@ -36,6 +36,13 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
         this.projection = projection;
     }
 
+    // only used for plan fragment builder
+    public PhysicalCTEAnchorOperator() {
+        super(OperatorType.PHYSICAL_CTE_ANCHOR);
+        this.cteId = -1;
+        this.consumeNum = -1;
+    }
+
     public int getCteId() {
         return cteId;
     }

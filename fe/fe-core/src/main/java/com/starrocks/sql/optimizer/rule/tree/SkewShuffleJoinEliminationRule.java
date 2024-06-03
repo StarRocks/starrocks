@@ -25,10 +25,16 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
+    private final AtomicInteger uniqueSplitId;
 
     private static final SkewShuffleJoinEliminationVisitor HANDLER = new SkewShuffleJoinEliminationVisitor();
+
+    public SkewShuffleJoinEliminationRule() {
+        this.uniqueSplitId = new AtomicInteger();
+    }
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {

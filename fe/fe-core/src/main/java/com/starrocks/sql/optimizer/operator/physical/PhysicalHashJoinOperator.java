@@ -35,7 +35,8 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
                                     ScalarOperator skewColumn,
                                     List<ScalarOperator> skewValues) {
 
-        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection, skewColumn, skewValues);
+        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection,
+                skewColumn, skewValues);
     }
 
     @Override

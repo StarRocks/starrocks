@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 public class SplitPlanFragment extends PlanFragment {
     private final List<ExchangeNode> destNodeList = Lists.newArrayList();
     private final List<Expr> splitExprs = Lists.newArrayList();
+
     private final List<DataPartition> outputPartitions = Lists.newArrayList();
 
     public List<ExchangeNode> getDestNodeList() {
@@ -38,8 +39,7 @@ public class SplitPlanFragment extends PlanFragment {
 
     public SplitPlanFragment(PlanFragment planFragment) {
         super(planFragment.fragmentId, planFragment.planRoot, planFragment.getDataPartition());
-        // Use random, only send to self
-        this.outputPartition = DataPartition.RANDOM;
+        this.outputPartition = DataPartition.HYBRID_HASH_PARTITIONED;
         this.children.addAll(planFragment.getChildren());
         this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
         this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
@@ -53,25 +53,31 @@ public class SplitPlanFragment extends PlanFragment {
         return destNodeList.get(index);
     }
 
+    public List<DataPartition> getOutputPartitions() {
+        return outputPartitions;
+    }
+
     @Override
     public void createDataSink(TResultSinkType resultSinkType) {
         if (sink != null) {
             return;
         }
 
-        Preconditions.checkState(!destNodeList.isEmpty(), "MultiCastPlanFragment don't support return result");
+        Preconditions.checkState(!destNodeList.isEmpty(), "SplitPlanFragment don't support return result");
 
-        MultiCastDataSink multiCastDataSink = new MultiCastDataSink();
-        this.sink = multiCastDataSink;
+        SplitCastDataSink splitCastDataSink = new SplitCastDataSink();
 
-        for (ExchangeNode f : destNodeList) {
-            DataStreamSink streamSink = new DataStreamSink(f.getId());
-            streamSink.setPartition(DataPartition.RANDOM);
+        this.sink = splitCastDataSink;
+
+        for (int i = 0; i < destNodeList.size(); i++) {
+            DataStreamSink streamSink = new DataStreamSink(destNodeList.get(i).getId());
+            streamSink.setPartition(outputPartitions.get(i));
             streamSink.setFragment(this);
-            streamSink.setOutputColumnIds(f.getReceiveColumns());
-            multiCastDataSink.getDataStreamSinks().add(streamSink);
-            multiCastDataSink.getDestinations().add(Lists.newArrayList());
+            splitCastDataSink.getDataStreamSinks().add(streamSink);
+            splitCastDataSink.getDestinations().add(Lists.newArrayList());
+            splitCastDataSink.getSplitExprs().add(splitExprs.get(i));
         }
+
     }
 
     @Override
@@ -102,8 +108,9 @@ public class SplitPlanFragment extends PlanFragment {
 
     @Override
     public void reset() {
-        MultiCastDataSink multiSink = (MultiCastDataSink) getSink();
-        multiSink.getDestinations().forEach(List::clear);
+        SplitCastDataSink splitCastDataSink = (SplitCastDataSink) getSink();
+        // clear destinations before retry
+        splitCastDataSink.getDestinations().forEach(List::clear);
     }
 }
 
