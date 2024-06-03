@@ -396,13 +396,13 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
         // link inverted files
         if (!_schema->indexes()->empty()) {
             int segment_n = i;
-            for (int index_id = 0; index_id < _schema->indexes()->size(); index_id++) {
-                const auto& index = (*(_schema->indexes()))[index_id];
+            const auto& indexes = *_schema->indexes();
+            for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
-                            dir, new_rowset_id.to_string(), segment_n, index_id);
+                            dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
-                            _rowset_path, rowset_id().to_string(), segment_n, index_id);
+                            _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
 
                     RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
                     std::set<std::string> files;
@@ -660,7 +660,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.pred_tree = options.pred_tree;
-    seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
+    seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
@@ -691,6 +691,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.enable_gin_filter = options.enable_gin_filter;
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.

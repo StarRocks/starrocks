@@ -27,8 +27,10 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.ShowExecutor;
@@ -66,6 +68,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
@@ -455,6 +458,27 @@ public class MaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Assert.assertNotNull(db);
+        Table table = db.getTable("mv_to_rename");
+        Assert.assertNotNull(table);
+        // test partition related info
+        MaterializedView oldMv = (MaterializedView) table;
+        Assert.assertTrue(oldMv.getRefreshScheme().isAsync());
+        Assert.assertTrue(oldMv.getRefreshScheme().toString().contains("MvRefreshScheme"));
+        Map<Table, Column> partitionMap = oldMv.getRelatedPartitionTableAndColumn();
+        Table table1 = db.getTable("tbl1");
+        Assert.assertTrue(partitionMap.containsKey(table1));
+        List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
+        Assert.assertEquals(1, baseTableType.size());
+        Assert.assertEquals(table1.getType(), baseTableType.get(0));
+        connectContext.executeSql("refresh materialized view mv_to_rename with sync mode");
+        Optional<Long> maxTime = oldMv.maxBaseTableRefreshTimestamp();
+        Assert.assertTrue(maxTime.isPresent());
+        Pair<Table, Column> pair = oldMv.getDirectTableAndPartitionColumn();
+        Assert.assertEquals("tbl1", pair.first.getName());
+
         String alterSql = "alter materialized view mv_to_rename rename mv_new_name;";
         StatementBase statement = SqlParser.parseSingleStatement(alterSql, connectContext.getSessionVariable().getSqlMode());
 
@@ -470,6 +494,7 @@ public class MaterializedViewTest {
         Assert.assertTrue(exprs.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) exprs.get(0);
         Assert.assertEquals("mv_new_name", slotRef.getTblNameWithoutAnalyzed().getTbl());
+        starRocksAssert.dropMaterializedView("mv_new_name");
 
         String alterSql2 = "alter materialized view mv_to_rename2 rename mv_new_name2;";
         statement = SqlParser.parseSingleStatement(alterSql2, connectContext.getSessionVariable().getSqlMode());
@@ -486,6 +511,43 @@ public class MaterializedViewTest {
         Assert.assertTrue(rightChild instanceof SlotRef);
         SlotRef slotRef2 = (SlotRef) rightChild;
         Assert.assertEquals("mv_new_name2", slotRef2.getTblNameWithoutAnalyzed().getTbl());
+        starRocksAssert.dropMaterializedView("mv_new_name2");
+    }
+
+    @Test
+    public void testReplay() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("create materialized view mv_replay\n" +
+                        "PARTITION BY k1\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+        connectContext.executeSql("insert into test.tbl1 values('2022-02-01', 2, 3)");
+        connectContext.executeSql("insert into test.tbl1 values('2022-02-16', 3, 5)");
+        connectContext.executeSql("refresh materialized view mv_replay with sync mode");
+
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Assert.assertNotNull(db);
+        Table table = db.getTable("mv_replay");
+        MaterializedView mv = (MaterializedView) table;
+        AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(db.getId(), mv.getId(), null,
+                mv.getBaseTableInfos(), mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap());
+        mv.replayAlterMaterializedViewBaseTableInfos(log);
+
+        starRocksAssert.dropMaterializedView("mv_replay");
     }
 
     @Test
@@ -914,5 +976,18 @@ public class MaterializedViewTest {
         Assert.assertThrows("Duplicate column name 'k2' in index",
                 UserException.class,
                 () -> starRocksAssert.withMaterializedView(mvSql2));
+    }
+
+    @Test
+    public void testBasePartitionInfo() {
+        MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(-1L, -1L, 123456L);
+        Assert.assertEquals(-1, basePartitionInfo.getExtLastFileModifiedTime());
+        Assert.assertEquals(-1, basePartitionInfo.getFileNumber());
+        basePartitionInfo.setExtLastFileModifiedTime(100);
+        basePartitionInfo.setFileNumber(10);
+        Assert.assertEquals(100, basePartitionInfo.getExtLastFileModifiedTime());
+        Assert.assertEquals(10, basePartitionInfo.getFileNumber());
+        Assert.assertTrue(basePartitionInfo.toString().contains(
+                "BasePartitionInfo{id=-1, version=-1, lastRefreshTime=123456, lastFileModifiedTime=100, fileNumber=10}"));
     }
 }

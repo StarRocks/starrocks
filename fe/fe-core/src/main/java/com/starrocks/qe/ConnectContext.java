@@ -143,8 +143,6 @@ public class ConnectContext {
     protected volatile boolean isKilled;
     // Db
     protected String currentDb = "";
-    // warehouse
-    protected String currentWarehouse;
     // `qualifiedUser` is the user used when the user establishes connection and authentication.
     // It is the real user used for this connection.
     // Different from the `currentUserIdentity` authentication user of execute as,
@@ -205,6 +203,8 @@ public class ConnectContext {
     protected boolean isStatisticsConnection = false;
     protected boolean isStatisticsJob = false;
     protected boolean isStatisticsContext = false;
+
+    protected boolean isMetadataContext = false;
     protected boolean needQueued = true;
 
     protected DumpInfo dumpInfo;
@@ -732,6 +732,14 @@ public class ConnectContext {
 
     public void setStatisticsContext(boolean isStatisticsContext) {
         this.isStatisticsContext = isStatisticsContext;
+    }
+
+    public boolean isMetadataContext() {
+        return isMetadataContext;
+    }
+
+    public void setMetadataContext(boolean metadataContext) {
+        isMetadataContext = metadataContext;
     }
 
     public boolean isNeedQueued() {

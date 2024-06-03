@@ -2,7 +2,7 @@
  <img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=e8355b6b-a9fc-4d4e-8ed8-b3157aa1827d" />
  <p align="center">
  <a href="https://starrocks.io/index">
-    <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png">
+    <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png?t=12234">
    </a>
 </p>
 <p align="center">
@@ -22,7 +22,7 @@
     <img src="https://img.shields.io/badge/Visit%20StarRocks-Website-green" alt="Website">
   </a>
   </a>
-   <a href="https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg">
+   <a href="https://try.starrocks.com/join-starrocks-on-slack">
     <img src="https://img.shields.io/badge/Join-Slack-ff69b4" alt="Slack">
   </a>
   </a>
@@ -68,12 +68,13 @@ Learn more 👉🏻 [Introduction to StarRocks](https://www.starrocks.io/blog/in
    </a>
 </p>
 
+
 StarRocks’s streamlined architecture is mainly composed of two modules: Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data.
 
 Starting from version 3.0, StarRocks supports a new shared-data architecture, which can provide better scalability and lower costs.
 
  <p align="center">
-    <img src="images/arch-v30.png">
+    <img src="docs/en/assets/architecture_evolution.png">
    </a>
 </p>
 
@@ -86,14 +87,14 @@ Starting from version 3.0, StarRocks supports a new shared-data architecture, wh
 
 | Section | Description |
 |-|-|
-| [Deploy](https://docs.starrocks.io/en-us/latest/quick_start/Deploy) | Learn how to run and configure StarRocks.|
+| [Deploy](https://docs.starrocks.io/docs/deployment/deployment_overview/) | Learn how to run and configure StarRocks.|
 | [Articles](https://github.com/StarRocks/starrocks/discussions/categories/how-tos-tutorials-best-practices-and-architecture-articles)| How-tos, Tutorials, Best Practices and Architecture Articles. |
 | [Docs](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro)| Full documentation. |
 | [Blogs](https://starrocks.io/blog) | StarRocks deep dive and user stories.  |
 
 ### ❓ Get support  
-[<img align="right" width="150" src="https://firstcontributions.github.io/assets/Readme/join-slack-team.png">](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)
--  [Slack community: ](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)join technical discussions, ask questions, and meet other users!
+[<img align="right" width="150" src="https://firstcontributions.github.io/assets/Readme/join-slack-team.png">](https://try.starrocks.com/join-starrocks-on-slack)
+-  [Slack community: ](https://try.starrocks.com/join-starrocks-on-slack) join technical discussions, ask questions, and meet other users!
 -  [YouTube channel:](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured) subscribe to the latest video tutorials and webcasts.
 -  [GitHub issues:](https://github.com/StarRocks/starrocks/issues) report an issue with StarRocks.
 

@@ -271,4 +271,30 @@ public class AnalyzeSetVariableTest {
         sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 1";
         analyzeSuccess(sql);
     }
+
+    @Test
+    public void testComputationFragmentSchedulingPolicy() {
+        String sql;
+
+        sql = "SET computation_fragment_scheduling_policy = compute_nodes_only";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = all_nodes";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = ALL_NODES";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = All_nodes";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = 'all_nodes'";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = \"all_nodes\"";
+        analyzeSuccess(sql);
+
+        sql = "SET computation_fragment_scheduling_policy = compute_nodes";
+        analyzeFail(sql);
+    }
 }

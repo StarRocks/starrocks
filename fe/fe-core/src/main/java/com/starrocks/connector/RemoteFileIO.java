@@ -15,10 +15,16 @@
 
 package com.starrocks.connector;
 
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
+
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
 public interface RemoteFileIO {
 
     Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey);
+
+    FileStatus[] getFileStatus(Path... files) throws IOException;
 }

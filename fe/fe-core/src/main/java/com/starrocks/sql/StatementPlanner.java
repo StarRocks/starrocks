@@ -118,27 +118,22 @@ public class StatementPlanner {
             }
 
             // Note: we only could get the olap table after Analyzing phase
-            boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
             if (stmt instanceof QueryStatement) {
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
+                boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(queryStmt);
+                needWholePhaseLock =  isLockFree(isOnlyOlapTableQueries, session) ? false : true;
                 ExecPlan plan;
-                if (isLockFree(isOnlyOlapTableQueries, session)) {
-                    unLock(plannerMetaLocker);
-                    needWholePhaseLock = false;
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker);
-                } else {
+                if (needWholePhaseLock) {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
+                } else {
+                    unLock(plannerMetaLocker);
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker);
                 }
                 setOutfileSink(queryStmt, plan);
                 return plan;
             } else if (stmt instanceof InsertStmt) {
-                InsertStmt insertStmt = (InsertStmt) stmt;
-                boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-                boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
-                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
-                        !session.getSessionVariable().isCboUseDBLock();
-                return new InsertPlanner(plannerMetaLocker, useOptimisticLock).plan((InsertStmt) stmt, session);
+                return planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -152,6 +147,23 @@ public class StatementPlanner {
         }
 
         return null;
+    }
+
+    public static ExecPlan planInsertStmt(PlannerMetaLocker plannerMetaLocker,
+                                          InsertStmt insertStmt,
+                                          ConnectContext connectContext) {
+        // if use optimistic lock, we will unlock it in InsertPlanner#buildExecPlanWithRetrye
+        boolean useOptimisticLock = isLockFreeInsertStmt(insertStmt, connectContext);
+        return new InsertPlanner(plannerMetaLocker, useOptimisticLock).plan(insertStmt, connectContext);
+    }
+
+    private static boolean isLockFreeInsertStmt(InsertStmt insertStmt,
+                                                ConnectContext connectContext) {
+        boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
+        boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+        boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(insertStmt);
+        return isOnlyOlapTableQueries && isSelect && isLeader &&
+                !connectContext.getSessionVariable().isCboUseDBLock();
     }
 
     private static boolean isLockFree(boolean isOnlyOlapTable, ConnectContext session) {
@@ -213,10 +225,13 @@ public class StatementPlanner {
              * currently only used in Spark/Flink Connector
              * Because the connector sends only simple queries, it only needs to remove the output fragment
              */
-            return PlanFragmentBuilder.createPhysicalPlan(
+            ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                     resultSinkType,
                     !session.getSessionVariable().isSingleNodeExecPlan());
+            execPlan.setLogicalPlan(logicalPlan);
+            execPlan.setColumnRefFactory(columnRefFactory);
+            return execPlan;
         }
     }
 
@@ -290,6 +305,8 @@ public class StatementPlanner {
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
                 if (isSchemaValid) {
+                    plan.setLogicalPlan(logicalPlan);
+                    plan.setColumnRefFactory(columnRefFactory);
                     return plan;
                 }
 

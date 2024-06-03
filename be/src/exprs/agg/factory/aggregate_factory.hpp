@@ -37,6 +37,7 @@
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
 #include "exprs/agg/hll_ndv.h"
+#include "exprs/agg/hll_sketch.h"
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
 #include "exprs/agg/intersect_count.h"
@@ -182,6 +183,9 @@ public:
     static AggregateFunctionPtr MakeHllNdvAggregateFunction();
 
     template <LogicalType T>
+    static AggregateFunctionPtr MakeHllSketchAggregateFunction();
+
+    template <LogicalType T>
     static AggregateFunctionPtr MakeHllRawAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
@@ -193,6 +197,12 @@ public:
 
     template <LogicalType PT>
     static AggregateFunctionPtr MakePercentileDiscAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeLowCardPercentileBinAggregateFunction();
+
+    template <LogicalType PT>
+    static AggregateFunctionPtr MakeLowCardPercentileCntAggregateFunction();
 
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
@@ -375,6 +385,11 @@ AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
 }
 
 template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeHllSketchAggregateFunction() {
+    return std::make_shared<HllSketchAggregateFunction<LT>>();
+}
+
+template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
     return std::make_shared<HllNdvAggregateFunction<LT, true>>();
 }
@@ -387,6 +402,16 @@ AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
 template <LogicalType PT>
 AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
+}
+
+template <LogicalType PT>
+AggregateFunctionPtr AggregateFactory::MakeLowCardPercentileBinAggregateFunction() {
+    return std::make_shared<LowCardPercentileBinAggregateFunction<PT>>();
+}
+
+template <LogicalType PT>
+AggregateFunctionPtr AggregateFactory::MakeLowCardPercentileCntAggregateFunction() {
+    return std::make_shared<LowCardPercentileCntAggregateFunction<PT>>();
 }
 
 template <LogicalType LT>

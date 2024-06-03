@@ -104,6 +104,7 @@ public class LoadLoadingTask extends LoadTask {
     private final int fileNum;
 
     private final LoadJob.JSONOptions jsonOptions;
+    private long warehouseId;
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
@@ -130,6 +131,7 @@ public class LoadLoadingTask extends LoadTask {
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
         this.jsonOptions = builder.jsonOptions;
+        this.warehouseId = builder.warehouseId;
     }
 
     public void prepare() throws UserException {
@@ -139,6 +141,7 @@ public class LoadLoadingTask extends LoadTask {
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
+        loadPlanner.setWarehouseId(warehouseId);
         loadPlanner.plan();
     }
 
@@ -186,7 +189,6 @@ public class LoadLoadingTask extends LoadTask {
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
-        summaryProfile.addInfoString("Memory Limit", DebugUtil.getPrettyStringBytes(execMemLimit));
         summaryProfile.addInfoString("Timeout", DebugUtil.getPrettyStringMs(timeoutS * 1000));
         summaryProfile.addInfoString("Strict Mode", String.valueOf(strictMode));
         summaryProfile.addInfoString("Partial Update", String.valueOf(partialUpdate));
@@ -234,13 +236,14 @@ public class LoadLoadingTask extends LoadTask {
             long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
 
-            if (context.getSessionVariable().isEnableProfile()) {
+            if (context.getSessionVariable().isEnableProfile()
+                    || ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
                 RuntimeProfile profile = buildFinishedTopLevelProfile();
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.collectProfileSync();
-                profile.addChild(curCoordinator.buildQueryProfile(context.needMergeProfile()));
+                profile.addChild(curCoordinator.buildQueryProfile(true));
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
@@ -328,6 +331,7 @@ public class LoadLoadingTask extends LoadTask {
         private int fileNum = 0;
         private LoadTaskCallback callback;
         private int priority;
+        private long warehouseId;
 
         private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -448,6 +452,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setJSONOptions(LoadJob.JSONOptions options) {
             this.jsonOptions = options;
+            return this;
+        }
+
+        public Builder setWarehouseId(long warehouseId) {
+            this.warehouseId = warehouseId;
             return this;
         }
 

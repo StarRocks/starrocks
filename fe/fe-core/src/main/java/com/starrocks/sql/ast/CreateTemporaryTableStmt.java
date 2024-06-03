@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 

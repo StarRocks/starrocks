@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -57,6 +58,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -263,10 +265,20 @@ public class TableFunctionTable extends Table {
 
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
             csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH || len == 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
+                        PROPERTY_CSV_COLUMN_SEPARATOR, 1, CsvFormat.MAX_COLUMN_SEPARATOR_LENGTH);
+            }
         }
 
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
             csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            int len = csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length;
+            if (len > CsvFormat.MAX_ROW_DELIMITER_LENGTH || len == 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_ILLEGAL_BYTES_LENGTH,
+                        PROPERTY_CSV_ROW_DELIMITER, 1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
+            }
         }
 
         if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
@@ -294,7 +306,14 @@ public class TableFunctionTable extends Table {
         }
 
         if (properties.containsKey(PROPERTY_CSV_TRIM_SPACE)) {
-            csvTrimSpace = Boolean.parseBoolean(properties.get(PROPERTY_CSV_TRIM_SPACE));
+            String property = properties.get(PROPERTY_CSV_TRIM_SPACE);
+            if (property.equalsIgnoreCase("true")) {
+                csvTrimSpace = true;
+            } else if (property.equalsIgnoreCase("false")) {
+                csvTrimSpace = false;
+            } else {
+                throw new DdlException("illegal value of csv.trim_space: " + property + ", only true/false allowed");
+            }
         }
     }
 
@@ -341,15 +360,15 @@ public class TableFunctionTable extends Table {
         params.setSkip_header(csvSkipHeader);
         params.setTrim_space(csvTrimSpace);
         params.setFlexible_column_mapping(true);
-        if (csvColumnSeparator.length() == 1) {
+        if (csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length == 1) {
             params.setColumn_separator(csvColumnSeparator.getBytes()[0]);
-        } else if (csvColumnSeparator.length() > 1) {
+        } else {
             params.setMulti_column_separator(csvColumnSeparator);
         }
 
-        if (csvRowDelimiter.length() == 1) {
+        if (csvRowDelimiter.getBytes(StandardCharsets.UTF_8).length == 1) {
             params.setRow_delimiter(csvRowDelimiter.getBytes()[0]);
-        } else if (csvRowDelimiter.length() > 1) {
+        } else {
             params.setMulti_row_delimiter(csvRowDelimiter);
         }
 

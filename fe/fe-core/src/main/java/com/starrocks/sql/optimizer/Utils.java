@@ -33,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
@@ -503,7 +504,7 @@ public class Utils {
         }
 
         Optional<ConstantOperator> result = ((ConstantOperator) op).castToStrictly(descType);
-        if (!result.isPresent()) {
+        if (result.isEmpty()) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("invalid value: {} to type {}", op, descType);
             }
@@ -538,8 +539,7 @@ public class Utils {
         }
         // Guarantee that both childType casting to lhsType and rhsType casting to childType are
         // lossless
-        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType) ||
-                !Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
             return Optional.empty();
         }
 
@@ -548,7 +548,16 @@ public class Utils {
         }
 
         Optional<ConstantOperator> result = rhs.castTo(childType);
-        return result.isPresent() ? Optional.of(result.get()) : Optional.empty();
+        if (result.isEmpty()) {
+            return Optional.empty();
+        }
+        if (Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+            return Optional.of(result.get());
+        } else if (result.get().toString().equalsIgnoreCase(rhs.toString())) {
+            // check lossless
+            return Optional.of(result.get());
+        }
+        return Optional.empty();
     }
 
     public static ScalarOperator transTrue2Null(ScalarOperator predicates) {
@@ -790,5 +799,32 @@ public class Utils {
         }
 
         expr.setStatistics(expressionContext.getStatistics());
+    }
+
+    /**
+     * Add new project into input, merge input's existing project if input has one.
+     * @param input input expression
+     * @param newProjectionMap new project map to be pushed down into input
+     * @return a new expression with new project
+     */
+    public static OptExpression mergeProjection(OptExpression input,
+                                                Map<ColumnRefOperator, ScalarOperator> newProjectionMap) {
+        if (newProjectionMap == null || newProjectionMap.isEmpty()) {
+            return input;
+        }
+        Operator newOp = input.getOp();
+        if (newOp.getProjection() == null || newOp.getProjection().getColumnRefMap().isEmpty()) {
+            newOp.setProjection(new Projection(newProjectionMap));
+        } else {
+            // merge two projections
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
+            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
+                ScalarOperator result = rewriter.rewrite(entry.getValue());
+                resultMap.put(entry.getKey(), result);
+            }
+            newOp.setProjection(new Projection(resultMap));
+        }
+        return input;
     }
 }

@@ -23,8 +23,8 @@
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
+#include "exec/spill/spill_fwd.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
@@ -32,9 +32,6 @@
 
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
-class SpillInputStream;
-class Spiller;
-class MemoryBlock;
 //  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
 // depending on the requirements of the upper layer
 

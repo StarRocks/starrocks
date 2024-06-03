@@ -17,6 +17,7 @@
 #include <any>
 #include <cstdint>
 #include <memory>
+#include <numeric>
 
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -30,6 +31,7 @@
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/bit_util.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 // implements for SpillerWriter
@@ -42,7 +44,7 @@ Status SpillerWriter::_decrease_running_flush_tasks() {
     return Status::OK();
 }
 
-const SpilledOptions& SpillerWriter::options() {
+const SpilledOptions& SpillerWriter::options() const {
     return _spiller->options();
 }
 
@@ -74,13 +76,41 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
     if (state->is_cancelled()) {
         return Status::OK();
     }
+
+    enum WriterStage { FLUSH_MEM_TABLE = 0, COMPACT = 1, FINISH = 2 };
+
     DCHECK(yield_ctx.task_context_data.has_value()) << "flush context must be set";
-    yield_ctx.total_yield_point_cnt = 1;
+    yield_ctx.total_yield_point_cnt = FINISH;
+
+    switch (yield_ctx.yield_point) {
+    case FLUSH_MEM_TABLE:
+        RETURN_IF_ERROR(_spill_mem_table(yield_ctx, mem_table));
+        RETURN_IF_YIELD(yield_ctx.need_yield);
+        TO_NEXT_STAGE(yield_ctx.yield_point);
+        [[fallthrough]];
+    case COMPACT:
+        RETURN_IF_ERROR(_compact_mem_table(yield_ctx));
+        RETURN_IF_YIELD(yield_ctx.need_yield);
+        TO_NEXT_STAGE(yield_ctx.yield_point);
+        [[fallthrough]];
+    default:
+        DCHECK_EQ(yield_ctx.yield_point, 2);
+    };
+
+    return Status::OK();
+}
+
+Status RawSpillerWriter::_spill_mem_table(workgroup::YieldContext& yield_ctx, const MemTablePtr& mem_table) {
     auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
     auto flush_ctx = std::static_pointer_cast<FlushContext>(io_task);
+
     // flush_ctx->output is not nullptr means the task is resumed from yield point
+    DCHECK(flush_ctx->input_stream == nullptr);
     if (flush_ctx->output == nullptr) {
-        flush_ctx->output = create_spill_output_stream(_spiller, &_block_group, _spiller->block_manager());
+        DCHECK(flush_ctx->block_group == nullptr);
+        auto block_group = std::make_shared<BlockGroup>();
+        flush_ctx->output = create_spill_output_stream(_spiller, block_group.get(), _spiller->block_manager());
+        flush_ctx->block_group = std::move(block_group);
     }
 
     // serialize mem table to data stream
@@ -89,8 +119,69 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
     RETURN_IF_ERROR(flush_ctx->output->flush());
 
     mem_table->reset();
+    flush_ctx->output.reset();
+    this->add_block_group(std::move(flush_ctx->block_group));
 
     return Status::OK();
+}
+
+Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) {
+    auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
+    auto flush_ctx = std::static_pointer_cast<FlushContext>(io_task);
+    // flush_ctx->output is not nullptr means the task is resumed from yield point
+    if (flush_ctx->output == nullptr) {
+        if (!_need_compact_block()) {
+            return Status::OK();
+        }
+
+        std::vector<BlockGroupPtr> block_groups = _block_group_set.select_compaction_block_groups();
+        if (block_groups.empty()) {
+            return Status::OK();
+        }
+
+        COUNTER_UPDATE(_spiller->metrics().compact_count, 1);
+        COUNTER_UPDATE(_spiller->metrics().compact_block_count, block_groups.size());
+
+        flush_ctx->compact_input_num_rows =
+                std::accumulate(block_groups.begin(), block_groups.end(), 0,
+                                [](size_t sum, const auto& block_group) { return sum + block_group->num_rows(); });
+        TRACE_SPILL_LOG << "spill compact block group input rows:" << flush_ctx->compact_input_num_rows;
+
+        DCHECK(flush_ctx->block_group == nullptr);
+        auto block_group = std::make_shared<BlockGroup>();
+        flush_ctx->output = create_spill_output_stream(_spiller, block_group.get(), _spiller->block_manager());
+        flush_ctx->block_group = std::move(block_group);
+        ASSIGN_OR_RETURN(flush_ctx->input_stream,
+                         BlockGroupSet::build_ordered_stream(block_groups, _runtime_state, _spiller->serde(), _spiller,
+                                                             options().sort_exprs, options().sort_desc));
+    }
+    auto st = DataTranster::transfer(yield_ctx, _runtime_state, _spiller->serde().get(), flush_ctx->output,
+                                     flush_ctx->input_stream);
+    RETURN_IF(!st.is_ok_or_eof(), st);
+    RETURN_IF_YIELD(yield_ctx.need_yield);
+    RETURN_IF_ERROR(flush_ctx->output->flush());
+    flush_ctx->output.reset();
+    DCHECK_EQ(flush_ctx->compact_input_num_rows, flush_ctx->block_group->num_rows());
+    this->add_block_group(std::move(flush_ctx->block_group));
+
+    return Status::OK();
+}
+
+bool RawSpillerWriter::_need_compact_block() const {
+    const auto& opts = options();
+    if (!opts.enable_block_compaction) {
+        return false;
+    }
+
+    if (opts.is_unordered) {
+        return false;
+    }
+
+    if (_block_group_set.size() < _spiller->max_sorted_block_cnt()) {
+        return false;
+    }
+
+    return true;
 }
 
 Status RawSpillerWriter::acquire_stream(const SpillPartitionInfo* partition,
@@ -104,10 +195,10 @@ Status RawSpillerWriter::acquire_stream(std::shared_ptr<SpillInputStream>* strea
     const auto& opts = options();
 
     if (opts.is_unordered) {
-        ASSIGN_OR_RETURN(input_stream, _block_group.as_unordered_stream(serde, _spiller));
+        ASSIGN_OR_RETURN(input_stream, _block_group_set.as_unordered_stream(serde, _spiller));
     } else {
-        ASSIGN_OR_RETURN(input_stream, _block_group.as_ordered_stream(_runtime_state, serde, _spiller, opts.sort_exprs,
-                                                                      opts.sort_desc));
+        ASSIGN_OR_RETURN(input_stream, _block_group_set.as_ordered_stream(_runtime_state, serde, _spiller,
+                                                                          opts.sort_exprs, opts.sort_desc));
     }
 
     *stream = input_stream;
@@ -372,14 +463,16 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
                                                  SpilledPartition* partition) {
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
-    if (partition->spill_writer->output_stream() == nullptr) {
-        auto output = create_spill_output_stream(_spiller, &partition->spill_writer->block_group(),
-                                                 _spiller->block_manager());
+    if (partition->spill_output_stream == nullptr) {
+        auto block_group = std::make_shared<BlockGroup>();
+        partition->block_group = block_group;
+        partition->spill_writer->add_block_group(std::move(block_group));
+        auto output = create_spill_output_stream(_spiller, partition->block_group.get(), _spiller->block_manager());
         std::lock_guard<std::mutex> l(_mutex);
-        DCHECK_EQ(partition->spill_writer->output_stream(), nullptr);
-        partition->spill_writer->output_stream() = output;
+        DCHECK_EQ(partition->spill_output_stream, nullptr);
+        partition->spill_output_stream = output;
     }
-    auto output = partition->spill_writer->output_stream();
+    auto output = partition->spill_output_stream;
     RETURN_IF_ERROR(mem_table->finalize(yield_ctx, output));
     RETURN_IF_YIELD(yield_ctx.need_yield);
     RETURN_IF_ERROR(output->flush());

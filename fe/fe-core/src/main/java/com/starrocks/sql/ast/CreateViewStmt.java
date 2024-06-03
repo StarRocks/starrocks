@@ -47,6 +47,10 @@ public class CreateViewStmt extends DdlStmt {
         this.queryStatement = queryStmt;
     }
 
+    public String getCatalog() {
+        return tableName.getCatalog();
+    }
+
     public String getDbName() {
         return tableName.getDb();
     }

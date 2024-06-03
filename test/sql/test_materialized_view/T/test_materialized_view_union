@@ -38,7 +38,7 @@ PROPERTIES (
 CREATE MATERIALIZED VIEW `test_union_mv1_${uuid0}`
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 PROPERTIES (
 "replication_num" = "1",
 "storage_medium" = "HDD"
@@ -87,7 +87,7 @@ insert into t1 values (202301,1,1),(202305,1,2);
 CREATE MATERIALIZED VIEW `test_union_mv2_${uuid0}`
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 PROPERTIES (
 "replication_num" = "1",
 "storage_medium" = "HDD",
@@ -161,7 +161,7 @@ insert into t3 (leg_id, cabin_class, observation_date) values
 CREATE MATERIALIZED VIEW v1 
 PARTITION BY date_trunc('day', observation_date)
 DISTRIBUTED BY HASH(leg_id)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 AS 
 SELECT * FROM t1
 UNION ALL
@@ -174,7 +174,7 @@ select count(*) from v1;
 CREATE MATERIALIZED VIEW v2
 PARTITION BY date_trunc('day', observation_date)
 DISTRIBUTED BY HASH(leg_id)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 AS 
 SELECT * FROM t1
 UNION ALL
@@ -184,7 +184,7 @@ SELECT * FROM t3;
 CREATE MATERIALIZED VIEW v3
 PARTITION BY date_trunc('day', observation_date)
 DISTRIBUTED BY HASH(leg_id)
-REFRESH ASYNC
+REFRESH DEFERRED ASYNC
 AS 
 SELECT * FROM t1
 UNION ALL

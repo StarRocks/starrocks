@@ -9,6 +9,8 @@ toc_max_heading_level: 4
 
 StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result. For information about the application scenarios, limits, principles, and supported data file formats of Stream Load, see [Loading from a local file system via Stream Load](../../../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
 
+Since v3.2.7, Stream Load supports compressing JSON data during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. For more information, see [data_desc](#data_desc).
+
 > **NOTICE**
 >
 > - After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
@@ -80,8 +82,10 @@ Describes the data file that you want to load. The `data_desc` descriptor can in
 -H "partitions: <partition1_name>[, <partition2_name>, ...]"
 -H "temporary_partitions: <temporary_partition1_name>[, <temporary_partition2_name>, ...]"
 -H "jsonpaths: [ \"<json_path1>\"[, \"<json_path2>\", ...] ]"
--H "strip_outer_array:  true | false"
+-H "strip_outer_array: true | false"
 -H "json_root: <json_path>"
+-H "ignore_json_size: true | false"
+-H "compression: <compression_algorithm> | Content-Encoding: <compression_algorithm>"
 ```
 
 The parameters in the `data_desc` descriptor can be divided into three types: common parameters, CSV parameters, and JSON parameters.
@@ -121,6 +125,7 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 | strip_outer_array | No       | Specifies whether to strip the outermost array structure. Valid values: `true` and `false`. Default value: `false`.<br/>In real-world business scenarios, the JSON data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON data file into one array and loads the array as a single data record.<br/>For example, the JSON data is `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`. If you set this parameter to `true`,  `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed into separate data records that are loaded into separate StarRocks table rows. |
 | json_root         | No       | The root element of the JSON data that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. For more information, see the "[Load JSON data using matched mode with root element specified](#load-json-data-using-matched-mode-with-root-element-specified)" section of this topic. |
 | ignore_json_size  | No       | Specifies whether to check the size of the JSON body in the HTTP request.<br/>**NOTE**<br/>By default, the size of the JSON body in an HTTP request cannot exceed 100 MB. If the JSON body exceeds 100 MB in size, an error "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." is reported. To prevent this error, you can add `"ignore_json_size:true"` in the HTTP request header to instruct StarRocks not to check the JSON body size. |
+| compression, Content-Encoding | NO | The encoding algorithm that is applied to the data during transmission. Supported algorithms include GZIP, BZIP2, LZ4_FRAME, and ZSTD. Example: `curl --location-trusted -u root:  -v 'http://127.0.0.1:18030/api/db0/tbl_simple/_stream_load' \-X PUT  -H "expect:100-continue" \-H 'format: json' -H 'compression: lz4_frame'   -T ./b.json.lz4`. |
 
 When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
 
@@ -136,6 +141,8 @@ Specifies some optional parameters, which are applied to the entire load job. Sy
 -H "strict_mode: true | false"
 -H "timezone: <string>"
 -H "load_mem_limit: <num>"
+-H "partial_update: true | false"
+-H "partial_update_mode: row | column"
 -H "merge_condition: <column_name>"
 ```
 
@@ -151,6 +158,8 @@ The following table describes the optional parameters.
 | strict_mode      | No       | Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`.  The value `true` specifies to enable the strict mode, and the value `false` specifies to disable the strict mode. |
 | timezone         | No       | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/management/timezone.md). |
 | load_mem_limit   | No       | The maximum amount of memory that can be provisioned to the load job. Unit: bytes. By default, the maximum memory size for a load job is 2 GB. The value of this parameter cannot exceed the maximum amount of memory that can be provisioned to each BE or CN. |
+| partial_update | No | Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature. |
+| partial_update_mode | No | Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul> |
 | merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column. StarRocks supports conditional updates since v2.5. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates. |
 
 ## Column mapping

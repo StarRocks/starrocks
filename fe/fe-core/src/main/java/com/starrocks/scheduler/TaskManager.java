@@ -48,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.thrift.TGetTasksParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
@@ -107,7 +108,7 @@ public class TaskManager implements MemoryTrackable {
         nameToTaskMap = Maps.newConcurrentMap();
         periodFutureMap = Maps.newConcurrentMap();
         taskRunManager = new TaskRunManager();
-        taskLock = new QueryableReentrantLock(true);
+        taskLock = new QueryableReentrantLock();
         taskRunScheduler = taskRunManager.getTaskRunScheduler();
     }
 
@@ -290,7 +291,13 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public SubmitResult executeTask(String taskName) {
-        return executeTask(taskName, new ExecuteOption());
+        Task task = getTask(taskName);
+        if (task == null) {
+            return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
+        }
+        ExecuteOption option = new ExecuteOption(task.getSource().isMergeable());
+        option.setManual(true);
+        return executeTask(taskName, option);
     }
 
     public SubmitResult executeTask(String taskName, ExecuteOption option) {
@@ -305,9 +312,8 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    // for test
     public SubmitResult executeTaskSync(Task task) {
-        return executeTaskSync(task, new ExecuteOption());
+        return executeTaskSync(task, new ExecuteOption(task.getSource().isMergeable()));
     }
 
     public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
@@ -328,7 +334,9 @@ public class TaskManager implements MemoryTrackable {
         } finally {
             taskUnlock();
         }
+
         try {
+            taskRunScheduler.addSyncRunningTaskRun(taskRun);
             Constants.TaskRunState taskRunState = taskRun.getFuture().get();
             if (taskRunState != Constants.TaskRunState.SUCCESS) {
                 String msg = taskRun.getStatus().getErrorMessage();
@@ -340,6 +348,8 @@ public class TaskManager implements MemoryTrackable {
             throw new DmlException("execute task %s failed: %s", rootCause, task.getName(), rootCause.getMessage());
         } catch (Exception e) {
             throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
+        } finally {
+            taskRunScheduler.removeSyncRunningTaskRun(taskRun);
         }
     }
 
@@ -384,19 +394,26 @@ public class TaskManager implements MemoryTrackable {
         LOG.info("drop tasks:{}", taskIdList);
     }
 
-    public List<Task> showTasks(String dbName) {
-        List<Task> taskList = Lists.newArrayList();
-        if (dbName == null) {
-            taskList.addAll(nameToTaskMap.values());
-        } else {
-            for (Map.Entry<String, Task> entry : nameToTaskMap.entrySet()) {
-                Task task = entry.getValue();
-
-                if (task.getDbName() != null && task.getDbName().equals(dbName)) {
-                    taskList.add(task);
-                }
-            }
+    private boolean isTaskMatched(Task task, TGetTasksParams params) {
+        if (params == null) {
+            return true;
         }
+        String dbName = params.db;
+        if (dbName != null && !dbName.equals(task.getDbName())) {
+            return false;
+        }
+        String taskName = params.task_name;
+        if (taskName != null && !taskName.equalsIgnoreCase(task.getName())) {
+            return false;
+        }
+        return true;
+    }
+
+    public List<Task> filterTasks(TGetTasksParams params) {
+        List<Task> taskList = Lists.newArrayList();
+        nameToTaskMap.values().stream()
+                .filter(t -> isTaskMatched(t, params))
+                .forEach(taskList::add);
         return taskList;
     }
 
@@ -536,7 +553,7 @@ public class TaskManager implements MemoryTrackable {
         try {
             createTask(task, false);
             if (task.getType() == Constants.TaskType.MANUAL) {
-                submitResult = executeTask(taskName);
+                submitResult = executeTask(task.getName());
             } else {
                 submitResult = new SubmitResult(null, SUBMITTED);
             }
@@ -603,11 +620,11 @@ public class TaskManager implements MemoryTrackable {
         SerializeData data = new SerializeData();
         data.tasks = new ArrayList<>(nameToTaskMap.values());
         checksum ^= data.tasks.size();
-        data.runStatus = showTaskRunStatus(null);
+        data.runStatus = getMatchedTaskRunStatus(null);
         int beforeSize = data.runStatus.size();
         if (beforeSize >= Config.task_runs_max_history_number) {
             taskRunManager.getTaskRunHistory().forceGC();
-            data.runStatus = showTaskRunStatus(null);
+            data.runStatus = getMatchedTaskRunStatus(null);
             String s = GsonUtils.GSON.toJson(data);
             Text.writeString(dos, s);
         } else {
@@ -619,7 +636,7 @@ public class TaskManager implements MemoryTrackable {
 
     public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         taskRunManager.getTaskRunHistory().forceGC();
-        List<TaskRunStatus> runStatusList = showTaskRunStatus(null);
+        List<TaskRunStatus> runStatusList = getMatchedTaskRunStatus(null);
         LOG.info("saveTasksV2, nameToTaskMap size:{}, runStatusList size: {}", nameToTaskMap.size(), runStatusList.size());
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.TASK_MGR,
                 2 + nameToTaskMap.size() + runStatusList.size());
@@ -636,33 +653,49 @@ public class TaskManager implements MemoryTrackable {
         writer.close();
     }
 
-    private boolean isShowTaskRunStatus(TaskRunStatus taskRunStatus, String dbName) {
-        if (dbName == null) {
+    private boolean isTaskRunStatusMatched(TaskRunStatus taskRunStatus, TGetTasksParams params) {
+        if (params == null) {
             return true;
         }
-        return dbName.equals(taskRunStatus.getDbName());
+        String dbName = params.db;
+        if (dbName != null && !dbName.equals(taskRunStatus.getDbName())) {
+            return false;
+        }
+        String taskName = params.task_name;
+        if (taskName != null && !taskName.equalsIgnoreCase(taskRunStatus.getTaskName())) {
+            return false;
+        }
+        String queryId = params.query_id;
+        if (queryId != null && !queryId.equalsIgnoreCase(taskRunStatus.getQueryId())) {
+            return false;
+        }
+        String state = params.state;
+        if (state != null && !state.equalsIgnoreCase(taskRunStatus.getState().name())) {
+            return false;
+        }
+        return true;
     }
 
-    public List<TaskRunStatus> showTaskRunStatus(String dbName) {
+    public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
         List<TaskRunStatus> taskRunList = Lists.newArrayList();
         // pending task runs
         List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
         pendingTaskRuns.stream()
                 .map(TaskRun::getStatus)
-                .filter(t -> isShowTaskRunStatus(t, dbName))
+                .filter(t -> isTaskRunStatusMatched(t, params))
                 .forEach(taskRunList::add);
 
         // running task runs
         Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
         runningTaskRuns.stream()
                 .map(TaskRun::getStatus)
-                .filter(t -> isShowTaskRunStatus(t, dbName))
+                .filter(t -> isTaskRunStatusMatched(t, params))
                 .forEach(taskRunList::add);
 
         // history task runs
         List<TaskRunStatus> historyTaskRuns = taskRunManager.getTaskRunHistory().getAllHistory();
         historyTaskRuns.stream()
-                .filter(t -> isShowTaskRunStatus(t, dbName))
+                .filter(t -> isTaskRunStatusMatched(t, params))
                 .forEach(taskRunList::add);
         return taskRunList;
     }
@@ -732,7 +765,7 @@ public class TaskManager implements MemoryTrackable {
                 return;
             }
         }
-        LOG.info("replayCreateTaskRun:" + status);
+        LOG.debug("replayCreateTaskRun:" + status);
 
         switch (status.getState()) {
             case PENDING:
@@ -742,7 +775,7 @@ public class TaskManager implements MemoryTrackable {
                     LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
-                ExecuteOption executeOption = new ExecuteOption();
+                ExecuteOption executeOption = new ExecuteOption(task.getSource().isMergeable());
                 executeOption.setReplay(true);
                 TaskRun taskRun = TaskRunBuilder
                         .newBuilder(task)
@@ -751,7 +784,7 @@ public class TaskManager implements MemoryTrackable {
 
                 // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                if (!taskRunManager.arrangeTaskRun(taskRun)) {
+                if (!taskRunManager.arrangeTaskRun(taskRun, true)) {
                     LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
                 }
                 break;
@@ -771,12 +804,12 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayUpdateTaskRun(TaskRunStatusChange statusChange) {
+        LOG.debug("replayUpdateTaskRun:" + statusChange);
         Constants.TaskRunState fromStatus = statusChange.getFromStatus();
         Constants.TaskRunState toStatus = statusChange.getToStatus();
         Long taskId = statusChange.getTaskId();
-        LOG.info("replayUpdateTaskRun:" + statusChange);
-        if (fromStatus == Constants.TaskRunState.PENDING) {
 
+        if (fromStatus == Constants.TaskRunState.PENDING) {
             // It is possible to update out of order for priority queue.
             TaskRun pendingTaskRun = taskRunScheduler.getTaskRunByQueryId(taskId, statusChange.getQueryId());
             if (pendingTaskRun == null) {
@@ -788,7 +821,6 @@ public class TaskManager implements MemoryTrackable {
             taskRunScheduler.removePendingTaskRun(pendingTaskRun);
 
             TaskRunStatus status = pendingTaskRun.getStatus();
-
             if (toStatus == Constants.TaskRunState.RUNNING) {
                 if (status.getQueryId().equals(statusChange.getQueryId())) {
                     status.setState(Constants.TaskRunState.RUNNING);
@@ -800,13 +832,13 @@ public class TaskManager implements MemoryTrackable {
                 status.setErrorCode(statusChange.getErrorCode());
                 status.setState(Constants.TaskRunState.FAILED);
                 taskRunManager.getTaskRunHistory().addHistory(status);
-            } else if (toStatus == Constants.TaskRunState.SUCCESS) {
+            } else if (toStatus == Constants.TaskRunState.MERGED) {
                 // This only happened when the task run is merged by others and no run ever.
                 LOG.info("Replay update pendingTaskRun which is merged by others, query_id:{}, taskId:{}",
                         statusChange.getQueryId(), taskId);
                 status.setErrorMessage(statusChange.getErrorMessage());
                 status.setErrorCode(statusChange.getErrorCode());
-                status.setState(Constants.TaskRunState.SUCCESS);
+                status.setState(Constants.TaskRunState.MERGED);
                 status.setProgress(100);
                 status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
@@ -874,7 +906,7 @@ public class TaskManager implements MemoryTrackable {
             return;
         }
         try {
-            List<Task> currentTask = showTasks(null);
+            List<Task> currentTask = filterTasks(null);
             for (Task task : currentTask) {
                 if (task.getType() == Constants.TaskType.PERIODICAL) {
                     TaskSchedule taskSchedule = task.getSchedule();

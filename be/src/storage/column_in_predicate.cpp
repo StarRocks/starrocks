@@ -100,6 +100,8 @@ public:
         return false;
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         for (auto value : _values) {
@@ -128,9 +130,9 @@ public:
         return Status::OK();
     }
 
-    bool support_bloom_filter() const override { return true; }
+    bool support_original_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const BloomFilter* bf) const override {
+    bool original_bloom_filter(const BloomFilter* bf) const override {
         static_assert(field_type != TYPE_HLL, "TODO");
         static_assert(field_type != TYPE_OBJECT, "TODO");
         static_assert(field_type != TYPE_PERCENTILE, "TODO");
@@ -172,7 +174,7 @@ public:
 
     std::string debug_string() const override {
         std::stringstream ss;
-        ss << "(columnId=" << _column_id << ",In(";
+        ss << "((columnId=" << _column_id << ")IN(";
         int i = 0;
         for (auto& item : _values) {
             if (i++ != 0) {
@@ -180,7 +182,7 @@ public:
             }
             ss << this->type_info()->to_string(&item);
         }
-        ss << ")";
+        ss << "))";
         return ss.str();
     }
 
@@ -282,6 +284,8 @@ public:
         return false;
     }
 
+    bool support_bitmap_filter() const override { return true; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         for (const std::string& s : _zero_padded_strs) {
@@ -312,9 +316,9 @@ public:
         return Status::OK();
     }
 
-    bool support_bloom_filter() const override { return true; }
+    bool support_original_bloom_filter() const override { return true; }
 
-    bool bloom_filter(const BloomFilter* bf) const override {
+    bool original_bloom_filter(const BloomFilter* bf) const override {
         for (const auto& str : _zero_padded_strs) {
             Slice v(str);
             RETURN_IF(bf->test_bytes(v.data, v.size), true);

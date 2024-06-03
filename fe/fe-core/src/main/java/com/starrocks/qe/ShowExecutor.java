@@ -58,6 +58,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -229,6 +231,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -324,7 +327,7 @@ public class ShowExecutor {
 
                         AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                         mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
-                            Table baseTable = baseTableInfo.getTable();
+                            Table baseTable = MvUtils.getTableChecked(baseTableInfo);
                             // TODO: external table should check table action after AuthorizationManager support it.
                             if (baseTable != null && baseTable.isNativeTableOrMaterializedView()) {
                                 try {
@@ -669,7 +672,7 @@ public class ShowExecutor {
             createSqlBuilder.append("CREATE DATABASE `").append(statement.getDb()).append("`");
             if (!Strings.isNullOrEmpty(db.getLocation())) {
                 createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-            } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
+            } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase() && Strings.isNullOrEmpty(db.getCatalogName())) {
                 String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
                 createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
             }
@@ -782,8 +785,12 @@ public class ShowExecutor {
 
             // create table catalogName.dbName.tableName (
             StringBuilder createTableSql = new StringBuilder();
-            createTableSql.append("CREATE TABLE ")
-                    .append("`").append(tableName).append("`")
+            if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+                createTableSql.append("CREATE EXTERNAL TABLE ");
+            } else {
+                createTableSql.append("CREATE TABLE ");
+            }
+            createTableSql.append("`").append(tableName).append("`")
                     .append(" (\n");
 
             // Columns
@@ -808,6 +815,8 @@ public class ShowExecutor {
             } else if (table.isDeltalakeTable()) {
                 location = table.getTableLocation();
             } else if (table.isPaimonTable()) {
+                location = table.getTableLocation();
+            } else if (table instanceof IcebergView) {
                 location = table.getTableLocation();
             }
 
@@ -843,7 +852,7 @@ public class ShowExecutor {
             List<List<String>> rowSet = Lists.newArrayList();
 
             List<ConnectContext.ThreadInfo> threadInfos = context.getConnectScheduler()
-                    .listConnection(context.getQualifiedUser());
+                    .listConnection(context.getQualifiedUser(), statement.getForUser());
             long nowMs = System.currentTimeMillis();
             for (ConnectContext.ThreadInfo info : threadInfos) {
                 List<String> row = info.toRow(nowMs, statement.showFull());
@@ -2156,7 +2165,7 @@ public class ShowExecutor {
                                 olapTable.getDefaultReplicationNum() : RunMode.defaultReplicationNum();
                         rows.add(Lists.newArrayList(
                                 tableName,
-                                String.valueOf(dynamicPartitionProperty.getEnable()),
+                                String.valueOf(dynamicPartitionProperty.isEnabled()),
                                 dynamicPartitionProperty.getTimeUnit().toUpperCase(),
                                 String.valueOf(dynamicPartitionProperty.getStart()),
                                 String.valueOf(dynamicPartitionProperty.getEnd()),
@@ -2173,7 +2182,8 @@ public class ShowExecutor {
                                 dynamicPartitionScheduler
                                         .getRuntimeInfo(tableName, DynamicPartitionScheduler.CREATE_PARTITION_MSG),
                                 dynamicPartitionScheduler
-                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG)));
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG),
+                                String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
                     }
                 } finally {
                     locker.unLockDatabase(db, LockType.READ);

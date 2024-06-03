@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -32,6 +33,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,7 +55,11 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
 
+    @SerializedName("taskId")
     private long taskId;
+
+    @SerializedName("taskRunId")
+    private final String taskRunId;
 
     private Map<String, String> properties;
 
@@ -72,8 +78,6 @@ public class TaskRun implements Comparable<TaskRun> {
     private Constants.TaskType type;
 
     private ExecuteOption executeOption;
-
-    private final String taskRunId;
 
     TaskRun() {
         future = new CompletableFuture<>();
@@ -136,7 +140,7 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
-    public String getUUID() {
+    public String getTaskRunId() {
         return taskRunId;
     }
 
@@ -171,7 +175,11 @@ public class TaskRun implements Comparable<TaskRun> {
             }
             MaterializedView materializedView = (MaterializedView) table;
             Preconditions.checkState(materializedView != null);
-            newProperties = materializedView.getProperties();
+            newProperties.putAll(materializedView.getProperties());
+
+            Warehouse w = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
+                    materializedView.getWarehouseId());
+            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, w.getName());
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }
@@ -322,25 +330,47 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
-        TaskRunStatus taskRunStatus = this.getStatus();
-        TaskRunStatus otherTaskRunStatus = taskRun.getStatus();
-        if (taskRunStatus == null) {
-            // prefer other
-            return 1;
-        } else if (otherTaskRunStatus == null) {
+        int ret = comparePriority(this.status, taskRun.status);
+        if (ret != 0) {
+            return ret;
+        }
+        return taskRunId.compareTo(taskRun.taskRunId);
+    }
+
+    private int comparePriority(TaskRunStatus t0, TaskRunStatus t1) {
+        if (t0 == null || t1 == null) {
             // prefer this
-            return -1;
+            return 0;
+        }
+        // if priority is different, return the higher priority
+        if (t0.getPriority() != t1.getPriority()) {
+            return Integer.compare(t1.getPriority(), t0.getPriority());
         } else {
-            // if priority is different, return the higher priority
-            if (taskRunStatus.getPriority() != otherTaskRunStatus.getPriority()) {
-                return otherTaskRunStatus.getPriority() - taskRunStatus.getPriority();
-            } else {
-                // if priority is the same, return the older task
-                return taskRunStatus.getCreateTime() > otherTaskRunStatus.getCreateTime() ? 1 : -1;
-            }
+            // if priority is the same, return the older task
+            return Long.compare(t0.getCreateTime(), t1.getCreateTime());
         }
     }
 
+    /**
+     * Check the taskRun is equal task to the given taskRun which means they have the same taskRunId and the same task.
+     */
+    public boolean isEqualTask(TaskRun o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null) {
+            return false;
+        }
+        if (task.getDefinition() == null) {
+            return false;
+        }
+        return this.taskId == o.getTaskId() &&
+                this.task.getDefinition().equals(o.getTask().getDefinition());
+    }
+
+    /**
+     * TaskRun is equal if they have the same taskRunId and the same task.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -349,12 +379,8 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (task.getDefinition() == null) {
-            return false;
-        }
         TaskRun taskRun = (TaskRun) o;
-        return this.taskId == taskRun.getTaskId() &&
-                this.task.getDefinition().equals(taskRun.getTask().getDefinition());
+        return this.taskRunId.equals(taskRun.getTaskRunId()) && isEqualTask(taskRun);
     }
 
     @Override
@@ -368,9 +394,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 "taskId=" + taskId +
                 ", type=" + type +
                 ", uuid=" + taskRunId +
-                ", task_state=" + status.getState() +
+                ", task_state=" + (status != null ? status.getState() : "") +
                 ", properties=" + properties +
-                ", extra_message =" + status.getExtraMessage() +
+                ", extra_message =" + (status != null ? status.getExtraMessage() : "") +
                 '}';
     }
 }

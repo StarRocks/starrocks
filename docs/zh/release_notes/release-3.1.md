@@ -4,6 +4,59 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.12
+
+发布日期：2024 年 5 月 30 日
+
+### 新增特性
+
+- 支持从 StarRocks 读取 ARRAY、MAP 和 STRUCT 等复杂类型的数据，并以 Arrow 格式可提供给 Flink connector 读取使用。[#43514](https://github.com/StarRocks/starrocks/pull/43514) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+
+### 功能优化
+
+- 在 BE 通过 RPC 与 FE 通信失败时，FE 只会统一返回报错信息 `call frontend service failed reason=xxx`，导致具体出错原因不明。优化后报错信息中会提示具体的出错原因，例如超时或服务器繁忙。 [#44153](https://github.com/StarRocks/starrocks/pull/44153)
+- 优化导入中报错信息，例如错误数据行超限、列数不对应、无效列名、所有分区中没有数据。
+
+### 安全
+
+- 升级 Kafka client 依赖包为 v3.4.0，以修复 [CVE-2023-25194](https://github.com/advisories/GHSA-26f8-x7cc-wqpc) 安全问题。[#45382](https://github.com/StarRocks/starrocks/pull/45382)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果一个物化视图定义中包含多个相同的表的 self join，且根据该表进行分区增量刷新，会因分区选择错误而导致结果错误。[#45936](https://github.com/StarRocks/starrocks/pull/45936)
+- 存算分离模式下在物化视图中创建 Bitmap 索引，会导致 FE crash。[#45665](https://github.com/StarRocks/starrocks/pull/45665)
+- 通过 ODBC 连接 FE follower 并执行 CREATE TABLE 时因空指针问题导致 BE crash。[#45043](https://github.com/StarRocks/starrocks/pull/45043)
+- 如果有较多异步任务，查询 information_schema.task_runs 会频繁失败。[#45520](https://github.com/StarRocks/starrocks/pull/45520)
+- SQL 语句中包含多个 COUNT DISTINCT 且包含 LIMIT，则 LIMIT 处理出现问题，导致每次执行语句返回数据不一致。[#44749](https://github.com/StarRocks/starrocks/pull/44749)
+- 查询明细表和聚合表的语句中包含 ORDER BY LIMIT 子句时，查询结果错误。[#45037](https://github.com/StarRocks/starrocks/pull/45037)
+
+## 3.1.11
+
+发布日期：2024 年 4 月 28 日
+
+### 行为变更
+
+- 禁止删除系统数据库 `information_schema` 中的视图。[#43556](https://github.com/StarRocks/starrocks/pull/43556)
+- 主键表的排序键（由 ORDER BY 语句指定）中不再支持指定重复的列。[#43374](https://github.com/StarRocks/starrocks/pull/43374)
+
+### 功能优化
+
+- 支持读取 Iceberg 中 Equality Delete 的 Parquet 文件。[#42489](https://github.com/StarRocks/starrocks/pull/42489)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。[#44061](https://github.com/StarRocks/starrocks/pull/44061)
+- `str_to_map` 函数使用时可能会导致 BE crash。[#43930](https://github.com/StarRocks/starrocks/pull/43930)
+- 使用 Routine Load 导入数据时，执行 `show proc '/routine_loads'` 会卡住，是因为内部有死锁问题。[#44249](https://github.com/StarRocks/starrocks/pull/44249)
+- 主键表的 Persistent Index 在使用中可能会因为内部并发控制问题而导致 BE crash。[#43720](https://github.com/StarRocks/starrocks/pull/43720)
+- 通过 `leaderFE_IP:8030` 界面查到的 `pending_task_run_count` 数据错误，当前统计的是 Pending+Running 的总数，而不是 Pending 的任务数。同时，从 `followerFE_IP:8030` 查不到 `refresh_pending` 监控指标的信息。[#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- 查询 `information_schema.task_runs` 会频繁失败。[#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- 一些含有 CTE 的 SQL 查询时会报 `Invalid plan: PhysicalTopNOperator` 错误。[#44185](https://github.com/StarRocks/starrocks/pull/44185)
+
 ## 3.1.10（已下线）
 
 发布日期：2024 年 3 月 29 日
@@ -21,6 +74,7 @@ displayed_sidebar: "Chinese"
 ### 新增特性
 
 - 主键表支持 Size-tiered Compaction。[#42474](https://github.com/StarRocks/starrocks/pull/42474)
+- 新增模糊/正则匹配函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
 
 ### 行为变更
 
@@ -46,7 +100,6 @@ displayed_sidebar: "Chinese"
 ### 新增特性
 
 - 存算分离集群中的云原生主键表支持 Size-tiered 模式 Compaction，以减轻导入较多小文件时 Compaction 的写放大问题。[#41610](https://github.com/StarRocks/starrocks/pull/41610)
-- 新增函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
 - 新增 `information_schema.partitions_meta` 视图，提供丰富的 PARTITION 元信息。[#41101](https://github.com/StarRocks/starrocks/pull/41101)
 - 新增 `sys.fe_memory_usage` 视图，提供 StarRocks 的内存使用信息。[#41083](https://github.com/StarRocks/starrocks/pull/41083)
 
@@ -89,7 +142,6 @@ displayed_sidebar: "Chinese"
 - 社区提供 StarRocks 数据迁移工具，支持将数据从存算一体集群迁移数据到存算一体集群或者存算分离集群。
 - 支持创建带有 WHERE 子句的同步物化视图。
 - MemTracker 中新增了 Data Cache 内存使用的相关指标。[#39600](https://github.com/StarRocks/starrocks/pull/39600)
-- 新增函数 `array_unique_agg`。
 
 ### 参数变更
 
@@ -493,7 +545,7 @@ displayed_sidebar: "Chinese"
 
 #### 存储、导入与查询
 
-- 正式支持[大算子落盘 (Spill)](https://docs.starrocks.io/zh/docs/administration/spill_to_disk/) 功能，允许将部分阻塞算子的中间结果落盘。开启大算子落盘功能后，当查询中包含聚合、排序或连接算子时，StarRocks 会将以上算子的中间结果缓存到磁盘以减少内存占用，尽量避免查询因内存不足而导致查询失败。
+- 正式支持[大算子落盘 (Spill)](https://docs.starrocks.io/zh/docs/3.1/administration/management/resource_management/spill_to_disk/) 功能，允许将部分阻塞算子的中间结果落盘。开启大算子落盘功能后，当查询中包含聚合、排序或连接算子时，StarRocks 会将以上算子的中间结果缓存到磁盘以减少内存占用，尽量避免查询因内存不足而导致查询失败。
 - 支持基数保持 JOIN 表（Cardinality-preserving Joins）的裁剪。在较多表的星型模型（比如 SSB）和雪花模型 (TPC-H) 的建模中、且查询只涉及到少量表的一些情况下，能裁剪掉一些不必要的表，从而提升 JOIN 的性能。
 - 执行 [UPDATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) 语句对主键表进行部分更新时支持启用列模式，适用于更新少部分列但是大量行的场景，更新性能可提升十倍。
 - 优化统计信息收集，以降低对导入影响，提高收集性能。

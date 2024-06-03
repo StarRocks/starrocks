@@ -15,6 +15,7 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -41,6 +42,7 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -50,6 +52,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -76,6 +79,7 @@ import java.util.function.Function;
 
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class HiveMetadataTest {
     private HiveMetaClient client;
@@ -673,5 +677,115 @@ public class HiveMetadataTest {
         Partition remotePartition = new Partition(map, null, null, null, false);
         HivePartition hivePartition = new HivePartition(null, null, null, null, null, null, map);
         Assert.assertTrue(HiveCommitter.checkIsSamePartition(remotePartition, hivePartition));
+    }
+
+    @Test
+    public void testCreateTableTimeout() throws Exception {
+        AnalyzeTestUtil.init();
+        String stmt = "create table hive_catalog.hive_db.hive_table (k1 int, k2 int)";
+        String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        starRocksAssert.withCatalog(sql);
+        new MockUp<HiveMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public Path getDefaultLocation(String dbName, String tableName) {
+                return new Path("xxxxx");
+            }
+
+            @Mock
+            public boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
+
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public void createDirectory(Path path, Configuration conf) {
+
+            }
+        };
+
+        new MockUp<CachingHiveMetastore>() {
+            @Mock
+            public void createTable(String dbName, Table table) {
+                throw new StarRocksConnectorException("timeout");
+            }
+        };
+
+        CreateTableStmt createTableStmt =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        Assert.assertTrue(hiveMetadata.createTable(createTableStmt));
+    }
+
+    @Test
+    public void testGetRemoteFileInfoForPartitions(
+            @Mocked HiveTable table,
+            @Mocked HiveMetastoreOperations hmsOps,
+            @Mocked RemoteFileOperations fileOps) {
+        List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103");
+        Map<String, Partition> partitionMap = Maps.newHashMap();
+        List<FileStatus> fileStatusList = Lists.newArrayList();
+        long modificationTime = 1000;
+        for (String name : partitionNames) {
+            Map<String, String> parameters = Maps.newHashMap();
+            TextFileFormatDesc formatDesc = new TextFileFormatDesc("a", "b", "c", "d");
+            String fullPath = "hdfs://path_to_table/" + name;
+            Partition partition = new Partition(parameters, RemoteFileInputFormat.PARQUET, formatDesc, fullPath, true);
+            partitionMap.put(name, partition);
+
+            Path filePath = new Path(fullPath + "/00000_0");
+            FileStatus fileStatus = new FileStatus(100000, false, 1, 256, modificationTime++, filePath);
+            fileStatusList.add(fileStatus);
+        }
+
+        FileStatus[] fileStatuses = fileStatusList.toArray(new FileStatus[0]);
+        new Expectations() {
+            {
+                hmsOps.getPartitionByNames((Table) any, (List<String>) any);
+                result = partitionMap;
+                minTimes = 1;
+
+                fileOps.getFileStatus((Path[]) any);
+                result = fileStatuses;
+                minTimes = 1;
+            }
+        };
+
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfoForPartitions(table, partitionNames);
+        Assert.assertEquals(3, remoteFileInfos.size());
+    }
+
+    @Test
+    public void testGetRemoteFileInfos(
+            @Mocked HiveTable table,
+            @Mocked HiveMetastoreOperations hmsOps) {
+        List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103");
+        Map<String, Partition> partitionMap = Maps.newHashMap();
+        for (String name : partitionNames) {
+            Map<String, String> parameters = Maps.newHashMap();
+            TextFileFormatDesc formatDesc = new TextFileFormatDesc("a", "b", "c", "d");
+            String fullPath = HDFS_HIVE_TABLE;
+            Partition partition = new Partition(parameters, RemoteFileInputFormat.PARQUET, formatDesc, fullPath, true);
+            partitionMap.put(name, partition);
+        }
+
+        new Expectations() {
+            {
+                hmsOps.getPartitionByNames((Table) any, (List<String>) any);
+                result = partitionMap;
+                minTimes = 1;
+            }
+        };
+
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(table, partitionNames);
+        Assert.assertEquals(3, remoteFileInfos.size());
     }
 }

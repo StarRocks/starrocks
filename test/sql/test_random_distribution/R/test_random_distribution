@@ -4,7 +4,6 @@ create table t1(k int, v int) duplicate key(k);
 -- !result
 create table t2(k int, v int) primary key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
 -- !result
 create table t2(k int, v int) primary key(k) distributed by random buckets 20;
 -- result:
@@ -12,7 +11,7 @@ E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. 
 -- !result
 create table t3(k int, v int) unique key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
+E: (1064, 'Getting analyzing error. Detail message: Currently not support default distribution in UNIQUE_KEYS.')
 -- !result
 create table t3(k int, v int) unique key(k) distributed by random buckets 20;
 -- result:
@@ -20,7 +19,7 @@ E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. 
 -- !result
 create table t4(k int, v int sum) aggregate key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
+E: (1064, 'Getting analyzing error. Detail message: Currently not support default distribution in AGG_KEYS.')
 -- !result
 create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
 -- result:

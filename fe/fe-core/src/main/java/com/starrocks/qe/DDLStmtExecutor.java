@@ -18,9 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -152,7 +150,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public class DDLStmtExecutor {
 
@@ -241,13 +238,15 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
                 if (name.isGlobalFunction()) {
-                    context.getGlobalStateMgr().getGlobalFunctionMgr().userAddFunction(stmt.getFunction());
+                    context.getGlobalStateMgr()
+                            .getGlobalFunctionMgr()
+                            .userAddFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
                 } else {
                     Database db = context.getGlobalStateMgr().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.addFunction(stmt.getFunction());
+                    db.addFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
                 }
             });
             return null;
@@ -646,7 +645,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().createView(stmt);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().createView(stmt);
             });
             return null;
         }
@@ -1067,29 +1066,15 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
-            Optional<DataCacheSelectMetrics> metrics = Optional.empty();
-            String errorMsg = "N/A";
+            DataCacheSelectMetrics metrics = null;
             try {
                 metrics = DataCacheSelectExecutor.cacheSelect(statement, context);
             } catch (Exception e) {
                 LOG.warn(e);
-                errorMsg = e.getMessage();
+                throw new RuntimeException(e.getMessage());
             }
 
-            if (metrics.isPresent()) {
-                return metrics.get().getShowResultSet(statement.isVerbose());
-            } else {
-                List<List<String>> rows = Lists.newArrayList();
-                List<String> row = Lists.newArrayList();
-                ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                        .addColumn(new Column("STATUS", ScalarType.createVarcharType()))
-                        .addColumn(new Column("ERROR_MSG", ScalarType.createVarcharType()))
-                        .build();
-                row.add("FAILED");
-                row.add(errorMsg);
-                rows.add(row);
-                return new ShowResultSet(metaData, rows);
-            }
+            return metrics.getShowResultSet(statement.isVerbose());
         }
 
         //=========================================== Dictionary Statement ==================================================

@@ -23,23 +23,24 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
-import java.util.Optional;
 
 public class DataCacheSelectExecutor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectExecutor.class);
 
-    public static Optional<DataCacheSelectMetrics> cacheSelect(DataCacheSelectStatement statement,
+    public static DataCacheSelectMetrics cacheSelect(DataCacheSelectStatement statement,
                                                              ConnectContext connectContext) throws Exception {
         // backup original session variable
         SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
         // clone an new session variable
         SessionVariable tmpSessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        // overwrite catalog
+        tmpSessionVariable.setCatalog(statement.getCatalog());
         // force enable datacache and populate
         tmpSessionVariable.setEnableScanDataCache(true);
         tmpSessionVariable.setEnablePopulateDataCache(true);
@@ -50,8 +51,11 @@ public class DataCacheSelectExecutor {
 
         InsertStmt insertStmt = statement.getInsertStmt();
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, insertStmt);
-        // register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
-        connectContext.getExecutor().registerSubStmtExecutor(stmtExecutor);
+        // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
+        // If DataCacheSelect is forward to leader, connectContext's Executor is null
+        if (connectContext.getExecutor() != null) {
+            connectContext.getExecutor().registerSubStmtExecutor(stmtExecutor);
+        }
         stmtExecutor.execute();
 
         if (connectContext.getState().isError()) {
@@ -65,25 +69,25 @@ public class DataCacheSelectExecutor {
         coordinator.join(connectContext.getSessionVariable().getQueryTimeoutS());
         if (coordinator.isDone()) {
             metrics = stmtExecutor.getCoordinator().getDataCacheSelectMetrics();
-            if (metrics != null) {
-                // update backend's datacache metrics after cache select
-                updateBackendDataCacheMetrics(metrics);
-            }
         }
         // set original session variable
         connectContext.setSessionVariable(sessionVariableBackup);
-        return Optional.ofNullable(metrics);
+
+        Preconditions.checkNotNull(metrics, "Failed to retrieve cache select metrics");
+        // update backend's datacache metrics after cache select
+        updateBackendDataCacheMetrics(metrics);
+        return metrics;
     }
 
     // update BE's datacache metrics after cache select
     public static void updateBackendDataCacheMetrics(DataCacheSelectMetrics metrics) {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         for (Map.Entry<Long, LoadDataCacheMetrics> metric : metrics.getBeMetrics().entrySet()) {
-            Backend backend = clusterInfoService.getBackend(metric.getKey());
-            if (backend == null) {
+            ComputeNode computeNode = clusterInfoService.getBackendOrComputeNode(metric.getKey());
+            if (computeNode == null) {
                 continue;
             }
-            backend.updateDataCacheMetrics(metric.getValue().getLastDataCacheMetrics());
+            computeNode.updateDataCacheMetrics(metric.getValue().getLastDataCacheMetrics());
         }
     }
 }

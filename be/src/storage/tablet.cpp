@@ -348,8 +348,8 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
-    LOG(INFO) << "add rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
-              << " to tablet=" << full_name();
+    VLOG(1) << "add rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
+            << " to tablet=" << full_name();
     _timestamped_version_tracker.add_version(rowset->version());
 
     std::vector<RowsetSharedPtr> rowsets_to_delete;
@@ -406,8 +406,8 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
         rs_metas_to_add.push_back(rs->rowset_meta());
         _rs_version_map[rs->version()] = rs;
         _gtid_to_version_map[rs->rowset_meta()->gtid()] = rs->version().second;
-        LOG(INFO) << "add rowset gtid=" << rs->rowset_meta()->gtid() << " version=" << rs->version()
-                  << " to tablet=" << full_name();
+        VLOG(1) << "add rowset gtid=" << rs->rowset_meta()->gtid() << " version=" << rs->version()
+                << " to tablet=" << full_name();
 
         _timestamped_version_tracker.add_version(rs->version());
         ++_newly_created_rowset_num;
@@ -609,8 +609,8 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
     _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
-    LOG(INFO) << "add incremental rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
-              << " to tablet=" << full_name();
+    VLOG(1) << "add incremental rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
+            << " to tablet=" << full_name();
     _inc_rs_version_map[rowset->version()] = rowset;
     if (need_binlog) {
         // BinlogManager#commit_ingestion needs the data disk size of rowset, and will
@@ -743,8 +743,8 @@ void Tablet::delete_expired_stale_rowset() {
                 if (it != _stale_rs_version_map.end()) {
                     // delete rowset
                     stale_rowsets.emplace_back(it->second);
-                    _stale_rs_version_map.erase(it);
                     _gtid_to_version_map.erase(it->second->rowset_meta()->gtid());
+                    _stale_rs_version_map.erase(it);
                 } else {
                     LOG(WARNING) << "delete stale rowset tablet=" << full_name() << " version["
                                  << timestamped_version->version().first << "," << timestamped_version->version().second
@@ -1780,7 +1780,7 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
-TabletSchemaCSPtr Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
+void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard l0(_meta_lock);
     std::lock_guard l1(_schema_lock);
     // Double Check for concurrent update
@@ -1790,10 +1790,8 @@ TabletSchemaCSPtr Tablet::update_max_version_schema(const TabletSchemaCSPtr& tab
         } else {
             _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
         }
+        _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
     }
-
-    _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
-    return _max_version_schema;
 }
 
 const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {

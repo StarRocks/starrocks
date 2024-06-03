@@ -19,11 +19,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -36,7 +40,9 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
@@ -98,7 +104,19 @@ public class OptExpressionDuplicator {
     }
 
     public OptExpression duplicate(OptExpression source) {
-        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(optimizerContext, columnMapping, rewriter);
+        return duplicate(source, false, false);
+    }
+
+    public OptExpression duplicate(OptExpression source,
+                                   boolean isResetSelectedPartitions) {
+        return duplicate(source, isResetSelectedPartitions, false);
+    }
+
+    public OptExpression duplicate(OptExpression source,
+                                   boolean isResetSelectedPartitions,
+                                   boolean isRefreshExternalTable) {
+        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(optimizerContext, columnMapping, rewriter,
+                isResetSelectedPartitions, isRefreshExternalTable);
         return source.getOp().accept(visitor, source, null);
     }
 
@@ -114,18 +132,31 @@ public class OptExpressionDuplicator {
         return newColumnRefs;
     }
 
+    /**
+     * Rewrite input scalar input into new scalar operator by new column mapping.
+     */
+    public ScalarOperator rewriteAfterDuplicate(ScalarOperator input) {
+        return rewriter.rewrite(input);
+    }
+
     class OptExpressionDuplicatorVisitor extends OptExpressionVisitor<OptExpression, Void> {
         private final OptimizerContext optimizerContext;
         private final Map<Integer, Integer> cteIdMapping = Maps.newHashMap();
         private final Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
         private final ReplaceColumnRefRewriter rewriter;
+        private final boolean isResetSelectedPartitions;
+        private final boolean isRefreshExternalTable;
 
         OptExpressionDuplicatorVisitor(OptimizerContext optimizerContext,
                                        Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
-                                       ReplaceColumnRefRewriter rewriter) {
+                                       ReplaceColumnRefRewriter rewriter,
+                                       boolean isResetSelectedPartitions,
+                                       boolean isRefreshExternalTable) {
             this.optimizerContext = optimizerContext;
             this.columnMapping = columnMapping;
             this.rewriter = rewriter;
+            this.isResetSelectedPartitions = isResetSelectedPartitions;
+            this.isRefreshExternalTable = isRefreshExternalTable;
         }
 
         private List<OptExpression> processChildren(OptExpression optExpression) {
@@ -139,9 +170,9 @@ public class OptExpressionDuplicator {
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
             Operator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
-            opBuilder.withOperator(optExpression.getOp());
-            Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
-                    ((LogicalScanOperator) optExpression.getOp()).getColRefToColumnMetaMap();
+            LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
+            opBuilder.withOperator(scanOperator);
+            Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = scanOperator.getColRefToColumnMetaMap();
             ImmutableMap.Builder<ColumnRefOperator, Column> columnRefColumnMapBuilder = new ImmutableMap.Builder<>();
             Map<Integer, Integer> relationIdMapping = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, Column> entry : columnRefOperatorColumnMap.entrySet()) {
@@ -157,8 +188,7 @@ public class OptExpressionDuplicator {
             }
             LogicalScanOperator.Builder scanBuilder = (LogicalScanOperator.Builder) opBuilder;
 
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap =
-                    ((LogicalScanOperator) optExpression.getOp()).getColumnMetaToColRefMap();
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap = scanOperator.getColumnMetaToColRefMap();
             ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = new ImmutableMap.Builder<>();
             for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
                 ColumnRefOperator key = entry.getValue();
@@ -175,14 +205,55 @@ public class OptExpressionDuplicator {
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
             // process HashDistributionSpec
-            if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
-                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
+                LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                 if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
                             columnRefFactory, columnMapping);
-                    LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                }
+
+                if (isResetSelectedPartitions) {
+                    olapScanBuilder.setSelectedPartitionId(null)
+                            .setPrunedPartitionPredicates(Lists.newArrayList())
+                            .setSelectedTabletId(Lists.newArrayList());
+                } else {
+                    List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
+                    if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
+                        List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
+                        for (ScalarOperator predicate : prunedPartitionPredicates) {
+                            ScalarOperator newPredicate = rewriter.rewrite(predicate);
+                            newPrunedPartitionPredicates.add(newPredicate);
+                        }
+                        olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
+                    }
+                }
+            } else {
+                try {
+                    if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
+                        // refresh iceberg table's metadata
+                        Table refBaseTable = scanOperator.getTable();
+                        IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
+                        String catalogName = cachedIcebergTable.getCatalogName();
+                        String dbName = cachedIcebergTable.getRemoteDbName();
+                        TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
+                        Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
+                        if (currentTable == null) {
+                            return null;
+                        }
+                        // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
+                        scanBuilder.setTable(currentTable);
+                    }
+                    ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
+                    if (isResetSelectedPartitions) {
+                        scanOperatorPredicates.clear();
+                    } else {
+                        scanOperatorPredicates.duplicate(rewriter);
+                    }
+                } catch (AnalysisException e) {
+                    // ignore exception
                 }
             }
 

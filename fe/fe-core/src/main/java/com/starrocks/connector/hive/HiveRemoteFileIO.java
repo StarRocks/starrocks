@@ -236,4 +236,23 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     public void setFileSystem(FileSystem fs) {
         this.fileSystem = fs;
     }
+
+    @Override
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
+        if (files == null || files.length <= 0) {
+            return null;
+        }
+        FileSystem fileSystem;
+        if (!FeConstants.runningUnitTest) {
+            fileSystem = FileSystem.get(files[0].toUri(), configuration);
+        } else {
+            fileSystem = this.fileSystem;
+        }
+        List<FileStatus> fileStatuses = Lists.newArrayList();
+        for (Path file : files) {
+            FileStatus fileStatus = fileSystem.getFileStatus(file);
+            fileStatuses.add(fileStatus);
+        }
+        return fileStatuses.toArray(new FileStatus[0]);
+    }
 }

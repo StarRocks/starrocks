@@ -489,7 +489,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         };
 
         nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
-        Assert.assertEquals(StatsConstants.ScheduleStatus.PENDING, nativeAnalyzeJob.getStatus());
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, nativeAnalyzeJob.getStatus());
 
         new MockUp<FullStatisticsCollectJob>() {
             @Mock
@@ -560,7 +560,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         };
 
         externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
-        Assert.assertEquals(StatsConstants.ScheduleStatus.PENDING, externalAnalyzeJob.getStatus());
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, externalAnalyzeJob.getStatus());
 
         new MockUp<ExternalFullStatisticsCollectJob>() {
             @Mock
@@ -606,7 +606,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(31, jobs.size());
+        Assert.assertEquals(32, jobs.size());
     }
 
     @Test
@@ -623,7 +623,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(12, jobs.size());
+        Assert.assertEquals(13, jobs.size());
     }
 
     @Test

@@ -76,41 +76,56 @@ public class GlobalFunctionMgr {
         return func;
     }
 
-    private void addFunction(Function function, boolean isReplay) throws UserException {
+    private void addFunction(Function function, boolean isReplay, boolean allowExists) throws UserException {
         String functionName = function.getFunctionName().getFunction();
-        List<Function> existFuncs = name2Function.get(functionName);
+        List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (!isReplay) {
-            if (existFuncs != null) {
-                for (Function existFunc : existFuncs) {
-                    if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
-                        throw new UserException("function already exists");
-                    }
+            for (Function existFunc : existFuncs) {
+                if (!allowExists && function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+                    throw new UserException("function already exists");
                 }
             }
-            // Get function id for this UDF, use CatalogIdGenerator. Only get function id
-            // when isReplay is false
-            long functionId = GlobalStateMgr.getCurrentState().getNextId();
-            // all user-defined functions id are negative to avoid conflicts with the builtin function
-            function.setFunctionId(-functionId);
+            assignIdToUserDefinedFunction(function);
         }
-
-        com.google.common.collect.ImmutableList.Builder<Function> builder =
-                com.google.common.collect.ImmutableList.builder();
-        if (existFuncs != null) {
-            builder.addAll(existFuncs);
-        }
-        builder.add(function);
-        name2Function.put(functionName, builder.build());
+        name2Function.put(functionName, addOrReplaceFunction(function, existFuncs));
     }
 
-    public synchronized void userAddFunction(Function f) throws UserException {
-        addFunction(f, false);
+    /**
+     * Add the function to the given list of functions. If an identical function exists within the list, it is replaced
+     * by the incoming function.
+     *
+     * @param function   The function to be added.
+     * @param existFuncs The list of functions to which the function is added. This list is not modified.
+     * @return a new list of functions with the given function added or replaced.
+     */
+    public static ImmutableList<Function> addOrReplaceFunction(Function function, List<Function> existFuncs) {
+        return ImmutableList.<Function>builder()
+                .addAll(existFuncs.stream()
+                        .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
+                        .collect(ImmutableList.toImmutableList()))
+                .add(function)
+                .build();
+    }
+
+    /**
+     * Assign a globally unique id to the given user-defined function.
+     * All user-defined functions IDs are negative to avoid conflicts with the builtin function.
+     *
+     * @param function Function to be modified.
+     */
+    public static void assignIdToUserDefinedFunction(Function function) {
+        long functionId = GlobalStateMgr.getCurrentState().getNextId();
+        function.setFunctionId(-functionId);
+    }
+
+    public synchronized void userAddFunction(Function f, boolean allowExists) throws UserException {
+        addFunction(f, false, allowExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(f);
     }
 
     public synchronized void replayAddFunction(Function f) {
         try {
-            addFunction(f, true);
+            addFunction(f, true, false);
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }

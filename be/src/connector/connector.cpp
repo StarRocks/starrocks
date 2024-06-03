@@ -110,7 +110,7 @@ void DataSource::update_profile(const Profile& profile) {
 StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
-        size_t num_total_scan_ranges) {
+        size_t num_total_scan_ranges, size_t scan_dop) {
     peek_scan_ranges(scan_ranges);
 
     pipeline::Morsels morsels;
@@ -122,7 +122,32 @@ StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_mor
             morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
         }
     }
-    return std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels));
+
+    if (partition_order_hint().has_value()) {
+        bool asc = partition_order_hint().value();
+        std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
+            auto l_partition_id = down_cast<pipeline::ScanMorsel*>(l.get())->partition_id();
+            auto r_partition_id = down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
+            if (asc) {
+                return std::less()(l_partition_id, r_partition_id);
+            } else {
+                return std::greater()(l_partition_id, r_partition_id);
+            }
+        });
+    }
+
+    if (output_chunk_by_bucket()) {
+        std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+            return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
+                   down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
+        });
+    }
+
+    auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels));
+    if (scan_dop > 0) {
+        morsel_queue->set_max_degree_of_parallelism(scan_dop);
+    }
+    return morsel_queue;
 }
 
 } // namespace starrocks::connector

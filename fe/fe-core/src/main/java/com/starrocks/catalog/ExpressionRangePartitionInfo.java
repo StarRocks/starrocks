@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
@@ -34,11 +35,11 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -98,34 +99,73 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         // Analyze partition expr
         Map<String, Column> partitionNameColumnMap = partitionColumns.stream()
                 .collect(toMap(x -> x.getName(), Function.identity(), (e1, e2) -> e1, CaseInsensitiveMap::new));
-        SlotRef slotRef;
         for (Expr expr : partitionExprs) {
-            if (expr instanceof FunctionCallExpr) {
-                slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
-            } else if (expr instanceof CastExpr) {
-                slotRef = AnalyzerUtils.getSlotRefFromCast(expr);
-            } else if (expr instanceof SlotRef) {
-                slotRef = (SlotRef) expr;
-            } else {
+            SlotRef slotRef = getPartitionExprSlotRef(expr);
+            if (slotRef == null) {
                 LOG.warn("Unknown expr type: {}", expr.toSql());
                 continue;
             }
-
-            // TODO: Later, for automatically partitioned tables,
-            //  partitions of materialized views (also created automatically),
-            //  and partition by expr tables will use ExpressionRangePartitionInfoV2
-            if (partitionNameColumnMap.containsKey(slotRef.getColumnName())) {
-                Column partitionColumn = partitionNameColumnMap.get(slotRef.getColumnName());
-                slotRef.setType(partitionColumn.getType());
-                slotRef.setNullable(partitionColumn.isAllowNull());
-                try {
-                    PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
-                } catch (SemanticException ex) {
-                    LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
-                }
+            // FIXME: use the slot ref's column name to find the partition column which maybe not the same as the slot ref's
+            //  column name.
+            String slotRefName = slotRef.getColumnName();
+            if (!partitionNameColumnMap.containsKey(slotRefName)) {
+                continue;
             }
+            Column partitionColumn = partitionNameColumnMap.get(slotRefName);
+            // analyze partition expression
+            analyzePartitionExpressionExpr(slotRef, partitionColumn, expr);
         }
         this.partitionExprs = partitionExprs;
+    }
+
+    /**
+     * NOTE: only one slot ref is allowed in partition expression for now.
+     * @param expr the partition expression.
+     * @return Return the input slotRef of partition expression, which is used to analyze partition expression.
+     */
+    private SlotRef getPartitionExprSlotRef(Expr expr) {
+        if (expr == null) {
+            return null;
+        }
+        if (expr instanceof SlotRef) {
+            return (SlotRef) expr;
+        } else if (expr instanceof FunctionCallExpr) {
+            return AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+        } else if (expr instanceof CastExpr) {
+            return AnalyzerUtils.getSlotRefFromCast(expr);
+        }
+        return null;
+    }
+
+    /**
+     * Analyze partition expression slot ref.
+     * @param slotRef the partition expression's argument slot ref.
+     * @param partitionColumn the partition column.
+     * @param partitionExpr the partition expression
+     */
+    private void analyzePartitionExpressionExpr(SlotRef slotRef, Column partitionColumn, Expr partitionExpr) {
+        // TODO: Later, for automatically partitioned tables,
+        //  partitions of materialized views (also created automatically),
+        //  and partition by expr tables will use ExpressionRangePartitionInfoV2
+        if (slotRef.getType() == Type.INVALID) {
+            if (partitionExpr instanceof FunctionCallExpr) {
+                if (MvUtils.isStr2Date(partitionExpr)) {
+                    // `str2date`'s input argument type should always be string
+                    slotRef.setType(Type.STRING);
+                } else {
+                    // otherwise input argument type is the same as the partition column's type
+                    slotRef.setType(partitionColumn.getType());
+                }
+            } else {
+                slotRef.setType(partitionColumn.getType());
+            }
+        }
+        slotRef.setNullable(partitionColumn.isAllowNull());
+        try {
+            PartitionExprAnalyzer.analyzePartitionExpr(partitionExpr, slotRef);
+        } catch (SemanticException ex) {
+            LOG.warn("Failed to analyze partition expr: {}", partitionExpr.toSql(), ex);
+        }
     }
 
     public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns, PartitionType type) {

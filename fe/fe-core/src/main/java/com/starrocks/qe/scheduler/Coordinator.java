@@ -230,4 +230,7 @@ public abstract class Coordinator {
 
     public abstract boolean isProfileAlreadyReported();
 
+    public abstract String getWarehouseName();
+
+    public abstract boolean isShortCircuit();
 }

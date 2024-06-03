@@ -90,6 +90,7 @@ import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.planner.JoinNode;
+import com.starrocks.planner.KuduScanNode;
 import com.starrocks.planner.MergeJoinNode;
 import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.MultiCastPlanFragment;
@@ -163,6 +164,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScan
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -373,6 +375,9 @@ public class PlanFragmentBuilder {
             Preconditions.checkState(colocateExecGroups.isEmpty());
         }
 
+        for (PlanFragment fragment : fragments) {
+            fragment.removeRfOnRightOffspringsOfBroadcastJoin();
+        }
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -465,71 +470,102 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        /**
+         * Set the columns which do not need to be output by ScanNode. They are columns which are only used in pushdownable
+         * predicates rather than columns which are used in non-pushdownable predicates and output columns.
+         *
+         * <p> The columns that can be pushed down need to meet:
+         * <ul>
+         * <li> All the columns of duplicate-key model.
+         * <li> Keys of primary-key model.
+         * <li> Keys of agg-key model (aggregation/unique_key model) in the skip-aggr scan stage.
+         * </ul>
+         *
+         * <p> The predicates that can be pushed down need to meet:
+         * <ul>
+         * <li> Simple single-column predicates, and the column can be pushed down, such as a = v1.
+         * <li> AND and OR predicates, and the sub-predicates are all pushable, such as a = v1 OR (b = v2 AND c = v3).
+         * <li> The other predicates are not pushable, such as a + b = v1, a = v1 OR a + b = v2.
+         * </ul>
+         *
+         * <p> The columns in the predicates that cannot be pushed down need to be retained, because these columns are
+         * used in the stage after scan.
+         */
         private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
                                             List<ScalarOperator> predicates, OlapTable referenceTable) {
-            if (!ConnectContext.get().getSessionVariable().isEnableFilterUnusedColumnsInScanStage()) {
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            if (!sessionVariable.isEnableFilterUnusedColumnsInScanStage()) {
                 return;
             }
 
             // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
             // - All the keys columns must be retained to merge and aggregate rows.
             // - Value columns can only be used after merging and aggregating.
-            MaterializedIndexMeta materializedIndexMeta =
-                    referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
             if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
                 return;
             }
 
-            List<ColumnRefOperator> outputColumns = node.getOutputColumns();
-            // if outputColumns is empty, skip this optimization
-            if (outputColumns.isEmpty()) {
-                return;
-            }
-            Set<Integer> outputColumnIds = new HashSet<Integer>();
-            for (ColumnRefOperator colref : outputColumns) {
-                outputColumnIds.add(colref.getId());
+            // ------------------------------------------------------------------------------------
+            // Get outputColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> outputColumnIds = node.getOutputColumns().stream()
+                    .map(ColumnRefOperator::getId)
+                    .collect(Collectors.toSet());
+            // Empty outputColumnIds means that the expression after ScanNode does not need any column from ScanNode.
+            // However, at least one column needs to be output, so choose any column as the output column.
+            if (outputColumnIds.isEmpty()) {
+                if (!scanNode.getSlots().isEmpty()) {
+                    outputColumnIds.add(scanNode.getSlots().get(0).getId().asInt());
+                }
             }
 
-            // NOTE:
-            // - only support push down single predicate(eg, a = xx) to scan node.
-            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in
-            // the unused
-            // columns.
-            // - complex pred(eg, a + b = xx) can not be pushed down to scan node yet.
-            // so the columns in complex predicate are useful for the stage after scan.
-            Set<Integer> singlePredColumnIds = new HashSet<Integer>();
-            Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-            Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
+            // ------------------------------------------------------------------------------------
+            // Get nonPushdownColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> nonPushdownColumnIds = Collections.emptySet();
             if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
                     materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
-                aggOrPrimaryKeyTableValueColumnNames =
-                        materializedIndexMeta.getSchema().stream()
-                                .filter(col -> !col.isKey())
-                                .map(Column::getName)
-                                .collect(Collectors.toSet());
+                Map<String, Integer> columnNameToId = scanNode.getSlots().stream().collect(Collectors.toMap(
+                        slot -> slot.getColumn().getName(),
+                        slot -> slot.getId().asInt()
+                ));
+                nonPushdownColumnIds = materializedIndexMeta.getSchema().stream()
+                        .filter(col -> !col.isKey())
+                        .map(Column::getName)
+                        .map(columnNameToId::get)
+                        .collect(Collectors.toSet());
             }
 
+            // ------------------------------------------------------------------------------------
+            // Get pushdownPredUsedColumnIds and nonPushdownPredUsedColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> pushdownPredUsedColumnIds = new HashSet<>();
+            Set<Integer> nonPushdownPredUsedColumnIds = new HashSet<>();
             for (ScalarOperator predicate : predicates) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
-                if (DecodeVisitor.isSimpleStrictPredicate(predicate)) {
+                boolean isPushdown =
+                        DecodeVisitor.isSimpleStrictPredicate(predicate, sessionVariable.isEnablePushdownOrPredicate())
+                                && Arrays.stream(usedColumns.getColumnIds()).noneMatch(nonPushdownColumnIds::contains);
+                if (isPushdown) {
                     for (int cid : usedColumns.getColumnIds()) {
-                        singlePredColumnIds.add(cid);
+                        pushdownPredUsedColumnIds.add(cid);
                     }
                 } else {
                     for (int cid : usedColumns.getColumnIds()) {
-                        complexPredColumnIds.add(cid);
+                        nonPushdownPredUsedColumnIds.add(cid);
                     }
                 }
             }
 
-            Set<Integer> unUsedOutputColumnIds = new HashSet<>();
-            for (Integer newCid : singlePredColumnIds) {
-                if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
-                    unUsedOutputColumnIds.add(newCid);
-                }
-            }
-
-            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggOrPrimaryKeyTableValueColumnNames);
+            // ------------------------------------------------------------------------------------
+            // Get unUsedOutputColumnIds which are in pushdownPredUsedColumnIds
+            // but not in nonPushdownPredUsedColumnIds and outputColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> unUsedOutputColumnIds = pushdownPredUsedColumnIds.stream()
+                    .filter(cid -> !nonPushdownPredUsedColumnIds.contains(cid) && !outputColumnIds.contains(cid))
+                    .collect(Collectors.toSet());
+            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
         }
 
         @Override
@@ -1176,6 +1212,7 @@ public class PlanFragmentBuilder {
                 }
                 deltaLakeScanNode.setupScanRangeLocations(context.getDescTbl());
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : " + e);
@@ -1283,6 +1320,49 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), odpsScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        public PlanFragment visitPhysicalKuduScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalKuduScanOperator node = (PhysicalKuduScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            KuduScanNode kuduScanNode =
+                    new KuduScanNode(context.getNextNodeId(), tupleDescriptor, "KuduScanNode");
+            kuduScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    kuduScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                kuduScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
+                HDFSScanNodePredicates scanNodePredicates = kuduScanNode.getScanNodePredicates();
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+            } catch (Exception e) {
+                LOG.warn("Kudu scan node get scan range locations failed : " + e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            kuduScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(kuduScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), kuduScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -2654,6 +2734,7 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.setProbePartitionByExprs(probePartitionByExprs);
+            joinNode.setEnableLateMaterialization(ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
             // enable group execution for colocate join
             currentExecGroup = leftExecGroup;
             if (ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
@@ -2845,19 +2926,53 @@ public class PlanFragmentBuilder {
                 analyticEvalNode.getConjuncts()
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
-            // In new planner
-            // Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
-            // to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
-            PlanNode root = inputFragment.getPlanRoot();
-            if (root instanceof SortNode) {
-                SortNode sortNode = (SortNode) root;
-                sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
-                // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
-                sortNode.setAnalyticPartitionSkewed(node.isSkewed());
-            }
+            passPartitionByToSortNode(context, inputFragment.getPlanRoot(), analyticEvalNode.getPartitionExprs(),
+                    node.isSkewed());
 
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
+        }
+
+        /**
+         * In new planner.
+         * Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
+         * to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
+         */
+        private static void passPartitionByToSortNode(ExecPlan context, PlanNode childRoot, List<Expr> partitionExprs,
+                                                      boolean isSkewed) {
+            SortNode sortNode = null;
+            if (childRoot instanceof SortNode) {
+                sortNode = (SortNode) childRoot;
+                sortNode.setAnalyticPartitionExprs(partitionExprs);
+            } else if (childRoot instanceof DecodeNode && childRoot.getChild(0) instanceof SortNode) {
+                DecodeNode decodeNode = (DecodeNode) childRoot;
+                sortNode = (SortNode) childRoot.getChild(0);
+
+                Map<Integer, Integer> stringIdToDictId = decodeNode.getDictIdToStringIds()
+                        .entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+                List<Expr> partitionExprsBeforeDecode = partitionExprs.stream().map(expr -> {
+                    if (!(expr instanceof SlotRef)) {
+                        return expr;
+                    }
+
+                    SlotRef slotRef = (SlotRef) expr;
+                    Integer dictSlotId = stringIdToDictId.get(slotRef.getDesc().getId().asInt());
+                    if (dictSlotId == null) {
+                        return expr;
+                    }
+
+                    SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(dictSlotId));
+                    return new SlotRef(slotDesc);
+                }).collect(Collectors.toList());
+
+                sortNode.setAnalyticPartitionExprs(partitionExprsBeforeDecode);
+            }
+
+            if (sortNode != null) {
+                // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
+                sortNode.setAnalyticPartitionSkewed(isSkewed);
+            }
         }
 
         private PlanFragment buildSetOperation(OptExpression optExpr, ExecPlan context, OperatorType operatorType) {

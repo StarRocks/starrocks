@@ -14,9 +14,9 @@
 
 #include "formats/parquet/column_chunk_writer.h"
 
-#include <parquet/arrow/writer.h>
+#include <parquet/column_writer.h>
+#include <parquet/types.h>
 
-#include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/level_builder.h"
 #include "gutil/casts.h"
 

@@ -48,6 +48,9 @@
 #include "exec/pipeline/query_context.h"
 #include "exprs/jit/jit_engine.h"
 #include "fs/fs_util.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -152,6 +155,9 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
                          const TQueryGlobals& query_globals, ExecEnv* exec_env) {
     _fragment_instance_id = fragment_instance_id;
     _query_options = query_options;
+    if (_query_options.__isset.spill_options) {
+        _spill_options = _query_options.spill_options;
+    }
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
         if (query_globals.__isset.timestamp_us) {
@@ -519,6 +525,40 @@ Status RuntimeState::reset_epoch() {
 bool RuntimeState::is_jit_enabled() const {
     return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
            _query_options.jit_level != 0;
+}
+
+void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
+    if (!_query_options.__isset.catalog) {
+        return;
+    }
+
+    TLoadDataCacheMetrics metrics{};
+    metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
+    metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
+    metrics.__set_write_bytes(_num_datacache_write_bytes.load(std::memory_order_relaxed));
+    metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
+    metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
+
+    if (_query_options.catalog == "default_catalog") {
+#ifdef USE_STAROS
+        if (config::starlet_use_star_cache) {
+            TDataCacheMetrics t_metrics{};
+            starcache::CacheMetrics cache_metrics;
+            staros::starlet::fslib::star_cache_get_metrics(&cache_metrics);
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache_metrics);
+            metrics.__set_metrics(t_metrics);
+            load_params->__set_load_datacache_metrics(metrics);
+        }
+#endif // USE_STAROS
+    } else {
+        if (config::datacache_enable) {
+            const BlockCache* cache = BlockCache::instance();
+            TDataCacheMetrics t_metrics{};
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
+            metrics.__set_metrics(t_metrics);
+            load_params->__set_load_datacache_metrics(metrics);
+        }
+    }
 }
 
 } // end namespace starrocks

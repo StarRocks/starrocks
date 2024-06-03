@@ -27,6 +27,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
+#include "util/bthreads/single_flight.h"
 
 namespace starrocks {
 struct FileInfo;
@@ -200,6 +201,7 @@ private:
 
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
+    StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
 
     LocationProvider* _location_provider;
     std::unique_ptr<Metacache> _metacache;
@@ -208,6 +210,9 @@ private:
 
     std::shared_mutex _meta_lock;
     std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
+
+    bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
+    bthreads::singleflight::Group<std::string, StatusOr<CombinedTxnLogPtr>> _combined_txn_log_group;
 };
 
 } // namespace starrocks::lake

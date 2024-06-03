@@ -37,6 +37,7 @@
 #include <atomic>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -75,10 +76,13 @@ class RowDescriptor;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
-
+using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
 namespace pipeline {
 class QueryContext;
 }
+
+#define EXTRACE_SPILL_PARAM(query_option, spill_option, var) \
+    spill_option.has_value() ? spill_option->var : query_option.var
 
 constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
 
@@ -329,34 +333,7 @@ public:
         _num_datacache_count.fetch_add(count, std::memory_order_relaxed);
     }
 
-    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
-        if (!_query_options.__isset.catalog) {
-            return;
-        }
-
-        TLoadDataCacheMetrics metrics{};
-        metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
-        metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
-        metrics.__set_write_bytes(_num_datacache_write_bytes.load(std::memory_order_relaxed));
-        metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
-        metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
-
-        if (_query_options.catalog == "default_catalog") {
-#ifdef USE_STAROS
-            if (config::starlet_use_star_cache) {
-                // support this later
-            }
-#endif
-        } else {
-            if (config::datacache_enable) {
-                const BlockCache* cache = BlockCache::instance();
-                TDataCacheMetrics t_metrics{};
-                DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
-                metrics.__set_metrics(t_metrics);
-                load_params->__set_load_datacache_metrics(metrics);
-            }
-        }
-    }
+    void update_load_datacache_metrics(TReportExecStatusParams* load_params) const;
 
     std::atomic_int64_t* mutable_total_spill_bytes();
 
@@ -368,47 +345,62 @@ public:
 
     int num_per_fragment_instances() const { return _num_per_fragment_instances; }
 
-    TSpillMode::type spill_mode() const {
-        DCHECK(_query_options.__isset.spill_mode);
-        return _query_options.spill_mode;
+    TSpillMode::type spill_mode() const { return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mode); }
+    int64_t spillable_operator_mask() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spillable_operator_mask);
     }
 
     bool enable_spill() const { return _query_options.enable_spill; }
 
     bool enable_hash_join_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::HASH_JOIN);
+        return spillable_operator_mask() & (1LL << TSpillableOperatorType::HASH_JOIN);
     }
 
-    bool enable_agg_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::AGG);
-    }
+    bool enable_agg_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG); }
     bool enable_agg_distinct_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::AGG_DISTINCT);
+        return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG_DISTINCT);
     }
-    bool enable_sort_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::SORT);
+    bool enable_sort_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::SORT); }
+    bool enable_nl_join_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::NL_JOIN); }
+
+    int32_t spill_mem_table_size() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }
-    bool enable_nl_join_spill() const {
-        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::NL_JOIN);
+
+    int32_t spill_mem_table_num() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_num);
     }
 
-    int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
+    bool enable_agg_spill_preaggregation() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, enable_agg_spill_preaggregation);
+    }
 
-    int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
+    double spill_mem_limit_threshold() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_limit_threshold);
+    }
 
-    bool enable_agg_spill_preaggregation() const { return _query_options.enable_agg_spill_preaggregation; }
+    int64_t spill_operator_min_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_min_bytes);
+    }
 
-    double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
+    int64_t spill_operator_max_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_operator_max_bytes);
+    }
 
-    int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
-    int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
-    int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+    int64_t spill_revocable_max_bytes() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_revocable_max_bytes);
+    }
     bool spill_enable_direct_io() const {
-        return _query_options.__isset.spill_enable_direct_io && _query_options.spill_enable_direct_io;
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_enable_direct_io);
     }
-    double spill_rand_ratio() const { return _query_options.spill_rand_ratio; }
+    double spill_rand_ratio() const { return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_rand_ratio); }
 
-    int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
+    int32_t spill_encode_level() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_encode_level);
+    }
+    bool spill_enable_compaction() const {
+        return _spill_options.has_value() ? _spill_options->spill_enable_compaction : false;
+    }
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
@@ -511,6 +503,20 @@ public:
     }
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
+
+    void set_shuffle_hash_bucket_rf_ids(std::unordered_set<int32_t>&& filter_ids) {
+        this->_shuffle_hash_bucket_rf_ids = std::move(filter_ids);
+    }
+
+    const std::unordered_set<int32_t>& shuffle_hash_bucket_rf_ids() const { return this->_shuffle_hash_bucket_rf_ids; }
+
+    void set_broadcast_join_right_offsprings(BroadcastJoinRightOffsprings&& broadcast_join_right_offsprings) {
+        this->_broadcast_join_right_offsprings = std::move(broadcast_join_right_offsprings);
+    }
+
+    const BroadcastJoinRightOffsprings& broadcast_join_right_offsprings() const {
+        return this->_broadcast_join_right_offsprings;
+    }
 
 private:
     // Set per-query state.
@@ -651,6 +657,11 @@ private:
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
+
+    std::unordered_set<int32_t> _shuffle_hash_bucket_rf_ids;
+    BroadcastJoinRightOffsprings _broadcast_join_right_offsprings;
+
+    std::optional<TSpillOptions> _spill_options;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

@@ -104,6 +104,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
@@ -128,6 +129,7 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -265,7 +267,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap).plan(node, outer);
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap);
+        LogicalPlan logicalPlan = queryTransformer.plan(node, outer);
+        return logicalPlan;
     }
 
     @Override
@@ -390,7 +394,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         }
 
         root = addOrderByLimit(root, setOperationRelation);
-        return new LogicalPlan(root, outputColumns, null);
+        return new LogicalPlan(root, outputColumns, List.of());
     }
 
     private OptExprBuilder addOrderByLimit(OptExprBuilder root, QueryRelation relation) {
@@ -456,7 +460,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         OptExprBuilder valuesOpt = new OptExprBuilder(new LogicalValuesOperator(valuesOutputColumns, values),
                 Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), valuesOutputColumns));
-        return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
+        return new LogicalPlan(valuesOpt, valuesOutputColumns, List.of());
     }
 
     private DistributionSpec getTableDistributionSpec(TableRelation node,
@@ -578,7 +582,6 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         } else if (Table.TableType.ODPS.equals(node.getTable().getType())) {
             scanOperator = new LogicalOdpsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
-
         } else if (Table.TableType.METADATA.equals(node.getTable().getType())) {
             MetadataTable metadataTable = (MetadataTable) node.getTable();
             if (metadataTable.getMetadataTableType() == MetadataTableType.LOGICAL_ICEBERG_METADATA) {
@@ -591,6 +594,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                 throw new StarRocksPlannerException("Not support metadata table type: " + metadataTable.getMetadataTableType(),
                         ErrorType.UNSUPPORTED);
             }
+        } else if (Table.TableType.KUDU.equals(node.getTable().getType())) {
+            scanOperator = new LogicalKuduScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalSchemaScanOperator(node.getTable(),
@@ -639,7 +645,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                 new LogicalProjectOperator(outputVariables.stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
-        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, null);
+        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, List.of());
     }
 
     @Override
@@ -661,7 +667,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
                 new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
 
-        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), null);
+        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), List.of());
     }
 
     @Override
@@ -676,10 +682,9 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         builder = addOrderByLimit(builder, node);
 
-        // store opt expression to ast map if sub-query is project or union
+        // store opt expression to ast map if sub-query's type is supported.
         OperatorType operatorType = subQueryOptExpression.getOp().getOpType();
-        if (optToAstMap != null && (operatorType == OperatorType.LOGICAL_PROJECT ||
-                operatorType == OperatorType.LOGICAL_UNION)) {
+        if (optToAstMap != null && TextMatchBasedRewriteRule.SUPPORTED_REWRITE_OPERATOR_TYPES.contains(operatorType)) {
             optToAstMap.put(subQueryOptExpression.getOp(), node.getQueryStatement());
         }
 
@@ -706,7 +711,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
             OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), newOutputColumns));
-            return new LogicalPlan(scanBuilder, newOutputColumns, null);
+            return new LogicalPlan(scanBuilder, newOutputColumns, List.of());
         }
     }
 
@@ -793,7 +798,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     .setNeedOutputRightChildColumns(true).build();
             return new LogicalPlan(
                     new OptExprBuilder(root, Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
-                            expressionMapping), expressionMapping.getFieldMappings(), null);
+                            expressionMapping), expressionMapping.getFieldMappings(), List.of());
         }
 
         LogicalPlan leftPlan = visit(node.getLeft());
@@ -834,7 +839,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new LogicalProjectOperator(expressionMapping.getFieldMappings().stream().distinct()
                             .collect(Collectors.toMap(Function.identity(), Function.identity())));
             return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                    expressionMapping.getFieldMappings(), null);
+                    expressionMapping.getFieldMappings(), List.of());
         }
 
         ExpressionMapping outputExpressionMapping;
@@ -880,7 +885,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                 new LogicalProjectOperator(outputExpressionMapping.getFieldMappings().stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
         return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                outputExpressionMapping.getFieldMappings(), null);
+                outputExpressionMapping.getFieldMappings(), List.of());
     }
 
     @Override
@@ -921,7 +926,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         Operator root = new LogicalTableFunctionOperator(outputColumns, node.getTableFunction(), projectMap);
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
-                null, null);
+                null, List.of());
     }
 
     @Override
@@ -954,7 +959,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
 
         ExpressionMapping mapping = new ExpressionMapping(node.getScope(), output);
         builder.setExpressionMapping(mapping);
-        return new LogicalPlan(builder, output, null);
+        return new LogicalPlan(builder, output, List.of());
     }
 
     /**

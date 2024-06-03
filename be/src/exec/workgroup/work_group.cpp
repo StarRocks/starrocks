@@ -593,7 +593,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
     return alive_workgroups;
 }
 
-void WorkGroupManager::for_each_workgroup(WorkGroupConsumer consumer) const {
+void WorkGroupManager::for_each_workgroup(const WorkGroupConsumer& consumer) const {
     std::shared_lock read_lock(_mutex);
     for (const auto& [_, wg] : _workgroups) {
         consumer(*wg);

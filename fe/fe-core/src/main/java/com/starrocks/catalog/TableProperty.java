@@ -45,7 +45,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -61,6 +60,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -291,12 +291,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
-        if (FeConstants.runningUnitTest) {
-            // FIXME: remove this later.
-            // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
-            // task run will only refresh 1 partition and will produce wrong result.
-            partitionRefreshNumber = INVALID;
-        }
     }
 
     public TableProperty copy() {
@@ -488,6 +482,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public void putMvSortKeys() {
+        if (CollectionUtils.isNotEmpty(mvSortKeys)) {
+            String value = Joiner.on(",").join(mvSortKeys);
+            this.properties.put(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS, value);
+        }
+    }
+
     public static List<String> analyzeMvSortKeys(String value) {
         if (StringUtils.isEmpty(value)) {
             return Lists.newArrayList();
@@ -596,8 +597,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildCompressionType() {
-        compressionType = TCompressionType.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
-                TCompressionType.LZ4_FRAME.name()));
+        String compression = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
+                TCompressionType.LZ4_FRAME.name());
+        for (TCompressionType type : TCompressionType.values()) {
+            if (type.name().equalsIgnoreCase(compression)) {
+                compressionType = type;
+                return this;
+            }
+        }
+        compressionType = TCompressionType.LZ4_FRAME;
         return this;
     }
 
@@ -656,7 +664,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 return "UNKNOWN";
         }
     }
-
 
     public TableProperty buildConstraint() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {

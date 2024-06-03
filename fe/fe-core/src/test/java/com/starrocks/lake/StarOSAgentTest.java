@@ -53,8 +53,10 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -216,7 +218,7 @@ public class StarOSAgentTest {
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
         starosAgent.removeWorker(workerHost, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-        Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
+        Assert.assertEquals(-1, starosAgent.getWorkerIdByNodeId(5));
     }
 
     @Test
@@ -235,7 +237,7 @@ public class StarOSAgentTest {
         long backendId = 5;
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(backendId, workerHost, 0);
-        Assert.assertEquals(workerId1, starosAgent.getWorkerIdByBackendId(backendId));
+        Assert.assertEquals(workerId1, starosAgent.getWorkerIdByNodeId(backendId));
 
         final String workerHost2 = "127.0.0.1:8091";
         new Expectations() {
@@ -250,7 +252,7 @@ public class StarOSAgentTest {
             }
         };
         starosAgent.addWorker(backendId, workerHost2, 0);
-        Assert.assertEquals(workerId2, starosAgent.getWorkerIdByBackendId(backendId));
+        Assert.assertEquals(workerId2, starosAgent.getWorkerIdByNodeId(backendId));
     }
 
     @Test
@@ -271,7 +273,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(5, workerHost, 0);
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
-        Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
+        Assert.assertEquals(6, starosAgent.getWorkerIdByNodeId(5));
 
         new Expectations() {
             {
@@ -359,7 +361,9 @@ public class StarOSAgentTest {
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
-        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, pathInfo, cacheInfo, 333));
+        Assert.assertEquals(Lists.newArrayList(10L, 11L),
+                starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
+                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
@@ -440,24 +444,24 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Map<Long, Long> workerToBackend = Maps.newHashMap();
-        Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
+        Map<Long, Long> workerToNode = Maps.newHashMap();
+        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
         ExceptionChecker.expectThrowsWithMsg(UserException.class,
                 "Failed to get primary backend. shard id: 10",
                 () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
 
-        Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L, 0));
+        Assert.assertEquals(Sets.newHashSet(), getBackendIdsByShard(10L, 0));
 
-        workerToBackend.put(1L, 10001L);
-        workerToBackend.put(2L, 10002L);
-        workerToBackend.put(3L, 10003L);
-        Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
+        workerToNode.put(1L, 10001L);
+        workerToNode.put(2L, 10002L);
+        workerToNode.put(3L, 10003L);
+        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L));
         Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L),
-                starosAgent.getBackendIdsByShard(10L, 0));
+                getBackendIdsByShard(10L, 0));
     }
 
     @Test
@@ -719,8 +723,12 @@ public class StarOSAgentTest {
                 return Lists.newArrayList(group);
             }
         };
-        List<String> addresses = starosAgent.listDefaultWorkerGroupIpPort();
+        List<String> addresses = starosAgent.listWorkerGroupIpPort(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
         Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
+    }
+
+    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
+        return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
     }
 }

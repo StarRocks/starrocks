@@ -39,6 +39,7 @@
 #include "io/shared_buffered_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
 #include "types/logical_type.h"
@@ -154,12 +155,25 @@ public:
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
+    /// Store the row ranges that satisfy the given predicates into |row_ranges|.
+    /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
     virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                              const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
+                                              const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                              CompoundNodeType pred_relation) {
         row_ranges->add({0, static_cast<rowid_t>(num_rows())});
         return Status::OK();
     }
 
+    virtual bool has_original_bloom_filter_index() const { return false; }
+    virtual bool has_ngram_bloom_filter_index() const { return false; }
+    /// Treat the relationship between |predicates| as `(s_pred_1 OR s_pred_2 OR ... OR s_pred_n) AND (ns_pred_1 AND ns_pred_2 AND ... AND ns_pred_n)`,
+    /// where s_pred_i denotes a predicate which supports bloom filter, and ns_pred_i denotes a predicate which does not support bloom filter.
+    /// That is,
+    /// - only keep the rows in |row_ranges| which satisfy any predicate that supports bloom filter in |predicates|.
+    /// - or keep all the rows in |row_ranges| if there is no predicate that supports bloom filter in |predicates|.
+    ///
+    /// prerequisite:
+    /// - if the original relationship between |predicates| is OR, all of them need to support bloom filter.
     virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                   SparseRange<>* row_ranges) {
         return Status::OK();

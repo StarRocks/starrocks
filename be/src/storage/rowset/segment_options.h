@@ -53,7 +53,7 @@ public:
     std::vector<SeekRange> ranges;
 
     PredicateTree pred_tree;
-    std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
+    PredicateTree pred_tree_for_zone_map;
 
     DisjunctivePredicates delete_predicates;
 
@@ -102,6 +102,7 @@ public:
     bool asc_hint = true;
 
     bool prune_column_after_index_filter = false;
+    bool enable_gin_filter = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

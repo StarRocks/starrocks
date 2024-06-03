@@ -68,4 +68,47 @@ void ParquetUTBase::append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id
     tExprs->emplace_back(t_expr);
 }
 
+void ParquetUTBase::append_string_conjunct(TExprOpcode::type opcode, starrocks::SlotId slot_id, std::string value,
+                                           std::vector<TExpr>* tExprs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::BINARY_PRED;
+    node0.opcode = opcode;
+    node0.child_type = TPrimitiveType::VARCHAR;
+    node0.num_children = 2;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = slot_id;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::STRING_LITERAL;
+    node2.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node2.num_children = 0;
+    TStringLiteral string_literal;
+    string_literal.value = value;
+    node2.__set_string_literal(string_literal);
+    node2.is_nullable = false;
+    nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+    tExprs->emplace_back(t_expr);
+}
+
 } // namespace starrocks::parquet
