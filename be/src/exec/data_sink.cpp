@@ -158,6 +158,8 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
     case TDataSinkType::MULTI_CAST_DATA_STREAM_SINK: {
         DCHECK(thrift_sink.__isset.multi_cast_stream_sink || thrift_sink.multi_cast_stream_sink.sinks.size() == 0)
                 << "Missing mcast stream sink.";
+
+        // @TODO set mem limit
         auto mcast_data_stream_sink = std::make_unique<MultiCastDataStreamSink>(state);
         const auto& thrift_mcast_stream_sink = thrift_sink.multi_cast_stream_sink;
 
@@ -308,6 +310,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
+        // @TODO mem limit
         // === create exchange ===
         auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(runtime_state, sinks.size());
 

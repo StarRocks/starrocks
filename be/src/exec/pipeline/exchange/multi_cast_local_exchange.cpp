@@ -20,13 +20,13 @@ namespace starrocks::pipeline {
 
 static const size_t kBufferedRowSizeScaleFactor = 16;
 
-MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number)
+MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int64_t memory_limit)
         : _runtime_state(runtime_state),
           _mutex(),
           _consumer_number(consumer_number),
-
           _progress(consumer_number),
-          _opened_source_opcount(consumer_number) {
+          _opened_source_opcount(consumer_number),
+          _memory_limit(memory_limit) {
     Cell* dummy = new Cell();
     _head = dummy;
     _tail = dummy;
@@ -56,6 +56,10 @@ bool MultiCastLocalExchanger::can_push_chunk() const {
     // the exchanger does not need any input.
     if ((_current_accumulated_row_size - _fast_accumulated_row_size) >
         _runtime_state->chunk_size() * kBufferedRowSizeScaleFactor) {
+        return false;
+    }
+    // @TODO current memory usage
+    if (_current_memory_usage >= _memory_limit) {
         return false;
     }
     return true;
@@ -132,6 +136,7 @@ void MultiCastLocalExchanger::open_source_operator(int32_t mcast_consumer_index)
     }
     _opened_source_opcount[mcast_consumer_index] += 1;
 }
+
 void MultiCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index) {
     std::unique_lock l(_mutex);
     _opened_source_opcount[mcast_consumer_index] -= 1;

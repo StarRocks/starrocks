@@ -44,7 +44,7 @@ class MultiCastLocalExchangeSinkOperator;
 // ===== exchanger =====
 class MultiCastLocalExchanger {
 public:
-    MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number);
+    MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int64_t memory_limit = INT64_MAX);
     ~MultiCastLocalExchanger();
     bool can_pull_chunk(int32_t mcast_consumer_index) const;
     bool can_push_chunk() const;
@@ -85,6 +85,9 @@ private:
     std::unique_ptr<RuntimeProfile> _runtime_profile;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
+
+    // max memory usage for exchanger.
+    int64_t _memory_limit = INT64_MAX;
 };
 
 // ===== source op =====
