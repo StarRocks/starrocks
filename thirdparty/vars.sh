@@ -407,7 +407,7 @@ LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2024.06.03.tar.gz"
 CLUCENE_NAME="starrocks-clucene-2024.06.03.tar.gz"
 CLUCENE_SOURCE="starrocks-clucene-2024.06.03"
-CLUCENE_MD5SUM="377d04800b556b32e5d90ca68b219e47"
+CLUCENE_MD5SUM="c218eb0fbbfe7f295e81ab1c8a9317cb"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
