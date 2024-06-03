@@ -314,7 +314,7 @@ The data is successfully loaded when the above result is returned.
 
 **Required**:  NO<br/>
 **Default value**: `FALSE`<br/>
-**Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`.
+**Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
 
 ### starrocks.write.properties.partial_update_mode
 

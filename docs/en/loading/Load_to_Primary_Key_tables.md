@@ -465,7 +465,7 @@ As shown in the preceding query result, the record whose `id` is `101` in `examp
 
 ## Partial updates
 
-Primary Key tables also support partial updates, and provide two modes, row mode and column mode, for different data updates scenarios. These two modes of partial updates can minimize the overhead of partial updates as much as possible while guaranteeing query performance, ensuring real-time updates. Row mode is more suitable for real-time update scenarios involving many columns and small batches. Column mode is suitable for batch processing update scenarios involving a few columns and a large number of rows.
+Primary Key tables also support partial updates, and provide two modes of partial updates, row mode and column mode, for different data update scenarios. These two modes of partial updates can minimize the overhead of partial updates as much as possible while guaranteeing query performance, ensuring real-time updates. Row mode is more suitable for real-time update scenarios involving many columns and small batches. Column mode is suitable for batch processing update scenarios involving a few columns and a large number of rows.
 
 > **NOTICE**
 >

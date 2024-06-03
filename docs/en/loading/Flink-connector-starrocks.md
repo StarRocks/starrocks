@@ -229,9 +229,9 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 ### starrocks.write.properties.partial_update
 
-**Required**:  NO<br/>
+**Required**: NO<br/>
 **Default value**: `FALSE`<br/>
-**Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`.
+**Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
 
 ### starrocks.write.properties.partial_update_mode
 
