@@ -26,7 +26,6 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -768,10 +767,6 @@ public class Optimizer {
                 }
                 context.getRuleSet().addJoinTransformationRules();
             }
-        }
-
-        if (!sessionVariable.isEnableCrossJoin() && Utils.isCrossJoin(tree.getOp())) {
-            throw new SemanticException("Cross join is not allowed, please check the join logic in the query");
         }
 
         if (!sessionVariable.isDisableJoinReorder() && sessionVariable.isEnableOuterJoinReorder()
