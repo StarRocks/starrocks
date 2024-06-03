@@ -192,8 +192,8 @@ public:
 
     Status write(WritableFile& wb) const;
 
-    Status compress_and_write(const CompressionTypePB& compression_type, WritableFile& wb,
-                              size_t* uncompressed_size, std::vector<int32_t>& compressed_pages_size) const;
+    Status compress_and_write(const CompressionTypePB& compression_type, WritableFile& wb, size_t* uncompressed_size,
+                              std::vector<int32_t>& compressed_pages_off) const;
 
     Status decompress_pages(const CompressionTypePB& compression_type, uint32_t npage, size_t uncompressed_size,
                             size_t compressed_size, const std::vector<int32_t>& pages_off);
@@ -222,7 +222,8 @@ Status ImmutableIndexShard::write(WritableFile& wb) const {
 }
 
 Status ImmutableIndexShard::compress_and_write(const CompressionTypePB& compression_type, WritableFile& wb,
-                                               size_t* uncompressed_size, std::vector<int32_t>& compressed_pages_size) const {
+                                               size_t* uncompressed_size,
+                                               std::vector<int32_t>& compressed_pages_off) const {
     if (compression_type == CompressionTypePB::NO_COMPRESSION) {
         return write(wb);
     }
@@ -231,26 +232,19 @@ Status ImmutableIndexShard::compress_and_write(const CompressionTypePB& compress
         const BlockCompressionCodec* codec = nullptr;
         RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
         int32_t offset = 0;
-        for (int32_t i = 0; i < npage()); i++) {
-            Slice input((uint8_t*)pages.data() + i * _page_size, _page_size);
+        for (int32_t i = 0; i < npage(); i++) {
+            Slice input((uint8_t*)_pages.data() + i * _page_size, _page_size);
             *uncompressed_size += input.get_size();
             faststring compressed_body;
             compressed_body.resize(codec->max_compressed_len(_page_size));
             Slice compressed_slice(compressed_body);
             RETURN_IF_ERROR(codec->compress(input, &compressed_slice));
             RETURN_IF_ERROR(wb.append(compressed_slice));
-            compressed_pages_size[i] = offset;
+            compressed_pages_off[i] = offset;
             offset += compressed_slice.get_size();
         }
-        compressed_pages_size[npage()] = offset;
-
-        Slice input((uint8_t*)_pages.data(), _page_size * npage());
-        *uncompressed_size = input.get_size();
-        faststring compressed_body;
-        compressed_body.resize(codec->max_compressed_len(*uncompressed_size));
-        Slice compressed_slice(compressed_body);
-        RETURN_IF_ERROR(codec->compress(input, &compressed_slice));
-        return wb.append(compressed_slice);
+        compressed_pages_off[npage()] = offset;
+        return Status::OK();
     } else {
         return Status::OK();
     }
@@ -277,7 +271,7 @@ Status ImmutableIndexShard::decompress_pages(const CompressionTypePB& compressio
         Slice decompressed_body((uint8_t*)uncompressed_pages.data() + i * _page_size, _page_size);
         RETURN_IF_ERROR(codec->decompress(compressed_body, &decompressed_body));
     }
-    pages.swap(uncompressed_pages);
+    _pages.swap(uncompressed_pages);
     return Status::OK();
 }
 
@@ -665,9 +659,9 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
     auto& shard = rs_create.value();
     size_t pos_before = _idx_wb->size();
     size_t uncompressed_size = 0;
-    std::vector<int32_t> compressed_pages_size(shard->npage() + 1, 0);
+    std::vector<int32_t> compressed_pages_off(shard->npage() + 1, 0);
     RETURN_IF_ERROR(shard->compress_and_write(static_cast<CompressionTypePB>(_meta.compression_type()), *_idx_wb,
-                                              &uncompressed_size, compressed_pages_size));
+                                              &uncompressed_size, compressed_pages_off));
     size_t pos_after = _idx_wb->size();
     auto shard_meta = _meta.add_shards();
     shard_meta->set_size(kvs.size());
@@ -677,7 +671,7 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
     shard_meta->set_nbucket(nbucket);
     shard_meta->set_uncompressed_size(uncompressed_size);
     shard_meta->set_page_size(page_size);
-    for (auto off : compressed_pages_size) {
+    for (auto off : compressed_pages_off) {
         shard_meta->mutable_page_off()->Add(off);
     }
 
@@ -2469,13 +2463,16 @@ Status ImmutableIndex::_read_page(size_t shard_idx, size_t pageid, LargeIndexPag
     const auto& shard_info = _shards[shard_idx];
     IndexPage compressed_page;
     if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
-        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_off[pageid], page->data(), shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]));
+        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_size * pageid, page->data(),
+                                             shard_info.page_size));
     } else {
-        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_off[pageid], compressed_page.data, shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]));
+        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_off[pageid], compressed_page.data,
+                                             shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]));
         const BlockCompressionCodec* codec = nullptr;
         RETURN_IF_ERROR(get_block_compression_codec(_compression_type, &codec));
-        Slice compressed_body((uint8_t*)compressed_page.data, shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]);
-        Slice decompressed_body(page->data, shard_info.page_size);
+        Slice compressed_body((uint8_t*)compressed_page.data,
+                              shard_info.page_off[pageid + 1] - shard_info.page_off[pageid]);
+        Slice decompressed_body((uint8_t*)page->data(), shard_info.page_size);
         RETURN_IF_ERROR(codec->decompress(compressed_body, &decompressed_body));
     }
     if (stat != nullptr) {
@@ -2619,7 +2616,8 @@ Status ImmutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb
         shard_ptrs[shard_idx] = std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
         RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard_ptrs[shard_idx]->data(), shard_info.bytes));
         RETURN_IF_ERROR(shard_ptrs[shard_idx]->decompress_pages(_compression_type, shard_info.npage,
-                                                                shard_info.uncompressed_size, shard_info.bytes, shard_info.page_off));
+                                                                shard_info.uncompressed_size, shard_info.bytes,
+                                                                shard_info.page_off));
         if (shard_info.key_size != 0) {
             RETURN_IF_ERROR(_get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard_ptrs[shard_idx]));
         } else {
@@ -2664,8 +2662,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
 
     // uncompressed_size == 0: upgrade from old version and no compression
     // uncompressed_size != 0 && page_off.back() > 0: new version, compress by page
-    if (config::enable_pindex_read_by_page && 
-                (shard_info.uncompressed_size == 0 || shard_info.page_off.back() > 0)) {
+    if (config::enable_pindex_read_by_page && (shard_info.uncompressed_size == 0 || shard_info.page_off.back() > 0)) {
         std::map<size_t, std::vector<KeyInfo>> keys_info_by_page;
         RETURN_IF_ERROR(_split_keys_info_by_page(shard_idx, check_keys_info, keys_info_by_page));
         return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page, stat);
