@@ -57,6 +57,7 @@ public class CreateFunctionStmt extends DdlStmt {
     private final TypeDef returnType;
     private final Map<String, String> properties;
     private final String content;
+    private final boolean shouldReplaceIfExists;
 
     // needed item set after analyzed
     private Function function;
@@ -74,14 +75,26 @@ public class CreateFunctionStmt extends DdlStmt {
                     .put(PrimitiveType.VARCHAR, String.class)
                     .build();
 
-    public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
-                              TypeDef returnType, Map<String, String> properties, String content) {
-        this(functionType, functionName, argsDef, returnType, properties, content, NodePosition.ZERO);
+    public CreateFunctionStmt(String functionType,
+                              FunctionName functionName,
+                              FunctionArgsDef argsDef,
+                              TypeDef returnType,
+                              Map<String, String> properties,
+                              String content,
+                              boolean shouldReplaceIfExists) {
+        this(functionType,
+                functionName,
+                argsDef,
+                returnType,
+                properties,
+                content,
+                shouldReplaceIfExists,
+                NodePosition.ZERO);
     }
 
     public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
                               TypeDef returnType, Map<String, String> properties, String content,
-                              NodePosition pos) {
+                              boolean shouldReplaceIfExists, NodePosition pos) {
         super(pos);
         this.functionName = functionName;
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
@@ -89,6 +102,7 @@ public class CreateFunctionStmt extends DdlStmt {
         this.argsDef = argsDef;
         this.returnType = returnType;
         this.content = content;
+        this.shouldReplaceIfExists = shouldReplaceIfExists;
         if (properties == null) {
             this.properties = ImmutableSortedMap.of();
         } else {
@@ -148,6 +162,10 @@ public class CreateFunctionStmt extends DdlStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    public boolean shouldReplaceIfExists() {
+        return shouldReplaceIfExists;
     }
 
     @Override

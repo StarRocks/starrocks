@@ -42,6 +42,7 @@ public class CreateFunctionStmtTest {
 
         Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
         Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assert.assertFalse(stmt.shouldReplaceIfExists());
     }
 
     @Test(expected = Throwable.class)
@@ -99,4 +100,20 @@ public class CreateFunctionStmtTest {
         }
     }
 
+    @Test
+    public void testCreateOrReplaceUDF() {
+        String createFunctionSql = "CREATE OR REPLACE FUNCTION ABC.MY_UDF_JSON_GET(string, string) \n"
+                + "RETURNS string \n"
+                + "properties (\n"
+                + "    \"symbol\" = \"com.starrocks.udf.sample.UDFJsonGet\",\n"
+                + "    \"type\" = \"StarrocksJar\",\n"
+                + "    \"file\" = \"http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar\"\n"
+                + ");";
+        CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+
+        Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
+        Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assert.assertTrue(stmt.shouldReplaceIfExists());
+    }
 }
