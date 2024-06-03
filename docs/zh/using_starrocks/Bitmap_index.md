@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['suoyin']
 ---
 
 # Bitmap 索引
@@ -10,40 +11,19 @@ displayed_sidebar: "Chinese"
 
 Bitmap 索引是一种使用 bitmap 的特殊数据库索引。bitmap 即为一个 bit 数组，一个 bit 的取值有两种：0 或 1。每一个 bit 对应数据表中的一行，并根据该行的取值情况来决定 bit 的取值是 0 还是 1。
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
-Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命中前缀索引列，StarRocks 即可使用[前缀索引](../table_design/Sort_key.md)提高查询效率，快速返回查询结果。但是前缀索引的长度有限，如果想要提高一个非前缀索引列的查询效率，即可以为这一列创建 Bitmap 索引。
-=======
 如果查询的过滤条件命中前缀索引，可以显著提高查询效率，快速返回结果。但是一个表只能有一个前缀索引，如果查询的过滤条件没有包含前缀索引的前缀，则为了提高这类查询的效率可以为该列创建 Bitmap 索引。
 
 ### 如何合理设计 Bitmap 索引，以便加速查询
 
 选择 Bitmap 索引的首要考虑因素是**列的基数和 Bitmap 索引对查询的过滤效果。**与普遍观念相反，Bitmap 索引比较适用于**较高基数列的查询和多个低基数列的组合查询，此时 Bitmap 索引对查询的过滤效果比较好，至少可以过滤掉 999/1000 的数据**，能够过滤较多的 Page 数据。
->>>>>>> ae01369c6f ([Doc] reconstruct bitmap index (#46061)):docs/zh/table_design/indexes/Bitmap_index.md
 
 如果是单个低基数列的查询，那么 Bitmap 索引过滤效果不佳，待读取的数据行较多并且散落在较多 Page 中。
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
-- 如列基数较低，值大量重复，例如 ENUM 类型的列，使用 Bitmap 索引能够减少查询的响应时间。如列基数较高，推荐使用 [Bloom filter 索引](../using_starrocks/Bloomfilter_index.md)。
-- Bitmap 索引所占的存储空间通常只有索引数据的一小部分，与其他索引技术相比，更节省存储空间。
-- 支持为多个列创建 Bitmap 索引，提高多列查询的效率，具体参见[多列查询](#多列查询)。
-=======
 :::info
->>>>>>> ae01369c6f ([Doc] reconstruct bitmap index (#46061)):docs/zh/table_design/indexes/Bitmap_index.md
 
 评估 Bitmap 索引对查询的过滤效果时，需要看加载数据的开销。并且 StarRocks 中底层数据以 Page（默认为 64K）为单位组织和加载的，加载数据的开销主要有几个部分：从磁盘加载 Page 的 IO 时间，Page 解压缩和解码时间。
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
-- Bitmap 索引适用于可使用等值条件 (`=`) 查询或 [NOT] IN 范围查询的列。
-- 主键表和明细表中所有列都可以创建 Bitmap 索引；聚合表和更新表中，只有维度列（即 Key 列）支持创建 bitmap 索引。
-- 支持为如下类型的列创建 Bitmap 索引：
-  - 日期类型：DATE、DATETIME。
-  - 数值类型：TINYINT、SMALLINT、INT、BITGINT、LARGEINT、DECIMAL 和 BOOLEAN。
-  - 字符串类型：CHAR、STRING 和 VARCHAR。
-  - 其他类型：HLL。
-- 如要了解一个查询是否命中了 Bitmap 索引，可查看该查询的 Profile 中的 `BitmapIndexFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../administration/Query_planning.md#查看分析-profile)。
-=======
 :::
->>>>>>> ae01369c6f ([Doc] reconstruct bitmap index (#46061)):docs/zh/table_design/indexes/Bitmap_index.md
 
 然而如果基数过于高，也会带来其他问题，比如**占用较多的磁盘空间**，并且因为需要导入时需要构建 Bitmap 索引，导入频繁时则**导入性能会受影响**。
 
@@ -96,20 +76,6 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
 - 建表时创建 Bitmap 索引。
 
     ```SQL
-<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
-    CREATE TABLE d0.table_hash
-    (
-        k1 TINYINT,
-        k2 DECIMAL(10, 2) DEFAULT "10.5",
-        v1 CHAR(10) REPLACE,
-        v2 INT SUM,
-        INDEX index_name (column_name) [USING BITMAP] [COMMENT '']
-    )
-    ENGINE = olap
-    AGGREGATE KEY(k1, k2)
-    DISTRIBUTED BY HASH(k1) BUCKETS 10
-    PROPERTIES ("storage_type" = "column");
-=======
     CREATE TABLE `lineorder_partial` (
       `lo_orderkey` int(11) NOT NULL COMMENT "",
       `lo_orderdate` int(11) NOT NULL COMMENT "",
@@ -120,21 +86,10 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
     ) ENGINE=OLAP 
     DUPLICATE KEY(`lo_orderkey`)
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
->>>>>>> ae01369c6f ([Doc] reconstruct bitmap index (#46061)):docs/zh/table_design/indexes/Bitmap_index.md
     ```
 
    本示例中，创建了基于 `lo_orderdate` 列创建了名称为 `lo_orderdate_index` 的 Bitmap 索引。Bitmap 索引的命名要求参见[系统限制](../../reference/System_limit.md)。在同一张表中不能创建名称相同的 Bitmap 索引。
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
-    | **参数**    | **必选** | **说明**                                                     |
-    | ----------- | -------- | ------------------------------------------------------------ |
-    | index_name  | 是       | Bitmap 索引名称。 必须由字母(a-z或A-Z)、数字(0-9)或下划线(_)组成，且只能以字母开头。总长度不能超过 64 个字符。在同一张表中不能创建名称相同的索引。                                           |
-    | column_name | 是       | 创建 Bitmap 索引的列名。您可以指定多个列名，即在建表时可同时为多个列创建 Bitmap 索引。|
-    | COMMENT     | 否       | 索引备注。                                                   |
-
-    您可以指定多条 `INDEX index_name (column_name) [USING BITMAP] [COMMENT '']` 命令同时为多个列创建 bitmap 索引，且多条命令之间用逗号（,）隔开。
-    关于建表的其他参数说明，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
-=======
    并且，支持为多个列创建 Bitmap 索引，并且多个 Bitmap 索引定义之间用英文逗号（,）隔开。
 
   :::note
@@ -142,9 +97,8 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
   建表的其他参数说明，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
   :::
->>>>>>> ae01369c6f ([Doc] reconstruct bitmap index (#46061)):docs/zh/table_design/indexes/Bitmap_index.md
 
-- 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE_INDEX.md)。
+- 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../../sql-reference/sql-statements/data-definition/CREATE_INDEX.md)。
 
     ```SQL
     CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
@@ -152,7 +106,7 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
 
 ### 创建进度
 
-创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
+创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
 
 ```SQL
 SHOW ALTER TABLE COLUMN [FROM db_name];
@@ -166,7 +120,7 @@ SHOW ALTER TABLE COLUMN [FROM db_name];
 
 ### 查看索引
 
-查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW_INDEX.md)。
+查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md)。
 
 ```SQL
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
@@ -180,7 +134,7 @@ SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
 
 ### 删除索引
 
-删除指定表的 Bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP_INDEX.md)。
+删除指定表的 Bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../../sql-reference/sql-statements/data-definition/DROP_INDEX.md)。
 
 ```SQL
 DROP INDEX index_name ON [db_name.]table_name;
@@ -202,11 +156,7 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 并且本小节还会对比强制使用 Bitmap 索引和 StarRocks 针对查询自适应选择是否 Bitmap 索引，来验证 [StarRocks 根据查询自适应选择是否使用 Bitmap 索引](#自适应选择是否使用-bitmap-索引)的效果。
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
-![figure](../assets/3.6.1-2.png)
-=======
 ### 建表和创建 Bitmap 索引
->>>>>>> ae01369c6f ([Doc] reconstruct bitmap index (#46061)):docs/zh/table_design/indexes/Bitmap_index.md
 
 :::warning
 
@@ -276,16 +226,12 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 ### Bitmap 索引占用磁盘空间情况
 
-<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
-![figure](../assets/3.6.1-3.png)
-=======
 - lo_shipmode 字符串类型，基数为7, Bitmap 索引占用磁盘空间 130M
 - lo_quantity: 整数类型，基数为 50, Bitmap 索引占用磁盘空间 291M
 - lo_discount: 整数类型，基数为 11, Bitmap 索引占用磁盘空间 198M
 - lo_orderdate: 整数类型，基数为 2406, Bitmap 索引占用磁盘空间 191M
 - lo_tax: 整数类型，基数为 9, Bitmap 索引占用磁盘空间为 160M
 - lo_partkey: 整数类型，基数为 60万，Bitmap索引占用磁盘空间为 601M
->>>>>>> ae01369c6f ([Doc] reconstruct bitmap index (#46061)):docs/zh/table_design/indexes/Bitmap_index.md
 
 ### 查询一：基于单个低基数列的查询
 
