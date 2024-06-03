@@ -33,6 +33,7 @@
 #include "butil/fd_utility.h"
 #include "common/config.h"
 #include "util/defer_op.h"
+#include "util/misc.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -231,15 +232,13 @@ void PythonEnvManager::start_background_cleanup_thread() {
     // TODO: port the task to common task pool
     _cleanup_thread = std::make_unique<std::thread>([this]() {
         while (_running) {
-            std::unique_lock<std::mutex> lock(_mutex);
             PyWorkerManager::getInstance().cleanup_expired_worker();
-            _cv.wait_for(lock, std::chrono::seconds(60));
+            nap_sleep(60, [&]() { return !_running; });
         }
     });
 }
 void PythonEnvManager::close() {
     _running = false;
-    _cv.notify_one();
     if (_cleanup_thread != nullptr) {
         _cleanup_thread->join();
     }

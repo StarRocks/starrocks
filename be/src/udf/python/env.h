@@ -145,8 +145,6 @@ public:
 
 private:
     bool _running = false;
-    std::mutex _mutex;
-    std::condition_variable _cv;
     std::unique_ptr<std::thread> _cleanup_thread;
     // readyonly after init
     std::unordered_map<std::string, PythonEnv> _envs;
