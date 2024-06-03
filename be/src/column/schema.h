@@ -98,6 +98,8 @@ public:
 
     void init_sort_key_idxes() { _init_sort_key_idxes(); }
 
+    Schema copy() const;
+
 private:
     void _build_index_map(const Fields& fields);
     void _init_sort_key_idxes() {

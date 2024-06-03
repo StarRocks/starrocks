@@ -64,6 +64,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TInsertMode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPlanFragmentExecParams;
@@ -152,6 +153,17 @@ public class StreamLoadPlanner {
         } else {
             if (streamLoadInfo.isPartialUpdate()) {
                 throw new DdlException("Only primary key table support partial update");
+            }
+        }
+        if (streamLoadInfo.getInsertMode() == TInsertMode.IGNORE_MODE) {
+            if (!isPrimaryKey) {
+                throw new DdlException("Only primary key table support ignore insert mode");
+            }
+            if (streamLoadInfo.isPartialUpdate()) {
+                throw new DdlException("Ignore insert mode is not support partial update.");
+            }
+            if (streamLoadInfo.getMergeConditionStr() != null && !streamLoadInfo.getMergeConditionStr().isEmpty()) {
+                throw new DdlException("Ignore insert mode is not support condition update.");
             }
         }
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();

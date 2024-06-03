@@ -387,7 +387,7 @@ public:
     ~FirstNullableColumnAggregator() override = default;
 
     explicit FirstNullableColumnAggregator(ValueColumnAggregatorPtr child) : _child(std::move(child)) {
-        _null_child = std::make_unique<ReplaceAggregator<NullColumn, uint8_t>>();
+        _null_child = std::make_unique<FirstAggregator<NullColumn, uint8_t>>();
     }
 
     void update_source(const ColumnPtr& src) override {
