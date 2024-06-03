@@ -54,7 +54,7 @@ When unloading data using INSERT INTO FILES, you must manually set the compressi
 
 ### Unload data into multiple files
 
-By default,  INSERT INTO FILES unloads data into multiple data files, each with a size of 1 GB. You can configure the file size using the property `target_max_file_size`.
+By default,  INSERT INTO FILES unloads data into multiple data files, each with a size of 1 GB. You can configure the file size using the property `target_max_file_size` (the unit is byte).
 
 The following example unloads all data rows in `sales_records` as multiple Parquet files prefixed by `data1`. The size of each file is 100 MB.
 
