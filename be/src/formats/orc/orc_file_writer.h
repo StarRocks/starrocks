@@ -19,6 +19,7 @@
 #include <util/priority_thread_pool.hpp>
 
 #include "formats/file_writer.h"
+#include "orc_memory_pool.h"
 
 namespace starrocks::formats {
 
@@ -81,6 +82,8 @@ public:
 
     int64_t get_written_bytes() override;
 
+    int64_t get_allocated_bytes() override;
+
     Status write(ChunkPtr chunk) override;
 
     CommitResult commit() override;
@@ -121,6 +124,7 @@ private:
 
     std::unique_ptr<orc::Type> _schema;
     std::shared_ptr<orc::Writer> _writer;
+    OrcMemoryPool _memory_pool;
     TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<ORCWriterOptions> _writer_options;
     int64_t _row_counter{0};

@@ -65,6 +65,10 @@ int64_t CSVFileWriter::get_written_bytes() {
     return _output_stream->size();
 }
 
+int64_t CSVFileWriter::get_allocated_bytes() {
+    return _output_stream->buffer_size();
+}
+
 Status CSVFileWriter::write(ChunkPtr chunk) {
     _num_rows += chunk->num_rows();
 

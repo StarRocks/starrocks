@@ -43,6 +43,7 @@
 #include <utility>
 #include <vector>
 
+#include "arrow_memory_pool.h"
 #include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -108,6 +109,8 @@ public:
 
     int64_t get_written_bytes() override;
 
+    int64_t get_allocated_bytes() override;
+
     Status write(ChunkPtr chunk) override;
 
     CommitResult commit() override;
@@ -133,6 +136,7 @@ private:
 
     const std::string _location;
     std::shared_ptr<arrow::io::OutputStream> _output_stream;
+    ArrowMemoryPool _memory_pool;
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _type_descs;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;

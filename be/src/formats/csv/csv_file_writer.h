@@ -45,6 +45,8 @@ public:
 
     int64_t get_written_bytes() override;
 
+    int64_t get_allocated_bytes() override;
+
     Status write(ChunkPtr chunk) override;
 
     CommitResult commit() override;

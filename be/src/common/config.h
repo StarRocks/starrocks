@@ -1314,10 +1314,9 @@ CONF_mInt64(arrow_read_batch_size, "4096");
 CONF_mBool(brpc_socket_keepalive, "false");
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
-// connector sink memory watermark in percentage
-CONF_mInt64(connector_sink_mem_high_watermark_percent, "30");
-CONF_mInt64(connector_sink_mem_low_watermark_percent, "20");
-CONF_mInt64(connector_sink_mem_min_watermark_percent, "10");
-CONF_mInt64(connector_sink_writer_early_close_minimum_bytes, "16777216");
+// connector sink memory watermark
+CONF_mDouble(connector_sink_mem_high_watermark_ratio, "0.3");
+CONF_mDouble(connector_sink_mem_low_watermark_ratio, "0.1");
+CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
 
 } // namespace starrocks::config

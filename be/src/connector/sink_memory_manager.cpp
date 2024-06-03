@@ -32,9 +32,6 @@ bool SinkOperatorMemoryManager::kill_victim() {
     std::string partition;
     WriterAndStream* victim = nullptr;
     for (auto& [key, writer_and_stream] : *_candidates) {
-        if (writer_and_stream.first->get_written_bytes() < _early_close_threshold) {
-            continue;
-        }
         if (victim && victim->first->get_written_bytes() > writer_and_stream.first->get_written_bytes()) {
             continue;
         }
@@ -58,54 +55,36 @@ int64_t SinkOperatorMemoryManager::update_releasable_memory() {
     return releasable_memory;
 }
 
-SinkMemoryManager::SinkMemoryManager(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {
-    if (_mem_tracker != nullptr && _mem_tracker->has_limit()) {
-        _high_watermark_percent = config::connector_sink_mem_high_watermark_percent;
-        _low_watermark_percent = config::connector_sink_mem_low_watermark_percent;
-        _min_watermark_percent = config::connector_sink_mem_min_watermark_percent;
-        _high_watermark_bytes = _mem_tracker->limit() * _high_watermark_percent / 100;
-        _low_watermark_bytes = _mem_tracker->limit() * _low_watermark_percent / 100;
-        _min_watermark_bytes = _mem_tracker->limit() * _min_watermark_percent / 100;
-        _early_close_writer_min_bytes = config::connector_sink_writer_early_close_minimum_bytes;
+int64_t SinkOperatorMemoryManager::update_writer_occupied_memory() {
+    int64_t writer_occupied_memory = 0;
+    for (auto& [_, writer_and_stream] : *_candidates) {
+        writer_occupied_memory += writer_and_stream.first->get_written_bytes();
     }
+    _writer_occupied_memory.store(writer_occupied_memory);
+    return _writer_occupied_memory;
+}
+
+SinkMemoryManager::SinkMemoryManager(MemTracker* query_pool_tracker, MemTracker* query_tracker)
+        : _query_pool_tracker(query_pool_tracker), _query_tracker(query_tracker) {
+    _high_watermark_ratio = config::connector_sink_mem_high_watermark_ratio;
+    _low_watermark_ratio = config::connector_sink_mem_low_watermark_ratio;
+    _urgent_space_ratio = config::connector_sink_mem_urgent_space_ratio;
 }
 
 SinkOperatorMemoryManager* SinkMemoryManager::create_child_manager() {
-    _children.push_back(std::make_unique<SinkOperatorMemoryManager>(_early_close_writer_min_bytes));
+    _children.push_back(std::make_unique<SinkOperatorMemoryManager>());
     auto* p = _children.back().get();
     DCHECK(p != nullptr);
     return p;
 }
 
 bool SinkMemoryManager::can_accept_more_input(SinkOperatorMemoryManager* child_manager) {
-    child_manager->update_releasable_memory();
-    if (_mem_tracker == nullptr || !_mem_tracker->has_limit()) {
-        return true;
+    if (!_apply_on_mem_tracker(child_manager, _query_pool_tracker)) {
+        return false;
     }
-    LOG_EVERY_SECOND(INFO) << "query pool consumption: " << _mem_tracker->consumption()
-                           << " releasable_memory: " << _total_releasable_memory();
-
-    auto available_memory = [this]() { return _mem_tracker->limit() - _mem_tracker->consumption(); };
-
-    if (available_memory() <= _low_watermark_bytes) {
-        // trigger early close
-        while (available_memory() + _total_releasable_memory() < _high_watermark_bytes) {
-            bool found = child_manager->kill_victim();
-            if (!found) {
-                break;
-            }
-            child_manager->update_releasable_memory();
-        }
+    if (!_apply_on_mem_tracker(child_manager, _query_tracker)) {
+        return false;
     }
-
-    if (available_memory() <= _min_watermark_bytes) {
-        // block
-        if (_total_releasable_memory() > 0) {
-            LOG_EVERY_SECOND(INFO) << "stop accept chunk";
-            return false;
-        }
-    }
-
     return true;
 }
 
@@ -114,4 +93,46 @@ int64_t SinkMemoryManager::_total_releasable_memory() {
     std::for_each(_children.begin(), _children.end(), [&](auto& child) { total += child->releasable_memory(); });
     return total;
 }
+
+int64_t SinkMemoryManager::_total_writer_occupied_memory() {
+    int64_t total = 0;
+    std::for_each(_children.begin(), _children.end(), [&](auto& child) { total += child->writer_occupied_memory(); });
+    return total;
+}
+
+bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_manager, MemTracker* mem_tracker) {
+    if (mem_tracker == nullptr || !mem_tracker->has_limit()) {
+        return true;
+    }
+
+    LOG_EVERY_SECOND(INFO) << "consumption: " << mem_tracker->consumption()
+                           << " releasable_memory: " << _total_releasable_memory()
+                           << " writer_allocated_memory: " << _total_writer_occupied_memory();
+
+    auto available_memory = [&]() { return mem_tracker->limit() - mem_tracker->consumption(); };
+    auto low_watermark = [&]() { return mem_tracker->limit() * _low_watermark_ratio; };
+    auto high_watermark = [&]() { return mem_tracker->limit() * _high_watermark_ratio; };
+    auto exceed_urgent_space = [&]() {
+        return _total_writer_occupied_memory() > _query_tracker->limit() * _urgent_space_ratio;
+    };
+
+    if (available_memory() <= low_watermark()) {
+        // trigger early close
+        while (exceed_urgent_space() && available_memory() + _total_releasable_memory() < high_watermark()) {
+            bool found = child_manager->kill_victim();
+            if (!found) {
+                break;
+            }
+            child_manager->update_releasable_memory();
+            child_manager->update_writer_occupied_memory();
+        }
+    }
+
+    if (available_memory() <= low_watermark() && _total_releasable_memory() > 0) {
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace starrocks::connector

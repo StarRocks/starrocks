@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "orc_memory_pool.h"
+
 #include <glog/logging.h>
+#include <jemalloc/jemalloc.h>
 
 #include <orc/OrcFile.hh>
 
@@ -20,30 +23,34 @@
 
 namespace starrocks {
 
-class OrcMemoryPoolImpl : public orc::MemoryPool {
-public:
-    ~OrcMemoryPoolImpl() override = default;
-
-    char* malloc(uint64_t size) override {
-        // Return nullptr if size is 0, otherwise debug-enabled jemalloc would fail non-zero size assertion.
-        // See https://github.com/jemalloc/jemalloc/issues/2514
-        if (UNLIKELY(size == 0)) {
-            return nullptr;
-        }
-        auto p = static_cast<char*>(std::malloc(size));
-        if (UNLIKELY(p == nullptr)) {
-            LOG(WARNING) << "malloc failed, size=" << size;
-            throw std::bad_alloc();
-        }
-        return p;
-    }
-
-    void free(char* p) override { std::free(p); }
-};
-
 orc::MemoryPool* getOrcMemoryPool() {
-    static OrcMemoryPoolImpl internal;
+    static OrcMemoryPool internal;
     return &internal;
+}
+
+char* OrcMemoryPool::malloc(uint64_t size) {
+    // Return nullptr if size is 0, otherwise debug-enabled jemalloc would fail non-zero size assertion.
+    // See https://github.com/jemalloc/jemalloc/issues/2514
+    if (UNLIKELY(size == 0)) {
+        return nullptr;
+    }
+    auto p = static_cast<char*>(std::malloc(size));
+    if (UNLIKELY(p == nullptr)) {
+        LOG(WARNING) << "malloc failed, size=" << size;
+        throw std::bad_alloc();
+    }
+    _bytes_allocated.fetch_add(size, std::memory_order_relaxed);
+    return p;
+}
+
+void starrocks::OrcMemoryPool::free(char* p) {
+    auto size = je_malloc_usable_size(p);
+    std::free(p);
+    _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
+}
+
+int64_t OrcMemoryPool::bytes_allocated() const {
+    return _bytes_allocated.load(std::memory_order_relaxed);
 }
 
 } // namespace starrocks

@@ -138,7 +138,7 @@ Status ORCFileWriter::init() {
     auto options = orc::WriterOptions();
     ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
     options.setCompression(compression);
-    options.setMemoryPool(getOrcMemoryPool());
+    options.setMemoryPool(&_memory_pool);
     _writer = orc::createWriter(*_schema, _output_stream.get(), options);
     _writer->addUserMetadata(STARROCKS_ORC_WRITER_VERSION_KEY, get_short_version());
     return Status::OK();
@@ -146,6 +146,10 @@ Status ORCFileWriter::init() {
 
 int64_t ORCFileWriter::get_written_bytes() {
     return _output_stream->getLength();
+}
+
+int64_t ORCFileWriter::get_allocated_bytes() {
+    return _memory_pool.bytes_allocated();
 }
 
 Status ORCFileWriter::write(ChunkPtr chunk) {

@@ -91,6 +91,10 @@ int64_t ParquetFileWriter::get_written_bytes() {
     return n;
 }
 
+int64_t ParquetFileWriter::get_allocated_bytes() {
+    return _memory_pool.bytes_allocated();
+}
+
 Status ParquetFileWriter::_flush_row_group() {
     DCHECK(_rowgroup_writer != nullptr);
     try {
@@ -420,7 +424,7 @@ Status ParquetFileWriter::init() {
                           ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
                           ->compression(compression)
                           ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
-                          ->memory_pool(getArrowMemoryPool())
+                          ->memory_pool(&_memory_pool)
                           ->build();
 
     _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);

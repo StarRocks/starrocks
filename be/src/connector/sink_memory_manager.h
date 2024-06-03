@@ -26,7 +26,7 @@ namespace starrocks::connector {
 /// not thread-safe except `releasable_memory()`
 class SinkOperatorMemoryManager {
 public:
-    SinkOperatorMemoryManager(int64_t early_close_threshold) : _early_close_threshold(early_close_threshold) {}
+    SinkOperatorMemoryManager() = default;
 
     void init(std::unordered_map<std::string, WriterAndStream>* writer_stream_pairs, AsyncFlushStreamPoller* io_poller,
               CommitFunc commit_func);
@@ -36,15 +36,20 @@ public:
 
     int64_t update_releasable_memory();
 
+    int64_t update_writer_occupied_memory();
+
     // thread-safe
     int64_t releasable_memory() { return _releasable_memory.load(); }
+
+    // thread-safe
+    int64_t writer_occupied_memory() { return _writer_occupied_memory.load(); }
 
 private:
     std::unordered_map<std::string, WriterAndStream>* _candidates = nullptr; // reference, owned by sink operator
     CommitFunc _commit_func;
     AsyncFlushStreamPoller* _io_poller;
     std::atomic_int64_t _releasable_memory{0};
-    int64_t _early_close_threshold{-1};
+    std::atomic_int64_t _writer_occupied_memory{0};
 };
 
 /// 1. manage all sink operators in a query
@@ -52,7 +57,7 @@ private:
 /// 3. kill (early-close) writers to enlarge releasable memory, which are flushed to remote storage and freed asynchronously
 class SinkMemoryManager {
 public:
-    SinkMemoryManager(MemTracker* mem_tracker);
+    SinkMemoryManager(MemTracker* query_pool_tracker, MemTracker* query_tracker);
 
     SinkOperatorMemoryManager* create_child_manager();
 
@@ -61,19 +66,17 @@ public:
     bool can_accept_more_input(SinkOperatorMemoryManager* child_manager);
 
 private:
+    bool _apply_on_mem_tracker(SinkOperatorMemoryManager* child_manager, MemTracker* mem_tracker);
+
     int64_t _total_releasable_memory();
+    int64_t _total_writer_occupied_memory();
 
-    int64_t _high_watermark_percent = -1;
-    int64_t _low_watermark_percent = -1;
-    int64_t _min_watermark_percent = -1;
-
-    int64_t _high_watermark_bytes = -1;
-    int64_t _low_watermark_bytes = -1;
-    int64_t _min_watermark_bytes = -1;
-    int64_t _early_close_writer_min_bytes = -1;
-
-    MemTracker* _mem_tracker = nullptr;
-    std::vector<std::unique_ptr<SinkOperatorMemoryManager>> _children; // size of dop
+    double _high_watermark_ratio = 0;
+    double _low_watermark_ratio = 0;
+    double _urgent_space_ratio = 0;
+    MemTracker* _query_pool_tracker = nullptr;
+    MemTracker* _query_tracker = nullptr;
+    std::vector<std::unique_ptr<SinkOperatorMemoryManager>> _children;
 };
 
 } // namespace starrocks::connector
