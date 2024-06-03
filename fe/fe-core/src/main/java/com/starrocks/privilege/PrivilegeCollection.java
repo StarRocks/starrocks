@@ -273,7 +273,13 @@ public class PrivilegeCollection {
             } else {
                 List<PrivilegeEntry> typeList = typeToPrivilegeEntryList.get(typeId);
                 for (PrivilegeEntry entry : otherList) {
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/privilege/PrivilegeCollection.java
                     grantObjectToList(entry.actionSet, entry.object, entry.isGrant, typeList);
+=======
+                    //deep copy here
+                    ActionSet actionSetClone = new ActionSet(entry.actionSet);
+                    grantObjectToList(actionSetClone, entry.object, entry.withGrantOption, typeList);
+>>>>>>> 2391dd9be8 ([BugFix] Fix an issue when the privilege is merged,casue root privilge dropped. (#46411)):fe/fe-core/src/main/java/com/starrocks/privilege/PrivilegeCollectionV2.java
                 } // for privilege entry in other.list
             }
         } // for typeId, privilegeEntryList in other
