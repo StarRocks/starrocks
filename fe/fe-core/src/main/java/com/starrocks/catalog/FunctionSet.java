@@ -282,6 +282,8 @@ public class FunctionSet {
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
+    public static final String TTEST_1SAMP = "ttest_1samp";
+    public static final String TTEST_2SAMP = "ttest_2samp";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -1205,6 +1207,39 @@ public class FunctionSet {
                     Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
+
+        // causal inference functions.
+        registerBuiltinHypothesisTestingFunctions();
+    }
+
+    private void registerBuiltinHypothesisTestingFunctions() {
+        // ttest
+        addBuiltin(AggregateFunction.createBuiltin(TTEST_1SAMP,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR, Type.DOUBLE,
+                        Type.ARRAY_DOUBLE, Type.VARCHAR), Type.VARCHAR, Type.VARBINARY, false, true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(TTEST_1SAMP,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR, Type.DOUBLE,
+                        Type.ARRAY_DOUBLE, Type.VARCHAR, Type.DOUBLE), Type.VARCHAR, Type.VARBINARY, false, true,
+                false));
+
+        addBuiltin(AggregateFunction.createBuiltin(TTEST_1SAMP,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR, Type.DOUBLE,
+                        Type.ARRAY_DOUBLE), Type.VARCHAR, Type.VARBINARY, false, true, false));
+
+        // expression, side, treatment, data, [cuped, alpha]
+        addBuiltin(AggregateFunction.createBuiltin(TTEST_2SAMP,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR, Type.BOOLEAN,
+                        Type.ARRAY_DOUBLE), Type.VARCHAR, Type.VARBINARY, false, true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(TTEST_2SAMP,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR, Type.BOOLEAN,
+                        Type.ARRAY_DOUBLE, Type.VARCHAR), Type.VARCHAR, Type.VARBINARY, false, true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(TTEST_2SAMP,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR, Type.BOOLEAN,
+                        Type.ARRAY_DOUBLE, Type.VARCHAR, Type.DOUBLE), Type.VARCHAR, Type.VARBINARY, false, true,
+                false));
     }
 
     private void registerBuiltinSumAggFunction(String name) {
