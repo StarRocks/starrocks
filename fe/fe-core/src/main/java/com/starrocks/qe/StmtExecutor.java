@@ -538,14 +538,12 @@ public class StmtExecutor {
                             context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
                         }
 
+                        LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
                         // no need to execute http query dump request in BE
                         if (context.isHTTPQueryDump) {
                             return;
                         }
                     }
-
-                    LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
-                    execPlanBuildByNewPlanner = true;
                 } else {
                     // no need to execute http query dump request in BE
                     if (context.isHTTPQueryDump) {
