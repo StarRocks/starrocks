@@ -611,6 +611,14 @@ The following parameters are supported:
 
   StarRocks allows setting the `priority` parameter for a Broker Load job since v2.5.
 
+- `partial_update`
+
+  Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
+
+- `partial_update_mode`
+
+  Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul>
+
 - `merge_condition`
 
   Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
