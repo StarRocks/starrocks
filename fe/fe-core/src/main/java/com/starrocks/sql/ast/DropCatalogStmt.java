@@ -21,18 +21,29 @@ import com.starrocks.sql.parser.NodePosition;
 public class DropCatalogStmt extends DdlStmt {
 
     private final String name;
+    private final boolean ifExists;
+
 
     public DropCatalogStmt(String name) {
-        this(name, NodePosition.ZERO);
+        this(name, false, NodePosition.ZERO);
     }
 
-    public DropCatalogStmt(String name, NodePosition pos) {
+    public DropCatalogStmt(String name, boolean ifExists) {
+        this(name, ifExists, NodePosition.ZERO);
+    }
+
+    public DropCatalogStmt(String name, boolean ifExists, NodePosition pos) {
         super(pos);
         this.name = name;
+        this.ifExists = ifExists;
     }
 
     public String getName() {
         return name;
+    }
+
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override
@@ -44,6 +55,9 @@ public class DropCatalogStmt extends DdlStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("DROP CATALOG ");
+        if (ifExists) {
+            sb.append("IF EXISTS ");
+        }
         sb.append("\'" + name + "\'");
         return sb.toString();
     }

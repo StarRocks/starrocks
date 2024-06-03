@@ -223,6 +223,8 @@ public enum ErrorCode {
             "Dynamic history partition num must greater than 0"),
     ERR_CATALOG_EXISTED_ERROR(5700, new byte[] {'4', '2', '0', '0', '0'},
             "Catalog '%s' already exists"),
+    ERR_UNKNOWN_CATALOG(5701, new byte[] {'4', '2', '0', '0', '0'},
+            "Catalog '%s' not exist."),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
