@@ -233,7 +233,9 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     get_values.clear();
     get_values.reserve(M * N);
     auto txn_log = std::make_shared<TxnLogPB>();
-    ASSERT_OK(index->major_compact(*_tablet_metadata, 0, txn_log.get()));
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), *_tablet_metadata, txn_log.get()));
+    ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() > 0);
+    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
     ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
     ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
     for (int i = 0; i < M * N; i++) {
