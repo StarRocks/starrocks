@@ -34,6 +34,11 @@ Status ShortCircuitHybridScanNode::set_scan_ranges(const std::vector<TScanRangeP
     return Status::OK();
 }
 
+Status ShortCircuitHybridScanNode::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::prepare(state));
+    return Status::OK();
+}
+
 Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     _t_desc_tbl = &_common_request.desc_tbl;
     _key_literal_exprs = &_common_request.key_literal_exprs;
@@ -55,9 +60,6 @@ Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     DCHECK(_tuple_desc != nullptr);
 
-    // skips runtime filters in ScanNode::open
-    RETURN_IF_ERROR(ScanNode::init(_tnode, state));
-    RETURN_IF_ERROR(ScanNode::prepare(state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
@@ -113,6 +115,8 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
         *eos = true;
     }
     *chunk = std::move(result_chunk);
+    _num_rows_returned += (*chunk)->num_rows();
+    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     return Status::OK();
 }
 

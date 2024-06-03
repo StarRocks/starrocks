@@ -633,6 +633,11 @@ public class StmtExecutor {
                             isAsync = tryProcessProfileAsync(execPlan, i);
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                if (coord.isShortCircuit()) {
+                                    throw new UserException(
+                                            "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                    "you can set it off by using  set enable_short_circuit=false");
+                                }
                                 handleExplainStmt(ExplainAnalyzer.analyze(
                                         ProfilingExecPlan.buildFrom(execPlan), profile, null));
                             }
@@ -905,7 +910,12 @@ public class StmtExecutor {
                 summaryProfile.addInfoString(ProfileManager.RETRY_TIMES, Integer.toString(retryIndex + 1));
             }
 
-            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
+            ProfilingExecPlan profilingPlan;
+            if (coord.isShortCircuit()) {
+                profilingPlan = null;
+            } else {
+                profilingPlan = plan == null ? null : plan.getProfilingPlan();
+            }
             String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
             if (queryDetail != null) {
                 queryDetail.setProfile(profileContent);
@@ -1234,12 +1244,17 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleAnalyzeProfileStmt() throws IOException {
+    private void handleAnalyzeProfileStmt() throws IOException, UserException {
         AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
         String queryId = analyzeProfileStmt.getQueryId();
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         Preconditions.checkNotNull(profileElement, "query not exists");
+        if (coord.isShortCircuit()) {
+            throw new UserException(
+                    "short circuit point query doesn't suppot analyze profile stmt, " +
+                            "you can set it off by using  set enable_short_circuit=false");
+        }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
                 RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
                 planNodeIds));
