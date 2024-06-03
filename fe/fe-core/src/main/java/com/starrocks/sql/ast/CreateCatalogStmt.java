@@ -29,7 +29,6 @@ public class CreateCatalogStmt extends DdlStmt {
 
     private final boolean ifNotExists;
 
-
     public CreateCatalogStmt(String catalogName, String comment, Map<String, String> properties, boolean ifNotExists) {
         this(catalogName, comment, properties, ifNotExists, NodePosition.ZERO);
     }

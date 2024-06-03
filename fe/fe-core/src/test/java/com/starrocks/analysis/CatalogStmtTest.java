@@ -15,6 +15,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -133,6 +134,11 @@ public class CatalogStmtTest {
         ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertTrue(connectorMgr.connectorExists("hive_catalog"));
+        try {
+            DDLStmtExecutor.execute(statement, connectCtx);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("exists"));
+        }
         StatementBase stmt_2 = AnalyzeTestUtil.analyzeSuccess(sql_2);
         CreateCatalogStmt statement_2 = (CreateCatalogStmt) stmt_2;
         DDLStmtExecutor.execute(statement_2, connectCtx);
