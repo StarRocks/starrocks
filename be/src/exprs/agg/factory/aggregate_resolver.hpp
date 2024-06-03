@@ -68,6 +68,7 @@ public:
     void register_approx();
     void register_others();
     void register_retract_functions();
+    void register_regression();
 
     const std::vector<LogicalType>& aggregate_types() const {
         const static std::vector<LogicalType> kTypes{

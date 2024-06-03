@@ -282,6 +282,10 @@ public class FunctionSet {
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
     public static final String FLAT_JSON_META = "flat_json_meta";
+    public static final String OLS_TRAIN = "ols_train";
+    public static final String OLS = "ols";
+    public static final String WLS_TRAIN = "wls_train";
+    public static final String WLS = "wls";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -1205,7 +1209,47 @@ public class FunctionSet {
                     Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
+        // regression
+        registerBuiltinRegressionFunctions();
     }
+
+
+    private void registerBuiltinRegressionFunctions() {
+        // oridinary linear regression
+        addBuiltin(AggregateFunction.createBuiltin(OLS_TRAIN,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.BOOLEAN), Type.JSON, Type.VARBINARY, false,
+                true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(OLS,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.BOOLEAN), Type.VARCHAR, Type.VARBINARY, false,
+                true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(OLS,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.BOOLEAN, Type.VARCHAR), Type.VARCHAR,
+                Type.VARBINARY, false, true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(OLS,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.BOOLEAN, Type.VARCHAR, Type.JSON, Type.JSON),
+                Type.VARCHAR, Type.VARBINARY, false, true, false));
+
+        // weighted linear regression
+        addBuiltin(AggregateFunction.createBuiltin(WLS_TRAIN,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.DOUBLE, Type.BOOLEAN), Type.JSON,
+                Type.VARBINARY, false, true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(WLS,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.DOUBLE, Type.BOOLEAN), Type.VARCHAR,
+                Type.VARBINARY, false, true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(WLS,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.DOUBLE, Type.BOOLEAN, Type.VARCHAR), Type.VARCHAR,
+                Type.VARBINARY, false, true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(WLS,
+                Lists.newArrayList(Type.DOUBLE, Type.ARRAY_DOUBLE, Type.DOUBLE, Type.BOOLEAN, Type.VARCHAR, Type.JSON, Type.JSON),
+                Type.VARCHAR, Type.VARBINARY, false, true, false));
+    }
+
 
     private void registerBuiltinSumAggFunction(String name) {
         for (ScalarType type : Type.FLOAT_TYPES) {
