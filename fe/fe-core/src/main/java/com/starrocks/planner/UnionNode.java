@@ -54,6 +54,7 @@ public class UnionNode extends SetOperationNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         toThrift(msg, TPlanNodeType.UNION_NODE);
+        
     }
 
     @Override
