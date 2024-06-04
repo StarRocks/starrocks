@@ -53,6 +53,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.privilege.SecurityPolicyRewriteRule;
@@ -1148,35 +1150,45 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
 
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db;
+            try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
+                db = metadataMgr.getDb(catalogName, dbName);
+            }
+
             MetaUtils.checkDbNullAndReport(db, dbName);
             Locker locker = new Locker();
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
-                Pair<Table, MaterializedIndexMeta> materializedIndex =
-                        metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
-                if (materializedIndex != null) {
-                    Table mvTable = materializedIndex.first;
-                    Preconditions.checkState(mvTable != null);
-                    Preconditions.checkState(mvTable instanceof OlapTable);
-                    try {
-                        // Add read lock to avoid concurrent problems.
-                        locker.lockDatabase(db, LockType.READ);
-                        OlapTable mvOlapTable = new OlapTable();
-                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
-                        // Copy the necessary olap table meta to avoid changing original meta;
-                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
-                        table = mvOlapTable;
-                    } finally {
-                        locker.unLockDatabase(db, LockType.READ);
+                try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
+                    Pair<Table, MaterializedIndexMeta> materializedIndex =
+                            metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
+                    if (materializedIndex != null) {
+                        Table mvTable = materializedIndex.first;
+                        Preconditions.checkState(mvTable != null);
+                        Preconditions.checkState(mvTable instanceof OlapTable);
+                        try {
+                            // Add read lock to avoid concurrent problems.
+                            locker.lockDatabase(db, LockType.READ);
+                            OlapTable mvOlapTable = new OlapTable();
+                            ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                            // Copy the necessary olap table meta to avoid changing original meta;
+                            mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
+                            table = mvOlapTable;
+                        } finally {
+                            locker.unLockDatabase(db, LockType.READ);
+                        }
                     }
                 }
             } else {
                 // treat it as a temporary table first
-                table = metadataMgr.getTemporaryTable(session.getSessionId(), catalogName, db.getId(), tbName);
+                try (Timer ignored = Tracers.watchScope("AnalyzeTemporaryTable")) {
+                    table = metadataMgr.getTemporaryTable(session.getSessionId(), catalogName, db.getId(), tbName);
+                }
                 if (table == null) {
-                    table = metadataMgr.getTable(catalogName, dbName, tbName);
+                    try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                        table = metadataMgr.getTable(catalogName, dbName, tbName);
+                    }
                 }
             }
 
