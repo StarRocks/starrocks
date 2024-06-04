@@ -1006,6 +1006,187 @@ TEST(ColumnAggregator, testBitmapFirst) {
     EXPECT_EQ("2001,20001", agg1->debug_item(5));
 }
 
+TEST(ColumnAggregator, testJsonFirst) {
+    FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_JSON, false);
+    field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+
+    auto src1 = JsonColumn::create();
+    auto src2 = JsonColumn::create();
+    auto src3 = JsonColumn::create();
+
+    for (int i = 0; i < 1024; i++) {
+        JsonValue j1 = JsonValue::from_string(R"({"k1":)" + std::to_string(i + 1000) + R"("k2": )" +
+                                              std::to_string(10000 + i) + "}");
+        src1->append(&j1);
+        JsonValue j2 = JsonValue::from_string(R"({"k1":)" + std::to_string(i + 3000) + R"("k2": )" +
+                                              std::to_string(30000 + i) + "}");
+        src2->append(&j2);
+        JsonValue j3 = JsonValue::from_string(R"({"k1":)" + std::to_string(i + 2000) + R"("k2": )" +
+                                              std::to_string(20000 + i) + "}");
+        src3->append(&j3);
+    }
+
+    auto agg1 = JsonColumn::create();
+
+    aggregator->update_aggregate(agg1.get());
+    aggregator->update_source(src1);
+
+    std::vector<uint32_t> loops;
+    loops.emplace_back(2);
+    loops.emplace_back(1022);
+
+    aggregator->aggregate_values(0, 2, loops.data(), false);
+
+    ASSERT_EQ(1, agg1->size());
+    ASSERT_EQ("\"{\\\"k1\\\":1000\\\"k2\\\": 10000}\"", agg1->debug_item(0));
+
+    aggregator->update_source(src2);
+
+    loops.clear();
+    loops.emplace_back(3);
+    loops.emplace_back(100);
+    loops.emplace_back(921);
+
+    aggregator->aggregate_values(0, 3, loops.data(), false);
+
+    EXPECT_EQ(3, agg1->size());
+    EXPECT_EQ("\"{\\\"k1\\\":1000\\\"k2\\\": 10000}\"", agg1->debug_item(0));
+    EXPECT_EQ("\"{\\\"k1\\\":1002\\\"k2\\\": 10002}\"", agg1->debug_item(1));
+    EXPECT_EQ("\"{\\\"k1\\\":3003\\\"k2\\\": 30003}\"", agg1->debug_item(2));
+
+    aggregator->update_source(src3);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(1023);
+
+    aggregator->aggregate_values(0, 2, loops.data(), true);
+
+    aggregator->finalize();
+
+    EXPECT_EQ(6, agg1->size());
+    EXPECT_EQ("\"{\\\"k1\\\":1000\\\"k2\\\": 10000}\"", agg1->debug_item(0));
+    EXPECT_EQ("\"{\\\"k1\\\":1002\\\"k2\\\": 10002}\"", agg1->debug_item(1));
+    EXPECT_EQ("\"{\\\"k1\\\":3003\\\"k2\\\": 30003}\"", agg1->debug_item(2));
+    EXPECT_EQ("\"{\\\"k1\\\":3103\\\"k2\\\": 30103}\"", agg1->debug_item(3));
+    EXPECT_EQ("\"{\\\"k1\\\":2000\\\"k2\\\": 20000}\"", agg1->debug_item(4));
+    EXPECT_EQ("\"{\\\"k1\\\":2001\\\"k2\\\": 20001}\"", agg1->debug_item(5));
+}
+
+TEST(ColumnAggregator, testHLLFirst) {
+    FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_HLL, false);
+    field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+
+    auto src1 = HyperLogLogColumn::create();
+    auto src2 = HyperLogLogColumn::create();
+    auto src3 = HyperLogLogColumn::create();
+
+    for (int i = 0; i < 1024; i++) {
+        HyperLogLog h1;
+        h1.update(i + 1000);
+        src1->append(&h1);
+        HyperLogLog h2;
+        h2.update(i + 3000);
+        src2->append(&h2);
+        HyperLogLog h3;
+        h3.update(i + 2000);
+        src3->append(&h3);
+    }
+
+    auto agg1 = HyperLogLogColumn::create();
+
+    aggregator->update_aggregate(agg1.get());
+    aggregator->update_source(src1);
+
+    std::vector<uint32_t> loops;
+    loops.emplace_back(2);
+    loops.emplace_back(1022);
+
+    aggregator->aggregate_values(0, 2, loops.data(), false);
+
+    ASSERT_EQ(1, agg1->size());
+
+    aggregator->update_source(src2);
+
+    loops.clear();
+    loops.emplace_back(3);
+    loops.emplace_back(100);
+    loops.emplace_back(921);
+
+    aggregator->aggregate_values(0, 3, loops.data(), false);
+
+    EXPECT_EQ(3, agg1->size());
+
+    aggregator->update_source(src3);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(1023);
+
+    aggregator->aggregate_values(0, 2, loops.data(), true);
+
+    aggregator->finalize();
+
+    EXPECT_EQ(6, agg1->size());
+}
+
+TEST(ColumnAggregator, testPercentileFirst) {
+    FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_PERCENTILE, false);
+    field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+
+    auto src1 = PercentileColumn::create();
+    auto src2 = PercentileColumn::create();
+    auto src3 = PercentileColumn::create();
+
+    for (int i = 0; i < 1024; i++) {
+        src1->append_default();
+        src2->append_default();
+        src3->append_default();
+    }
+
+    auto agg1 = PercentileColumn::create();
+
+    aggregator->update_aggregate(agg1.get());
+    aggregator->update_source(src1);
+
+    std::vector<uint32_t> loops;
+    loops.emplace_back(2);
+    loops.emplace_back(1022);
+
+    aggregator->aggregate_values(0, 2, loops.data(), false);
+
+    ASSERT_EQ(1, agg1->size());
+
+    aggregator->update_source(src2);
+
+    loops.clear();
+    loops.emplace_back(3);
+    loops.emplace_back(100);
+    loops.emplace_back(921);
+
+    aggregator->aggregate_values(0, 3, loops.data(), false);
+
+    EXPECT_EQ(3, agg1->size());
+
+    aggregator->update_source(src3);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(1023);
+
+    aggregator->aggregate_values(0, 2, loops.data(), true);
+
+    aggregator->finalize();
+
+    EXPECT_EQ(6, agg1->size());
+}
+
 TEST(ColumnAggregator, testNullIntFirst) {
     FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_INT, true);
     field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);

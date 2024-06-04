@@ -253,4 +253,49 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+TEST_F(LakePersistentIndexTest, test_insert_ignore) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    vector<IndexValue> ignore_values;
+    const int N = 10000;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        values.emplace_back(i * 2);
+    }
+
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
+
+    //ignore
+    keys.clear();
+    key_slices.clear();
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i + N / 2);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        ignore_values.emplace_back((i + N / 2) * 3);
+    }
+    vector<IndexValue> ignore_old_values(N, IndexValue(NullIndexValue));
+    Status st = index->upsert(N, key_slices.data(), ignore_values.data(), ignore_old_values.data(), nullptr,
+                              InsertMode::IGNORE_MODE);
+    ASSERT_TRUE(st.ok());
+    std::vector<IndexValue> new_get_values(keys.size());
+    ASSERT_TRUE(index->get(keys.size(), key_slices.data(), new_get_values.data()).ok());
+    ASSERT_EQ(keys.size(), new_get_values.size());
+    for (int i = 0; i < N / 2; i++) {
+        ASSERT_EQ(2 * (i + N / 2), new_get_values[i].get_value());
+    }
+    for (int i = N / 2; i < N; i++) {
+        ASSERT_EQ(3 * (i + N / 2), new_get_values[i].get_value());
+    }
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
 } // namespace starrocks::lake
