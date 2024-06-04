@@ -293,4 +293,8 @@ public abstract class OptExpressionVisitor<R, C> {
     public R visitPhysicalSplitConsumer(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
+
+    public R visitPhysicalMerge(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
 }
