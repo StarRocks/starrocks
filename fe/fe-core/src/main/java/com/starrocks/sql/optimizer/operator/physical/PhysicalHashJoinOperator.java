@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Objects;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
+    private ScalarOperator skewColumn;
+    private List<ScalarOperator> skewValues;
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
@@ -35,8 +37,9 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
                                     ScalarOperator skewColumn,
                                     List<ScalarOperator> skewValues) {
 
-        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection,
-                skewColumn, skewValues);
+        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
+        this.skewColumn = skewColumn;
+        this.skewValues = skewValues;
     }
 
     @Override

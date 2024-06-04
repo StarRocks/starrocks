@@ -963,6 +963,11 @@ struct TMergeNode {
   3: required list<list<Exprs.TExpr>> const_expr_lists
 }
 
+enum TLocalExchangerType {
+  PASSTHROUGH = 0,
+  DIRECT = 1
+}
+
 struct TUnionNode {
     // A UnionNode materializes all const/result exprs into this tuple.
     1: required Types.TTupleId tuple_id
@@ -975,6 +980,8 @@ struct TUnionNode {
     4: required i64 first_materialized_child_idx
     // For pass through child, the slot map is union slot id -> child slot id
     20: optional list<map<Types.TSlotId, Types.TSlotId>> pass_through_slot_maps
+    // union node' local exchanger type with parent node, default is PASSTHROUGH
+    21: optional TLocalExchangerType local_exchanger_type
 }
 
 struct TIntersectNode {
