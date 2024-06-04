@@ -111,7 +111,7 @@ public class CatalogStmtTest {
 
         try {
             DDLStmtExecutor.execute(statement, connectCtx);
-        } catch (IllegalStateException e) {
+        } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("exists"));
         }
 
