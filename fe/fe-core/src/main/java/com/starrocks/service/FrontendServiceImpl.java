@@ -2339,7 +2339,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("failed to cancel alter operation", e);
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
