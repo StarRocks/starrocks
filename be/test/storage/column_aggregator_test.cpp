@@ -933,6 +933,79 @@ TEST(ColumnAggregator, testStringFirst) {
     EXPECT_EQ("2000", agg1->get_data()[4].to_string());
     EXPECT_EQ("2001", agg1->get_data()[5].to_string());
 }
+
+TEST(ColumnAggregator, testBitmapFirst) {
+    FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_OBJECT, false);
+    field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+
+    auto src1 = BitmapColumn::create();
+    auto src2 = BitmapColumn::create();
+    auto src3 = BitmapColumn::create();
+
+    for (int i = 0; i < 1024; i++) {
+        BitmapValue b1;
+        b1.add(i + 1000);
+        b1.add(i + 10000);
+        src1->append(&b1);
+        BitmapValue b2;
+        b2.add(i + 3000);
+        b2.add(i + 30000);
+        src2->append(&b2);
+        BitmapValue b3;
+        b3.add(i + 2000);
+        b3.add(i + 20000);
+        src3->append(&b3);
+    }
+
+    auto agg1 = BitmapColumn::create();
+
+    aggregator->update_aggregate(agg1.get());
+    aggregator->update_source(src1);
+
+    std::vector<uint32_t> loops;
+    loops.emplace_back(2);
+    loops.emplace_back(1022);
+
+    aggregator->aggregate_values(0, 2, loops.data(), false);
+
+    ASSERT_EQ(1, agg1->size());
+    ASSERT_EQ("1000,10000", agg1->debug_item(0));
+
+    aggregator->update_source(src2);
+
+    loops.clear();
+    loops.emplace_back(3);
+    loops.emplace_back(100);
+    loops.emplace_back(921);
+
+    aggregator->aggregate_values(0, 3, loops.data(), false);
+
+    EXPECT_EQ(3, agg1->size());
+    EXPECT_EQ("1000,10000", agg1->debug_item(0));
+    EXPECT_EQ("1002,10002", agg1->debug_item(1));
+    EXPECT_EQ("3003,30003", agg1->debug_item(2));
+
+    aggregator->update_source(src3);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(1023);
+
+    aggregator->aggregate_values(0, 2, loops.data(), true);
+
+    aggregator->finalize();
+
+    EXPECT_EQ(6, agg1->size());
+    EXPECT_EQ("1000,10000", agg1->debug_item(0));
+    EXPECT_EQ("1002,10002", agg1->debug_item(1));
+    EXPECT_EQ("3003,30003", agg1->debug_item(2));
+    EXPECT_EQ("3103,30103", agg1->debug_item(3));
+    EXPECT_EQ("2000,20000", agg1->debug_item(4));
+    EXPECT_EQ("2001,20001", agg1->debug_item(5));
+}
+
 TEST(ColumnAggregator, testNullIntFirst) {
     FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_INT, true);
     field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
