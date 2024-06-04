@@ -17,8 +17,8 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
-import com.starrocks.connector.hive.HiveTableName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONDropTableMessage;
 import org.apache.logging.log4j.LogManager;
@@ -62,7 +62,7 @@ public class DropTableEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean existInCache() {
-        return cache.isTablePresent(HiveTableName.of(dbName, tableName));
+        return cache.isTablePresent(DatabaseTableName.of(dbName, tableName));
     }
 
     @Override
