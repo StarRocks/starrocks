@@ -793,4 +793,270 @@ TEST(ColumnAggregator, testNullArrayReplaceIfNotNull) {
     ASSERT_EQ("NULL", agg->debug_item(0));
 }
 
+// NOLINTNEXTLINE
+TEST(ColumnAggregator, testNullArrayFirstIfNotNull2) {
+    auto array_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_INT));
+    FieldPtr field =
+            std::make_shared<Field>(1, "test_array", array_type_info,
+                                    StorageAggregateType::STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL, 1, false, true);
+    auto agg = NullableColumn::create(
+            ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                UInt32Column::create()),
+            NullColumn::create());
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+    aggregator->update_aggregate(agg.get());
+
+    // first chunk column
+    auto src = NullableColumn::create(
+            ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                UInt32Column::create()),
+            NullColumn::create());
+    DatumArray array_3{Datum((int32_t)(3))};
+    DatumArray array_4{Datum((int32_t)(4))};
+    DatumArray array_8{Datum((int32_t)(8))};
+    DatumArray array_11{Datum((int32_t)(11))};
+    DatumArray array_13{Datum((int32_t)(13))};
+    DatumArray array_14{Datum((int32_t)(14))};
+    DatumArray array_15{Datum((int32_t)(15))};
+
+    src->append_nulls(1);
+    src->append_datum(Datum(array_3));
+    src->append_datum(Datum(array_4));
+    src->append_datum(Datum(array_8));
+    src->append_nulls(1);
+
+    aggregator->update_source(src);
+
+    std::vector<uint32_t> loops{1, 1, 1, 2};
+
+    aggregator->aggregate_values(0, 4, loops.data(), false);
+
+    src->reset_column();
+
+    src->append_nulls(1);
+    src->append_datum(Datum(array_11));
+    src->append_datum(Datum(array_13));
+    src->append_datum(Datum(array_14));
+    src->append_datum(Datum(array_15));
+
+    aggregator->update_source(src);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(1);
+    loops.emplace_back(1);
+    loops.emplace_back(1);
+    loops.emplace_back(1);
+
+    aggregator->aggregate_values(0, 1, loops.data(), false);
+    aggregator->finalize();
+
+    ASSERT_EQ(agg->size(), 4);
+    ASSERT_TRUE(agg->get(0).is_null());
+    ASSERT_EQ(agg->get(1).get_array()[0].get_int32(), 3);
+    ASSERT_EQ(agg->get(2).get_array()[0].get_int32(), 4);
+    ASSERT_EQ(agg->get(3).get_array()[0].get_int32(), 8);
+
+    agg->reset_column();
+    aggregator->update_aggregate(agg.get());
+
+    aggregator->aggregate_values(1, 4, loops.data(), false);
+    aggregator->finalize();
+
+    ASSERT_EQ(agg->size(), 4);
+    ASSERT_EQ(agg->get(0).get_array()[0].get_int32(), 11);
+    ASSERT_EQ(agg->get(1).get_array()[0].get_int32(), 13);
+    ASSERT_EQ(agg->get(2).get_array()[0].get_int32(), 14);
+    ASSERT_EQ(agg->get(3).get_array()[0].get_int32(), 15);
+}
+
+// test first
+TEST(ColumnAggregator, testNullIntFirst) {
+    FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_INT, true);
+    field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+
+    auto src1 = Int32Column::create();
+    auto null1 = NullColumn ::create();
+
+    auto src2 = Int32Column::create();
+    auto null2 = NullColumn::create();
+
+    auto src3 = Int32Column::create();
+    auto null3 = NullColumn::create();
+
+    for (int i = 0; i < 1024; i++) {
+        src1->append(i);
+        null1->append(0);
+    }
+
+    for (int i = 0; i < 1024; i++) {
+        src2->append(i);
+        null2->append(1);
+    }
+
+    for (int i = 0; i < 1024; i++) {
+        src3->append(i);
+        null3->append(i > 512);
+    }
+
+    auto nsrc1 = NullableColumn::create(src1, null1);
+    auto nsrc2 = NullableColumn::create(src2, null2);
+    auto nsrc3 = NullableColumn::create(src3, null3);
+
+    auto agg1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+
+    auto dst = down_cast<Int32Column*>(agg1->data_column().get());
+    auto ndst = down_cast<NullColumn*>(agg1->null_column().get());
+
+    aggregator->update_aggregate(agg1.get());
+    aggregator->update_source(nsrc1);
+
+    std::vector<uint32_t> loops;
+    loops.emplace_back(2);
+    loops.emplace_back(1022);
+
+    aggregator->aggregate_values(0, 2, loops.data(), false);
+
+    EXPECT_EQ(1, agg1->size());
+    EXPECT_EQ(0, dst->get_data()[0]);
+    EXPECT_EQ(0, ndst->get_data()[0]);
+    EXPECT_EQ(false, agg1->is_null(0));
+
+    aggregator->update_source(nsrc2);
+
+    loops.clear();
+    loops.emplace_back(3);
+    loops.emplace_back(100);
+    loops.emplace_back(921);
+
+    aggregator->aggregate_values(0, 3, loops.data(), false);
+
+    EXPECT_EQ(3, agg1->size());
+    EXPECT_EQ(0, dst->get_data()[0]);
+    EXPECT_EQ(0, ndst->get_data()[0]);
+
+    EXPECT_EQ(2, dst->get_data()[1]);
+    EXPECT_EQ(0, ndst->get_data()[1]);
+
+    EXPECT_EQ(3, dst->get_data()[2]);
+    EXPECT_EQ(1, ndst->get_data()[2]);
+
+    aggregator->update_source(nsrc3);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(1023);
+
+    aggregator->aggregate_values(0, 2, loops.data(), true);
+
+    aggregator->finalize();
+
+    EXPECT_EQ(6, agg1->size());
+
+    EXPECT_EQ(0, dst->get_data()[0]);
+    EXPECT_EQ(0, ndst->get_data()[0]);
+
+    EXPECT_EQ(2, dst->get_data()[1]);
+    EXPECT_EQ(0, ndst->get_data()[1]);
+
+    EXPECT_EQ(3, dst->get_data()[2]);
+    EXPECT_EQ(1, ndst->get_data()[2]);
+
+    EXPECT_EQ(103, dst->get_data()[3]);
+    EXPECT_EQ(1, ndst->get_data()[3]);
+
+    EXPECT_EQ(0, dst->get_data()[4]);
+    EXPECT_EQ(0, ndst->get_data()[4]);
+
+    EXPECT_EQ(1, dst->get_data()[5]);
+    EXPECT_EQ(0, ndst->get_data()[5]);
+
+    EXPECT_EQ(false, agg1->is_null(0));
+    EXPECT_EQ(false, agg1->is_null(1));
+    EXPECT_EQ(true, agg1->is_null(2));
+    EXPECT_EQ(true, agg1->is_null(3));
+    EXPECT_EQ(false, agg1->is_null(4));
+    EXPECT_EQ(false, agg1->is_null(5));
+}
+
+TEST(ColumnAggregator, testArrayFirst) {
+    auto array_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_VARCHAR));
+    FieldPtr field = std::make_shared<Field>(1, "test_array", array_type_info,
+                                             StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
+
+    auto agg_elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto agg_offsets = UInt32Column::create();
+    auto agg = ArrayColumn::create(agg_elements, agg_offsets);
+
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+    aggregator->update_aggregate(agg.get());
+    std::vector<uint32_t> loops;
+
+    // first chunk column
+    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto offsets = UInt32Column::create();
+    auto src = ArrayColumn::create(elements, offsets);
+    for (int i = 0; i < 10; ++i) {
+        elements->append_datum(Slice(std::to_string(i)));
+    }
+    offsets->append(2);
+    offsets->append(5);
+    offsets->append(10);
+
+    aggregator->update_source(src);
+
+    loops.clear();
+    loops.emplace_back(2);
+    loops.emplace_back(1);
+
+    aggregator->aggregate_values(0, 2, loops.data(), false);
+
+    ASSERT_EQ(1, agg->size());
+    EXPECT_EQ("['0','1']", agg->debug_item(0));
+
+    // second chunk column
+    src->reset_column();
+    for (int i = 10; i < 20; ++i) {
+        elements->append_datum(Slice(std::to_string(i)));
+    }
+    offsets->append(2);
+    offsets->append(7);
+    offsets->append(9);
+    offsets->append(10);
+
+    aggregator->update_source(src);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(2);
+    loops.emplace_back(1);
+
+    aggregator->aggregate_values(0, 3, loops.data(), false);
+
+    EXPECT_EQ(3, agg->size());
+    EXPECT_EQ("['5','6','7','8','9']", agg->debug_item(1));
+    EXPECT_EQ("['12','13','14','15','16']", agg->debug_item(2));
+
+    // third chunk column
+    src->reset_column();
+    for (int i = 20; i < 30; ++i) {
+        elements->append_datum(Slice(std::to_string(i)));
+    }
+    offsets->append(10);
+
+    aggregator->update_source(src);
+
+    loops.clear();
+    loops.emplace_back(1);
+
+    aggregator->aggregate_values(0, 1, loops.data(), true);
+
+    aggregator->finalize();
+
+    EXPECT_EQ(5, agg->size());
+    EXPECT_EQ("['19']", agg->debug_item(3));
+    EXPECT_EQ("['20','21','22','23','24','25','26','27','28','29']", agg->debug_item(4));
+}
 } // namespace starrocks

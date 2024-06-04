@@ -244,23 +244,35 @@ template <typename ColumnType, typename StateType>
 class FirstAggregator final : public ValueColumnAggregator<ColumnType, StateType> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
-        this->data() = data[row];
+        if (!this->filled) {
+            auto* data = down_cast<ColumnType*>(src.get())->get_data().data();
+            this->data() = data[row];
+            this->filled = true;
+        }
     }
 
     void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
         aggregate_impl(start, src);
     }
 
-    void append_data(Column* agg) override { down_cast<ColumnType*>(agg)->append(this->data()); }
+    void append_data(Column* agg) override {
+        down_cast<ColumnType*>(agg)->append(this->data());
+        this->filled = false;
+    }
+
+private:
+    bool filled = false;
 };
 
 template <>
 class FirstAggregator<BitmapColumn, BitmapValue> final : public ValueColumnAggregator<BitmapColumn, BitmapValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<BitmapColumn*>(src.get());
-        this->data() = *(data->get_object(row));
+        if (!this->filled) {
+            auto* data = down_cast<BitmapColumn*>(src.get());
+            this->data() = *(data->get_object(row));
+            this->filled = true;
+        }
     }
 
     void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
@@ -271,7 +283,11 @@ public:
         auto* col = down_cast<BitmapColumn*>(agg);
         auto& bitmap = const_cast<BitmapValue&>(this->data());
         col->append(std::move(bitmap));
+        this->filled = false;
     }
+
+private:
+    bool filled = false;
 };
 
 template <>
@@ -279,8 +295,11 @@ class FirstAggregator<HyperLogLogColumn, HyperLogLog> final
         : public ValueColumnAggregator<HyperLogLogColumn, HyperLogLog> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<HyperLogLogColumn*>(src.get());
-        this->data() = *(data->get_object(row));
+        if (!filled) {
+            auto* data = down_cast<HyperLogLogColumn*>(src.get());
+            this->data() = *(data->get_object(row));
+            this->filled = true;
+        }
     }
 
     void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
@@ -291,7 +310,11 @@ public:
         auto* col = down_cast<HyperLogLogColumn*>(agg);
         auto& hll = const_cast<HyperLogLog&>(this->data());
         col->append(std::move(hll));
+        this->filled = false;
     }
+
+private:
+    bool filled = false;
 };
 
 template <>
@@ -299,8 +322,11 @@ class FirstAggregator<PercentileColumn, PercentileValue> final
         : public ValueColumnAggregator<PercentileColumn, PercentileValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<PercentileColumn*>(src.get());
-        this->data() = *(data->get_object(row));
+        if (!this->filled) {
+            auto* data = down_cast<PercentileColumn*>(src.get());
+            this->data() = *(data->get_object(row));
+            this->filled = true;
+        }
     }
 
     void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
@@ -311,15 +337,22 @@ public:
         auto* col = down_cast<PercentileColumn*>(agg);
         auto& per = const_cast<PercentileValue&>(this->data());
         col->append(std::move(per));
+        this->filled = false;
     }
+
+private:
+    bool filled = false;
 };
 
 template <>
 class FirstAggregator<JsonColumn, JsonValue> final : public ValueColumnAggregator<JsonColumn, JsonValue> {
 public:
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<JsonColumn*>(src.get());
-        this->data() = *(data->get_object(row));
+        if (!this->filled) {
+            auto* data = down_cast<JsonColumn*>(src.get());
+            this->data() = *(data->get_object(row));
+            this->filled = true;
+        }
     }
 
     void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
@@ -330,7 +363,11 @@ public:
         auto* col = down_cast<JsonColumn*>(agg);
         auto& per = const_cast<JsonValue&>(this->data());
         col->append(std::move(per));
+        this->filled = false;
     }
+
+private:
+    bool filled = false;
 };
 
 template <>
@@ -339,9 +376,12 @@ public:
     void reset() override { this->data().reset(); }
 
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
-        Slice data = col->get_slice(row);
-        this->data().update(data);
+        if (!this->filled) {
+            auto* col = down_cast<BinaryColumn*>(src.get());
+            Slice data = col->get_slice(row);
+            this->data().update(data);
+            this->filled = true;
+        }
     }
 
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
@@ -354,7 +394,11 @@ public:
         auto* col = down_cast<BinaryColumn*>(agg);
         // NOTE: assume the storage pointed by |this->data().slice()| not destroyed.
         col->append(this->data().slice());
+        this->filled = false;
     }
+
+private:
+    bool filled = false;
 };
 
 // Array/Map/Struct
@@ -364,8 +408,11 @@ public:
     void reset() override { this->data().reset(); }
 
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        this->data().column = src;
-        this->data().row = row;
+        if (!this->filled) {
+            this->data().column = src;
+            this->data().row = row;
+        }
+        this->filled = true;
     }
 
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(start, src); }
@@ -377,9 +424,13 @@ public:
         } else {
             col->append_default();
         }
+        this->filled = false;
     }
 
     bool need_deep_copy() const override { return true; }
+
+private:
+    bool filled = false;
 };
 
 class FirstNullableColumnAggregator final : public ValueColumnAggregatorBase {
