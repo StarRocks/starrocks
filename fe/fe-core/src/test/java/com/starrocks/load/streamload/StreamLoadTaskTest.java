@@ -52,7 +52,7 @@ public class StreamLoadTaskTest {
         boolean isRoutineLoad = false;
         long warehouseId = 0L;
         streamLoadTask =
-                new StreamLoadTask(id, new Database(), new OlapTable(), label, timeoutMs, createTimeMs, isRoutineLoad,
+                new StreamLoadTask(id, new Database(), new OlapTable(), label, "", "", timeoutMs, createTimeMs, isRoutineLoad,
                         warehouseId);
     }
 

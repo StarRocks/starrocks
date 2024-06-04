@@ -45,6 +45,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
@@ -575,6 +576,56 @@ public class EtlStatus implements Writable {
             details.put("TaskNumber", counterTbl.rowMap().size());
             details.put("Unfinished backends", unfinishedBackendIds);
             details.put("All backends", allBackendIds);
+            Gson gson = new Gson();
+            return gson.toJson(details);
+        }
+
+        public synchronized Map<String, Object> toRuntimeDetails() {
+            TreeMap<String, Object> details = Maps.newTreeMap();
+
+            details.put(LoadConstants.RUNTIME_DETAILS_FILE_SIZE, totalFileSizeB);
+            details.put(LoadConstants.RUNTIME_DETAILS_TASK_NUM, counterTbl.rowMap().size());
+            details.put(LoadConstants.RUNTIME_DETAILS_UNFINISHED_BACKENDS, unfinishedBackendIds);
+            details.put(LoadConstants.RUNTIME_DETAILS_BACKENDS, allBackendIds);
+
+            return details;
+        }
+
+        public synchronized String toJobDetail() {
+            long totalSinkRows = 0;
+            for (long rows : counterTbl.values()) {
+                totalSinkRows += rows;
+            }
+
+            long totalSourceRows = 0;
+            for (long rows : sourceRowsCounterTbl.values()) {
+                totalSourceRows += rows;
+            }
+
+            long totalSinkBytes = 0;
+            for (long bytes : sinkBytesCounterTbl.values()) {
+                totalSinkBytes += bytes;
+            }
+
+            long totalSourceBytes = 0;
+            if (loadFinish) {
+                totalSourceBytes = totalFileSizeB;
+            } else {
+                for (long bytes : sourceBytesCounterTbl.values()) {
+                    totalSourceBytes += bytes;
+                }
+            }
+
+            TreeMap<String, Object> details = Maps.newTreeMap();
+            details.put("scan_rows", totalSourceRows);
+            details.put("scan_bytes", totalSourceBytes);
+            details.put("load_rows", totalSinkRows);
+            details.put("load_bytes", totalSinkBytes);
+            details.put("file_num", fileNum);
+            details.put("file_size", totalFileSizeB);
+            details.put("task_num", counterTbl.rowMap().size());
+            details.put("unfinished_backends", unfinishedBackendIds);
+            details.put("backends", allBackendIds);
             Gson gson = new Gson();
             return gson.toJson(details);
         }

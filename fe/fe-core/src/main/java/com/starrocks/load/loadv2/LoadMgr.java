@@ -232,8 +232,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows,
+    public long registerLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
+                                EtlJobType jobType, long createTimestamp, long estimateScanRows,
                                 int estimateFileNum, long estimateFileSize,
                                 TLoadJobType type, long timeout, Coordinator coordinator)
             throws UserException {
@@ -246,13 +246,17 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, type, timeout, coordinator);
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
+                    createTimestamp, type, timeout, coordinator);
             loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
             loadJob.setEstimateScanRow(estimateScanRows);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
         addLoadJob(loadJob);
+        if (!loadJob.isCompleted()) {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
         return loadJob.getId();

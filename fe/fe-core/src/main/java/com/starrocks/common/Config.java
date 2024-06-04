@@ -347,6 +347,12 @@ public class Config extends ConfigBase {
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /**
+     * The interval of the load history syncer.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_sync_interval_second = 60;
+
+    /**
      * For Task framework do some background operation like cleanup Task/TaskRun.
      * It will run every *task_check_interval_second* to do background job.
      */

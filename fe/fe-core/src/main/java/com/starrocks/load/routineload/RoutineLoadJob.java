@@ -869,28 +869,25 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     new StreamLoadPlanner(db, (OlapTable) table, info);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
-            if (planParams.query_options.enable_profile) {
-                StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
-                StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
-                        taskTimeoutSecond, true, warehouseId);
-                streamLoadTask.setTxnId(txnId);
-                streamLoadTask.setLabel(label);
-                streamLoadTask.setTUniqueId(loadId);
-                streamLoadManager.addLoadTask(streamLoadTask);
+            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label, "", "",
+                    taskTimeoutSecond, true, warehouseId);
+            streamLoadTask.setTxnId(txnId);
+            streamLoadTask.setLabel(label);
+            streamLoadTask.setTUniqueId(loadId);
+            streamLoadManager.addLoadTask(streamLoadTask);
 
-                Coordinator coord =
-                        getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
-                streamLoadTask.setCoordinator(coord);
+            Coordinator coord =
+                    getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
+            streamLoadTask.setCoordinator(coord);
 
-                QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
+            QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
 
-                LOG.info(new LogBuilder("routine load task create stream load task success").
-                        add("transactionId", txnId).
-                        add("label", label).
-                        add("streamLoadTaskId", streamLoadTask.getId()));
-
-            }
+            LOG.info(new LogBuilder("routine load task create stream load task success").
+                    add("transactionId", txnId).
+                    add("label", label).
+                    add("streamLoadTaskId", streamLoadTask.getId()));
 
             // add table indexes to transaction state
             TransactionState txnState =

@@ -2039,6 +2039,9 @@ public class StmtExecutor {
                         label,
                         database.getFullName(),
                         targetTable.getId(),
+                        transactionId,
+                        DebugUtil.printId(context.getExecutionId()),
+                        context.getQualifiedUser(),
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,
@@ -2047,6 +2050,9 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         coord);
+                if (txnState != null) {
+                    txnState.setCallbackId(jobId);
+                }
             }
 
             coord.setLoadJobId(jobId);

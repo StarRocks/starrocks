@@ -430,6 +430,9 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
         manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
+        manual_load_attach.__set_beginTxnTime(ctx->begin_txn_cost_nanos / 1000 / 1000);
+        manual_load_attach.__set_planTime(ctx->stream_load_put_cost_nanos / 1000 / 1000);
+        manual_load_attach.__set_receiveDataTime(ctx->total_received_data_cost_nanos / 1000 / 1000);
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }
