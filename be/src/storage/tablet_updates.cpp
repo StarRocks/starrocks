@@ -3501,9 +3501,13 @@ struct RowsetLoadInfo {
 Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
                                 const std::string& err_msg_header) {
     OlapStopWatch watch;
-    DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << err_msg_header << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
-            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
+        string msg = strings::Substitute(
+                "$0 tablet state is not TABLET_NOTREADY, link_from is not allowed tablet_id:$1 tablet_state:$2",
+                err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     LOG(INFO) << err_msg_header << "link_from start tablet:" << _tablet.tablet_id()
               << " #pending:" << _pending_commits.size() << " base_tablet:" << base_tablet->tablet_id()
               << " request_version:" << request_version;
@@ -3703,9 +3707,13 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
 Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                                    ChunkChanger* chunk_changer, std::string err_msg_header) {
     OlapStopWatch watch;
-    DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << err_msg_header << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
-            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
+        string msg = strings::Substitute(
+                "$0 tablet state is not TABLET_NOTREADY, convert_from is not allowed tablet_id:$1 tablet_state:$2",
+                err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     LOG(INFO) << err_msg_header << "convert_from start tablet:" << _tablet.tablet_id()
               << " #pending:" << _pending_commits.size() << " base_tablet:" << base_tablet->tablet_id()
               << " request_version:" << request_version;
@@ -3955,9 +3963,13 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
 Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                                    ChunkChanger* chunk_changer, std::string err_msg_header) {
     OlapStopWatch watch;
-    DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << err_msg_header << "tablet state is not TABLET_NOTREADY, reorder_from is not allowed"
-            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
+        string msg = strings::Substitute(
+                "$0 tablet state is not TABLET_NOTREADY, reorder_from is not allowed tablet_id:$1 tablet_state:$2",
+                err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     LOG(INFO) << err_msg_header << "reorder_from start tablet:" << _tablet.tablet_id()
               << " #pending:" << _pending_commits.size() << " base_tablet:" << base_tablet->tablet_id()
               << " request_version:" << request_version;
