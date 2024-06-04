@@ -31,13 +31,13 @@ import java.util.List;
 public class FieldDef implements ParseNode {
 
     private final String fieldName;
-    private final List<String> parentFiledNames;
+    private final List<String> nestedFieldNames;
     private final TypeDef typeDef;
     private final ColumnPosition fieldPos;
 
-    public FieldDef(String fieldName, List<String> parentFiledNames, TypeDef typeDef, ColumnPosition fieldPos) {
+    public FieldDef(String fieldName, List<String> nestedFieldNames, TypeDef typeDef, ColumnPosition fieldPos) {
         this.fieldName = fieldName;
-        this.parentFiledNames = parentFiledNames;
+        this.nestedFieldNames = nestedFieldNames;
         this.typeDef = typeDef;
         this.fieldPos = fieldPos;
     }
@@ -46,12 +46,12 @@ public class FieldDef implements ParseNode {
         return fieldName;
     }
 
-    public List<String> getParentFieldNames() {
-        return parentFiledNames;
+    public List<String> getNestedFieldName() {
+        return nestedFieldNames;
     }
 
-    public String getParentFieldName(int i) {
-        return parentFiledNames.get(i);
+    public String getNestedFieldName(int i) {
+        return nestedFieldNames.get(i);
     }
 
     public TypeDef getTypeDef() {
@@ -105,8 +105,8 @@ public class FieldDef implements ParseNode {
                     String.format("column %s type %s is not Struct", baseCol.getName(), targetFieldType.toString()));
         }
 
-        if (parentFiledNames != null && !parentFiledNames.isEmpty()) {
-            for (String name : parentFiledNames) {
+        if (nestedFieldNames != null && !nestedFieldNames.isEmpty()) {
+            for (String name : nestedFieldNames) {
                 targetFieldType = getFieldType(targetFieldType, name);
                 if (targetFieldType == null) {
                     throw new AnalysisException(

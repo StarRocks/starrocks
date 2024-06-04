@@ -37,7 +37,7 @@ public class AddFieldClause extends AlterTableColumnClause {
     }
 
     public List<String> getNestedFieldName() {
-        return fieldDef.getParentFieldNames();
+        return fieldDef.getNestedFieldName();
     }
 
     public String getFieldName() {
