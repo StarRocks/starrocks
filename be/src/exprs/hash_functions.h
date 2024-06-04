@@ -124,7 +124,10 @@ inline StatusOr<ColumnPtr> HashFunctions::xx_hash3_128(FunctionContext* context,
     std::vector<bool> is_null_vec(row_size, false);
 
     for (size_t i = 0; i < row_size; i++) {
-        XXH3_128bits_reset_withSeed(&(states[i]), default_xxhash_seed);
+        XXH_errorcode code = XXH3_128bits_reset_withSeed(&(states[i]), default_xxhash_seed);
+        if (code != XXH_OK) {
+            return Status::InternalError("init xxh3 state failed");
+        }
     }
 
     for (const auto& viewer : column_viewers) {
@@ -139,7 +142,10 @@ inline StatusOr<ColumnPtr> HashFunctions::xx_hash3_128(FunctionContext* context,
             }
 
             auto slice = viewer.value(row);
-            XXH3_128bits_update(&(states[row]), slice.data, slice.size);
+            XXH_errorcode code = XXH3_128bits_update(&(states[row]), slice.data, slice.size);
+            if (code != XXH_OK) {
+                return Status::InternalError("update xxh3 state failed");
+            }
         }
     }
 
