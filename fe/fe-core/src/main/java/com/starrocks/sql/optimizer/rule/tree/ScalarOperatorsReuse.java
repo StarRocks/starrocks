@@ -163,11 +163,11 @@ public class ScalarOperatorsReuse {
 
         @Override
         public ScalarOperator visitCall(CallOperator call, Void context) {
-            ScalarOperator operator = new CallOperator(call.getFnName(),
+            CallOperator operator = new CallOperator(call.getFnName(),
                     call.getType(),
                     call.getChildren().stream().map(argument -> argument.accept(this, null)).collect(toImmutableList()),
                     call.getFunction(),
-                    call.isDistinct());
+                    call.isDistinct(), call.isRemovedDistinct());
             return tryRewrite(operator);
         }
 
