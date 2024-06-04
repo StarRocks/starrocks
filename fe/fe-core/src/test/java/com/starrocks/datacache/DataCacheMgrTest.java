@@ -16,10 +16,10 @@ package com.starrocks.datacache;
 
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QualifiedName;
-import org.elasticsearch.common.collect.List;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 public class DataCacheMgrTest {

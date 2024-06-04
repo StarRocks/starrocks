@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;

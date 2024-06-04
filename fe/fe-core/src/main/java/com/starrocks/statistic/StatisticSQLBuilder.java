@@ -84,9 +84,6 @@ public class StatisticSQLBuilder {
         DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
         // close velocity log
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
-        DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_LOGSYSTEM_CLASS,
-                "org.apache.velocity.runtime.log.Log4JLogChute");
-        DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
     public static String buildQueryTableStatisticsSQL(Long tableId) {

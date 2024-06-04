@@ -43,7 +43,7 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
-        <jprotobuf.version>2.4.12</jprotobuf.version>
+        <jprotobuf.version>2.4.23</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.4.1</spark.version>
@@ -57,7 +57,8 @@ under the License.
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-        <odps.version>0.45.5-public</odps.version>
+        <odps.version>0.48.3-public</odps.version>
+        <kudu.version>1.17.0</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
     </properties>
@@ -220,7 +221,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.kudu</groupId>
                 <artifactId>kudu-client</artifactId>
-                <version>1.16.0</version>
+                <version>${kudu.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
@@ -327,7 +328,17 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf</artifactId>
                 <version>${jprotobuf.version}</version>
+            </dependency>
+
+            <!--Only used to compile protobuf-->
+            <!--jar-with-dependencies contains CVE problems, so set scope with provided to download it.-->
+            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
+            <dependency>
+                <groupId>com.baidu</groupId>
+                <artifactId>jprotobuf</artifactId>
+                <version>${jprotobuf.version}</version>
                 <classifier>jar-with-dependencies</classifier>
+                <scope>provided</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-common -->
@@ -410,7 +421,8 @@ under the License.
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
-                <version>4.1.61.Final</version>
+                <!--same with hadoop 3.4.0-->
+                <version>4.1.100.Final</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
@@ -745,12 +757,6 @@ under the License.
                 <groupId>org.apache.hudi</groupId>
                 <artifactId>hudi-common</artifactId>
                 <version>${hudi.version}</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>org.apache.zookeeper</groupId>
-                        <artifactId>zookeeper</artifactId>
-                    </exclusion>
-                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
