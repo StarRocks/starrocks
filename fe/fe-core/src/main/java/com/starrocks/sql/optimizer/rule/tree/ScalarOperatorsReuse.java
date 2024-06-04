@@ -151,7 +151,7 @@ public class ScalarOperatorsReuse {
                     call.getType(),
                     call.getChildren().stream().map(argument -> argument.accept(this, null)).collect(toImmutableList()),
                     call.getFunction(),
-                    call.isDistinct(), call.isRemovedDistinct());
+                    call.isDistinct());
             return tryRewrite(operator);
         }
 

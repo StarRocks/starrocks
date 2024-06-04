@@ -476,12 +476,7 @@ public class ScalarOperatorToExpr {
                 case "schema":
                 case "user":
                 case "current_user":
-<<<<<<< HEAD
                 case "current_catalog":
-=======
-                case "current_role":
-                case "session_id":
->>>>>>> 2f1c5dab61 ([BugFix] add an id argument to mark  non-deterministic functions (#46592))
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),
                             0);
@@ -491,24 +486,19 @@ public class ScalarOperatorToExpr {
                             "",
                             ((ConstantOperator) call.getChild(0)).getBigint());
                     break;
-<<<<<<< HEAD
-=======
                 case "rand":
                 case "random":
                 case "uuid":
-                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, List.of()));
-                    Preconditions.checkNotNull(call.getFunction());
-                    callExpr.setFn(call.getFunction());
-                    callExpr.setIgnoreNulls(call.getIgnoreNulls());
-                    break;
                 case "sleep":
-                    Expr child =  buildExpr.build(call.getChild(0), context);
-                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, List.of(child)));
+                    List<Expr> arguments = Lists.newArrayList();
+                    if (call.getChildren().size() == 2) {
+                        arguments.add(buildExpr.build(call.getChild(0), context));
+                    }
+                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
                     Preconditions.checkNotNull(call.getFunction());
                     callExpr.setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
->>>>>>> 2f1c5dab61 ([BugFix] add an id argument to mark  non-deterministic functions (#46592))
                 default:
                     List<Expr> arg = call.getChildren().stream()
                             .map(expr -> buildExpr.build(expr, context))
