@@ -179,7 +179,7 @@ public class RboOptimizer {
         QueryStatementPlus stmt = RboOptimizer.getQueryStatement(ctx, sql);
         QueryStatement queryStmt = stmt.getQueryStatement();
         Map<String, FQTable> fqTableMap = stmt.getFqTableMap();
-        AutoMVOptions options = AutoMVOptions.of();
+        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
         Function<OptExpression, PlanPiece> subPlanToPieceConverter = subPlanToPiece(options, fqTableMap);
         return RboOptimizer.getSubPlans(queryStmt, ctx, PlanPiecePattern.getSPJG())
                 .stream()

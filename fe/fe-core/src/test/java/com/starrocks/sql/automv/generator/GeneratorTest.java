@@ -81,7 +81,7 @@ public class GeneratorTest {
             AggregatePiece planPiece = optPlanPiece.get();
 
             PlanPieceNormalizer.normalize(planPiece);
-            AutoMVOptions options = AutoMVOptions.of();
+            AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
             MVGenerateContext mvGenerateContext = MVGenerateContext.builder()
                     .setMvNameGenerator(query -> MVName.generateFromQuery(query).toString())
                     .setNextId(idConverter::nextId)
@@ -124,7 +124,7 @@ public class GeneratorTest {
             List<OptExpression> subPlans = fQTableMapAndSubPlans.second;
             Map<String, FQTable> fqTableMap = fQTableMapAndSubPlans.first;
             PrettyPrinter traceLog = new PrettyPrinter();
-            AutoMVOptions options = AutoMVOptions.of();
+            AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
             for (OptExpression subPlan : subPlans) {
                 PlanPiece planPiece = PlanPieceBuilder.createPlanPiece(subPlan, idConverter, fqTableMap);
                 AggregatePiece aggPiece = planPiece.mustCast(AggregatePiece.class);

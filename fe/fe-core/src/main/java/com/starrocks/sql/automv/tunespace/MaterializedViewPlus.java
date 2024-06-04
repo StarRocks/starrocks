@@ -64,6 +64,7 @@ public class MaterializedViewPlus {
             .add(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
             .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
             .add(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
+            .add(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS)
             .build();
     private final MaterializedView mv;
     private final TableName fqName;

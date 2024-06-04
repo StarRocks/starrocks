@@ -37,17 +37,25 @@ import com.starrocks.sql.automv.ast.AlterTunespaceStmt;
 import com.starrocks.sql.automv.ast.CreateTunespaceStmt;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 import com.starrocks.sql.automv.generator.PropertiesPolicy;
+import com.starrocks.sql.automv.lattice.MVRecommender;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pattern.PlanPiecePattern;
+import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.FQTable;
+import com.starrocks.sql.automv.pieces.PlanPiece;
+import com.starrocks.sql.automv.policies.AggregatePolicies;
+import com.starrocks.sql.automv.policies.AggregatePolicy;
 import com.starrocks.sql.automv.tunespace.MaterializedViewPlus;
 import com.starrocks.sql.automv.tunespace.PlanPieceInfo;
+import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.OptExpression;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class TunespaceExecutor {
@@ -107,7 +115,7 @@ public class TunespaceExecutor {
             QueryStatement queryStmt = appendClause.getQueryStatement().getQueryStatement();
             Map<String, FQTable> fqTableMap = appendClause.getQueryStatement().getFqTableMap();
             List<OptExpression> subPlans = RboOptimizer.getSubPlans(queryStmt, context, PlanPiecePattern.getSPJG());
-            AutoMVOptions options = AutoMVOptions.of();
+            AutoMVOptions options = AutoMVOptions.of(context.getSessionVariable());
             List<PlanPieceInfo> pieceInfos = subPlans.stream()
                     .map(subPlan -> PlanPieceInfo.from(options, subPlan, false, fqTableMap))
                     .collect(Collectors.toList());
@@ -191,7 +199,37 @@ public class TunespaceExecutor {
 
         @Override
         public ShowResultSet visitShowRecommendationsStmt(ShowRecommendationsStmt node, ConnectContext context) {
-            return new ShowResultSet(node.getMetaData(), Collections.emptyList());
+            String fqTableName = TableNamePlus.of(node.getTableName()).getFqName();
+            TablePlus table = PlanPieceInfo.getTable(fqTableName, 1, 1);
+            List<String> items = table.getColumnPluses().stream()
+                    .map(columnPlus -> columnPlus.getColumn().getName())
+                    .collect(Collectors.toList());
+            String selectSql = table.getSelectSql(items, null);
+            CustomizedQueryExecutor executor = new CustomizedQueryExecutor();
+            List<PlanPieceInfo> pieceInfos =
+                    executor.query(PlanPieceInfo.class, PlanPieceInfo.getColumns(), context, selectSql);
+            AutoMVOptions options = AutoMVOptions.of(context.getSessionVariable());
+
+            AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);
+
+            List<PlanPiece> pieces = pieceInfos.stream().map(PlanPieceInfo::getQuery)
+                    .flatMap(query -> RboOptimizer.getPlanPieces(query, context).stream())
+                    .map(aggPiece -> aggPiece.mustCast(AggregatePiece.class))
+                    .map(aggPiece -> policy.convert(aggPiece).orElse(aggPiece))
+                    .collect(Collectors.toList());
+
+            int startIdx = node.getOffset().orElse(0L).intValue();
+            int endIdx = node.getLimit().map(limit -> limit + startIdx).orElse((long) Integer.MAX_VALUE).intValue();
+            Supplier<Integer> idAssigner = Util.nextIdGenerator();
+            MVRecommender mvRecommender = new MVRecommender(context, options);
+            List<List<String>> showResults = mvRecommender.recommend(pieces, startIdx, endIdx).stream()
+                    .map(rec -> rec.getRowList(idAssigner))
+                    .flatMap(Collection::stream)
+                    .collect(Collectors.toList());
+            int newStartIdx = Math.min(startIdx, showResults.size());
+            int newEndIdx = Math.min(endIdx, showResults.size());
+            showResults = showResults.subList(newStartIdx, newEndIdx);
+            return new ShowResultSet(node.getMetaData(), showResults);
         }
     }
 }

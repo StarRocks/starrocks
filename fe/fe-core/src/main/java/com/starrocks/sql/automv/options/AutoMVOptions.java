@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.automv.options;
 
+import com.starrocks.qe.SessionVariable;
+
 public class AutoMVOptions {
     private final int partialRollupMinAggPieces;
     private final boolean useCardinalityEstimation;
@@ -74,14 +76,6 @@ public class AutoMVOptions {
         this.enableComplexDerivedDimensions = enableComplexDerivedDimensions;
     }
 
-    //TODO(by satanson): should removed after all MV merged
-    @Deprecated
-    public static AutoMVOptions of() {
-        return new AutoMVOptions(3, true, false, false, false, 3, false, true, false, 0.01, 1073741824, 0.05, 512,
-                300000, 0.005, 1.0, Integer.MAX_VALUE, false, true);
-    }
-
-    /*
     public static AutoMVOptions of(SessionVariable sv) {
         return new AutoMVOptions(
                 sv.getAutoMVPartialRollupMinAggPieces(),
@@ -104,7 +98,6 @@ public class AutoMVOptions {
                 sv.isAutoMVEnableComplexDerivedMetrics(),
                 sv.isAutoMVEnableComplexDerivedDimensions());
     }
-     */
 
     public boolean isEnableSemiAntiJoin() {
         return enableSemiAntiJoin;

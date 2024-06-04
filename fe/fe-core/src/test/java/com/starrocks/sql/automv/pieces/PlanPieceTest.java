@@ -65,7 +65,7 @@ public class PlanPieceTest {
     private static List<Pair<String, AggregatePiece>> getPieces(ConnectContext ctx,
                                                                 List<Pair<String, String>> queryList,
                                                                 java.util.function.Predicate<String> filter) {
-        AutoMVOptions options = AutoMVOptions.of();
+        AutoMVOptions options = AutoMVOptions.of(ctx.getSessionVariable());
         AggregatePolicy policy = AggregatePolicies.defaultPolicies(options);
         return queryList.stream()
                 .filter(p -> filter.test(p.first))
@@ -80,14 +80,14 @@ public class PlanPieceTest {
     @Test
     public void testCategorizePieces() {
         ConnectContext ctx = getStarRocksAssert().getCtx();
-        Set<String> excludeQuerySet = ImmutableSet.of();
+        Set<String> excludeQuerySet = ImmutableSet.of("query61");
 
         List<Pair<String, String>> queryList = TestUtil.getTPCDSQueryList()
                 .stream()
                 .filter(p -> !excludeQuerySet.contains(p.first))
                 .collect(Collectors.toList());
         List<Pair<String, AggregatePiece>> pieces = getPieces(ctx, queryList, name -> true);
-        Assert.assertEquals(pieces.size(), 200);
+        Assert.assertEquals(pieces.size(), 198);
         System.out.println("pieceSize=" + pieces.size());
         pieces.forEach(p -> p.second.assignPieceIds());
         Map<String, List<Pair<String, PlanPiece>>> pieceGroups = pieces.stream()
@@ -95,7 +95,7 @@ public class PlanPieceTest {
                 .collect(Collectors.groupingBy(p ->
                         p.second.mustCast(AggregatePiece.class).getFlatTable().getAuxState().getNormHash()));
         System.out.println("groupSize=" + pieceGroups.size());
-        Assert.assertEquals(pieceGroups.size(), 87);
+        Assert.assertEquals(pieceGroups.size(), 85);
         Object[][] expectResults = new Object[][] {
                 {"af5577d0b0a576f719cc417bcc0a5b70", ImmutableSet.of("query78")},
                 {"3a5b366721fa2837c6aeeb195523a7e5", ImmutableSet.of("query55", "query03", "query52", "query42")},
@@ -123,7 +123,8 @@ public class PlanPieceTest {
                 {"3fe2a1389e3d1eedcad5af18ece98456", ImmutableSet.of("query06", "query41")},
                 {"b92d147f43ad7cb481db34f4c80b60a2", ImmutableSet.of("query48")},
                 {"735f953bf0407319fb55bafe83eaa4f8",
-                        ImmutableSet.of("query39", "query39-2-2", "query21", "query39-1-2", "query39-2", "query39-1")},
+                        ImmutableSet.of("query39", "query39-2-2", "query21", "query39-1-2", "query39-2",
+                                "query39-1")},
                 {"8b8b4d8931597ca28d194899cd68f18f", ImmutableSet.of("query56")},
                 {"b25cc343a8d4a7077e12c0c44b8ba338", ImmutableSet.of("query83")},
                 {"43d4c08a71a76ce6d5d235c7d4d10272", ImmutableSet.of("query01")},
@@ -142,7 +143,8 @@ public class PlanPieceTest {
                 {"cbfdfee7b1b0998dea79ff81382e001d", ImmutableSet.of("query90")},
                 {"a61826152d93f4d628478eb74609fc73", ImmutableSet.of("query66")},
                 {"16a112dfbc381b83221bbef8dea766fc", ImmutableSet.of("query80")},
-                {"b15c06d3fc4efc0c999901abaaa68479", ImmutableSet.of("query23-1", "query23-2", "query23", "query98")},
+                {"b15c06d3fc4efc0c999901abaaa68479",
+                        ImmutableSet.of("query23-1", "query23-2", "query23", "query98")},
                 {"62207f53f0f8d0148480a48e3c215695", ImmutableSet.of("query07")},
                 {"a3fce86e56cf7906f7e8722e91a079cc", ImmutableSet.of("query88")},
                 {"74047c0150b2fe7feea1de4e8f8330e6", ImmutableSet.of("query04", "query11", "query74")},

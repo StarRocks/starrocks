@@ -748,6 +748,35 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_CONSTANT_EXECUTE_IN_FE = "enable_constant_execute_in_fe";
 
+    // automv
+
+    public static final String AUTOMV_PARTIAL_ROLLUP_MIN_AGG_PIECES = "automv_partial_rollup_min_agg_pieces";
+    public static final String AUTOMV_USE_CARDINALITY_ESTIMATION = "automv_use_cardinality_estimation";
+    public static final String AUTOMV_PRUNE_ROLLUP_UNABLE_AGGREGATE_WITH_CONJUNCTS =
+            "automv_prune_rollup_unable_aggregate_with_conjuncts";
+
+    public static final String AUTOMV_PUSH_DOWN_AGG_BELOW_SEMI_ANTI_JOIN =
+            "automv_push_down_agg_below_semi_anti_join";
+
+    public static final String AUTOMV_ENABLE_SEMI_ANTI_JOIN = "automv_enable_semi_anti_join";
+    public static final String AUTOMV_MAX_ORDER_BY_COLUMNS = "automv_max_order_by_columns";
+    public static final String AUTOMV_USE_ARRAY_AGG_COUNT_DISTINCT = "automv_use_array_agg_count_distinct";
+    public static final String AUTOMV_USE_BITMAP_COUNT_DISTINCT = "automv_use_bitmap_count_distinct";
+    public static final String AUTOMV_USE_HLL_COUNT_DISTINCT = "automv_use_hll_count_distinct";
+    public static final String AUTOMV_SAMPLING_RATIO_LOW_BOUND = "automv_sampling_ratio_low_bound";
+    public static final String AUTOMV_MIN_SAMPLING_ROWS = "automv_min_sampling_rows";
+    public static final String AUTOMV_RELATIVE_ERROR_BOUND = "automv_relative_error_bound";
+
+    public static final String AUTOMV_SAMPLING_BUCKETS = "automv_sampling_buckets";
+    public static final String AUTOMV_SAMPLING_TIMEOUT = "automv_sampling_timeout";
+    public static final String AUTOMV_CARD_ROWCOUNT_RATIO_LWM = "automv_card_rowcount_ratio_lwm";
+    public static final String AUTOMV_CARD_ROWCOUNT_RATIO_HWM = "automv_card_rowcount_ratio_hwm";
+    public static final String AUTOMV_MAX_CALCULATE_STEPS = "automv_max_calculate_steps";
+
+    public static final String AUTOMV_ENABLE_COMPLEX_DERIVED_METRICS = "automv_enable_complex_derived_metrics";
+
+    public static final String AUTOMV_ENABLE_COMPLEX_DERIVED_DIMENSIONS = "automv_enable_complex_derived_dimensions";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2027,6 +2056,54 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                         StringUtils.upperCase(chooseExecuteInstancesMode))
                 .or(SessionVariableConstants.ChooseInstancesMode.LOCALITY);
     }
+
+    // automv variables
+    @VarAttr(name = AUTOMV_PARTIAL_ROLLUP_MIN_AGG_PIECES)
+    private int autoMVPartialRollupMinAggPieces = 3;
+    @VarAttr(name = AUTOMV_USE_CARDINALITY_ESTIMATION)
+    private boolean autoMVUseCardinalityEstimation = true;
+    @VarAttr(name = AUTOMV_PRUNE_ROLLUP_UNABLE_AGGREGATE_WITH_CONJUNCTS)
+    private boolean autoMVPruneRollupUnableAggregateWithConjuncts = true;
+
+    @VarAttr(name = AUTOMV_PUSH_DOWN_AGG_BELOW_SEMI_ANTI_JOIN)
+    private boolean autoMVPushDownAggBelowSemiAntiJoin = false;
+
+    @VarAttr(name = AUTOMV_ENABLE_SEMI_ANTI_JOIN)
+    private boolean autoMVEnableSemiAntiJoin = true;
+    @VarAttr(name = AUTOMV_MAX_ORDER_BY_COLUMNS)
+    private int autoMVMaxOrderByColumns = 3;
+    @VarAttr(name = AUTOMV_USE_ARRAY_AGG_COUNT_DISTINCT)
+    private boolean autoMVUseArrayAggCountDistinct = false;
+    @VarAttr(name = AUTOMV_USE_BITMAP_COUNT_DISTINCT)
+    private boolean autoMVUseBitmapCountDistinct = true;
+    @VarAttr(name = AUTOMV_USE_HLL_COUNT_DISTINCT)
+    private boolean autoMVUseHllCountDistinct = false;
+    @VarAttr(name = AUTOMV_SAMPLING_RATIO_LOW_BOUND)
+    private double autoMVSamplingRatioLowBound = 0.01;
+    @VarAttr(name = AUTOMV_MIN_SAMPLING_ROWS)
+    private long autoMVMinSamplingRows = 1073741824;
+    @VarAttr(name = AUTOMV_RELATIVE_ERROR_BOUND)
+    private double autoMVRelativeErrorBound = 0.05;
+
+    @VarAttr(name = AUTOMV_SAMPLING_BUCKETS)
+    private int autoMVSamplingBuckets = 512;
+    @VarAttr(name = AUTOMV_SAMPLING_TIMEOUT)
+    private long autoMVSamplingTimeout = 300000;
+
+    @VarAttr(name = AUTOMV_CARD_ROWCOUNT_RATIO_LWM)
+    private double autoMVCardRowCountRatioLWM = 0.0;
+
+    @VarAttr(name = AUTOMV_CARD_ROWCOUNT_RATIO_HWM)
+    private double autoMVCardRowCountRatioHWM = 0.5;
+
+    @VarAttr(name = AUTOMV_MAX_CALCULATE_STEPS)
+    private int autoMVMaxCalculateSteps = Integer.MAX_VALUE;
+
+    @VarAttr(name = AUTOMV_ENABLE_COMPLEX_DERIVED_METRICS)
+    private boolean autoMVEnableComplexDerivedMetrics = false;
+
+    @VarAttr(name = AUTOMV_ENABLE_COMPLEX_DERIVED_DIMENSIONS)
+    private boolean autoMVEnableComplexDerivedDimensions = true;
 
     public void setChooseExecuteInstancesMode(String mode) {
         SessionVariableConstants.ChooseInstancesMode result =
@@ -3850,6 +3927,157 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableConstantExecuteInFE(boolean enableConstantExecuteInFE) {
         this.enableConstantExecuteInFE = enableConstantExecuteInFE;
+    }
+
+    //auto mv
+
+    public void setAutoMVPartialRollupMinAggPieces(int value) {
+        this.autoMVPartialRollupMinAggPieces = value;
+    }
+
+    public int getAutoMVPartialRollupMinAggPieces() {
+        return this.autoMVPartialRollupMinAggPieces;
+    }
+
+    public void setAutoMVUseCardinalityEstimation(boolean value) {
+        this.autoMVUseCardinalityEstimation = value;
+    }
+
+    public void setAutoMVPruneRollupUnableAggregateWithConjuncts(boolean value) {
+        this.autoMVPruneRollupUnableAggregateWithConjuncts = value;
+    }
+
+    public boolean isAutoMVPruneRollupUnableAggregateWithConjuncts() {
+        return autoMVPruneRollupUnableAggregateWithConjuncts;
+    }
+
+    public void setAutoMVPushDownAggBelowSemiAntiJoin(boolean value) {
+        this.autoMVPushDownAggBelowSemiAntiJoin = value;
+    }
+
+    public boolean isAutoMVPushDownAggBelowSemiAntiJoin() {
+        return this.autoMVPushDownAggBelowSemiAntiJoin;
+    }
+
+    public void setAutomvEnableSemiAntiJoin(boolean value) {
+        this.autoMVEnableSemiAntiJoin = value;
+    }
+
+    public boolean isAutoMVEnableSemiAntiJoin() {
+        return this.autoMVEnableSemiAntiJoin;
+    }
+    public void setAutoMVMaxOrderByColumns(int value) {
+        this.autoMVMaxOrderByColumns = value;
+    }
+
+    public int getAutoMVMaxOrderByColumns() {
+        return this.autoMVMaxOrderByColumns;
+    }
+    public void setAutoMVUseArrayAggCountDistinct(boolean value) {
+        this.autoMVUseArrayAggCountDistinct = value;
+    }
+
+    public boolean getAutoMVUseArrayAggCountDistinct() {
+        return this.autoMVUseArrayAggCountDistinct;
+    }
+
+    public void setAutoMVUseBitmapCountDistinct(boolean value) {
+        this.autoMVUseBitmapCountDistinct = value;
+    }
+
+    public boolean getAutoMVUseBitmapCountDistinct() {
+        return this.autoMVUseBitmapCountDistinct;
+    }
+
+    public void setAutoMVUseHllCountDistinct(boolean value) {
+        this.autoMVUseHllCountDistinct = value;
+    }
+
+    public boolean getAutoMVUseHllCountDistinct() {
+        return this.autoMVUseHllCountDistinct;
+    }
+
+    public boolean isAutoMVUseCardinalityEstimation() {
+        return this.autoMVUseCardinalityEstimation;
+    }
+
+    public void setAutoMVSamplingRatioLowBound(double value) {
+        this.autoMVSamplingRatioLowBound = value;
+    }
+
+    public double getAutoMVSamplingRatioLowBound() {
+        return this.autoMVSamplingRatioLowBound;
+    }
+    public void setAutoMVMinSamplingRows(long value) {
+        this.autoMVMinSamplingRows = value;
+    }
+
+    public long getAutoMVMinSamplingRows() {
+        return this.autoMVMinSamplingRows;
+    }
+
+    public void setAutoMVRelativeErrorBound(double value) {
+        this.autoMVRelativeErrorBound = value;
+    }
+
+    public double getAutoMVRelativeErrorBound() {
+        return this.autoMVRelativeErrorBound;
+    }
+
+    public void setAutoMVSamplingBuckets(int value) {
+        this.autoMVSamplingBuckets = value;
+    }
+
+    public int getAutoMVSamplingBuckets() {
+        return this.autoMVSamplingBuckets;
+    }
+
+    public void setAutoMVSamplingTimeout(long value) {
+        this.autoMVSamplingTimeout = value;
+    }
+
+    public long getAutoMVSamplingTimeout() {
+        return this.autoMVSamplingTimeout;
+    }
+
+    public void setAutoMVCardRowCountRatioLWM(double value) {
+        this.autoMVCardRowCountRatioLWM = value;
+    }
+
+    public double getAutoMVCardRowCountRatioLWM() {
+        return this.autoMVCardRowCountRatioLWM;
+    }
+
+    public void setAutoMVCardRowCountRatioHWM(double value) {
+        this.autoMVCardRowCountRatioHWM = value;
+    }
+
+    public double getAutoMVCardRowCountRatioHWM() {
+        return this.autoMVCardRowCountRatioHWM;
+    }
+
+    public void setAutoMVMaxCalculateSteps(int value) {
+        this.autoMVMaxCalculateSteps = value;
+    }
+
+    public int getAutoMVMaxCalculateSteps() {
+        return this.autoMVMaxCalculateSteps;
+    }
+
+    public void setAutoMVEnableComplexDerivedMetrics(boolean on) {
+        this.autoMVEnableComplexDerivedMetrics = on;
+    }
+
+    public boolean isAutoMVEnableComplexDerivedMetrics() {
+        return this.autoMVEnableComplexDerivedMetrics;
+    }
+
+    public void setAutoMVEnableComplexDerivedDimensions(boolean on) {
+        this.autoMVEnableComplexDerivedDimensions = on;
+    }
+
+    public boolean isAutoMVEnableComplexDerivedDimensions() {
+        return this.autoMVEnableComplexDerivedDimensions;
     }
 
     // Serialize to thrift object
