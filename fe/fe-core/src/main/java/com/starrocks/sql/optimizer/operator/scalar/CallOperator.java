@@ -200,29 +200,6 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(fn, other.fn);
     }
 
-
-    // Only used for meaning equivalence comparison in iceberg table scan predicate
-    @Override
-    public boolean equivalent(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-
-        CallOperator other = (CallOperator) obj;
-        if (this.arguments.size() != other.arguments.size()) {
-            return false;
-        }
-
-        return isDistinct == other.isDistinct &&
-                Objects.equals(fnName, other.fnName) &&
-                Objects.equals(type, other.type) &&
-                Objects.equals(arguments, other.arguments) &&
-                Objects.equals(fn, other.fn);
-    }
-
     @Override
     public ScalarOperator clone() {
         CallOperator operator = (CallOperator) super.clone();
