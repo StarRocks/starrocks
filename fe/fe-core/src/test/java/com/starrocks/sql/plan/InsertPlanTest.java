@@ -33,6 +33,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
@@ -1040,18 +1041,16 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testInsertIgnoreCheck() {
         // check olap table
-        try {
+        UnsupportedException exception = Assert.assertThrows(UnsupportedException.class, () -> {
             getInsertExecPlan("insert ignore into test.mysql_table select v1,v2 from t0");
-            Assert.fail();
-        } catch (Exception e) {
-            assertContains(e.getMessage(), "Only support insert ignore for olap table");
-        }
+        });
+        assertContains(exception.getMessage(), "Only support insert ignore for olap table");
+
         // check primary key engine
-        try {
+        exception = Assert.assertThrows(UnsupportedException.class, () -> {
             getInsertExecPlan("explain insert ignore into t0 select * from t0");
-            Assert.fail();
-        } catch (Exception e) {
-            assertContains(e.getMessage(), "Only support insert ignore for primary key olap table");
-        }
+        });
+
+        assertContains(exception.getMessage(), "Only support insert ignore for primary key olap table");
     }
 }

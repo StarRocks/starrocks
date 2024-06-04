@@ -157,7 +157,7 @@ public class StreamLoadPlanner {
         }
         if (streamLoadInfo.getInsertMode() == TInsertMode.IGNORE_MODE) {
             if (!isPrimaryKey) {
-                throw new DdlException("Only primary key table support ignore insert mode");
+                throw new DdlException("Only primary key table support ignore insert mode.");
             }
             if (streamLoadInfo.isPartialUpdate()) {
                 throw new DdlException("Ignore insert mode is not support partial update.");

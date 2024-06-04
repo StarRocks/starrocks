@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.DdlException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -270,5 +271,145 @@ public class StreamLoadPlannerTest {
         Assert.assertEquals(TInsertMode.IGNORE_MODE, streamLoadInfo.getInsertMode());
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
         planner.plan(streamLoadInfo.getId());
+    }
+
+    @Test
+    public void testInsertModeCheckPrimaryKeys() throws UserException {
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", Type.BIGINT, false);
+        columns.add(c1);
+        Column c2 = new Column("c2", Type.BIGINT, true);
+        columns.add(c2);
+        new Expectations() {
+            {
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.DUP_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+                destTable.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                scanNode.init((Analyzer) any);
+                minTimes = 0;
+                scanNode.getChildren();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                scanNode.getId();
+                minTimes = 0;
+                result = new PlanNodeId(5);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setInsert_mode(TInsertMode.IGNORE_MODE);
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        Assert.assertEquals(TInsertMode.IGNORE_MODE, streamLoadInfo.getInsertMode());
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        DdlException ddlException = Assert.assertThrows(DdlException.class, () -> {
+            planner.plan(streamLoadInfo.getId());
+        });
+        Assert.assertEquals("Only primary key table support ignore insert mode.", ddlException.getMessage());
+    }
+
+    @Test
+    public void testInsertModeCheckPartialUpdate() throws UserException {
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", Type.BIGINT, false);
+        columns.add(c1);
+        Column c2 = new Column("c2", Type.BIGINT, true);
+        columns.add(c2);
+        new Expectations() {
+            {
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+                destTable.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                scanNode.init((Analyzer) any);
+                minTimes = 0;
+                scanNode.getChildren();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                scanNode.getId();
+                minTimes = 0;
+                result = new PlanNodeId(5);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setInsert_mode(TInsertMode.IGNORE_MODE);
+        request.setPartial_update(true);
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        Assert.assertEquals(TInsertMode.IGNORE_MODE, streamLoadInfo.getInsertMode());
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        DdlException ddlException = Assert.assertThrows(DdlException.class, () -> {
+            planner.plan(streamLoadInfo.getId());
+        });
+        Assert.assertEquals("Ignore insert mode is not support partial update.", ddlException.getMessage());
+    }
+
+    @Test
+    public void testInsertModeCheckConditionUpdate() throws UserException {
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", Type.BIGINT, false);
+        columns.add(c1);
+        Column c2 = new Column("c2", Type.BIGINT, true);
+        columns.add(c2);
+        new Expectations() {
+            {
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+                destTable.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                scanNode.init((Analyzer) any);
+                minTimes = 0;
+                scanNode.getChildren();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                scanNode.getId();
+                minTimes = 0;
+                result = new PlanNodeId(5);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setInsert_mode(TInsertMode.IGNORE_MODE);
+        request.setMerge_condition("c2");
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        Assert.assertEquals(TInsertMode.IGNORE_MODE, streamLoadInfo.getInsertMode());
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        DdlException ddlException = Assert.assertThrows(DdlException.class, () -> {
+            planner.plan(streamLoadInfo.getId());
+        });
+        Assert.assertEquals("Ignore insert mode is not support condition update.", ddlException.getMessage());
     }
 }
