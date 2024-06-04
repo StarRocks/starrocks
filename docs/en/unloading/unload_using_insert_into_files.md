@@ -55,7 +55,7 @@ When unloading data using INSERT INTO FILES, you must manually set the compressi
 
 ### Unload data into multiple files
 
-By default,  INSERT INTO FILES unloads data into multiple data files, each with a size of 1 GB. You can configure the file size using the property `max_file_size`.
+By default,  INSERT INTO FILES unloads data into multiple data files, each with a size of 1 GB. You can configure the file size using the property `target_max_file_size` (Unit: Bytes).
 
 The following example unloads all data rows in `sales_records` as multiple Parquet files prefixed by `data1`. The size of each file is 1 KB.
 
@@ -64,11 +64,11 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data1",
     "format" = "parquet",
+    "compression" = "uncompressed",
+    "target_max_file_size" = "1024", -- 1KB
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "max_file_size" = "1KB"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
@@ -84,11 +84,11 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
+    "compression" = "lz4",
+    "partition_by" = "sales_time",
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "partition_by" = "sales_time"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
@@ -104,11 +104,11 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data2",
     "format" = "parquet",
+    "compression" = "lz4",
+    "single" = "true",
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "single" = "true"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
