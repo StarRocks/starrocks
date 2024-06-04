@@ -158,7 +158,7 @@ inline bool parse_key_value_pairs(std::istream& input) {
         }
         auto field = op_field.value();
         if (assigned_fields.count(field) > 0) {
-            std::cerr << fmt::format("Duplicate assignment to config '{}', previous assignmet will be ignored\n",
+            std::cerr << fmt::format("Duplicate assignment to config '{}', previous assignment will be ignored\n",
                                      field->name());
         }
         assigned_fields.insert(field);
