@@ -32,6 +32,8 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Scalar operator support function call
+ * Please be careful when adding new attributes. Rewriting expr operation exists everywhere in the optimizer.
+ * If you add new attributes, please make sure that the new attributes will not be erased by the rewriting operation.
  */
 public class CallOperator extends ScalarOperator {
     private String fnName;
@@ -104,6 +106,13 @@ public class CallOperator extends ScalarOperator {
         return fn != null && fn instanceof AggregateFunction;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isRemovedDistinct() {
+        return removedDistinct;
+    }
+
+>>>>>>> 2f1c5dab61 ([BugFix] add an id argument to mark  non-deterministic functions (#46592))
     @Override
     public String toString() {
         return fnName + "(" + (isDistinct ? "distinct " : "") +
@@ -192,6 +201,32 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
+<<<<<<< HEAD
+=======
+        return isDistinct == other.isDistinct && removedDistinct == other.removedDistinct &&
+                Objects.equals(fnName, other.fnName) &&
+                Objects.equals(type, other.type) &&
+                Objects.equals(arguments, other.arguments) &&
+                Objects.equals(fn, other.fn);
+    }
+
+
+    // Only used for meaning equivalence comparison in iceberg table scan predicate
+    @Override
+    public boolean equivalent(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+
+        CallOperator other = (CallOperator) obj;
+        if (this.arguments.size() != other.arguments.size()) {
+            return false;
+        }
+
+>>>>>>> 2f1c5dab61 ([BugFix] add an id argument to mark  non-deterministic functions (#46592))
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
