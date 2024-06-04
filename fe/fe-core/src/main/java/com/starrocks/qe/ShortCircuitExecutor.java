@@ -28,7 +28,10 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TScanRangeLocations;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Random;
@@ -51,6 +54,8 @@ public class ShortCircuitExecutor {
 
     protected ShortCircuitResult result = null;
 
+    protected Map<String, RuntimeProfile> perBeExecutionProfile;
+
     private static final Random RANDOM = new Random(); // NOSONAR
 
     protected ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
@@ -63,6 +68,11 @@ public class ShortCircuitExecutor {
         this.isBinaryRow = isBinaryRow;
         this.enableProfile = enableProfile;
         this.protocol = protocol;
+        if (enableProfile) {
+            this.perBeExecutionProfile = new HashMap<>();
+        } else {
+            this.perBeExecutionProfile = Collections.emptyMap();
+        }
     }
 
     public static ShortCircuitExecutor create(ConnectContext context, List<PlanFragment> fragments,
@@ -98,6 +108,16 @@ public class ShortCircuitExecutor {
     public RowBatch getNext() {
         Preconditions.checkNotNull(result);
         return result.getRowBatches().poll();
+    }
+
+    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        RuntimeProfile executionProfile = new RuntimeProfile("Short Circuit Executor");
+        perBeExecutionProfile.forEach((key, beProfile) -> {
+            // compute localTimePercent for each backend profile
+            beProfile.computeTimeInProfile();
+            executionProfile.addChild(beProfile);
+        });
+        return executionProfile;
     }
 
     public Optional<RuntimeProfile> getRuntimeProfile() {

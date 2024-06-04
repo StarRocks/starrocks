@@ -671,6 +671,7 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     }
     builder->apply_opcompaction(op_compaction, max_rowset_id);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
+    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
 
     TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);

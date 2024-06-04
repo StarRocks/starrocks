@@ -1253,7 +1253,7 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type properties? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
     ;
 inlineFunction
     : AS ATTACHMENT
@@ -2454,6 +2454,14 @@ userPropertyList
 
 property
     : key=string '=' value=string
+    ;
+
+inlineProperties
+    : inlineProperty ( inlineProperty)*
+    ;
+
+inlineProperty
+    : key=identifier '=' value=string
     ;
 
 varType

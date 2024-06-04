@@ -66,6 +66,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -203,7 +205,7 @@ public class DeltaLakeScanNode extends ScanNode {
         long partitionId = -1;
         if (!partitionKeys.containsKey(partitionKey)) {
             partitionId = nextPartitionId();
-            Path filePath = new Path(fileStatus.getPath());
+            Path filePath = new Path(URLDecoder.decode(fileStatus.getPath(), StandardCharsets.UTF_8));
 
             DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
                     new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,

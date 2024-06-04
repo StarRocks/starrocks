@@ -39,9 +39,9 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.5.0</iceberg.version>
-        <paimon.version>0.7.0-incubating</paimon.version>
+        <paimon.version>0.8.0</paimon.version>
         <delta-kernel.version>3.2.0</delta-kernel.version>
-        <staros.version>3.3-rc1</staros.version>
+        <staros.version>3.3-rc2</staros.version>
         <python>python</python>
     </properties>
 
@@ -199,6 +199,25 @@ under the License.
             <artifactId>awaitility</artifactId>
             <version>4.2.0</version>
             <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
+        <dependency>
+            <groupId>com.baidu</groupId>
+            <artifactId>jprotobuf</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.auto.value</groupId>
+                    <artifactId>auto-value</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--Include velocity because we are already using it-->
+        <!-- https://mvnrepository.com/artifact/org.apache.velocity/velocity-engine-core -->
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity-engine-core</artifactId>
+            <version>2.3</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
@@ -577,7 +596,17 @@ under the License.
                     <groupId>com.aliyun</groupId>
                     <artifactId>tea-util</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>com.aliyun</groupId>
+                    <artifactId>datalake20200710</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+        <!--Fix CVE from aliyun dlf-->
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>datalake20200710</artifactId>
+            <version>2.0.12</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
@@ -644,6 +673,18 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aliyun</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.jdom</groupId>
+                    <artifactId>jdom2</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--Fix CVF from hadoop-aliyun-->
+        <dependency>
+            <groupId>org.jdom</groupId>
+            <artifactId>jdom2</artifactId>
+            <version>2.0.6.1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
@@ -716,6 +757,57 @@ under the License.
                     <groupId>org.glassfish</groupId>
                     <artifactId>javax.el</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-server</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- For CVE problems -->
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-client</artifactId>
+            <version>2.4.18</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-server</artifactId>
+            <version>2.4.18</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>javax.servlet</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.mortbay.jetty</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>tomcat</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-hdfs</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -759,11 +851,70 @@ under the License.
             <scope>compile</scope>
         </dependency>
 
+        <!--Decouple dependencies from paimon-bundle, after paimon-bundle fix cve problems, we can use paimon-bundle instead-->
+        <!--BEGIN-->
         <dependency>
             <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-bundle</artifactId>
+            <artifactId>paimon-common</artifactId>
             <version>${paimon.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-core</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+        <!-- codegen runtime dependencies -->
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-codegen-loader</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+        <!-- format runtime dependencies -->
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-format</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <version>1.1.8.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <version>1.8.0</version>
+        </dependency>
+        <!-- paimon catalogs -->
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-hive-catalog</artifactId>
+            <version>${paimon.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- other runtime dependencies -->
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-shade-jackson-2</artifactId>
+            <version>2.14.2-${paimon.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-shade-guava-30</artifactId>
+            <version>30.1.1-jre-${paimon.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-shade-caffeine-2</artifactId>
+            <version>2.9.3-${paimon.version}</version>
+        </dependency>
+        <!--END-->
+        <!--Decouple from paimon-bundle-->
 
         <dependency>
             <groupId>org.apache.paimon</groupId>
@@ -900,6 +1051,22 @@ under the License.
                     <groupId>com.amazonaws</groupId>
                     <artifactId>aws-java-sdk-bundle</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.elasticsearch</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.elasticsearch.client</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>jetty-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -911,6 +1078,12 @@ under the License.
         <dependency>
             <groupId>com.aliyun.odps</groupId>
             <artifactId>odps-sdk-core</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

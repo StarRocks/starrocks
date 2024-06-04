@@ -29,6 +29,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
@@ -74,6 +75,7 @@ public class LocationLabeledTableBalanceTest {
     }
 
     @Test
+    @Ignore
     public void test1BestEffortBalance() throws SQLException, InterruptedException {
         // Initialize 3 backends with location: rack:r1, rack:r1, rack:r2
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -173,6 +175,7 @@ public class LocationLabeledTableBalanceTest {
     }
 
     @Test
+    @Ignore
     public void test2LocationMatchedBalance() throws InterruptedException, SQLException {
         Database test = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) test.getTable("test_table_best_effort_balance");

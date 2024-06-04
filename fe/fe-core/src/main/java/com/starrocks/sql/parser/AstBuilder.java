@@ -5164,6 +5164,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
         String functionType = "SCALAR";
+        boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
         boolean isGlobal = context.GLOBAL() != null;
         if (context.functionType != null) {
             functionType = context.functionType.getText();
@@ -5178,6 +5179,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.properties() != null) {
             properties = new HashMap<>();
             List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        if (context.inlineProperties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.inlineProperties().inlineProperty(), Property.class);
             for (Property property : propertyList) {
                 properties.put(property.getKey(), property.getValue());
             }
@@ -5197,7 +5205,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new CreateFunctionStmt(functionType, fnName,
-                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent);
+                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent, replaceIfExists);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------
@@ -7129,6 +7137,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitProperty(StarRocksParser.PropertyContext context) {
         return new Property(
                 ((StringLiteral) visit(context.key)).getStringValue(),
+                ((StringLiteral) visit(context.value)).getStringValue(),
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitInlineProperty(StarRocksParser.InlinePropertyContext context) {
+        return new Property(
+                ((Identifier) visit(context.key)).getValue(),
                 ((StringLiteral) visit(context.value)).getStringValue(),
                 createPos(context));
     }

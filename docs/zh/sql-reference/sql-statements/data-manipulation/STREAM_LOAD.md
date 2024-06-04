@@ -143,6 +143,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 -H "strict_mode: true | false"
 -H "timezone: <string>"
 -H "load_mem_limit: <num>"
+-H "partial_update: true | false"
+-H "partial_update_mode: row | column"
 -H "merge_condition: <column_name>"
 ```
 
@@ -158,6 +160,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | strict_mode      | 否           | 用于指定是否开严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。<br />关于该模式的介绍，参见 [严格模式](../../../loading/load_concept/strict_mode.md)。|
 | timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br />该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/management/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/management/timezone.md)”中所述的会话级时区。 |
 | load_mem_limit   | 否           | 导入作业的内存限制，最大不超过 BE（或 CN）的内存限制。单位：字节。默认内存限制为 2 GB。 |
+| partial_update | 否 |是否使用部分列更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。|
+| partial_update_mode | 否 | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>|
 | merge_condition  | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。StarRocks v2.5 起支持条件更新。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。 <br/>**说明**<br/>指定的列必须为非主键列，且仅主键表支持条件更新。  |
 
 ## 列映射

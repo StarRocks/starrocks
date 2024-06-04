@@ -2198,9 +2198,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-        OptExpression newQueryInput = duplicator.duplicate(queryInput);
         // NOTE: selected partitions and tablets should be deduced again.
-        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput, false);
+        OptExpression newQueryInput = duplicator.duplicate(queryInput, true);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         // rewrite viewInput

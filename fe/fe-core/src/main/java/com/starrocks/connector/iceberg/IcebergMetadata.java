@@ -432,7 +432,13 @@ public class IcebergMetadata implements ConnectorMetadata {
                     CloseableIterable<StructLike> rows = task.asDataTask().rows();
                     for (StructLike row : rows) {
                         // Get the last updated time of the table according to the table schema
-                        long lastUpdated = row.get(7, Long.class);
+                        long lastUpdated = -1;
+                        try {
+                            lastUpdated = row.get(7, Long.class);
+                        } catch (NullPointerException e) {
+                            LOG.error("The table [{}] snapshot [{}] has been expired",
+                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), e);
+                        }
                         Partition partition = new Partition(lastUpdated);
                         return ImmutableList.of(partition);
                     }

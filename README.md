@@ -74,7 +74,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules: Fronte
 Starting from version 3.0, StarRocks supports a new shared-data architecture, which can provide better scalability and lower costs.
 
  <p align="center">
-    <img src="images/arch-v30.png">
+    <img src="docs/en/assets/architecture_evolution.png">
    </a>
 </p>
 
@@ -87,7 +87,7 @@ Starting from version 3.0, StarRocks supports a new shared-data architecture, wh
 
 | Section | Description |
 |-|-|
-| [Deploy](https://docs.starrocks.io/en-us/latest/quick_start/Deploy) | Learn how to run and configure StarRocks.|
+| [Deploy](https://docs.starrocks.io/docs/deployment/deployment_overview/) | Learn how to run and configure StarRocks.|
 | [Articles](https://github.com/StarRocks/starrocks/discussions/categories/how-tos-tutorials-best-practices-and-architecture-articles)| How-tos, Tutorials, Best Practices and Architecture Articles. |
 | [Docs](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro)| Full documentation. |
 | [Blogs](https://starrocks.io/blog) | StarRocks deep dive and user stories.  |
