@@ -279,7 +279,9 @@ public class PrivilegeCollectionV2 implements GsonPostProcessable {
             } else {
                 List<PrivilegeEntry> typeList = typeToPrivilegeEntryList.get(typeId);
                 for (PrivilegeEntry entry : otherList) {
-                    grantObjectToList(entry.actionSet, entry.object, entry.withGrantOption, typeList);
+                    //deep copy here
+                    ActionSet actionSetClone = new ActionSet(entry.actionSet);
+                    grantObjectToList(actionSetClone, entry.object, entry.withGrantOption, typeList);
                 } // for privilege entry in other.list
             }
         } // for typeId, privilegeEntryList in other
