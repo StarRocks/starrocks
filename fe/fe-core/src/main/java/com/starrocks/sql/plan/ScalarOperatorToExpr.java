@@ -469,6 +469,11 @@ public class ScalarOperatorToExpr {
                             ((ConstantOperator) call.getChild(0)).getVarchar(),
                             0);
                     break;
+                case "connection_id":
+                    callExpr = new InformationFunction(fnName,
+                            "",
+                            ((ConstantOperator) call.getChild(0)).getBigint());
+                    break;
                 case "rand":
                 case "random":
                 case "uuid":
