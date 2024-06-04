@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -75,7 +76,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
         if (!context.getSessionVariable().isEnableMaterializedViewPushDownRewrite()) {
             return false;
         }
-        if (MvUtils.isOptHasAppliedRule(input, Operator.OP_PUSH_DOWN_BIT)) {
+        if (Utils.isOptHasAppliedRule(input, Operator.OP_PUSH_DOWN_BIT)) {
             return false;
         }
         if (!MvUtils.isLogicalSPJG(input)) {

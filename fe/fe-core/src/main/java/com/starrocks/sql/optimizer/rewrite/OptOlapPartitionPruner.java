@@ -105,6 +105,36 @@ public class OptOlapPartitionPruner {
         return builder.build();
     }
 
+    /**
+     * If the selected partition ids are not null, merge the selected partition ids and do further partition pruning.
+     * @param olapScanOperator the olap scan operator
+     * @return the new olap scan operator with merged partition ids and predicates
+     */
+    public static LogicalOlapScanOperator mergePartitionPrune(LogicalOlapScanOperator olapScanOperator) {
+        // already pruned partitions
+        List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
+        // new pruned partitions
+        LogicalOlapScanOperator newOlapScanOperator = OptOlapPartitionPruner.prunePartitions(olapScanOperator);
+        List<Long> newSelectedPartitionIds = newOlapScanOperator.getSelectedPartitionId();
+        // merge selected partition ids
+        List<Long> ansPartitionIds = null;
+        if (newSelectedPartitionIds != null && selectedPartitionIds != null) {
+            ansPartitionIds = Lists.newArrayList(selectedPartitionIds);
+            // use hash set to accelerate the intersection operation
+            ansPartitionIds.retainAll(new HashSet<>(newSelectedPartitionIds));
+        } else {
+            ansPartitionIds = (selectedPartitionIds == null) ? newSelectedPartitionIds : selectedPartitionIds;
+        }
+        final LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        builder.withOperator(newOlapScanOperator)
+                .setSelectedPartitionId(ansPartitionIds)
+                // new predicate should cover the old one
+                .setPredicate(newOlapScanOperator.getPredicate())
+                // use the new pruned partition predicates
+                .setPrunedPartitionPredicates(newOlapScanOperator.getPrunedPartitionPredicates());
+        return builder.build();
+    }
+
     private static Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicates(
             LogicalOlapScanOperator logicalOlapScanOperator, List<Long> selectedPartitionIds) {
         List<ScalarOperator> scanPredicates = Utils.extractConjuncts(logicalOlapScanOperator.getPredicate());

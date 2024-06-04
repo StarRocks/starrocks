@@ -28,6 +28,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -606,22 +607,33 @@ public class Utils {
         return num < 0 ? 1 : num + 1;
     }
 
+    /**
+     * Check the input expression is not nullable or not.
+     * @param nullOutputColumnOps the nullable column reference operators.
+     * @param expression the input expression.
+     * @return true if the expression is not nullable, otherwise false.
+     */
     public static boolean canEliminateNull(Set<ColumnRefOperator> nullOutputColumnOps, ScalarOperator expression) {
-        Map<ColumnRefOperator, ScalarOperator> m = nullOutputColumnOps.stream()
-                .map(op -> new ColumnRefOperator(op.getId(), op.getType(), op.getName(), true))
-                .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
-
-        for (ScalarOperator e : Utils.extractConjuncts(expression)) {
-            ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(e);
-
-            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-            // Call the ScalarOperatorRewriter function to perform constant folding
-            nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            if (nullEval.isConstantRef() && ((ConstantOperator) nullEval).isNull()) {
-                return true;
-            } else if (nullEval.equals(ConstantOperator.createBoolean(false))) {
-                return true;
+        try {
+            Map<ColumnRefOperator, ScalarOperator> m = nullOutputColumnOps.stream()
+                    .map(op -> new ColumnRefOperator(op.getId(), op.getType(), op.getName(), true))
+                    .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
+            for (ScalarOperator e : Utils.extractConjuncts(expression)) {
+                ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(e);
+                ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+                // Call the ScalarOperatorRewriter function to perform constant folding
+                nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+                // Only result is `null` or false, which means the expression "xxx is null" can never be true,
+                // it can eliminate null.
+                if (nullEval.isConstantRef() && ((ConstantOperator) nullEval).isNull()) {
+                    return true;
+                } else if (nullEval.equals(ConstantOperator.FALSE)) {
+                    return true;
+                }
             }
+        } catch (Throwable e) {
+            LOG.warn("Failed to eliminate null: {}", DebugUtil.getStackTrace(e));
+            return false;
         }
         return false;
     }
@@ -826,5 +838,65 @@ public class Utils {
             newOp.setProjection(new Projection(resultMap));
         }
         return input;
+    }
+
+    /**
+     * Check if the operator has applied the rule
+     * @param op input operator to be checked
+     * @param ruleMask specific rule mask
+     * @return true if the operator has applied the rule, false otherwise
+     */
+    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
+        if (op == null) {
+            return false;
+        }
+        // TODO: support cte inline
+        int opRuleMask = op.getOpRuleMask();
+        return (opRuleMask & ruleMask) != 0;
+    }
+
+    /**
+     * Set the rule mask to the operator
+     * @param op input operator
+     * @param ruleMask specific rule mask
+     */
+    public static void setOpAppliedRule(Operator op, int ruleMask) {
+        if (op == null) {
+            return;
+        }
+        op.setOpRuleMask(op.getOpRuleMask() | ruleMask);
+    }
+
+    /**
+     * Reset the rule mask to the operator
+     * @param op input operator
+     * @param ruleMask specific rule mask
+     */
+    public static void resetOpAppliedRule(Operator op, int ruleMask) {
+        if (op == null) {
+            return;
+        }
+        op.setOpRuleMask(op.getOpRuleMask() | (~ ruleMask));
+    }
+
+    /**
+     * Check if the optExpression has applied the rule in recursively
+     * @param optExpression input optExpression to be checked
+     * @param ruleMask specific rule mask
+     * @return true if the optExpression or its children have applied the rule, false otherwise
+     */
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        if (optExpression == null) {
+            return false;
+        }
+        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
+            return true;
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            if (isOptHasAppliedRule(child, ruleMask)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

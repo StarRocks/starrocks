@@ -73,6 +73,23 @@ public class MVPartitionPruner {
     }
 
     private class MVPartitionPrunerVisitor extends OptExpressionVisitor<OptExpression, Void> {
+        private boolean isAddMVPrunePredicate(LogicalOlapScanOperator olapScanOperator) {
+            if (mvRewriteContext == null) {
+                return false;
+            }
+            return olapScanOperator.getTable().isMaterializedView()
+                    && olapScanOperator.getTable().getId() == mvRewriteContext.getMaterializationContext().getMv().getId()
+                    && mvRewriteContext.getMvPruneConjunct() != null;
+        }
+
+        private ScalarOperator getMVPrunePredicate(LogicalOlapScanOperator scanOperator) {
+            ScalarOperator originPredicate = scanOperator.getPredicate();
+            if (mvRewriteContext == null) {
+                return originPredicate;
+            }
+            return Utils.compoundAnd(originPredicate, mvRewriteContext.getMvPruneConjunct());
+        }
+
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
@@ -84,13 +101,9 @@ public class MVPartitionPruner {
                 // for mv: select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1,
                 // which c3 is partition column and c1 is distribution column.
                 // we should add predicate c3 < 2000 and c1 = 1 into scan operator to do pruning
-                boolean isAddMvPrunePredicate = scanOperator.getTable().isMaterializedView()
-                        && scanOperator.getTable().getId() == mvRewriteContext.getMaterializationContext().getMv().getId()
-                        && mvRewriteContext.getMvPruneConjunct() != null;
+                boolean isAddMvPrunePredicate = isAddMVPrunePredicate(olapScanOperator);
                 if (isAddMvPrunePredicate) {
-                    ScalarOperator originPredicate = scanOperator.getPredicate();
-                    ScalarOperator newPredicate = Utils.compoundAnd(originPredicate, mvRewriteContext.getMvPruneConjunct());
-                    builder.setPredicate(newPredicate);
+                    builder.setPredicate(getMVPrunePredicate(olapScanOperator));
                 }
                 LogicalOlapScanOperator newOlapScanOperator = builder.build();
 
@@ -197,6 +210,9 @@ public class MVPartitionPruner {
             if (scanOperator != refScanOperator) {
                 return optExpression;
             }
+            // reset the partition prune flag to be pruned again.
+            Utils.resetOpAppliedRule(scanOperator, Operator.OP_PARTITION_PRUNE_BIT);
+
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
                 final LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
@@ -205,7 +221,6 @@ public class MVPartitionPruner {
                 builder.withOperator(olapScanOperator)
                         .setSelectedPartitionId(olapTableCompensatePartitionIds)
                         .setSelectedTabletId(Lists.newArrayList());
-
                 return OptExpression.create(builder.build());
             } else if (SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES.contains(scanOperator.getOpType())) {
                 final LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(refScanOperator);

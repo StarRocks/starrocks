@@ -372,7 +372,7 @@ public class Optimizer {
      */
     private OptExpression transparentMVRewrite(OptExpression tree, TaskContext rootTaskContext) {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new MaterializedViewTransparentRewriteRule());
-        if (MvUtils.isOptHasAppliedRule(tree, Operator.OP_TRANSPARENT_MV_BIT)) {
+        if (Utils.isOptHasAppliedRule(tree, Operator.OP_TRANSPARENT_MV_BIT)) {
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
         }
         return tree;

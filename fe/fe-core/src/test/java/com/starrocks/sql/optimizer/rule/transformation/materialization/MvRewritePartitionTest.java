@@ -547,12 +547,9 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 23: id_date >= '1991-03-30'\n" +
                     "     partitions=1/1");
-            PlanTestBase.assertContains(plan, "4:OlapScanNode\n" +
-                    "     TABLE: table_with_day_partition\n" +
+            PlanTestBase.assertContains(plan, "     TABLE: table_with_day_partition\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 27: id_date >= '1991-03-30'\n" +
                     "     partitions=3/4");
         }
 
