@@ -83,7 +83,7 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
-    "compression" = "uncompressed",
+    "compression" = "lz4",
     "partition_by" = "sales_time",
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
@@ -103,7 +103,7 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data2",
     "format" = "parquet",
-    "compression" = "uncompressed",
+    "compression" = "lz4",
     "single" = "true",
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
