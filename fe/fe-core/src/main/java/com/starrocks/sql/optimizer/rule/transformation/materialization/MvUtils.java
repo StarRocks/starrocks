@@ -1244,28 +1244,7 @@ public class MvUtils {
      * @return : true if opt expression or its children have applied mv union rewrite, false otherwise.
      */
     public static boolean isAppliedMVUnionRewrite(OptExpression optExpression) {
-        return isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
-    }
-
-    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
-        // TODO: support cte inline
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & ruleMask) != 0;
-    }
-
-    public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
-        if (optExpression == null) {
-            return false;
-        }
-        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
-            return true;
-        }
-        for (OptExpression child : optExpression.getInputs()) {
-            if (isOptHasAppliedRule(child, ruleMask)) {
-                return true;
-            }
-        }
-        return false;
+        return Utils.isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
     }
 
     /**
