@@ -478,7 +478,6 @@ public class ScalarOperatorToExpr {
                     List<Expr> arguments = Lists.newArrayList();
                     if (call.getChildren().size() == 2) {
                         arguments.add(buildExpr.build(call.getChild(0), context));
-
                     }
                     callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
                     Preconditions.checkNotNull(call.getFunction());
