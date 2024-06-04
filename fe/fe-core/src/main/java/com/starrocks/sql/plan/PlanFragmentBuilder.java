@@ -61,6 +61,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -3823,6 +3824,9 @@ public class PlanFragmentBuilder {
             TupleDescriptor mergeOperationTuple = context.getDescTbl().createTupleDescriptor();
 
             UnionNode setOperationNode = new UnionNode(context.getNextNodeId(), mergeOperationTuple.getId());
+            if (rightChild.getPlanRoot() instanceof ExchangeNode) {
+                setOperationNode.setLocalExchangeType(LocalExchangerType.DIRECT);
+            }
 
             for (ColumnRefOperator columnRefOperator : mergeOperator.getOutputColumnRefOp()) {
                 SlotDescriptor slotDesc = context.getDescTbl()
@@ -3863,6 +3867,9 @@ public class PlanFragmentBuilder {
             // left plan fragment is shuffle join, and right plan fragment can be broadcast join or exchange
             // we always need to merge these two child plan fragments with mergeOperationFragment
             mergeChildFragmentsIntoParent(mergeOperationFragment, Lists.newArrayList(leftChild, rightChild), context);
+
+            setOperationNode.setLimit(mergeOperator.getLimit());
+            setOperationNode.computeStatistics(optExpr.getStatistics());
 
             context.getFragments().add(mergeOperationFragment);
 

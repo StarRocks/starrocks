@@ -75,7 +75,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 return visitChild(opt, requireEmptyForChild);
             }
 
-            return null;
+            // temp
+            return visitChild(opt, requireEmptyForChild);
         }
 
         @Override

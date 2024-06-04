@@ -34,17 +34,13 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected final ScalarOperator onPredicate;
     protected final String joinHint;
     protected boolean canLocalShuffle;
-    private ScalarOperator skewColumn;
-    private List<ScalarOperator> skewValues;
 
     protected PhysicalJoinOperator(OperatorType operatorType, JoinOperator joinType,
                                    ScalarOperator onPredicate,
                                    String joinHint,
                                    long limit,
                                    ScalarOperator predicate,
-                                   Projection projection,
-                                   ScalarOperator skewColumn,
-                                    List<ScalarOperator> skewValues) {
+                                   Projection projection) {
         super(operatorType);
         this.joinType = joinType;
         this.onPredicate = onPredicate;
@@ -52,8 +48,6 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
-        this.skewColumn = skewColumn;
-        this.skewValues = skewValues;
     }
 
     public JoinOperator getJoinType() {
