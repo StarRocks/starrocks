@@ -248,7 +248,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 unload_data_param::=
     "compression" = "<compression_method>",
     "partition_by" = "<column_name> [, ...]",
-    "single" = { "true" | "false" } 
+    "single" = { "true" | "false" } ,
+    "target_max_file_size" = "<int>"
 ```
 
 | **参数**          | **必填** | **说明**                                                          |
