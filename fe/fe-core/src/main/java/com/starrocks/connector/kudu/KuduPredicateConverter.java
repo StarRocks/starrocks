@@ -32,7 +32,6 @@ import org.apache.kudu.client.KuduPredicate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -43,8 +42,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static org.apache.paimon.data.Timestamp.fromSQLTimestamp;
 
 public class KuduPredicateConverter extends ScalarOperatorVisitor<List<KuduPredicate>, Void> {
     private static final Logger LOG = LogManager.getLogger(KuduPredicateConverter.class);
@@ -192,7 +189,8 @@ public class KuduPredicateConverter extends ScalarOperatorVisitor<List<KuduPredi
                 return (int) ChronoUnit.DAYS.between(epochDay, localDate);
             case DATETIME:
                 LocalDateTime localDateTime = constValue.getDatetime();
-                return fromSQLTimestamp(Timestamp.valueOf((localDateTime)));
+                LocalDateTime epochDateTime = Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC).toLocalDateTime();
+                return ChronoUnit.MICROS.between(epochDateTime, localDateTime);
             default:
                 return null;
         }
