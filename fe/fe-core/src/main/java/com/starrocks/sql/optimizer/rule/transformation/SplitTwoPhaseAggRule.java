@@ -21,7 +21,6 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -46,8 +45,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
-import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
-import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STAGE;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 
@@ -90,8 +87,8 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
-        if (CollectionUtils.isNotEmpty(distinctCols.get()) && !isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
-            return Lists.newArrayList();
+        if (!isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+            return List.of();
         }
 
         Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap(aggOp.getAggregations());
@@ -122,24 +119,6 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
         OptExpression globalOptExpression = OptExpression.create(global, localOptExpression);
 
         return Lists.newArrayList(globalOptExpression);
-    }
-
-    private boolean isSuitableForTwoStageDistinct(OptExpression input, LogicalAggregationOperator operator,
-                                                  List<ColumnRefOperator> distinctColumns) {
-        int aggMode = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-        for (CallOperator callOperator : operator.getAggregations().values()) {
-            if (callOperator.isDistinct() && !canGenerateTwoStageAggregate(callOperator)) {
-                return false;
-            }
-        }
-
-        if (aggMode == TWO_STAGE.ordinal()) {
-            return true;
-        }
-
-        return CollectionUtils.isNotEmpty(operator.getGroupingKeys())
-                && aggMode == AUTO.ordinal()
-                && isTwoStageMoreEfficient(input, distinctColumns);
     }
 
     private boolean canGenerateTwoStageAggregate(CallOperator distinctCall) {
