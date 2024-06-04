@@ -167,6 +167,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
@@ -3497,20 +3498,12 @@ public class PlanFragmentBuilder {
                 leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
                 rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
 
-                // Currently, we always generate new fragment for PhysicalDistribution.
-                // So we need to remove exchange node only fragment for Join.
-                context.getFragments().remove(leftFragment);
-                context.getFragments().remove(rightFragment);
-
                 PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
                         joinNode, lhsJoinPartition);
-                joinFragment.addChildren(leftFragment.getChildren());
-                joinFragment.addChildren(rightFragment.getChildren());
+                // Currently, we always generate new fragment for PhysicalDistribution.
+                // So we need to remove exchange node only fragment for Join.
+                mergeChildFragmentsIntoParent(joinFragment, Lists.newArrayList(leftFragment, rightFragment), context);
 
-                joinFragment.mergeQueryGlobalDicts(leftFragment.getQueryGlobalDicts());
-                joinFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                joinFragment.mergeQueryDictExprs(leftFragment.getQueryGlobalDictExprs());
-                joinFragment.mergeQueryDictExprs(rightFragment.getQueryGlobalDictExprs());
                 context.getFragments().add(joinFragment);
 
                 return joinFragment;
@@ -3821,6 +3814,61 @@ public class PlanFragmentBuilder {
             return splitConsumeFragment;
         }
 
+        @Override
+        public PlanFragment visitPhysicalMerge(OptExpression optExpr, ExecPlan context) {
+            PlanFragment leftChild = visit(optExpr.inputAt(0), context);
+            PlanFragment rightChild = visit(optExpr.inputAt(1), context);
+
+            PhysicalMergeOperator mergeOperator = (PhysicalMergeOperator) optExpr.getOp();
+            TupleDescriptor mergeOperationTuple = context.getDescTbl().createTupleDescriptor();
+
+            UnionNode setOperationNode = new UnionNode(context.getNextNodeId(), mergeOperationTuple.getId());
+
+            for (ColumnRefOperator columnRefOperator : mergeOperator.getOutputColumnRefOp()) {
+                SlotDescriptor slotDesc = context.getDescTbl()
+                        .addSlotDescriptor(mergeOperationTuple, new SlotId(columnRefOperator.getId()));
+                slotDesc.setType(columnRefOperator.getType());
+                slotDesc.setIsMaterialized(true);
+                slotDesc.setIsNullable(columnRefOperator.isNullable());
+
+                context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDesc));
+            }
+
+            setOperationNode.setFirstMaterializedChildIdx_(optExpr.arity());
+
+            currentExecGroup.add(setOperationNode, true);
+
+            List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = new ArrayList<>();
+            for (int childIdx = 0; childIdx < optExpr.arity(); ++childIdx) {
+                Map<Integer, Integer> slotIdMap = new HashMap<>();
+                List<ColumnRefOperator> childOutput = mergeOperator.getChildOutputColumns().get(childIdx);
+                Preconditions.checkState(childOutput.size() == mergeOperator.getOutputColumnRefOp().size());
+                for (int columnIdx = 0; columnIdx < mergeOperator.getOutputColumnRefOp().size(); ++columnIdx) {
+                    Integer resultColumnIdx = mergeOperator.getOutputColumnRefOp().get(columnIdx).getId();
+                    slotIdMap.put(resultColumnIdx, childOutput.get(columnIdx).getId());
+                }
+                outputSlotIdToChildSlotIdMaps.add(slotIdMap);
+                Preconditions.checkState(slotIdMap.size() == mergeOperator.getOutputColumnRefOp().size());
+            }
+            setOperationNode.setOutputSlotIdToChildSlotIdMaps(outputSlotIdToChildSlotIdMaps);
+
+            Preconditions.checkState(optExpr.getInputs().size() == mergeOperator.getChildOutputColumns().size());
+
+            // mergeOperationFragment's data partition is the same as the first child shuffle join 's data partition
+            PlanFragment mergeOperationFragment = new PlanFragment(context.getNextFragmentId(), setOperationNode,
+                    leftChild.getDataPartition());
+            setOperationNode.addChild(leftChild.getPlanRoot());
+            setOperationNode.addChild(rightChild.getPlanRoot());
+
+            // left plan fragment is shuffle join, and right plan fragment can be broadcast join or exchange
+            // we always need to merge these two child plan fragments with mergeOperationFragment
+            mergeChildFragmentsIntoParent(mergeOperationFragment, Lists.newArrayList(leftChild, rightChild), context);
+
+            context.getFragments().add(mergeOperationFragment);
+
+            return mergeOperationFragment;
+        }
+
         private DataPartition translateDistributionToDataPartition(DistributionSpec distributionSpec,
                                                                    ExecPlan context) {
             DataPartition dataPartition;
@@ -3845,6 +3893,16 @@ public class PlanFragmentBuilder {
                         + distributionSpec.getType(), INTERNAL_ERROR);
             }
             return dataPartition;
+        }
+
+        private void mergeChildFragmentsIntoParent(PlanFragment parentFragment, List<PlanFragment> childFragments,
+                                                   ExecPlan context) {
+            for (PlanFragment fragment : childFragments) {
+                context.getFragments().remove(fragment);
+                parentFragment.addChildren(fragment.getChildren());
+                parentFragment.mergeQueryGlobalDicts(fragment.getQueryGlobalDicts());
+                parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
+            }
         }
     }
 }

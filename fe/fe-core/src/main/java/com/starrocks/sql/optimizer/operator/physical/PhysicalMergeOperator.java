@@ -33,10 +33,8 @@ public class PhysicalMergeOperator extends PhysicalSetOperation {
     private final LocalExchangeType localExchangeType;
 
     public PhysicalMergeOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
-                                 LocalExchangeType localExchangeType, long limit,
-                                 ScalarOperator predicate,
-                                 Projection projection) {
-        super(OperatorType.PHYSICAL_MERGE, columnRef, childOutputColumns, limit, predicate, projection);
+                                 LocalExchangeType localExchangeType, long limit) {
+        super(OperatorType.PHYSICAL_MERGE, columnRef, childOutputColumns, limit, null, null);
         this.localExchangeType = localExchangeType;
     }
 
@@ -55,18 +53,13 @@ public class PhysicalMergeOperator extends PhysicalSetOperation {
             return false;
         }
 
-        PhysicalUnionOperator that = (PhysicalUnionOperator) o;
-        return isUnionAll == that.isUnionAll;
-    }
-
-    @Override
-    public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalUnion(this, context);
+        PhysicalMergeOperator that = (PhysicalMergeOperator) o;
+        return localExchangeType == that.localExchangeType;
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalUnion(optExpression, context);
+        return visitor.visitPhysicalMerge(optExpression, context);
     }
 }
 

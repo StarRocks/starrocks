@@ -13,6 +13,8 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -37,6 +39,11 @@ public class PhysicalSplitConsumeOperator extends PhysicalOperator {
 
     public ScalarOperator getSplitPredicate() {
         return splitPredicate;
+    }
+
+    @Override
+    public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
+        return visitor.visitPhysicalSplitConsumer(optExpression, context);
     }
 
     @Override
