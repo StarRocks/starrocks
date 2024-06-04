@@ -54,7 +54,7 @@ INSERT INTO FILES 支持将数据导出到单个文件或多个文件。您可�
 
 ### 导出数据到多个文件
 
-默认情况下，INSERT INTO FILES 会将数据导出到多个数据文件中，每个文件的大小为 1 GB。您可以使用`max_file_size` 属性配置文件大小。
+默认情况下，INSERT INTO FILES 会将数据导出到多个数据文件中，每个文件的大小为 1 GB。您可以使用`target_max_file_size` 属性配置文件大小, 单位是 Byte。
 
 以下示例将 `sales_records` 中的所有数据行导出为多个以 `data1` 为前缀的 Parquet 文件。每个文件的大小为 1 KB。
 
@@ -63,11 +63,11 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data1",
     "format" = "parquet",
+    "compression" = "uncompressed",
+    "target_max_file_size" = "1024", -- 1KB
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "max_file_size" = "1KB"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
@@ -83,11 +83,11 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
+    "compression" = "uncompressed",
+    "partition_by" = "sales_time",
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "partition_by" = "sales_time"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
@@ -103,11 +103,11 @@ INSERT INTO
 FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data2",
     "format" = "parquet",
+    "compression" = "uncompressed",
+    "single" = "true",
     "hadoop.security.authentication" = "simple",
     "username" = "xxxxx",
-    "password" = "xxxxx",
-    "compression" = "lz4",
-    "single" = "true"
+    "password" = "xxxxx"
 )
 SELECT * FROM sales_records;
 ```
