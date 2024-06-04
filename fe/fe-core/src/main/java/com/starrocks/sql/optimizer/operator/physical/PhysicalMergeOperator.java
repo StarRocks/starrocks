@@ -14,26 +14,20 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.common.LocalExchangerType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 
 public class PhysicalMergeOperator extends PhysicalSetOperation {
-    public enum LocalExchangeType {
-        PASS_THROUGH,
-        DIRECT
-    }
 
-    private final LocalExchangeType localExchangeType;
+    private final LocalExchangerType localExchangeType;
 
     public PhysicalMergeOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
-                                 LocalExchangeType localExchangeType, long limit) {
+                                 LocalExchangerType localExchangeType, long limit) {
         super(OperatorType.PHYSICAL_MERGE, columnRef, childOutputColumns, limit, null, null);
         this.localExchangeType = localExchangeType;
     }
