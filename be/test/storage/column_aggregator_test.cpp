@@ -871,6 +871,68 @@ TEST(ColumnAggregator, testNullArrayFirstIfNotNull2) {
 }
 
 // test first
+TEST(ColumnAggregator, testStringFirst) {
+    FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_VARCHAR, false);
+    field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+
+    auto src1 = BinaryColumn::create();
+    auto src2 = BinaryColumn::create();
+    auto src3 = BinaryColumn::create();
+
+    for (int i = 0; i < 1024; i++) {
+        src1->append(Slice(std::to_string(i + 1000)));
+        src2->append(Slice(std::to_string(i + 3000)));
+        src3->append(Slice(std::to_string(i + 2000)));
+    }
+
+    auto agg1 = BinaryColumn::create();
+
+    aggregator->update_aggregate(agg1.get());
+    aggregator->update_source(src1);
+
+    std::vector<uint32_t> loops;
+    loops.emplace_back(2);
+    loops.emplace_back(1022);
+
+    aggregator->aggregate_values(0, 2, loops.data(), false);
+
+    ASSERT_EQ(1, agg1->size());
+    ASSERT_EQ("1000", agg1->get_data()[0].to_string());
+
+    aggregator->update_source(src2);
+
+    loops.clear();
+    loops.emplace_back(3);
+    loops.emplace_back(100);
+    loops.emplace_back(921);
+
+    aggregator->aggregate_values(0, 3, loops.data(), false);
+
+    EXPECT_EQ(3, agg1->size());
+    EXPECT_EQ("1000", agg1->get_data()[0].to_string());
+    EXPECT_EQ("1002", agg1->get_data()[1].to_string());
+    EXPECT_EQ("3003", agg1->get_data()[2].to_string());
+
+    aggregator->update_source(src3);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(1023);
+
+    aggregator->aggregate_values(0, 2, loops.data(), true);
+
+    aggregator->finalize();
+
+    EXPECT_EQ(6, agg1->size());
+    EXPECT_EQ("1000", agg1->get_data()[0].to_string());
+    EXPECT_EQ("1002", agg1->get_data()[1].to_string());
+    EXPECT_EQ("3003", agg1->get_data()[2].to_string());
+    EXPECT_EQ("3103", agg1->get_data()[3].to_string());
+    EXPECT_EQ("2000", agg1->get_data()[4].to_string());
+    EXPECT_EQ("2001", agg1->get_data()[5].to_string());
+}
 TEST(ColumnAggregator, testNullIntFirst) {
     FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_INT, true);
     field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);

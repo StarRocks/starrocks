@@ -251,7 +251,7 @@ public:
         }
     }
 
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+    void aggregate_batch_impl(int start, [[maybe_unused]] int end, const ColumnPtr& src) override {
         aggregate_impl(start, src);
     }
 
@@ -275,7 +275,7 @@ public:
         }
     }
 
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+    void aggregate_batch_impl(int start, [[maybe_unused]] int end, const ColumnPtr& src) override {
         aggregate_impl(start, src);
     }
 
@@ -302,7 +302,7 @@ public:
         }
     }
 
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+    void aggregate_batch_impl(int start, [[maybe_unused]] int end, const ColumnPtr& src) override {
         aggregate_impl(start, src);
     }
 
@@ -329,7 +329,7 @@ public:
         }
     }
 
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+    void aggregate_batch_impl(int start, [[maybe_unused]] int end, const ColumnPtr& src) override {
         aggregate_impl(start, src);
     }
 
@@ -355,7 +355,7 @@ public:
         }
     }
 
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+    void aggregate_batch_impl(int start, [[maybe_unused]] int end, const ColumnPtr& src) override {
         aggregate_impl(start, src);
     }
 
@@ -385,9 +385,12 @@ public:
     }
 
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        auto* col = down_cast<BinaryColumn*>(src.get());
-        Slice data = col->get_slice(start);
-        this->data().update(data);
+        if (!this->filled) {
+            auto* col = down_cast<BinaryColumn*>(src.get());
+            Slice data = col->get_slice(start);
+            this->data().update(data);
+            this->filled = true;
+        }
     }
 
     void append_data(Column* agg) override {
@@ -411,8 +414,8 @@ public:
         if (!this->filled) {
             this->data().column = src;
             this->data().row = row;
+            this->filled = true;
         }
-        this->filled = true;
     }
 
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(start, src); }
