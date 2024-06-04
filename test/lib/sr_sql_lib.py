@@ -1763,3 +1763,29 @@ class StarrocksSQLApiLib(object):
         finally:
             cursor.close()
             conn.close()
+<<<<<<< HEAD
+=======
+
+    def assert_trace_times_contains(self, query, *expects):
+        """
+        assert trace times result contains expect string
+        """
+        sql = "trace times %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
+
+    def assert_clear_stale_stats(self, query, expect_num):
+        timeout = 300
+        num = 0;
+        while timeout > 0:
+            res = self.execute_sql(query)
+            num = res["result"]
+            if int(num) < expect_num:
+                break;
+            time.sleep(10)
+            timeout -= 10
+        else:
+            tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
+               
+>>>>>>> 92604ff78c ([UT] fix unstable ut (#46617))
