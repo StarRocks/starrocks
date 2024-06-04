@@ -2077,6 +2077,10 @@ public class PlanFragmentBuilder {
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
+            if (aggregations.isEmpty() && groupBys.isEmpty()) {
+                throw new StarRocksPlannerException(INTERNAL_ERROR, "invalid agg operator " +
+                        "without any group by key or agg function. OptExpression:\n%s", optExpr.debugString(5));
+            }
             List<ColumnRefOperator> partitionBys = node.getPartitionByColumns();
             boolean hasRemovedDistinct = node.hasRemovedDistinctFunc();
 
