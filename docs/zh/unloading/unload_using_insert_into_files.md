@@ -56,7 +56,7 @@ INSERT INTO FILES 支持将数据导出到单个文件或多个文件。您可�
 
 默认情况下，INSERT INTO FILES 会将数据导出到多个数据文件中，每个文件的大小为 1 GB。您可以使用`target_max_file_size` 属性配置文件大小, 单位是 Byte。
 
-以下示例将 `sales_records` 中的所有数据行导出为多个以 `data1` 为前缀的 Parquet 文件。每个文件的大小为 100 MB。
+以下示例将 `sales_records` 中的所有数据行导出为多个以 `data1` 为前缀的 Parquet 文件。每个文件的大小为 1 KB。
 
 ```SQL
 INSERT INTO 
@@ -64,7 +64,7 @@ FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/data1",
     "format" = "parquet",
     "compression" = "uncompressed",
-    "target_max_file_size" = "104857600" -- 100MB
+    "target_max_file_size" = "1024" -- 1KB
 )
 SELECT * FROM sales_records;
 ```
