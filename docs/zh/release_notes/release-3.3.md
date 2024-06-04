@@ -49,7 +49,6 @@ displayed_sidebar: "Chinese"
 - 优化存算分离集群下主键表的 Compaction 事务 Publish 执行逻辑，通过避免读取主键索引，降低执行过程中的 I/O 和内存开销。
 
 ### 数据湖分析
-test
 
 - **Data Cache 增强**：
   - 新增 [缓存预热 (Warmup)](https://docs.starrocks.io/zh/docs/3.3/data_source/data_cache_warmup/) 命令 CACHE SELECT，用于填充查询热点数据，可以结合 SUBMIT TASK 完成周期性填充。
