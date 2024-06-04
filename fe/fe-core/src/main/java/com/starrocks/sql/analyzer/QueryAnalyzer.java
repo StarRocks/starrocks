@@ -49,13 +49,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.profile.Timer;
-import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
->>>>>>> 84236b52a9 ([Enhancement] add meta analzye log (#46470))
 import com.starrocks.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -1010,7 +1003,6 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
 
-<<<<<<< HEAD
             Database database = metadataMgr.getDb(catalogName, dbName);
             MetaUtils.checkDbNullAndReport(database, dbName);
 
@@ -1036,48 +1028,6 @@ public class QueryAnalyzer {
                 }
             } else {
                 table = metadataMgr.getTable(catalogName, dbName, tbName);
-=======
-            Database db;
-            try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
-                db = metadataMgr.getDb(catalogName, dbName);
-            }
-
-            MetaUtils.checkDbNullAndReport(db, dbName);
-            Locker locker = new Locker();
-
-            Table table = null;
-            if (tableRelation.isSyncMVQuery()) {
-                try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
-                    Pair<Table, MaterializedIndexMeta> materializedIndex =
-                            metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
-                    if (materializedIndex != null) {
-                        Table mvTable = materializedIndex.first;
-                        Preconditions.checkState(mvTable != null);
-                        Preconditions.checkState(mvTable instanceof OlapTable);
-                        try {
-                            // Add read lock to avoid concurrent problems.
-                            locker.lockDatabase(db, LockType.READ);
-                            OlapTable mvOlapTable = new OlapTable();
-                            ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
-                            // Copy the necessary olap table meta to avoid changing original meta;
-                            mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
-                            table = mvOlapTable;
-                        } finally {
-                            locker.unLockDatabase(db, LockType.READ);
-                        }
-                    }
-                }
-            } else {
-                // treat it as a temporary table first
-                try (Timer ignored = Tracers.watchScope("AnalyzeTemporaryTable")) {
-                    table = metadataMgr.getTemporaryTable(session.getSessionId(), catalogName, db.getId(), tbName);
-                }
-                if (table == null) {
-                    try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                        table = metadataMgr.getTable(catalogName, dbName, tbName);
-                    }
-                }
->>>>>>> 84236b52a9 ([Enhancement] add meta analzye log (#46470))
             }
 
             if (table == null) {
