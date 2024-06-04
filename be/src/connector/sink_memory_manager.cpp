@@ -127,6 +127,7 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
         }
     }
 
+    child_manager->update_releasable_memory();
     if (available_memory() <= low_watermark() && _total_releasable_memory() > 0) {
         return false;
     }
