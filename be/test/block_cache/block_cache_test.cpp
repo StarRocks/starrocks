@@ -247,7 +247,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     const size_t block_size = 1024 * 1024;
 
     CacheOptions options;
-    options.mem_space_size = 1024;
+    options.mem_space_size = 0;
     size_t quota = 500 * 1024 * 1024;
     options.disk_spaces.push_back({.path = cache_dir, .size = quota});
     options.block_size = block_size;
