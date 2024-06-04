@@ -1242,6 +1242,11 @@ build_clucene() {
 build_avx2ki() {
     check_if_source_exist $AVX2KI_SOURCE
     cd $TP_SOURCE_DIR/$AVX2KI_SOURCE
+    
+    # sudo apt-get install rpm2cpio
+    # sudo yum install rpm2cpio
+    check_prerequest "rpm2cpio -h" "rpm2cpio"
+
     rpm2cpio boostkit-ksl-2.0.0-1.aarch64.rpm | cpio -id
     mv usr/local/ksl $TP_INSTALL_DIR
     cp $TP_INSTALL_DIR/ksl/lib/libavx2neon.so.2.0.0 $TP_INSTALL_DIR/lib/libavx2neon.so
@@ -1400,9 +1405,7 @@ build_clucene
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     build_avx2ki
-fi
-
-if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
+else
     build_breakpad
     build_libdeflate
 fi

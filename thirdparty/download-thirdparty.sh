@@ -219,7 +219,7 @@ do
             continue
         fi
 
-        if [ `ls $TP_SOURCE_DIR/tmp_dir/ | wc -l` != "1" ]; then
+        if [[ ! -d $TP_SOURCE_DIR/tmp_dir/${!SOURCE} ]]; then
             mkdir -p $TP_SOURCE_DIR/${!SOURCE}
         fi
 
