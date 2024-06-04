@@ -343,6 +343,12 @@ public class Config extends ConfigBase {
     public static int stream_load_task_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * The interval of the load history syncer.
+     */
+    @ConfField(mutable = true)
+    public static int loads_history_sync_interval_second = 60;
+
+    /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
     @ConfField

@@ -1607,6 +1607,12 @@ public class PlanFragmentBuilder {
                             case "JOB_ID":
                                 scanNode.setJobId(constantOperator.getBigint());
                                 break;
+                            case "ID":
+                                if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")
+                                        || scanNode.getTableName().equalsIgnoreCase("loads")) {
+                                    scanNode.setJobId(constantOperator.getBigint());
+                                }
+                                break;
                             case "TYPE":
                                 scanNode.setType(constantOperator.getVarchar());
                                 break;

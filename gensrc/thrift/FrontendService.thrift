@@ -573,6 +573,15 @@ struct TLoadInfo {
     22: optional i64 num_unselected_rows
     23: optional i64 num_sink_rows
     24: optional string rejected_record_path
+    25: optional string load_id
+    26: optional string profile_id
+    27: optional string table
+    28: optional string user
+    29: optional string load_commit_time
+    30: optional string warehouse
+    31: optional string runtime_details
+    32: optional string properties
+    33: optional i64 num_scan_bytes
 }
 
 struct TGetRoutineLoadJobsResult {
@@ -986,6 +995,9 @@ struct TManualLoadTxnCommitAttachment {
     4: optional i64 receivedBytes
     5: optional i64 loadedBytes
     6: optional i64 unselectedRows
+    7: optional i64 planTime
+    8: optional i64 receiveDataTime
+    9: optional i64 beginTxnTime
 }
 
 struct TTxnCommitAttachment {
