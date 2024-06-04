@@ -83,7 +83,10 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     RETURN_IF_ERROR(_create_src_chunk(&src_chunk));
 
     if (_cur_file_eof) {
-        RETURN_IF_ERROR(_open_next_reader());
+        auto st = _open_next_reader();
+        if (!st.ok() && !st.is_time_out()) {
+            return st;
+        }
         _cur_file_eof = false;
     }
 
@@ -279,8 +282,12 @@ Status JsonScanner::_open_next_reader() {
     }
     _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors,
                                                     _json_types, range_desc);
-    RETURN_IF_ERROR(_cur_file_reader->open());
     _next_range++;
+    st = _cur_file_reader->open();
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to open reader, status: " << st.to_string();
+        return st;
+    }
     return Status::OK();
 }
 
