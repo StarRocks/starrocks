@@ -465,18 +465,10 @@ public class ScalarOperatorToExpr {
                 case "user":
                 case "current_user":
                 case "current_role":
-                case "session_id":
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),
                             0);
                     break;
-                case "connection_id":
-                    callExpr = new InformationFunction(fnName,
-                            "",
-                            ((ConstantOperator) call.getChild(0)).getBigint());
-                    break;
-<<<<<<< HEAD
-=======
                 case "rand":
                 case "random":
                 case "uuid":
@@ -492,7 +484,6 @@ public class ScalarOperatorToExpr {
                     callExpr.setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
->>>>>>> 2f1c5dab61 ([BugFix] add an id argument to mark  non-deterministic functions (#46592))
                 default:
                     List<Expr> arg = call.getChildren().stream()
                             .map(expr -> buildExpr.build(expr, context))
