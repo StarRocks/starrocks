@@ -105,14 +105,6 @@ public class CallOperator extends ScalarOperator {
     public boolean isAggregate() {
         return fn != null && fn instanceof AggregateFunction;
     }
-
-<<<<<<< HEAD
-=======
-    public boolean isRemovedDistinct() {
-        return removedDistinct;
-    }
-
->>>>>>> 2f1c5dab61 ([BugFix] add an id argument to mark  non-deterministic functions (#46592))
     @Override
     public String toString() {
         return fnName + "(" + (isDistinct ? "distinct " : "") +
@@ -201,9 +193,7 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-<<<<<<< HEAD
-=======
-        return isDistinct == other.isDistinct && removedDistinct == other.removedDistinct &&
+        return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
                 Objects.equals(arguments, other.arguments) &&
@@ -226,7 +216,6 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
 
->>>>>>> 2f1c5dab61 ([BugFix] add an id argument to mark  non-deterministic functions (#46592))
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
