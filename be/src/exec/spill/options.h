@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <limits>
 #include <memory>
 
 #include "column/vectorized_fwd.h"
@@ -103,6 +104,9 @@ struct SpilledOptions {
 
     BlockManager* block_manager = nullptr;
     workgroup::WorkGroupPtr wg;
+
+    bool enable_buffer_read = false;
+    size_t max_read_buffer_bytes = UINT64_MAX;
 };
 
 // spill strategy

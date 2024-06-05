@@ -267,6 +267,9 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
             _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::LOCAL_HASH_BUCKET ||
             state->fragment_ctx()->enable_adaptive_dop();
 
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+
     const auto& param = _hash_joiner_factory->hash_join_param();
 
     _build_side_partition = param._build_expr_ctxs;

@@ -246,8 +246,8 @@ Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeCo
 
 class SequenceInputStream : public SpillInputStream {
 public:
-    SequenceInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde)
-            : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)) {}
+    SequenceInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde, BlockReaderOptions options)
+            : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)), _options(std::move(options)) {}
     ~SequenceInputStream() override = default;
 
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;
@@ -262,6 +262,7 @@ private:
     size_t _current_idx = 0;
     size_t _block_read_rows = 0;
     SerdePtr _serde;
+    BlockReaderOptions _options;
     DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
@@ -274,7 +275,11 @@ StatusOr<ChunkUniquePtr> SequenceInputStream::get_next(workgroup::YieldContext& 
 
     while (true) {
         if (_current_reader == nullptr) {
-            _current_reader = _input_blocks[_current_idx]->get_reader();
+            bool is_remote = _input_blocks[_current_idx]->is_remote();
+            _options.read_io_bytes = GET_METRICS(is_remote, _serde->parent()->metrics(), restore_bytes);
+            _options.read_io_timer = GET_METRICS(is_remote, _serde->parent()->metrics(), read_io_timer);
+            _options.read_io_count = GET_METRICS(is_remote, _serde->parent()->metrics(), read_io_count);
+            _current_reader = _input_blocks[_current_idx]->get_reader(_options);
         }
         auto& block = _input_blocks[_current_idx];
         if (!(block->is_remote() ^ io_ctx->use_local_io_executor)) {
@@ -447,12 +452,17 @@ std::vector<BlockGroupPtr> BlockGroupSet::select_compaction_block_groups() {
 }
 
 StatusOr<InputStreamPtr> BlockGroupSet::as_unordered_stream(const SerdePtr& serde, Spiller* spiller) {
+    BlockReaderOptions read_options;
+    if (spiller->options().enable_buffer_read) {
+        read_options.enable_buffer_read = true;
+        read_options.max_buffer_bytes = spiller->options().max_read_buffer_bytes;
+    }
     std::vector<BlockPtr> blocks;
     // collect block for each group
     for (auto group : _groups) {
         blocks.insert(blocks.end(), group->blocks().begin(), group->blocks().end());
     }
-    auto stream = std::make_shared<SequenceInputStream>(std::move(blocks), serde);
+    auto stream = std::make_shared<SequenceInputStream>(std::move(blocks), serde, read_options);
     return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream), spiller);
 }
 
@@ -468,7 +478,12 @@ StatusOr<InputStreamPtr> BlockGroupSet::build_ordered_stream(std::vector<BlockGr
                                                              const SortDescs* sort_descs) {
     std::vector<InputStreamPtr> streams;
     for (const auto& group : block_groups) {
-        auto stream = std::make_shared<SequenceInputStream>(group->blocks(), serde);
+        BlockReaderOptions read_options;
+        if (spiller->options().enable_buffer_read) {
+            read_options.enable_buffer_read = true;
+            read_options.max_buffer_bytes = spiller->options().max_read_buffer_bytes / group->blocks().size();
+        }
+        auto stream = std::make_shared<SequenceInputStream>(group->blocks(), serde, read_options);
         streams.emplace_back(std::make_shared<BufferedInputStream>(chunk_buffer_max_size, stream, spiller));
     }
     auto stream = std::make_shared<OrderedInputStream>(std::move(streams), state);

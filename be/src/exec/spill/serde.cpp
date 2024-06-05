@@ -163,15 +163,8 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
 
 StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockReader* reader) {
     char header_buffer[HEADER_SIZE];
-    bool is_read_from_remote = reader->block()->is_remote();
-    auto read_io_timer = GET_METRICS(is_read_from_remote, _parent->metrics(), read_io_timer);
-    auto read_io_count = GET_METRICS(is_read_from_remote, _parent->metrics(), read_io_count);
 
-    {
-        SCOPED_TIMER(read_io_timer);
-        COUNTER_UPDATE(read_io_count, 1);
-        RETURN_IF_ERROR(reader->read_fully(header_buffer, HEADER_SIZE));
-    }
+    RETURN_IF_ERROR(reader->read_fully(header_buffer, HEADER_SIZE));
 
     int32_t sequence_id = UNALIGNED_LOAD32(header_buffer + SEQUENCE_OFFSET);
     int32_t attachment_size = UNALIGNED_LOAD32(header_buffer + ATTACHMENT_SIZE_OFFSET);
@@ -187,8 +180,6 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
 
     auto buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
     {
-        SCOPED_TIMER(read_io_timer);
-        COUNTER_UPDATE(read_io_count, 1);
         auto st = reader->read_fully(buf, attachment_size);
         RETURN_IF(st.is_end_of_file(), Status::InternalError("not found enough data in block"));
         RETURN_IF_ERROR(st);
@@ -204,8 +195,6 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
         read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]);
     }
 
-    auto restore_bytes = GET_METRICS(is_read_from_remote, _parent->metrics(), restore_bytes);
-    COUNTER_UPDATE(restore_bytes, attachment_size);
     TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()
                     << ", encoded size: " << attachment_size << ", original size: " << chunk->bytes_usage();
     return chunk;

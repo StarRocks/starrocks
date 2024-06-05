@@ -104,6 +104,8 @@ public:
 
     static StatusOr<SerdePtr> create_serde(Spiller* parent);
 
+    Spiller* parent() const { return _parent; }
+
 protected:
     Spiller* _parent = nullptr;
 };
