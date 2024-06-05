@@ -1336,4 +1336,7 @@ CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 
 CONF_mBool(discard_load_data, "false");
+CONF_mBool(force_enable_olap_sink_profile, "false");
+CONF_mInt64(force_report_interval_ns, "3600000000000");
+CONF_mBool(olap_sink_print_profile, "false");
 } // namespace starrocks::config

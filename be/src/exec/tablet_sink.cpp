@@ -160,6 +160,12 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
                 query_ctx->get_runtime_profile_report_interval_ns());
     }
 
+    if (config::force_enable_olap_sink_profile) {
+        _load_channel_profile_config.set_enable_profile(true);
+        _load_channel_profile_config.set_big_query_profile_threshold_ns(0);
+        _load_channel_profile_config.set_runtime_profile_report_interval_ns(config::force_report_interval_ns);
+    }
+
     return Status::OK();
 }
 
@@ -863,6 +869,14 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     if (!status.ok()) {
         _span->SetStatus(trace::StatusCode::kError, std::string(status.message()));
     }
+
+    if (config::olap_sink_print_profile) {
+        std::stringstream ss;
+        state->runtime_profile()->compute_time_in_profile();
+        state->runtime_profile()->pretty_print(&ss);
+        LOG(INFO) << ss.str();
+    }
+
     return status;
 }
 
