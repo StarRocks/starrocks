@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "storage/lake/meta_file.h"
 #include "test_util.h"
 #include "testutil/assert.h"
 
@@ -224,16 +225,26 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         index->prepare(EditVersion(i, 0), 0);
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+        // generate sst files.
+        index->minor_compact();
     }
 
-    index->minor_compact();
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    // commit sst files
+    ASSERT_OK(index->commit(&builder));
     vector<IndexValue> get_values(M * N);
     ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
 
     get_values.clear();
     get_values.reserve(M * N);
     auto txn_log = std::make_shared<TxnLogPB>();
-    ASSERT_OK(index->major_compact(*_tablet_metadata, 0, txn_log.get()));
+    // try to compact sst files.
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), *tablet_metadata_ptr, txn_log.get()));
+    ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() > 0);
+    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
     ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
     ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
     for (int i = 0; i < M * N; i++) {

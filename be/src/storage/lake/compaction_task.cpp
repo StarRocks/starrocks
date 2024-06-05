@@ -35,8 +35,7 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
         auto metadata = _tablet.metadata();
         if (metadata->enable_persistent_index() &&
             metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
-            return _tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(_tablet.metadata()->id(),
-                                                                                          *metadata, txn_log);
+            return _tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(*metadata, txn_log);
         }
     }
     return Status::OK();

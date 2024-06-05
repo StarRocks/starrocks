@@ -261,7 +261,7 @@ Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValu
 }
 
 Status LakePersistentIndex::prepare_merging_iterator(
-        const TabletMetadata& metadata, TxnLogPB* txn_log,
+        TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log,
         std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
         std::unique_ptr<sstable::Iterator>* merging_iter_ptr) {
     sstable::ReadOptions read_options;
@@ -281,7 +281,7 @@ Status LakePersistentIndex::prepare_merging_iterator(
     for (const auto& sstable_pb : metadata.sstable_meta().sstables()) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
         ASSIGN_OR_RETURN(auto rf,
-                         fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+                         fs::new_random_access_file(tablet_mgr->sst_location(metadata.id(), sstable_pb.filename())));
         auto merging_sstable = std::make_shared<PersistentIndexSstable>();
         RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, false /** no filter **/));
         merging_sstables->push_back(merging_sstable);
@@ -316,7 +316,7 @@ Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> it
     return builder->Finish();
 }
 
-Status LakePersistentIndex::major_compact(const TabletMetadata& metadata, int64_t min_retain_version,
+Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const TabletMetadata& metadata,
                                           TxnLogPB* txn_log) {
     if (metadata.sstable_meta().sstables_size() < config::lake_pk_index_sst_min_compaction_versions) {
         return Status::OK();
@@ -325,13 +325,13 @@ Status LakePersistentIndex::major_compact(const TabletMetadata& metadata, int64_
     std::vector<std::shared_ptr<PersistentIndexSstable>> sstable_vec;
     std::unique_ptr<sstable::Iterator> merging_iter_ptr;
     // build merge iterator
-    RETURN_IF_ERROR(prepare_merging_iterator(metadata, txn_log, &sstable_vec, &merging_iter_ptr));
+    RETURN_IF_ERROR(prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr));
     if (!merging_iter_ptr->Valid()) {
         return merging_iter_ptr->status();
     }
 
     auto filename = gen_sst_filename();
-    auto location = _tablet_mgr->sst_location(_tablet_id, filename);
+    auto location = tablet_mgr->sst_location(metadata.id(), filename);
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(location));
     sstable::Options options;
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
