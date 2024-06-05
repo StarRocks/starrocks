@@ -115,8 +115,14 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     public HudiTable(long id, String name, String catalogName, String hiveDbName, String hiveTableName,
+<<<<<<< HEAD
                      String resourceName, List<Column> schema, List<String> dataColumnNames,
                      List<String> partColumnNames, long createTime, Map<String, String> properties) {
+=======
+                     String resourceName, String comment, List<Column> schema, List<String> dataColumnNames,
+                     List<String> partColumnNames, long createTime, Map<String, String> properties,
+                     HudiTableType type) {
+>>>>>>> 8831ee4279 ([BugFix] no incremental data for hudi mor table (#46650))
         super(id, name, TableType.HUDI, schema);
         this.catalogName = catalogName;
         this.hiveDbName = hiveDbName;
@@ -126,6 +132,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         this.partColumnNames = partColumnNames;
         this.createTime = createTime;
         this.hudiProperties = properties;
+<<<<<<< HEAD
+=======
+        this.comment = comment;
+        this.tableType = type;
+>>>>>>> 8831ee4279 ([BugFix] no incremental data for hudi mor table (#46650))
     }
 
     public String getDbName() {
@@ -517,8 +528,13 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         public HudiTable build() {
+<<<<<<< HEAD
             return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, fullSchema,
                     dataColNames, partitionColNames, createTime, hudiProperties);
+=======
+            return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, comment,
+                    fullSchema, dataColNames, partitionColNames, createTime, hudiProperties, tableType);
+>>>>>>> 8831ee4279 ([BugFix] no incremental data for hudi mor table (#46650))
         }
     }
 }
