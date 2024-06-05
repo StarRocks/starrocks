@@ -3037,6 +3037,19 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
     });
 }
 
+TEST_P(PersistentIndexTest, pindex_compaction_schedule_with_migration) {
+    TabletSharedPtr tablet = create_tablet(rand(), rand());
+    ASSERT_OK(tablet->init());
+    tablet->set_is_migrating(true);
+    PersistentIndexCompactionManager mgr;
+    ASSERT_OK(mgr.init());
+    mgr.schedule([&]() {
+        std::vector<TabletAndScore> ret;
+        ret.emplace_back(tablet->tablet_id(), 1.0);
+        return ret;
+    });
+}
+
 TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
     int64_t old_config = config::max_allow_pindex_l2_num;
     config::max_allow_pindex_l2_num = 100;
