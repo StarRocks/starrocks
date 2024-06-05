@@ -1154,7 +1154,6 @@ public class DatabaseTransactionMgr {
                     transactionState.clearErrorMsg();
                     transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                     unprotectUpsertTransactionState(transactionState, false);
-                    transactionState.notifyVisible();
                     txnOperated = true;
                     // TODO(cmy): We found a very strange problem. When delete-related transactions are processed here,
                     // subsequent `updateCatalogAfterVisible()` is called, but it does not seem to be executed here
@@ -1182,8 +1181,8 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+        transactionState.notifyVisible();
         collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
-
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
