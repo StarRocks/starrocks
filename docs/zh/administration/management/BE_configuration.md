@@ -340,8 +340,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：INFO
 - 类型：String
 - 单位：-
-- 是否动态：否
-- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。
+- 是否动态：是（自 v3.3.0、v3.2.7 及 v3.1.12 起）
+- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。自 v3.3.0、v3.2.7 及 v3.1.12 起，该参数变为动态参数。
 - 引入版本：-
 
 ##### sys_log_roll_mode
