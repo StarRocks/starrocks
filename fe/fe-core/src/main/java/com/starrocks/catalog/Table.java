@@ -300,6 +300,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.ICEBERG_VIEW;
     }
 
+    public boolean isExternalTableSupportAnalyze() {
+        return type == TableType.HIVE || type == TableType.ICEBERG || type == TableType.HUDI
+                || type == TableType.ODPS || type == TableType.DELTALAKE;
+    }
+
     public boolean isView() {
         return isOlapView() || isConnectorView();
     }
