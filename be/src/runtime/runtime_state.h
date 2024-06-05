@@ -36,6 +36,7 @@
 
 #include <atomic>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -381,7 +382,22 @@ public:
     }
     double spill_rand_ratio() const { return _query_options.spill_rand_ratio; }
 
+<<<<<<< HEAD
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
+=======
+    int32_t spill_encode_level() const {
+        return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_encode_level);
+    }
+    bool spill_enable_compaction() const {
+        return _spill_options.has_value() ? _spill_options->spill_enable_compaction : false;
+    }
+    bool enable_spill_buffer_read() const {
+        return _spill_options.has_value() ? _spill_options->enable_spill_buffer_read : false;
+    }
+    int64_t max_spill_read_buffer_bytes_per_driver() const {
+        return _spill_options.has_value() ? _spill_options->max_spill_read_buffer_bytes_per_driver : INT64_MAX;
+    }
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;

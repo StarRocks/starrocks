@@ -163,6 +163,7 @@ Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chun
 }
 
 StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockReader* reader) {
+<<<<<<< HEAD
     size_t encoded_size;
     bool is_read_from_remote = reader->block()->is_remote();
     auto read_io_timer =
@@ -176,6 +177,18 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
         RETURN_IF_ERROR(reader->read_fully(&encoded_size, sizeof(size_t)));
     }
     size_t read_bytes = sizeof(size_t) + encoded_size;
+=======
+    char header_buffer[HEADER_SIZE];
+
+    RETURN_IF_ERROR(reader->read_fully(header_buffer, HEADER_SIZE));
+
+    int32_t sequence_id = UNALIGNED_LOAD32(header_buffer + SEQUENCE_OFFSET);
+    int32_t attachment_size = UNALIGNED_LOAD32(header_buffer + ATTACHMENT_SIZE_OFFSET);
+    if (sequence_id != SEQUENCE_MAGIC_ID) {
+        return Status::InternalError(fmt::format("sequence id mismatch {} vs {}", sequence_id, SEQUENCE_MAGIC_ID));
+    }
+
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
     auto chunk = _chunk_builder();
     auto& columns = chunk->columns();
 
@@ -188,9 +201,15 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
 
     auto buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
     {
+<<<<<<< HEAD
         SCOPED_TIMER(read_io_timer);
         COUNTER_UPDATE(read_io_count, 1);
         RETURN_IF_ERROR(reader->read_fully(buf, total_size));
+=======
+        auto st = reader->read_fully(buf, attachment_size);
+        RETURN_IF(st.is_end_of_file(), Status::InternalError("not found enough data in block"));
+        RETURN_IF_ERROR(st);
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
     }
 
     [[maybe_unused]] const uint32_t* encode_levels = nullptr;
@@ -200,6 +219,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
         read_cursor += columns.size() * sizeof(uint32_t);
     }
 
+<<<<<<< HEAD
     if (_encode_context == nullptr) {
         SCOPED_TIMER(_parent->metrics().deserialize_timer);
         for (auto& column : columns) {
@@ -216,6 +236,10 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     COUNTER_UPDATE(restore_bytes, read_bytes);
     TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string() << ", encoded size: " << encoded_size
                     << ", original size: " << chunk->bytes_usage();
+=======
+    TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()
+                    << ", encoded size: " << attachment_size << ", original size: " << chunk->bytes_usage();
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
     return chunk;
 }
 

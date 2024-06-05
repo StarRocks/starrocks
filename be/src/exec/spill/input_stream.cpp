@@ -243,9 +243,15 @@ Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeCo
 
 class UnorderedInputStream : public SpillInputStream {
 public:
+<<<<<<< HEAD
     UnorderedInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde)
             : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)) {}
     ~UnorderedInputStream() override = default;
+=======
+    SequenceInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde, BlockReaderOptions options)
+            : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)), _options(std::move(options)) {}
+    ~SequenceInputStream() override = default;
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
 
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;
 
@@ -258,6 +264,7 @@ private:
     std::shared_ptr<BlockReader> _current_reader;
     size_t _current_idx = 0;
     SerdePtr _serde;
+    BlockReaderOptions _options;
     DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
@@ -270,7 +277,11 @@ StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(workgroup::YieldContext&
 
     while (true) {
         if (_current_reader == nullptr) {
-            _current_reader = _input_blocks[_current_idx]->get_reader();
+            bool is_remote = _input_blocks[_current_idx]->is_remote();
+            _options.read_io_bytes = GET_METRICS(is_remote, _serde->parent()->metrics(), restore_bytes);
+            _options.read_io_timer = GET_METRICS(is_remote, _serde->parent()->metrics(), read_io_timer);
+            _options.read_io_count = GET_METRICS(is_remote, _serde->parent()->metrics(), read_io_count);
+            _current_reader = _input_blocks[_current_idx]->get_reader(_options);
         }
         auto& block = _input_blocks[_current_idx];
         if (!(block->is_remote() ^ io_ctx->use_local_io_executor)) {
@@ -387,6 +398,7 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(workgroup::YieldContext& y
     return std::make_unique<Chunk>();
 }
 
+<<<<<<< HEAD
 StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream(const SerdePtr& serde, Spiller* spiller) {
     std::partition(_blocks.begin(), _blocks.end(), [](const BlockPtr& block) { return !block->is_remote(); });
     auto stream = std::make_shared<UnorderedInputStream>(_blocks, serde);
@@ -397,6 +409,104 @@ StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, cons
                                                        const SortExecExprs* sort_exprs, const SortDescs* sort_descs) {
     if (_blocks.empty()) {
         return as_unordered_stream(serde, spiller);
+=======
+std::vector<BlockGroupPtr> BlockGroupSet::select_compaction_block_groups() {
+    std::vector<BlockGroupPtr> result;
+    {
+        std::lock_guard guard(_mutex);
+        const int min_compact_groups = 8;
+        const int level_size_factor = 8;
+        if (_groups.size() <= min_compact_groups) {
+            return {};
+        }
+        std::stable_sort(_groups.begin(), _groups.end(), [](const BlockGroupPtr& a, const BlockGroupPtr& b) {
+            return a->data_size() > b->data_size();
+        });
+
+        // assign level to each group
+        std::vector<int> levels(_groups.size(), 0);
+        int current_level = 0;
+        int need_compaction_level = -1;
+        int current_level_nums = 0;
+        size_t current_size = _groups.back()->data_size();
+
+        for (int i = _groups.size() - 1; i >= 0; --i) {
+            if (_groups[i]->data_size() > current_size * level_size_factor) {
+                current_size = _groups[i]->data_size();
+                current_level++;
+                current_level_nums = 0;
+            }
+            levels[i] = current_level;
+            current_level_nums++;
+            if (current_level_nums > min_compact_groups && need_compaction_level < 0) {
+                need_compaction_level = current_level;
+            }
+        }
+
+        if (need_compaction_level >= 0) {
+            // compact the groups in the same level
+            std::unordered_set<BlockGroup*> removed_groups;
+            for (int i = _groups.size() - 1; i >= 0; --i) {
+                if (levels[i] == need_compaction_level) {
+                    result.emplace_back(_groups[i]);
+                    removed_groups.insert(_groups[i].get());
+                }
+                if (result.size() > min_compact_groups) {
+                    break;
+                }
+            }
+
+            auto it = std::remove_if(_groups.begin(), _groups.end(), [&removed_groups](const BlockGroupPtr& group) {
+                return removed_groups.count(group.get()) > 0;
+            });
+
+            _groups.erase(it, _groups.end());
+        } else {
+            // select the smallest N block group for compact
+            for (size_t i = 0; i < min_compact_groups; ++i) {
+                result.emplace_back(_groups.back());
+                _groups.pop_back();
+            }
+        }
+    }
+    return result;
+}
+
+StatusOr<InputStreamPtr> BlockGroupSet::as_unordered_stream(const SerdePtr& serde, Spiller* spiller) {
+    BlockReaderOptions read_options;
+    if (spiller->options().enable_buffer_read) {
+        read_options.enable_buffer_read = true;
+        read_options.max_buffer_bytes = spiller->options().max_read_buffer_bytes;
+    }
+    std::vector<BlockPtr> blocks;
+    // collect block for each group
+    for (auto group : _groups) {
+        blocks.insert(blocks.end(), group->blocks().begin(), group->blocks().end());
+    }
+    auto stream = std::make_shared<SequenceInputStream>(std::move(blocks), serde, read_options);
+    return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream), spiller);
+}
+
+StatusOr<InputStreamPtr> BlockGroupSet::as_ordered_stream(RuntimeState* state, const SerdePtr& serde, Spiller* spiller,
+                                                          const SortExecExprs* sort_exprs,
+                                                          const SortDescs* sort_descs) {
+    return build_ordered_stream(_groups, state, serde, spiller, sort_exprs, sort_descs);
+}
+
+StatusOr<InputStreamPtr> BlockGroupSet::build_ordered_stream(std::vector<BlockGroupPtr>& block_groups,
+                                                             RuntimeState* state, const SerdePtr& serde,
+                                                             Spiller* spiller, const SortExecExprs* sort_exprs,
+                                                             const SortDescs* sort_descs) {
+    std::vector<InputStreamPtr> streams;
+    for (const auto& group : block_groups) {
+        BlockReaderOptions read_options;
+        if (spiller->options().enable_buffer_read) {
+            read_options.enable_buffer_read = true;
+            read_options.max_buffer_bytes = spiller->options().max_read_buffer_bytes / group->blocks().size();
+        }
+        auto stream = std::make_shared<SequenceInputStream>(group->blocks(), serde, read_options);
+        streams.emplace_back(std::make_shared<BufferedInputStream>(chunk_buffer_max_size, stream, spiller));
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
     }
     std::partition(_blocks.begin(), _blocks.end(), [](const BlockPtr& block) { return !block->is_remote(); });
 

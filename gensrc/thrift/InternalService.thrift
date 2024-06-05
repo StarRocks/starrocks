@@ -144,6 +144,35 @@ struct TSpillToRemoteStorageOptions {
   3: optional bool disable_spill_to_local_disk;
 }
 
+<<<<<<< HEAD
+=======
+// spill options
+struct TSpillOptions {
+  1: optional i32 spill_mem_table_size;
+  2: optional i32 spill_mem_table_num;
+  3: optional double spill_mem_limit_threshold;
+  4: optional i64 spill_operator_min_bytes;
+  5: optional i64 spill_operator_max_bytes;
+  6: optional i32 spill_encode_level;
+  7: optional i64 spill_revocable_max_bytes;
+  8: optional bool spill_enable_direct_io;
+  9: optional bool spill_enable_compaction;
+  // only used in spill_mode="random"
+  // probability of triggering operator spill
+  // (0.0,1.0)
+  10: optional double spill_rand_ratio;
+  11: optional TSpillMode spill_mode;
+  // used to identify which operators allow spill, only meaningful when enable_spill=true
+  12: optional i64 spillable_operator_mask;
+  13: optional bool enable_agg_spill_preaggregation;
+
+  21: optional bool enable_spill_to_remote_storage;
+  22: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+  23: optional bool enable_spill_buffer_read;
+  24: optional i64 max_spill_read_buffer_bytes_per_driver;
+}
+
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
 // Query options with their respective defaults
 struct TQueryOptions {
   2: optional i32 max_errors = 0

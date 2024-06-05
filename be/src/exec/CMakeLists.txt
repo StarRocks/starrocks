@@ -291,6 +291,11 @@ set(EXEC_FILES
     spill/dir_manager.cpp
     spill/serde.cpp
     spill/input_stream.cpp
+<<<<<<< HEAD
+=======
+    spill/data_stream.cpp
+    spill/block_reader.cpp
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
     spill/log_block_manager.cpp
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp

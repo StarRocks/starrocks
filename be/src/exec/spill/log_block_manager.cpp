@@ -17,10 +17,12 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
 #include "common/config.h"
+#include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
 #include "fmt/format.h"
@@ -30,6 +32,7 @@
 #include "runtime/exec_env.h"
 #include "storage/options.h"
 #include "util/defer_op.h"
+#include "util/raw_container.h"
 #include "util/uid_util.h"
 
 namespace starrocks::spill {
@@ -149,19 +152,13 @@ StatusOr<LogBlockContainerPtr> LogBlockContainer::create(DirPtr dir, TUniqueId q
 
 class LogBlockReader final : public BlockReader {
 public:
-    LogBlockReader(const Block* block) : BlockReader(block) {}
-    ~LogBlockReader() override = default;
+    LogBlockReader(const Block* block, const BlockReaderOptions& options = {}) : BlockReader(block, options) {}
 
-    Status read_fully(void* data, int64_t count) override;
+    ~LogBlockReader() override = default;
 
     std::string debug_string() override { return _block->debug_string(); }
 
     const Block* block() const override { return _block; }
-
-private:
-    std::unique_ptr<io::InputStreamWrapper> _readable;
-    size_t _offset = 0;
-    size_t _length = 0;
 };
 
 class LogBlock : public Block {
@@ -184,11 +181,13 @@ public:
 
     Status flush() override { return _container->flush(); }
 
-    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const {
+    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const override {
         return _container->get_readable(_offset, _size);
     }
 
-    std::shared_ptr<BlockReader> get_reader() override { return std::make_shared<LogBlockReader>(this); }
+    std::shared_ptr<BlockReader> get_reader(const BlockReaderOptions& options) override {
+        return std::make_shared<LogBlockReader>(this, options);
+    }
 
     std::string debug_string() const override {
 #ifndef BE_TEST
@@ -204,6 +203,7 @@ private:
     size_t _offset{};
 };
 
+<<<<<<< HEAD
 Status LogBlockReader::read_fully(void* data, int64_t count) {
     if (_readable == nullptr) {
         auto log_block = down_cast<const LogBlock*>(_block);
@@ -223,6 +223,9 @@ Status LogBlockReader::read_fully(void* data, int64_t count) {
     return Status::OK();
 }
 LogBlockManager::LogBlockManager(TUniqueId query_id, DirManager* dir_mgr)
+=======
+LogBlockManager::LogBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
+>>>>>>> ce36ac7715 ([Enhancement] reduce read io requests during spill restore phase  (#44971))
         : _query_id(std::move(query_id)), _dir_mgr(dir_mgr) {
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;
