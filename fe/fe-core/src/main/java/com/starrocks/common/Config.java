@@ -2041,7 +2041,7 @@ public class Config extends ConfigBase {
      * The interval of lazy refreshing hive metastore cache
      */
     @ConfField
-    public static long hive_meta_cache_refresh_interval_s = 3600L * 2L;
+    public static long hive_meta_cache_refresh_interval_s = 60;
 
     /**
      * Hive metastore cache ttl
