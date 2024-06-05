@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
 
-package com.starrocks.connector.odps;
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "formats/parquet/schema.h"
+#include "runtime/types.h"
 
-import com.starrocks.connector.DatabaseTableName;
+namespace starrocks::parquet {
 
-public class OdpsTableName extends DatabaseTableName {
-    public OdpsTableName(String databaseName, String tableName) {
-        super(databaseName, tableName);
-    }
+class StatisticsHelper {
+public:
+    static Status decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
+                                           const TypeDescriptor& type, const ParquetField* field,
+                                           const std::string& timezone);
+};
 
-    public static OdpsTableName of(String databaseName, String tableName) {
-        return new OdpsTableName(databaseName, tableName);
-    }
-}
+} // namespace starrocks::parquet

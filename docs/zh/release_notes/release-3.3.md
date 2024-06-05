@@ -4,6 +4,38 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.3
 
+## 3.3.0-RC02
+
+发布日期：2024 年 6 月 4 日
+
+### 功能优化
+
+- 存算分离支持 Cache 预热 (Warmup) ，可以提前将远端数据载入 Data Cache。详细内容，参考 [Data Cache 预热](https://docs.starrocks.io/zh/docs/3.3/data_source/data_cache_warmup/)。
+- 优化 Paimon Catalog：
+  - 基于 Paimon 外表创建的物化视图支持自动查询改写。
+  - 优化针对 Paimon Catalog 查询的 Scan Range 调度，提高 I/O 并发。
+  - 支持查询 Paimon 系统表。
+
+### 行为变更
+
+原先按照 GMT+8 时区的时间调度数据库一致性检查。修复后按照当地时区的时间进行调度。[#45748](https://github.com/StarRocks/starrocks/issues/45748)
+
+### 参数变更
+
+支持动态修改 FE 参数 `sys_log_level`。[#45062](https://github.com/StarRocks/starrocks/issues/45062)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询改写至使用 UNION ALL 创建的物化视图，查询结果错误。[#42949](https://github.com/StarRocks/starrocks/issues/42949)
+- 执行带谓词的查询，并且查询改写至物化视图时，读取了多余的列。[#45272](https://github.com/StarRocks/starrocks/issues/45272)
+- 函数 next_day、previous_day 的结果出错。[#45343](https://github.com/StarRocks/starrocks/issues/45343)
+- 副本迁移导致 schema change 失败。[#45384](https://github.com/StarRocks/starrocks/issues/45384)
+- RESTORE 全文倒排索引的表后，BE crash。[#45010](https://github.com/StarRocks/starrocks/issues/45010)
+- 使用 Iceberg catalog 查询时，返回重复的数据行。[#44753](https://github.com/StarRocks/starrocks/issues/44753)
+- 低基数字典优化无法在聚合表中字符串数组（`ARRAY<VARCHAR>`）类型的列上生效。[#44702](https://github.com/StarRocks/starrocks/issues/44702)
+
 ## 3.3.0-RC01
 
 发布日期：2024 年 5 月 10 日
