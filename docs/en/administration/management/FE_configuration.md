@@ -2456,7 +2456,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_fast_schema_evolution
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
