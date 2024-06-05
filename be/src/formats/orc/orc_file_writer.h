@@ -127,11 +127,7 @@ private:
     TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<ORCWriterOptions> _writer_options;
     int64_t _row_counter{0};
-
     std::function<void()> _rollback_action;
-    // If provided, submit task to executors and return future to the caller. Otherwise execute synchronously.
-    PriorityThreadPool* _executors = nullptr;
-    RuntimeState* _runtime_state = nullptr;
 };
 
 class ORCFileWriterFactory : public FileWriterFactory {

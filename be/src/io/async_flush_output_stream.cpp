@@ -75,7 +75,7 @@ Status AsyncFlushOutputStream::write(const uint8_t* data, int64_t size) {
                     DCHECK(ok);
                 }
             };
-            to_enqueue_tasks.push_back(std::move(task));
+            to_enqueue_tasks.emplace_back(task);
         }
     }
 
@@ -117,7 +117,7 @@ Status AsyncFlushOutputStream::close() {
                 DCHECK(ok);
             }
         };
-        to_enqueue_tasks.push_back(std::move(task));
+        to_enqueue_tasks.emplace_back(task);
     }
 
     auto close_task = [&]() {
@@ -133,7 +133,7 @@ Status AsyncFlushOutputStream::close() {
             _promise.set_value(_io_status); // notify
         }
     };
-    to_enqueue_tasks.push_back(std::move(close_task));
+    to_enqueue_tasks.emplace_back(close_task);
     enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));
     return Status::OK();
 }

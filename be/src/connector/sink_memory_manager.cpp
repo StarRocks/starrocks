@@ -19,7 +19,7 @@ namespace starrocks::connector {
 void SinkOperatorMemoryManager::init(std::unordered_map<std::string, WriterStreamPair>* writer_stream_pairs,
                                      AsyncFlushStreamPoller* io_poller, CommitFunc commit_func) {
     _candidates = writer_stream_pairs;
-    _commit_func = commit_func;
+    _commit_func = std::move(commit_func);
     _io_poller = io_poller;
 }
 
