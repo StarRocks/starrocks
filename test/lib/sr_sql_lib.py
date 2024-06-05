@@ -1734,3 +1734,15 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
+    def assert_clear_stale_stats(self, query, expect_num):
+        timeout = 300
+        num = 0;
+        while timeout > 0:
+            res = self.execute_sql(query)
+            num = res["result"]
+            if int(num) < expect_num:
+                break;
+            time.sleep(10)
+            timeout -= 10
+        else:
+            tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
