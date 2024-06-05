@@ -63,7 +63,6 @@ set(UTIL_FILES
   url_parser.cpp
   url_coding.cpp
   mysql_row_buffer.cpp
-  error_util.cc
   spinlock.cc
   file_util.cpp
   filesystem_util.cc
