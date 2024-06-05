@@ -71,7 +71,6 @@ import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropRollupClause;
-import com.starrocks.sql.ast.FieldDef;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -97,6 +96,7 @@ import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 
 import java.time.format.DateTimeParseException;
@@ -725,9 +725,9 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         }
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
-        FieldDef fieldDef = clause.getFieldDef();
+        StructFieldDesc fieldDesc = clause.getFieldDesc();
         try {
-            fieldDef.analyze(baseColumn, false);
+            fieldDesc.analyze(baseColumn, false);
         } catch (AnalysisException e) {
             throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
         }
@@ -746,9 +746,9 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         }
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
-        FieldDef fieldDef = new FieldDef(clause.getFieldName(), clause.getNestedFieldName(), null, null);
+        StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedFieldName(), null, null);
         try {
-            fieldDef.analyze(baseColumn, true);
+            fieldDesc.analyze(baseColumn, true);
         } catch (AnalysisException e) {
             throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
         }

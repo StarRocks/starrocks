@@ -26,7 +26,7 @@ import com.starrocks.common.AnalysisException;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
-public class FieldDefTest {
+public class StructFieldDescTest {
     @Test
     public void testAnalyze() {
         StructField field1 = new StructField("v1", Type.INT);
@@ -43,36 +43,36 @@ public class FieldDefTest {
         TypeDef addTypeDef = new TypeDef(addType);
         Column intCol1 = new Column("intCol1", addType);
 
-        FieldDef dropFieldDef1 = new FieldDef("v2", Lists.newArrayList("v1"), null, null);
+        StructFieldDesc dropFieldDesc1 = new StructFieldDesc("v2", Lists.newArrayList("v1"), null, null);
 
         // base column not exist;
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDef1.analyze(null, true));
+        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(null, true));
     
         // base column is not struct column
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDef1.analyze(intCol1, true));
+        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(intCol1, true));
 
         // nested field is not struct
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDef1.analyze(structCol1, true));
+        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(structCol1, true));
 
         // drop field is not exist
-        FieldDef dropFieldDef2 = new FieldDef("v1", Lists.newArrayList("v4"), null, null);
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDef2.analyze(structCol1, true));
+        StructFieldDesc dropFieldDesc2 = new StructFieldDesc("v1", Lists.newArrayList("v4"), null, null);
+        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc2.analyze(structCol1, true));
 
         // normal drop field
-        FieldDef dropFieldDef3 = new FieldDef("v2", Lists.newArrayList("v4"), null, null);
-        Assertions.assertDoesNotThrow(() -> dropFieldDef3.analyze(structCol1, true));        
+        StructFieldDesc dropFieldDesc3 = new StructFieldDesc("v2", Lists.newArrayList("v4"), null, null);
+        Assertions.assertDoesNotThrow(() -> dropFieldDesc3.analyze(structCol1, true));        
 
         // add exist field
-        FieldDef addFieldDef1 = new FieldDef("v2", Lists.newArrayList("v4"), addTypeDef, null);
-        Assertions.assertThrows(AnalysisException.class, () -> addFieldDef1.analyze(structCol1, false));
+        StructFieldDesc addFieldDesc1 = new StructFieldDesc("v2", Lists.newArrayList("v4"), addTypeDef, null);
+        Assertions.assertThrows(AnalysisException.class, () -> addFieldDesc1.analyze(structCol1, false));
 
         // type not exist
-        FieldDef addFieldDef2 = new FieldDef("v5", Lists.newArrayList("v4"), null, null);
-        Assertions.assertThrows(AnalysisException.class, () -> addFieldDef2.analyze(structCol1, false));
+        StructFieldDesc addFieldDesc2 = new StructFieldDesc("v5", Lists.newArrayList("v4"), null, null);
+        Assertions.assertThrows(AnalysisException.class, () -> addFieldDesc2.analyze(structCol1, false));
 
         // normal add field
-        FieldDef addFieldDef3 = new FieldDef("v5", Lists.newArrayList("v4"), addTypeDef, null);
-        Assertions.assertDoesNotThrow(() -> addFieldDef3.analyze(structCol1, false));
+        StructFieldDesc addFieldDesc3 = new StructFieldDesc("v5", Lists.newArrayList("v4"), addTypeDef, null);
+        Assertions.assertDoesNotThrow(() -> addFieldDesc3.analyze(structCol1, false));
 
     }
 }

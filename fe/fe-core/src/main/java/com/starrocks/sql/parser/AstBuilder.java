@@ -248,7 +248,6 @@ import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
-import com.starrocks.sql.ast.FieldDef;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -414,6 +413,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
+import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SwapTableClause;
@@ -4107,8 +4107,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (fieldName == null) {
             throw new ParsingException("add field clause name is null");
         }
-        FieldDef fieldDef = new FieldDef(fieldName, parts, typeDef, fieldPosition);
-        return new AddFieldClause(columnName, fieldDef, rollupName, getProperties(context.properties()));
+        StructFieldDesc fieldDesc = new StructFieldDesc(fieldName, parts, typeDef, fieldPosition);
+        return new AddFieldClause(columnName, fieldDesc, rollupName, getProperties(context.properties()));
     }
 
     @Override
