@@ -81,7 +81,9 @@ public class Locker {
         }
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        LOG.debug(this + " | LockManager request lock : rid " + rid + ", lock type " + lockType);
         lockManager.lock(rid, this, lockType, timeout);
+        LOG.debug(this + " | LockManager acquire lock : rid " + rid + ", lock type " + lockType);
     }
 
     public void lock(long rid, LockType lockType) throws IllegalLockStateException {
@@ -96,6 +98,7 @@ public class Locker {
      */
     public void release(long rid, LockType lockType) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        LOG.debug(this + " | LockManager release lock : rid " + rid + ", lock type " + lockType);
         lockManager.release(rid, this, lockType);
     }
 
@@ -313,8 +316,6 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
         if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
-            Preconditions.checkState(!tableListClone.isEmpty());
-
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, 0);
@@ -339,8 +340,6 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
         if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
-            Preconditions.checkState(!tableListClone.isEmpty());
-
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, timeout);
