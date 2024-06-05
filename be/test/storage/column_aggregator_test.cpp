@@ -871,6 +871,149 @@ TEST(ColumnAggregator, testNullArrayFirstIfNotNull2) {
 }
 
 // test first
+TEST(ColumnAggregator, testFirstTpeDispatch) {
+    FieldPtr field1 = std::make_shared<Field>(1, "test3", LogicalType::TYPE_TINYINT, false);
+    field1->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator1 = ColumnAggregatorFactory::create_value_column_aggregator(field1);
+    ASSERT_TRUE(aggregator1);
+
+    FieldPtr field2 = std::make_shared<Field>(2, "test3", LogicalType::TYPE_SMALLINT, false);
+    field2->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator2 = ColumnAggregatorFactory::create_value_column_aggregator(field2);
+    ASSERT_TRUE(aggregator2);
+
+    FieldPtr field3 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_INT, false);
+    field3->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator3 = ColumnAggregatorFactory::create_value_column_aggregator(field3);
+    ASSERT_TRUE(aggregator3);
+
+    FieldPtr field4 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_BIGINT, false);
+    field4->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator4 = ColumnAggregatorFactory::create_value_column_aggregator(field4);
+    ASSERT_TRUE(aggregator4);
+
+    FieldPtr field5 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_LARGEINT, false);
+    field5->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator5 = ColumnAggregatorFactory::create_value_column_aggregator(field5);
+    ASSERT_TRUE(aggregator5);
+
+    FieldPtr field6 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_FLOAT, false);
+    field6->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator6 = ColumnAggregatorFactory::create_value_column_aggregator(field6);
+    ASSERT_TRUE(aggregator6);
+
+    FieldPtr field7 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_DOUBLE, false);
+    field7->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator7 = ColumnAggregatorFactory::create_value_column_aggregator(field7);
+    ASSERT_TRUE(aggregator7);
+
+    FieldPtr field8 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_DECIMAL, false);
+    field8->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator8 = ColumnAggregatorFactory::create_value_column_aggregator(field8);
+    ASSERT_TRUE(aggregator8);
+
+    FieldPtr field9 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_DECIMALV2, false);
+    field9->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator9 = ColumnAggregatorFactory::create_value_column_aggregator(field9);
+    ASSERT_TRUE(aggregator9);
+
+    auto decimal32_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_DECIMAL32));
+    FieldPtr field10 = std::make_shared<Field>(1, "test3", decimal32_type_info,
+                                               StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
+    auto aggregator10 = ColumnAggregatorFactory::create_value_column_aggregator(field10);
+    ASSERT_TRUE(aggregator10);
+
+    auto decimal64_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_DECIMAL64));
+    FieldPtr field11 = std::make_shared<Field>(1, "test3", decimal64_type_info,
+                                               StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
+    auto aggregator11 = ColumnAggregatorFactory::create_value_column_aggregator(field11);
+    ASSERT_TRUE(aggregator11);
+
+    auto decimal128_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_DECIMAL128));
+    FieldPtr field12 = std::make_shared<Field>(1, "test3", decimal128_type_info,
+                                               StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
+    auto aggregator12 = ColumnAggregatorFactory::create_value_column_aggregator(field12);
+    ASSERT_TRUE(aggregator12);
+
+    FieldPtr field13 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_DATE_V1, false);
+    field13->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator13 = ColumnAggregatorFactory::create_value_column_aggregator(field13);
+    ASSERT_TRUE(aggregator13);
+
+    FieldPtr field14 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_DATE, false);
+    field14->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator14 = ColumnAggregatorFactory::create_value_column_aggregator(field14);
+    ASSERT_TRUE(aggregator14);
+
+    FieldPtr field15 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_DATETIME_V1, false);
+    field15->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator15 = ColumnAggregatorFactory::create_value_column_aggregator(field15);
+    ASSERT_TRUE(aggregator15);
+
+    FieldPtr field16 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_DATETIME, false);
+    field16->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator16 = ColumnAggregatorFactory::create_value_column_aggregator(field16);
+    ASSERT_TRUE(aggregator16);
+
+    FieldPtr field17 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_CHAR, false);
+    field17->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator17 = ColumnAggregatorFactory::create_value_column_aggregator(field17);
+    ASSERT_TRUE(aggregator17);
+
+    FieldPtr field18 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_VARCHAR, false);
+    field18->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator18 = ColumnAggregatorFactory::create_value_column_aggregator(field18);
+    ASSERT_TRUE(aggregator18);
+
+    FieldPtr field19 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_VARBINARY, false);
+    field19->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator19 = ColumnAggregatorFactory::create_value_column_aggregator(field19);
+    ASSERT_TRUE(aggregator19);
+
+    FieldPtr field20 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_BOOLEAN, false);
+    field20->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator20 = ColumnAggregatorFactory::create_value_column_aggregator(field20);
+    ASSERT_TRUE(aggregator20);
+
+    auto array_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_ARRAY));
+    FieldPtr field21 = std::make_shared<Field>(1, "test3", array_type_info,
+                                               StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
+    auto aggregator21 = ColumnAggregatorFactory::create_value_column_aggregator(field21);
+    ASSERT_TRUE(aggregator21);
+
+    auto map_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_MAP));
+    FieldPtr field22 = std::make_shared<Field>(1, "test3", map_type_info,
+                                               StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
+    auto aggregator22 = ColumnAggregatorFactory::create_value_column_aggregator(field22);
+    ASSERT_TRUE(aggregator22);
+
+    auto struct_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_STRUCT));
+    FieldPtr field23 = std::make_shared<Field>(1, "test3", struct_type_info,
+                                               StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
+    auto aggregator23 = ColumnAggregatorFactory::create_value_column_aggregator(field23);
+    ASSERT_TRUE(aggregator23);
+
+    FieldPtr field24 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_HLL, false);
+    field24->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator24 = ColumnAggregatorFactory::create_value_column_aggregator(field24);
+    ASSERT_TRUE(aggregator24);
+
+    FieldPtr field25 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_OBJECT, false);
+    field25->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator25 = ColumnAggregatorFactory::create_value_column_aggregator(field25);
+    ASSERT_TRUE(aggregator25);
+
+    FieldPtr field26 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_PERCENTILE, false);
+    field26->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator26 = ColumnAggregatorFactory::create_value_column_aggregator(field26);
+    ASSERT_TRUE(aggregator26);
+
+    FieldPtr field27 = std::make_shared<Field>(3, "test3", LogicalType::TYPE_JSON, false);
+    field27->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
+    auto aggregator27 = ColumnAggregatorFactory::create_value_column_aggregator(field27);
+    ASSERT_TRUE(aggregator27);
+}
+
 TEST(ColumnAggregator, testStringFirst) {
     FieldPtr field = std::make_shared<Field>(1, "test", LogicalType::TYPE_VARCHAR, false);
     field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_FIRST);
