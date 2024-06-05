@@ -384,13 +384,8 @@ public:
         }
     }
 
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
-        if (!this->filled) {
-            auto* col = down_cast<BinaryColumn*>(src.get());
-            Slice data = col->get_slice(start);
-            this->data().update(data);
-            this->filled = true;
-        }
+    void aggregate_batch_impl(int start, [[maybe_unused]] int end, const ColumnPtr& src) override {
+        aggregate_impl(start, src);
     }
 
     void append_data(Column* agg) override {
