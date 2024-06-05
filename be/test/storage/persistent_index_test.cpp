@@ -3020,6 +3020,7 @@ TEST_P(PersistentIndexTest, pindex_compaction_disk_limit) {
 }
 
 TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
+    config::pindex_major_compaction_schedule_interval_seconds = 0;
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     ASSERT_OK(tablet->init());
     TabletSharedPtr tablet2 = create_tablet(rand(), rand());
@@ -3038,6 +3039,7 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
 }
 
 TEST_P(PersistentIndexTest, pindex_compaction_schedule_with_migration) {
+    config::pindex_major_compaction_schedule_interval_seconds = 0;
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     ASSERT_OK(tablet->init());
     tablet->set_is_migrating(true);
@@ -3048,6 +3050,8 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule_with_migration) {
         ret.emplace_back(tablet->tablet_id(), 1.0);
         return ret;
     });
+    sleep(2);
+    ASSERT_FALSE(mgr.is_running(tablet->tablet_id()));
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
