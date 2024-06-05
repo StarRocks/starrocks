@@ -48,7 +48,7 @@ class AsyncOrcOutputStream : public orc::OutputStream {
 public:
     AsyncOrcOutputStream(io::AsyncFlushOutputStream* _stream);
 
-    ~AsyncOrcOutputStream() override;
+    ~AsyncOrcOutputStream() override = default;
 
     uint64_t getLength() const override;
 
@@ -73,8 +73,7 @@ public:
                   const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                   TCompressionType::type compression_type, const std::shared_ptr<ORCWriterOptions>& writer_options,
-                  const std::function<void()>& rollback_action, PriorityThreadPool* executors,
-                  RuntimeState* runtime_state);
+                  const std::function<void()>& rollback_action);
 
     ~ORCFileWriter() override = default;
 
@@ -84,7 +83,7 @@ public:
 
     int64_t get_allocated_bytes() override;
 
-    Status write(ChunkPtr chunk) override;
+    Status write(Chunk* chunk) override;
 
     CommitResult commit() override;
 
@@ -98,7 +97,7 @@ private:
 
     static void _populate_orc_notnull(orc::ColumnVectorBatch& orc_column, uint8_t* null_column, size_t column_size);
 
-    StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(const ChunkPtr& chunk);
+    StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(Chunk* chunk);
 
     Status _write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type_desc);
 
@@ -145,9 +144,7 @@ public:
 
     Status init() override;
 
-    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const override;
-
-    StatusOr<WriterAndStream> createAsync(const std::string& path) const override;
+    StatusOr<WriterAndStream> create(const std::string& path) const override;
 
 private:
     std::shared_ptr<FileSystem> _fs;

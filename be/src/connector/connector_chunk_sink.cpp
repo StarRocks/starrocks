@@ -42,12 +42,12 @@ Status ConnectorChunkSink::init() {
     return Status::OK();
 }
 
-Status ConnectorChunkSink::add(ChunkPtr chunk) {
+Status ConnectorChunkSink::add(Chunk* chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     if (partitioned) {
         ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name_nullable(_partition_column_names,
-                                                                            _partition_column_evaluators, chunk.get()));
+                                                                            _partition_column_evaluators, chunk));
     }
 
     auto it = _writer_stream_pairs.find(partition);
@@ -57,7 +57,7 @@ Status ConnectorChunkSink::add(ChunkPtr chunk) {
             callback_on_commit(writer->commit());
             _writer_stream_pairs.erase(it);
             auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
-            ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->createAsync(path));
+            ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
             std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
             std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
             RETURN_IF_ERROR(new_writer->init());
@@ -69,7 +69,7 @@ Status ConnectorChunkSink::add(ChunkPtr chunk) {
         }
     } else {
         auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
-        ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->createAsync(path));
+        ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
         std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
         std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
         RETURN_IF_ERROR(new_writer->init());

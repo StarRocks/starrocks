@@ -43,7 +43,6 @@ public:
 
     ~IcebergChunkSink() override = default;
 
-private:
     void callback_on_commit(const CommitResult& result) override;
 };
 

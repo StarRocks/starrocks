@@ -52,6 +52,7 @@
 #include "exprs/function_context.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
+#include "formats/parquet/arrow_memory_pool.h"
 #include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/utils.h"
@@ -100,8 +101,7 @@ public:
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type,
                       const std::shared_ptr<ParquetWriterOptions>& writer_options,
-                      const std::function<void()>& rollback_action, PriorityThreadPool* executors,
-                      RuntimeState* runtime_state);
+                      const std::function<void()>& rollback_action);
 
     ~ParquetFileWriter() override;
 
@@ -111,7 +111,7 @@ public:
 
     int64_t get_allocated_bytes() override;
 
-    Status write(ChunkPtr chunk) override;
+    Status write(Chunk* chunk) override;
 
     CommitResult commit() override;
 
@@ -147,8 +147,6 @@ private:
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
     const std::function<void()> _rollback_action;
-    PriorityThreadPool* _executors = nullptr;
-    RuntimeState* _runtime_state = nullptr;
 };
 
 class ParquetFileWriterFactory : public FileWriterFactory {
@@ -162,9 +160,7 @@ public:
 
     Status init() override;
 
-    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const override;
-
-    StatusOr<WriterAndStream> createAsync(const std::string& path) const override;
+    StatusOr<WriterAndStream> create(const std::string& path) const override;
 
 private:
     std::shared_ptr<FileSystem> _fs;

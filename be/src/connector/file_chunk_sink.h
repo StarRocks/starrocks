@@ -42,7 +42,6 @@ public:
 
     ~FileChunkSink() override = default;
 
-private:
     void callback_on_commit(const formats::FileWriter::CommitResult& result) override;
 };
 

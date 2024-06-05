@@ -16,6 +16,7 @@
 
 #include <glog/logging.h>
 #include <jemalloc/jemalloc.h>
+#include <malloc.h>
 
 #include <orc/OrcFile.hh>
 
@@ -39,12 +40,12 @@ char* OrcMemoryPool::malloc(uint64_t size) {
         LOG(WARNING) << "malloc failed, size=" << size;
         throw std::bad_alloc();
     }
-    _bytes_allocated.fetch_add(size, std::memory_order_relaxed);
+    _bytes_allocated.fetch_add(malloc_usable_size(p), std::memory_order_relaxed);
     return p;
 }
 
 void starrocks::OrcMemoryPool::free(char* p) {
-    auto size = je_malloc_usable_size(p);
+    auto size = malloc_usable_size(p);
     std::free(p);
     _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
 }

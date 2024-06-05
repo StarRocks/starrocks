@@ -30,7 +30,7 @@ class SinkOperatorMemoryManager;
 
 using Writer = formats::FileWriter;
 using Stream = io::AsyncFlushOutputStream;
-using WriterAndStream = std::pair<std::unique_ptr<Writer>, Stream*>;
+using WriterStreamPair = std::pair<std::unique_ptr<Writer>, Stream*>;
 using CommitResult = formats::FileWriter::CommitResult;
 using CommitFunc = std::function<void(const CommitResult& result)>;
 
@@ -50,15 +50,15 @@ public:
 
     Status init();
 
-    Status add(ChunkPtr chunk);
+    Status add(Chunk* chunk);
 
     Status finish();
 
     void rollback();
 
-protected:
     virtual void callback_on_commit(const CommitResult& result) = 0;
 
+protected:
     AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
 
@@ -70,7 +70,7 @@ protected:
     RuntimeState* _state;
     std::vector<std::function<void()>> _rollback_actions;
 
-    std::unordered_map<std::string, WriterAndStream> _writer_stream_pairs;
+    std::unordered_map<std::string, WriterStreamPair> _writer_stream_pairs;
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 };
 

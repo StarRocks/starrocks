@@ -111,13 +111,6 @@ AsyncParquetOutputStream::AsyncParquetOutputStream(io::AsyncFlushOutputStream* s
     set_mode(arrow::io::FileMode::WRITE);
 }
 
-AsyncParquetOutputStream::~AsyncParquetOutputStream() {
-    arrow::Status st = AsyncParquetOutputStream::Close();
-    if (!st.ok()) {
-        LOG(WARNING) << "close parquet output stream failed: " << st;
-    }
-}
-
 arrow::Status AsyncParquetOutputStream::Write(const std::shared_ptr<arrow::Buffer>& data) {
     arrow::Status st = Write(data->data(), data->size());
     if (!st.ok()) {

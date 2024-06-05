@@ -46,13 +46,13 @@ class Chunk;
 
 namespace starrocks::formats {
 
-Status ParquetFileWriter::write(ChunkPtr chunk) {
+Status ParquetFileWriter::write(Chunk* chunk) {
     if (_rowgroup_writer == nullptr) {
         _rowgroup_writer = std::make_unique<parquet::ChunkWriter>(_writer->AppendBufferedRowGroup(), _type_descs,
                                                                   _schema, _eval_func);
     }
 
-    RETURN_IF_ERROR(_rowgroup_writer->write(chunk.get()));
+    RETURN_IF_ERROR(_rowgroup_writer->write(chunk));
 
     if (_rowgroup_writer->estimated_buffered_bytes() >= _writer_options->rowgroup_size) {
         return _flush_row_group();
@@ -217,8 +217,7 @@ ParquetFileWriter::ParquetFileWriter(
         const std::string& location, std::shared_ptr<arrow::io::OutputStream> output_stream,
         const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
         std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators, TCompressionType::type compression_type,
-        const std::shared_ptr<ParquetWriterOptions>& writer_options, const std::function<void()>& rollback_action,
-        PriorityThreadPool* executors, RuntimeState* runtime_state)
+        const std::shared_ptr<ParquetWriterOptions>& writer_options, const std::function<void()>& rollback_action)
         : _location(location),
           _output_stream(std::move(output_stream)),
           _column_names(column_names),
@@ -226,9 +225,7 @@ ParquetFileWriter::ParquetFileWriter(
           _column_evaluators(std::move(column_evaluators)),
           _compression_type(compression_type),
           _writer_options(writer_options),
-          _rollback_action(std::move(rollback_action)),
-          _executors(executors),
-          _runtime_state(runtime_state) {}
+          _rollback_action(std::move(rollback_action)) {}
 
 StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_type(TCompressionType::type type) {
     ::parquet::Compression::type converted_type;
@@ -456,20 +453,7 @@ Status ParquetFileWriterFactory::init() {
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const std::string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
-    auto rollback_action = [fs = _fs, path = path]() {
-        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
-    };
-    auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
-    auto types = ColumnEvaluator::types(_column_evaluators);
-    auto output_stream = std::make_unique<parquet::ParquetOutputStream>(std::move(file));
-    return std::make_shared<ParquetFileWriter>(path, std::move(output_stream), _column_names, types,
-                                               std::move(column_evaluators), _compression_type, _parsed_options,
-                                               rollback_action, _executors, _runtime_state);
-}
-
-StatusOr<WriterAndStream> ParquetFileWriterFactory::createAsync(const std::string& path) const {
+StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& path) const {
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
@@ -481,7 +465,7 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::createAsync(const std::strin
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());
     auto writer = std::make_unique<ParquetFileWriter>(path, parquet_output_stream, _column_names, types,
                                                       std::move(column_evaluators), _compression_type, _parsed_options,
-                                                      rollback_action, _executors, _runtime_state);
+                                                      rollback_action);
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),

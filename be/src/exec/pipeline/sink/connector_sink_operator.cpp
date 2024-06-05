@@ -102,7 +102,7 @@ StatusOr<ChunkPtr> ConnectorSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    RETURN_IF_ERROR(_connector_chunk_sink->add(chunk));
+    RETURN_IF_ERROR(_connector_chunk_sink->add(chunk.get()));
     return Status::OK();
 }
 

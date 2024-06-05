@@ -72,12 +72,6 @@ void OrcOutputStream::close() {
 
 AsyncOrcOutputStream::AsyncOrcOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {}
 
-AsyncOrcOutputStream::~AsyncOrcOutputStream() {
-    if (!_is_closed) {
-        close();
-    }
-}
-
 uint64_t AsyncOrcOutputStream::getLength() const {
     return _stream->tell();
 }
@@ -119,8 +113,7 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::shared_ptr<orc::O
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                              TCompressionType::type compression_type,
                              const std::shared_ptr<ORCWriterOptions>& writer_options,
-                             const std::function<void()>& rollback_action, PriorityThreadPool* executors,
-                             RuntimeState* runtime_state)
+                             const std::function<void()>& rollback_action)
         : _location(location),
           _output_stream(std::move(output_stream)),
           _column_names(column_names),
@@ -128,9 +121,7 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::shared_ptr<orc::O
           _column_evaluators(std::move(column_evaluators)),
           _compression_type(compression_type),
           _writer_options(writer_options),
-          _rollback_action(rollback_action),
-          _executors(executors),
-          _runtime_state(runtime_state) {}
+          _rollback_action(rollback_action) {}
 
 Status ORCFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
@@ -152,7 +143,7 @@ int64_t ORCFileWriter::get_allocated_bytes() {
     return _memory_pool.bytes_allocated();
 }
 
-Status ORCFileWriter::write(ChunkPtr chunk) {
+Status ORCFileWriter::write(Chunk* chunk) {
     ASSIGN_OR_RETURN(auto cvb, _convert(chunk));
     _writer->add(*cvb);
     _row_counter += chunk->num_rows();
@@ -186,12 +177,12 @@ FileWriter::CommitResult ORCFileWriter::commit() {
     return result;
 }
 
-StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(const ChunkPtr& chunk) {
+StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(Chunk* chunk) {
     auto cvb = _writer->createRowBatch(chunk->num_rows());
     auto root = down_cast<orc::StructVectorBatch*>(cvb.get());
 
     for (size_t i = 0; i < _column_evaluators.size(); ++i) {
-        ASSIGN_OR_RETURN(auto column, _column_evaluators[i]->evaluate(chunk.get()));
+        ASSIGN_OR_RETURN(auto column, _column_evaluators[i]->evaluate(chunk));
         RETURN_IF_ERROR(_write_column(*root->fields[i], column, _type_descs[i]));
     }
 
@@ -506,20 +497,7 @@ Status ORCFileWriterFactory::init() {
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
-    auto rollback_action = [fs = _fs, path = path]() {
-        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
-    };
-    auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
-    auto types = ColumnEvaluator::types(_column_evaluators);
-    auto output_stream = std::make_unique<OrcOutputStream>(std::move(file));
-    return std::make_shared<ORCFileWriter>(path, std::move(output_stream), _column_names, types,
-                                           std::move(column_evaluators), _compression_type, _parsed_options,
-                                           rollback_action, _executors, _runtime_state);
-}
-
-StatusOr<WriterAndStream> ORCFileWriterFactory::createAsync(const string& path) const {
+StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const {
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
@@ -529,9 +507,9 @@ StatusOr<WriterAndStream> ORCFileWriterFactory::createAsync(const string& path) 
     auto async_output_stream =
             std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto orc_output_stream = std::make_shared<AsyncOrcOutputStream>(async_output_stream.get());
-    auto writer = std::make_unique<ORCFileWriter>(path, orc_output_stream, _column_names, types,
-                                                  std::move(column_evaluators), _compression_type, _parsed_options,
-                                                  rollback_action, _executors, _runtime_state);
+    auto writer =
+            std::make_unique<ORCFileWriter>(path, orc_output_stream, _column_names, types, std::move(column_evaluators),
+                                            _compression_type, _parsed_options, rollback_action);
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),

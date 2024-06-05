@@ -108,7 +108,7 @@ class AsyncParquetOutputStream : public arrow::io::OutputStream {
 public:
     AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream);
 
-    ~AsyncParquetOutputStream() override;
+    ~AsyncParquetOutputStream() override = default;
 
     arrow::Status Write(const void* data, int64_t nbytes) override;
 
