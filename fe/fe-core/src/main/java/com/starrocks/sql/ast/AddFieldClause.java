@@ -15,12 +15,9 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
 import java.util.Map;
 
 // clause which is used to add one field to
@@ -34,22 +31,6 @@ public class AddFieldClause extends AlterTableColumnClause {
 
     public StructFieldDesc getFieldDesc() {
         return fieldDesc;
-    }
-
-    public List<String> getNestedParentFieldNames() {
-        return fieldDesc.getNestedParentFieldNames();
-    }
-
-    public String getFieldName() {
-        return fieldDesc.getFieldName();
-    }
-
-    public Type getType() {
-        return fieldDesc.getType();
-    }
-
-    public ColumnPosition getFieldPos() {
-        return fieldDesc.getFieldPos();
     }
 
     public AddFieldClause(String colName, StructFieldDesc fieldDesc, String rollupName, Map<String, String> properties) {

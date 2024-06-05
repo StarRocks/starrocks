@@ -67,30 +67,6 @@ public class StructFieldDesc implements ParseNode {
         this.fieldPos = fieldPos;
     }
 
-    public String getFieldName() {
-        return fieldName;
-    }
-
-    public List<String> getNestedParentFieldNames() {
-        return nestedParentFieldNames;
-    }
-
-    public String getNestedParentFieldName(int i) {
-        return nestedParentFieldNames.get(i);
-    }
-
-    public TypeDef getTypeDef() {
-        return typeDef;
-    }
-
-    public Type getType() {
-        return typeDef.getType();
-    }
-
-    public ColumnPosition getFieldPos() {
-        return fieldPos;
-    }
-
     @Override
     public NodePosition getPos() {
         return null;
