@@ -23,7 +23,7 @@ public class DeadlockException extends IllegalLockStateException {
             final LockManager.DeadLockChecker dc, final Locker locker, final boolean isVictim) {
 
         StringBuilder msg = new StringBuilder();
-        msg.append("Deadlock was detected. ");
+        msg.append("LockManager detects dead lock. ");
         if (isVictim) {
             msg.append("Locker: \"").append(locker);
             msg.append("\" was chosen randomly as the victim.\n");
