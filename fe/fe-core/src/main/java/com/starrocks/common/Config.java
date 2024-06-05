@@ -2999,4 +2999,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int stream_load_group_latency_ms = 2000;
+
+    @ConfField(mutable = true)
+    public static int checkpoint_interval_second = 36000;
 }
