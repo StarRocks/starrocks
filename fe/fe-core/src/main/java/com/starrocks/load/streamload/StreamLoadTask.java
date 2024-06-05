@@ -253,13 +253,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return channelNum;
     }
 
+    public int getAllocateChannelNum() {
+        return Math.min(beginChannelNum.get(), channelNum);
+    }
+
     public int allocateChannel() {
         int channelId = beginChannelNum.getAndIncrement();
         return channelId >= channelNum ? -1 : channelId;
-    }
-
-    public int getNumAllocateChannels() {
-        return Math.min(channelNum, beginChannelNum.get());
     }
 
     public boolean setPrepareFlag() {

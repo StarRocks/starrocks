@@ -214,33 +214,38 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     private void stopGroup(final StreamLoadTask task) {
+        boolean needReset = false;
         readLock();
         try {
-            if (activeLoadTask != task) {
-                return;
+            if (activeLoadTask == task) {
+                needReset = true;
             }
         } finally {
             readUnlock();
         }
 
-        writeLock();
-        try {
-            if (activeLoadTask != task) {
-                return;
+        if (needReset) {
+            writeLock();
+            try {
+                if (activeLoadTask == task) {
+                    activeLoadTask = null;
+                }
+            } finally {
+                writeUnlock();
             }
-            activeLoadTask = null;
-        } finally {
-            writeUnlock();
         }
         task.stopGroup();
-        scheduleManualLoad(task);
+        LOG.info("Stop group, label: {}, total channel: {}, allocate channel: {}",
+                task.getLabel(), task.getChannelNum(), task.getAllocateChannelNum());
+        scheduleManualLoad(task, true);
     }
 
-    private void scheduleManualLoad(StreamLoadTask task) {
+    private void scheduleManualLoad(StreamLoadTask task, boolean isStopGroup) {
         if (!task.tryScheduleManualChannel()) {
+            LOG.info("Not schedule manual load, isStopGroup: {}", isStopGroup);
             return;
         }
-        for (int i = task.getNumAllocateChannels(); i < task.getChannelNum(); i++) {
+        for (int i = task.getAllocateChannelNum(); i < task.getChannelNum(); i++) {
             final int channelId = i;
             executorService.submit(() -> manualLoadChannel(task, channelId));
         }
@@ -425,7 +430,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                 return redirectAddress;
             }
             TNetworkAddress address = task.executeTask(channelId, headers, resp);
-            scheduleManualLoad(task);
+            scheduleManualLoad(task, false);
             return address;
         } finally {
             if (needUnLock) {
