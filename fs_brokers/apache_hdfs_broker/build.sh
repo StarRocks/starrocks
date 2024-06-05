@@ -26,15 +26,10 @@ export STARROCKS_HOME=${ROOT}/../..
 . ${STARROCKS_HOME}/env.sh
 
 export BROKER_HOME=$ROOT/
-echo ${BROKER_HOME}
 export BROKER_CORE_HOME=$ROOT/src/broker-core/
 export HADOOP_COS_HOME=$ROOT/src/hadoop-cos-shaded/
 
-# prepare thrift
-mkdir -p ${BROKER_CORE_HOME}/src/main/resources/thrift
-mkdir -p ${BROKER_CORE_HOME}/src/main/thrift
-cp ${BROKER_HOME}/../../gensrc/thrift/FileBrokerService.thrift ${BROKER_CORE_HOME}/src/main/resources/thrift/
-
+echo ${BROKER_HOME}
 cd ${BROKER_HOME}/src
 $MVN_CMD clean
 $MVN_CMD package -DskipTests

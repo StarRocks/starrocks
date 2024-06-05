@@ -269,23 +269,7 @@ under the License.
                             <executable>mkdir</executable>
                             <arguments>
                                 <argument>-p</argument>
-                                <argument>${basedir}/src/main/resources/thrift</argument>
                                 <argument>${basedir}/src/main/thrift</argument>
-                            </arguments>
-                            <skip>${skip.plugin}</skip>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>copy-thrift</id>
-                        <phase>process-resources</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>cp</executable>
-                            <arguments>
-                                <argument>${starrocks.home}/gensrc/thrift/FileBrokerService.thrift</argument>
-                                <argument>${basedir}/src/main/resources/thrift/</argument>
                             </arguments>
                             <skip>${skip.plugin}</skip>
                         </configuration>
