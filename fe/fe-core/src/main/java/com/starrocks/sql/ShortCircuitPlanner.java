@@ -24,7 +24,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -37,6 +39,27 @@ import java.util.TreeMap;
 public class ShortCircuitPlanner {
 
     public static final long MAX_RETURN_ROWS = 2048;
+
+    public static class ShortCircuitContext {
+        private long maxReturnRows = 0;
+        private boolean isPoint;
+
+        public ShortCircuitContext(boolean isPoint) {
+            this.isPoint = isPoint;
+        }
+
+        public long getMaxReturnRows() {
+            return maxReturnRows;
+        }
+
+        public void setMaxReturnRows(long maxReturnRows) {
+            this.maxReturnRows = maxReturnRows;
+        }
+
+        public boolean isPoint() {
+            return isPoint;
+        }
+    }
 
     public static BaseLogicalPlanChecker createLogicalPlanChecker(OptExpression root, boolean allowFilter,
                                                                   boolean allowLimit, boolean allowProject,
@@ -56,6 +79,9 @@ public class ShortCircuitPlanner {
             return root;
         }
         boolean supportShortCircuit = root.getOp().accept(new LogicalPlanChecker(), root, null);
+        if (supportShortCircuit && OperatorType.LOGICAL_LIMIT.equals(root.getOp().getOpType())) {
+            root = root.getInputs().get(0);
+        }
         root.setShortCircuit(supportShortCircuit);
         return root;
     }
@@ -100,6 +126,7 @@ public class ShortCircuitPlanner {
         protected List<String> orderByColumns = null;
 
         protected long limit = Operator.DEFAULT_LIMIT;
+        protected ShortCircuitContext shortCircuitContext = new ShortCircuitContext(false);
 
         public LogicalPlanChecker() {
         }
@@ -141,12 +168,22 @@ public class ShortCircuitPlanner {
         }
 
         @Override
+        public Boolean visitLogicalLimit(OptExpression optExpression, Void context) {
+            LogicalLimitOperator logicalLimitOperator = (LogicalLimitOperator) optExpression.getOp();
+            shortCircuitContext.setMaxReturnRows(logicalLimitOperator.getLimit());
+            return visitChild(optExpression, context);
+        }
+
+        @Override
         public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
             return createLogicalPlanChecker(optExpression, allowFilter, allowLimit, allowProject,
                     allowSort, predicate, orderByColumns, limit).visitLogicalTableScan(optExpression, context);
         }
 
-        protected static boolean isPointScan(Table table, List<String> keyColumns, List<ScalarOperator> conjuncts) {
+        protected static boolean isPointScan(Table table,
+                                             List<String> keyColumns,
+                                             List<ScalarOperator> conjuncts,
+                                             ShortCircuitContext shortCircuitContext) {
             Map<String, PartitionColumnFilter> filters = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
             filters.putAll(ColumnFilterConverter.convertColumnFilter(conjuncts, table));
             if (keyColumns == null || keyColumns.isEmpty()) {
@@ -158,7 +195,9 @@ public class ShortCircuitPlanner {
                     PartitionColumnFilter filter = filters.get(keyColumn);
                     if (filter.getInPredicateLiterals() != null) {
                         cardinality *= filter.getInPredicateLiterals().size();
-                        if (cardinality > MAX_RETURN_ROWS) {
+                        // TODO(limit operator place fe)
+                        if (cardinality > MAX_RETURN_ROWS ||
+                                (shortCircuitContext.getMaxReturnRows() != 0 && cardinality != 1)) {
                             return false;
                         }
                     } else if (!filter.isPoint()) {
