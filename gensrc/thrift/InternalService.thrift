@@ -166,6 +166,8 @@ struct TSpillOptions {
 
   21: optional bool enable_spill_to_remote_storage;
   22: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+  23: optional bool enable_spill_buffer_read;
+  24: optional i64 max_spill_read_buffer_bytes_per_driver;
 }
 
 // Query options with their respective defaults

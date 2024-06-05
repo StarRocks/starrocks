@@ -292,6 +292,7 @@ set(EXEC_FILES
     spill/serde.cpp
     spill/input_stream.cpp
     spill/data_stream.cpp
+    spill/block_reader.cpp
     spill/log_block_manager.cpp
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp
