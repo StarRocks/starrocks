@@ -162,6 +162,10 @@ bool MemTable::check_supported_column_partial_update(const Chunk& chunk) {
 }
 
 StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (config::discard_load_data) {
+        return false;
+    }
+
     if (_chunk == nullptr) {
         _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
     }
