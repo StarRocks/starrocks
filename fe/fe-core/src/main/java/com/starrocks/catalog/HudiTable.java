@@ -116,7 +116,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     public HudiTable(long id, String name, String catalogName, String hiveDbName, String hiveTableName,
                      String resourceName, String comment, List<Column> schema, List<String> dataColumnNames,
-                     List<String> partColumnNames, long createTime, Map<String, String> properties) {
+                     List<String> partColumnNames, long createTime, Map<String, String> properties,
+                     HudiTableType type) {
         super(id, name, TableType.HUDI, schema);
         this.catalogName = catalogName;
         this.hiveDbName = hiveDbName;
@@ -127,6 +128,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         this.createTime = createTime;
         this.hudiProperties = properties;
         this.comment = comment;
+        this.tableType = type;
     }
 
     public String getDbName() {
@@ -526,7 +528,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
         public HudiTable build() {
             return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, comment,
-                    fullSchema, dataColNames, partitionColNames, createTime, hudiProperties);
+                    fullSchema, dataColNames, partitionColNames, createTime, hudiProperties, tableType);
         }
     }
 }
