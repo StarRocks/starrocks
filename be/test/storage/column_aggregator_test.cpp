@@ -982,8 +982,8 @@ TEST(ColumnAggregator, testFirstTpeDispatch) {
     ASSERT_TRUE(aggregator21);
 
     auto map_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_MAP));
-    FieldPtr field22 = std::make_shared<Field>(1, "test3", map_type_info,
-                                               StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
+    FieldPtr field22 = std::make_shared<Field>(1, "test3", map_type_info, StorageAggregateType::STORAGE_AGGREGATE_FIRST,
+                                               1, false, false);
     auto aggregator22 = ColumnAggregatorFactory::create_value_column_aggregator(field22);
     ASSERT_TRUE(aggregator22);
 
