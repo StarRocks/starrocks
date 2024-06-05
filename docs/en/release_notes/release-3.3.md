@@ -18,7 +18,7 @@ Release date: June 4, 2024
 
 ### Behavior Change
 
-Originally, database consistency checker was scheduled based on GMT+8 time zone. Database consistency checker is scheduled based on the local time zone now. [#45748](https://github.com/StarRocks/starrocks/issues/45748)
+Originally, database consistency checker was scheduled based on GMT+8 time zone. Database consistency checker is scheduled based on the local time zone now. [#45748](https://github.com/StarRocks/starrocks/issues/45748) test1234
 
 ### Parameter Change
 
