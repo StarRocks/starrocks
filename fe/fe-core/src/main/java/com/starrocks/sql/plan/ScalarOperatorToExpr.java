@@ -492,14 +492,12 @@ public class ScalarOperatorToExpr {
                 case "rand":
                 case "random":
                 case "uuid":
-                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, List.of()));
-                    Preconditions.checkNotNull(call.getFunction());
-                    callExpr.setFn(call.getFunction());
-                    callExpr.setIgnoreNulls(call.getIgnoreNulls());
-                    break;
                 case "sleep":
-                    Expr child =  buildExpr.build(call.getChild(0), context);
-                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, List.of(child)));
+                    List<Expr> arguments = Lists.newArrayList();
+                    if (call.getChildren().size() == 2) {
+                        arguments.add(buildExpr.build(call.getChild(0), context));
+                    }
+                    callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
                     Preconditions.checkNotNull(call.getFunction());
                     callExpr.setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
