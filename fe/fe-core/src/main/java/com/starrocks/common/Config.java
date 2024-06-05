@@ -259,11 +259,11 @@ public class Config extends ConfigBase {
     @ConfField
     public static String profile_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField
-    public static int profile_log_roll_num = 10;
+    public static int profile_log_roll_num = 5;
     @ConfField
     public static String profile_log_roll_interval = "DAY";
     @ConfField
-    public static String profile_log_delete_age = "7d";
+    public static String profile_log_delete_age = "1d";
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
