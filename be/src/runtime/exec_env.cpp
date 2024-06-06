@@ -86,6 +86,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+#include "udf/python/env.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
@@ -569,6 +570,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         LOG(WARNING) << "Failed to init JIT engine: " << status.message();
     }
 
+    RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
+    PythonEnvManager::getInstance().start_background_cleanup_thread();
+
     return Status::OK();
 }
 
@@ -669,6 +673,8 @@ void ExecEnv::stop() {
 #ifndef BE_TEST
     close_s3_clients();
 #endif
+
+    PythonEnvManager::getInstance().close();
 }
 
 void ExecEnv::destroy() {

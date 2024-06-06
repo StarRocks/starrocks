@@ -59,8 +59,10 @@ struct UserFunctionCacheEntry;
 class UserFunctionCache {
 public:
     static constexpr const char* JAVA_UDF_SUFFIX = ".jar";
+    static constexpr const char* PY_UDF_SUFFIX = ".py.zip";
     static constexpr int UDF_TYPE_UNKNOWN = -1;
     static constexpr int UDF_TYPE_JAVA = 1;
+    static constexpr int UDF_TYPE_PYTHON = 2;
 
     using UserFunctionCacheEntryPtr = std::shared_ptr<UserFunctionCacheEntry>;
     // local_dir is the directory which contain cached library.
