@@ -48,8 +48,11 @@ public:
             : _tablet(std::move(tablet)), _mgr(mgr) {}
 
     void run() override {
+        DeferOp defer([&]() {
+            // Must call `unmark_running()` after run() end.
+            _mgr->unmark_running(_tablet.get());
+        });
         WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
-        _mgr->unmark_running(_tablet.get());
     }
 
 private:
