@@ -709,6 +709,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
 
+    public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
+
+    public static final String ENABLE_NESTED_LOOP_JOIN = "enable_nested_loop_join";
+
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
@@ -1914,6 +1918,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
     @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
     private int scanHivePartitionNumLimit = 0;
+
+    @VarAttr(name = ENABLE_CROSS_JOIN)
+    private boolean enableCrossJoin = true;
+
+    @VarAttr(name = ENABLE_NESTED_LOOP_JOIN)
+    private boolean enableNestedLoopJoin = true;
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
@@ -3703,6 +3713,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setScanHivePartitionNumLimit(int scanHivePartitionNumLimit) {
         this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
+    }
+
+    public boolean isEnableCrossJoin() {
+        return enableCrossJoin;
+    }
+
+    public void setEnableCrossJoin(boolean enableCrossJoin) {
+        this.enableCrossJoin = enableCrossJoin;
+    }
+
+    public boolean isEnableNestedLoopJoin() {
+        return enableNestedLoopJoin;
+    }
+
+    public void setEnableNestedLoopJoin(boolean enableNestedLoopJoin) {
+        this.enableNestedLoopJoin = enableNestedLoopJoin;
     }
 
     public boolean enableCboDeriveRangeJoinPredicate() {
