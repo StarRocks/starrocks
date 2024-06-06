@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Add labels on BEs
 
-Since v3.3.0, StarRocks supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures that data can be evenly distributed based on racks, data centers, etc., to address disaster recovery requirements in case that certain racks lose power or data centers encounter failures.
+Since v3.2.8, StarRocks supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures that data can be evenly distributed based on racks, data centers, etc., to address disaster recovery requirements in case that certain racks lose power or data centers encounter failures.
 
 ## Overview
 
@@ -76,7 +76,9 @@ ALTER TABLE example_table
 
 :::note
 
-For historical tables that are created before v3.3.0, data of these historical tables is not distributed based on labels by default. If you need to distribute data of a historical table based on labels, you can execute the following statement to add labels to the historical table:
+If you have upgraded StarRocks to version 3.2.8 or later, for historical tables created before the upgrade, data is not distributed based on labels by default. 
+
+If you need to distribute data of a historical table based on labels, you can execute the following statement to add labels to the historical table:
 
 ```SQL
 ALTER TABLE example_table1
