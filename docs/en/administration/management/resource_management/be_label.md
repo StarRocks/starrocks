@@ -68,8 +68,7 @@ ALTER TABLE example_table
 
 :::note
 
-If you have upgraded StarRocks to version 3.2.8 or later, for historical tables created before the upgrade, data is not distributed based on labels by default. 
-If you need to distribute data of a historical table based on labels, you can execute the following statement to add labels to the historical table:
+If you have upgraded StarRocks to version 3.2.8 or later, for historical tables created before the upgrade, data is not distributed based on labels by default.  If you need to distribute data of a historical table based on labels, you can execute the following statement to add labels to the historical table:
 
 ```SQL
 ALTER TABLE example_table1
