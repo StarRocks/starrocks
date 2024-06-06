@@ -99,11 +99,6 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         this.enableListNameCache = enableListNamesCache;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
 
-        databaseNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
-                .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
-        tableNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
-                .build(asyncReloading(CacheLoader.from(this::loadAllTableNames), executor));
-
         // The list names interface of hive metastore latency is very low, so we default to pull the latest every time.
         if (enableListNamesCache) {
             partitionKeysCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
@@ -112,12 +107,6 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
             partitionKeysCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                     .build(asyncReloading(CacheLoader.from(this::loadPartitionKeys), executor));
         }
-
-        databaseCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                .build(asyncReloading(CacheLoader.from(this::loadDb), executor));
-
-        tableCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                .build(asyncReloading(CacheLoader.from(this::loadTable), executor));
 
         partitionCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize)
                 .build(asyncReloading(new CacheLoader<HivePartitionName, Partition>() {
@@ -265,12 +254,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
     @Override
     public MetastoreTable getMetastoreTable(String dbName, String tableName) {
-        return get(metastoreTableCache, DatabaseTableName.of(dbName, tableName));
-    }
-
-    @Override
-    public MetastoreTable loadMetastoreTable(DatabaseTableName databaseTableNam) {
-        return metastore.getMetastoreTable(databaseTableNam.getDatabaseName(), databaseTableNam.getTableName());
+        return metastore.getMetastoreTable(dbName, tableName);
     }
 
     public Table getTable(String dbName, String tableName) {
@@ -555,6 +539,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         List<HivePartitionName> refreshPartitionNames = refreshTable(hiveDbName, hiveTblName, onlyCachedPartitions);
         Set<DatabaseTableName> cachedTableNames = getCachedTableNames();
         lastAccessTimeMap.keySet().removeIf(tableName -> !(cachedTableNames.contains(tableName)));
+        LOG.info("Refresh table {}.{} in background", hiveDbName, hiveTblName);
         return refreshPartitionNames;
     }
 
@@ -624,6 +609,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                 .collect(Collectors.toList());
     }
 
+    @Override
     public synchronized void invalidateAll() {
         databaseNamesCache.invalidateAll();
         tableNamesCache.invalidateAll();
@@ -640,6 +626,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         databaseNamesCache.invalidateAll();
     }
 
+    @Override
     public synchronized void invalidateTable(String dbName, String tableName) {
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         tableCache.invalidate(databaseTableName);
@@ -667,10 +654,6 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         } else {
             partitionKeysCache.invalidate(hivePartitionValue);
         }
-    }
-
-    public boolean isTablePresent(DatabaseTableName tableName) {
-        return tableCache.getIfPresent(tableName) != null;
     }
 
     public boolean isPartitionPresent(HivePartitionName hivePartitionName) {
