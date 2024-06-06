@@ -50,7 +50,7 @@ public:
     void run() override {
         DeferOp defer([&]() {
             // Must call `unmark_running()` after run() end.
-            _mgr->unmark_running(_tablet->tablet_id(), _tablet->data_dir());
+            _mgr->unmark_running(_tablet.get());
         });
         std::shared_lock migration_rlock(_tablet->get_migration_lock(), std::try_to_lock);
         if (!migration_rlock.owns_lock() || Tablet::check_migrate(_tablet)) {
@@ -58,10 +58,6 @@ public:
             return;
         }
         WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
-<<<<<<< HEAD
-        _mgr->unmark_running(_tablet.get());
-=======
->>>>>>> b459aa891d ([BugFix] fix concurrency issue between pk tablet migrate and pk index major compaction (#46675))
     }
 
 private:
