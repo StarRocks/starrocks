@@ -48,8 +48,16 @@ public:
             : _tablet(std::move(tablet)), _mgr(mgr) {}
 
     void run() override {
+        DeferOp defer([&]() {
+            // Must call `unmark_running()` after run() end.
+            _mgr->unmark_running(_tablet->tablet_id(), _tablet->data_dir());
+        });
+        std::shared_lock migration_rlock(_tablet->get_migration_lock(), std::try_to_lock);
+        if (!migration_rlock.owns_lock() || Tablet::check_migrate(_tablet)) {
+            // Skip pk index major compaction when this tablet is migrating.
+            return;
+        }
         WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
-        _mgr->unmark_running(_tablet->tablet_id(), _tablet->data_dir());
     }
 
 private:
