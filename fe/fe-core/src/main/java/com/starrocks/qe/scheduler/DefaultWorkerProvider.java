@@ -375,7 +375,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return workers.values().asList().get(index);
     }
 
-    private static boolean isWorkerAvailable(ComputeNode worker) {
+    public static boolean isWorkerAvailable(ComputeNode worker) {
         return worker.isAlive() && !SimpleScheduler.isInBlocklist(worker.getId());
     }
 
