@@ -83,7 +83,8 @@ private:
 class JsonReader {
 public:
     JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
-               bool strict_mode, std::vector<SlotDescriptor*> slot_descs, const TBrokerRangeDesc& range_desc);
+               bool strict_mode, std::vector<SlotDescriptor*> slot_descs, std::vector<TypeDescriptor> types,
+               const TBrokerRangeDesc& range_desc);
 
     ~JsonReader();
 
@@ -131,9 +132,11 @@ private:
     std::shared_ptr<SequentialFile> _file;
     bool _closed = false;
     std::vector<SlotDescriptor*> _slot_descs;
+    std::vector<TypeDescriptor> _type_descs;
     //Attention: _slot_desc_dict's key is the string_view of the column of _slot_descs,
     // so the lifecycle of _slot_descs should be longer than _slot_desc_dict;
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
+    std::unordered_map<std::string_view, TypeDescriptor> _type_desc_dict;
 
     // For performance reason, the simdjson parser should be reused over several files.
     //https://github.com/simdjson/simdjson/blob/master/doc/performance.md

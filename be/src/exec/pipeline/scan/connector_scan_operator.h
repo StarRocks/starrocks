@@ -126,7 +126,8 @@ private:
 class ConnectorChunkSource : public ChunkSource {
 public:
     ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer,
+                         bool enable_adaptive_io_tasks);
 
     ~ConnectorChunkSource() override;
 
@@ -168,6 +169,7 @@ private:
     uint64_t _chunk_mem_bytes = 0;
     int64_t _request_mem_tracker_bytes = 0;
     int64_t _mem_alloc_failed_count = 0;
+    bool _enable_adaptive_io_tasks = true;
 };
 
 } // namespace pipeline

@@ -980,29 +980,27 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
 
     @Override
     public Void visitAddPartitionClause(AddPartitionClause clause, ConnectContext context) {
-        if (!(table instanceof OlapTable)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, table.getName());
+        PartitionDescAnalyzer.analyze(clause.getPartitionDesc());
+
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(clause.getPartitionDesc(), olapTable);
         }
 
-        OlapTable olapTable = (OlapTable) table;
-        PartitionDescAnalyzer.analyze(clause.getPartitionDesc());
-        PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(clause.getPartitionDesc(), olapTable);
         return null;
     }
 
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
-        if (!(table instanceof OlapTable)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, table.getName());
-        }
-
-
-        OlapTable olapTable = (OlapTable) table;
         MultiRangePartitionDesc multiRangePartitionDesc = clause.getMultiRangePartitionDesc();
         if (multiRangePartitionDesc != null) {
             PartitionDescAnalyzer.analyze(multiRangePartitionDesc);
-            PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(multiRangePartitionDesc, olapTable);
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(multiRangePartitionDesc, olapTable);
+            }
         }
+
         return null;
     }
 }

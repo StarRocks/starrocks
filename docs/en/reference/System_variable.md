@@ -333,6 +333,12 @@ This variable is introduced to solve compatibility issues.
 Default value: `true`.
 -->
 
+### enable_datacache_async_populate_mode
+
+* **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
+* **Default**: false
+* **Introduced in**: v3.2.7
+
 ### enable_connector_adaptive_io_tasks
 
 * **Description**: Whether to adaptively adjust the number of concurrent I/O tasks when querying external tables. Default value is `true`. If this feature is not enabled, you can manually set the number of concurrent I/O tasks using the variable `connector_io_tasks_per_scan_operator`.
@@ -347,6 +353,12 @@ Default value: `true`.
 
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v2.5
+
+### enable_gin_filter
+
+* **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
+* **Default**: true
+* **Introduced in**: v3.3.0
 
 ### enable_group_level_query_queue (global)
 
@@ -377,7 +389,7 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 
 ### enable_short_circuit
 
-* **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the table uses hybrid row-column storage and the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit to directly query the data stored in the row-by-row fashion.
+* **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit.
 * **Default**: false
 * **Introduced in**: v3.2.3
 

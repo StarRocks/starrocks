@@ -238,13 +238,15 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
                 if (name.isGlobalFunction()) {
-                    context.getGlobalStateMgr().getGlobalFunctionMgr().userAddFunction(stmt.getFunction());
+                    context.getGlobalStateMgr()
+                            .getGlobalFunctionMgr()
+                            .userAddFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
                 } else {
                     Database db = context.getGlobalStateMgr().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.addFunction(stmt.getFunction());
+                    db.addFunction(stmt.getFunction(), stmt.shouldReplaceIfExists());
                 }
             });
             return null;
@@ -643,7 +645,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().createView(stmt);
+                GlobalStateMgr.getCurrentState().getMetadataMgr().createView(stmt);
             });
             return null;
         }
@@ -915,6 +917,15 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateCatalogStatement(CreateCatalogStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                String catalogName = stmt.getCatalogName();
+                if (context.getGlobalStateMgr().getCatalogMgr().catalogExists(catalogName)) {
+                    if (stmt.isIfNotExists()) {
+                        LOG.info("create catalog[{}] which already exists", catalogName);
+                        return;
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CATALOG_EXISTED_ERROR, catalogName);
+                    }
+                }
                 context.getGlobalStateMgr().getCatalogMgr().createCatalog(stmt);
             });
             return null;

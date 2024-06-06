@@ -50,6 +50,22 @@ public class CreateFunctionStmtAnalyzerTest {
                 createFunctionSql, 32).get(0);
     }
 
+    private CreateFunctionStmt createPyStmt(String symbol, String type) {
+        Config.enable_udf = true;
+        String createFunctionSql = String.format("CREATE %s FUNCTION ABC.MY_UDF_JSON_GET(string, string) \n"
+                + "RETURNS string \n"
+                + "properties (\n"
+                + "    \"symbol\" = \"%s\",\n"
+                + "    \"type\" = \"Python\",\n"
+                + "    \"file\" = \"http://localhost:8080/\"\n"
+                + ") AS $$\n"
+                + "def a(b):"
+                + "   return b "
+                + "$$;", type, symbol);
+        return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                createFunctionSql, 32).get(0);
+    }
+
     @Test(expected = Throwable.class)
     public void testJUDF() {
         try {
@@ -180,6 +196,14 @@ public class CreateFunctionStmtAnalyzerTest {
         } finally {
             Config.enable_udf = false;
         }
+    }
+
+    @Test
+    public void testPyUDF() {
+        CreateFunctionStmt stmt = createPyStmt("a", "");
+        Assert.assertNotNull(stmt.getContent());
+        new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+
     }
 
 }

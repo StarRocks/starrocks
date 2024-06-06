@@ -816,3 +816,30 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 DROP TABLE t_gin_var;
+
+-- name: test_gin_match_empty
+CREATE TABLE `t_gin_match_empty` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v1` string COMMENT "",
+  `v2` string COMMENT "",
+  `v3` string COMMENT "",
+   INDEX idx1 (v1) USING GIN ('parser' = 'english'),
+   INDEX idx2 (v2) USING GIN ('parser' = 'chinese'),
+   INDEX idx3 (v3) USING GIN ('parser' = 'standard')
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+
+insert into t_gin_match_empty values (1, "中文50中文", "中文50中文", "中文50中文");
+
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH "";
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH "";
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH "";
+
+DROP TABLE t_gin_match_empty;

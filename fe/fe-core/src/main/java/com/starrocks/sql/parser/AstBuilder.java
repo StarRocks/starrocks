@@ -739,7 +739,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                     properties,
                     extProperties,
-                    context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                    context.comment() == null ? null :
+                            ((StringLiteral) visit(context.comment().string())).getStringValue(),
                     context.rollupDesc() == null ?
                             null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
                     context.orderByDesc() == null ? null :
@@ -871,7 +872,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             if (functionName.equals(FunctionSet.FROM_UNIXTIME) || functionName.equals(FunctionSet.FROM_UNIXTIME_MS)) {
                 if (hasCast || paramsExpr.size() > 1) {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
                 }
             }
         }
@@ -1868,6 +1870,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateExternalCatalogStatement(
             StarRocksParser.CreateExternalCatalogStatementContext context) {
+        boolean ifNotExists = context.IF() != null;
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String catalogName = identifier.getValue();
         String comment = null;
@@ -1881,7 +1884,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateCatalogStmt(catalogName, comment, properties, createPos(context));
+
+        return new CreateCatalogStmt(catalogName, comment, properties,  ifNotExists, createPos(context));
     }
 
     @Override
@@ -2941,7 +2945,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
         String forUser = null;
         if (context.FOR() != null) {
-            forUser =  ((StringLiteral) visit(context.string())).getValue();
+            forUser = ((StringLiteral) visit(context.string())).getValue();
         }
         boolean isShowFull = context.FULL() != null;
         return new ShowProcesslistStmt(isShowFull, forUser, createPos(context));
@@ -3323,7 +3327,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 null,
                 null,
                 createPos(ctx));
-
 
         // create queryStatement based on queryRelation
         QueryStatement queryStatement = new QueryStatement(queryRelation);
@@ -4415,6 +4418,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return Tracers.Mode.TIMER;
         } else if (context.ALL() != null) {
             return Tracers.Mode.TIMING;
+        } else if (context.REASON() != null) {
+            return Tracers.Mode.REASON;
         } else {
             return Tracers.Mode.NONE;
         }
@@ -5162,6 +5167,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
         String functionType = "SCALAR";
+        boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
         boolean isGlobal = context.GLOBAL() != null;
         if (context.functionType != null) {
             functionType = context.functionType.getText();
@@ -5171,10 +5177,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionName = qualifiedName.toString();
 
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
-        TypeDef intermediateType = null;
-        if (context.intermediateType != null) {
-            intermediateType = new TypeDef(getType(context.intermediateType), createPos(context.intermediateType));
-        }
 
         Map<String, String> properties = null;
         if (context.properties() != null) {
@@ -5183,6 +5185,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             for (Property property : propertyList) {
                 properties.put(property.getKey(), property.getValue());
             }
+        }
+        if (context.inlineProperties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.inlineProperties().inlineProperty(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        String inlineContent = null;
+        if (context.inlineFunction() != null) {
+            String content = context.inlineFunction().ATTACHMENT().getText();
+            inlineContent = context.inlineFunction().ATTACHMENT().getText().substring(2, content.length() - 2);
         }
 
         FunctionName fnName = FunctionName.createFnName(functionName);
@@ -5194,7 +5208,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new CreateFunctionStmt(functionType, fnName,
-                getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
+                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent, replaceIfExists);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------
@@ -7126,6 +7140,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitProperty(StarRocksParser.PropertyContext context) {
         return new Property(
                 ((StringLiteral) visit(context.key)).getStringValue(),
+                ((StringLiteral) visit(context.value)).getStringValue(),
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitInlineProperty(StarRocksParser.InlinePropertyContext context) {
+        return new Property(
+                ((Identifier) visit(context.key)).getValue(),
                 ((StringLiteral) visit(context.value)).getStringValue(),
                 createPos(context));
     }

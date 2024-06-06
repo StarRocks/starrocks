@@ -484,7 +484,7 @@ KILL ANALYZE <ID>
 
 ## 采集 Hive/Iceberg/Hudi 表的统计信息
 
-从 3.2 版本起，支持采集 Hive, Iceberg, Hudi 表的统计信息。**采集的语法和内表相同，但是只支持手动全量采集、手动直方图采集（自 v3.3.0 起）、自动全量采集，不支持抽样采集**。自 v3.3.0 起，支持采集 STRUCT 子列的统计信息。
+从 3.2 版本起，支持采集 Hive, Iceberg, Hudi 表的统计信息。**采集的语法和内表相同，但是只支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集，不支持抽样采集**。自 v3.3.0 起，支持采集 STRUCT 子列的统计信息。
 
 收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息。
 
@@ -513,7 +513,7 @@ partition_name:
 对 Hive、Iceberg、Hudi 表采集统计信息时，有如下限制：
 
 1. 目前只支持采集 Hive、Iceberg、Hudi 表的统计信息。
-2. 目前只支持手动全量采集、手动直方图采集（自 v3.3.0 起）和自动全量采集，不支持抽样采集。
+2. 目前只支持手动全量采集、手动直方图采集（自 v3.2.7 起）和自动全量采集，不支持抽样采集。
 3. 全量自动采集，需要创建一个采集任务，系统不会默认自动采集外部数据源的统计信息。
 4. 对于自动采集任务，只支持采集指定表的统计信息，不支持采集所有数据库、数据库下所有表的统计信息。
 5. 对于自动采集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据采集间隔周期性全表采集。
@@ -608,7 +608,7 @@ KILL ANALYZE <ID>
 
 对于外部数据源中的表，需要创建一个自动采集任务，StarRocks 会根据采集任务中指定的属性，周期性检查采集任务是否需要执行，默认检查时间为 5 min。Hive 和 Iceberg 仅在发现有数据更新时，才会自动执行一次采集任务。
 
-Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由采集线程的时间间隔和用户设置的采集间隔决定，参考下面的属性进行调整）。
+StarRocks 目前不支持感知 Hudi 数据更新，所以只能周期性采集统计数据。您可以指定以下 FE 配置项来控制收集行为：
 
 - statistic_collect_interval_sec
 
@@ -636,6 +636,8 @@ Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周
 CREATE ANALYZE TABLE tbl_name (col_name [,col_name])
 [PROPERTIES (property [,property])]
 ```
+
+您可以通过 Property `statistic_auto_collect_interval` 为当前自动收集任务单独设置收集间隔。此时 FE 配置项 `statistic_auto_collect_small_table_interval` 和 `statistic_auto_collect_large_table_interval` 将不会对该任务生效。
 
 示例：
 

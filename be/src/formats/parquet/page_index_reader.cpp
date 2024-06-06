@@ -31,6 +31,7 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/statistics_helper.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/stringprintf.h"
@@ -112,16 +113,16 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
         max_chunk->append_column(max_column, slotId);
         // deal with min_values
         Status st;
-        st = _decode_value_into_column(min_column, column_index.min_values, column.slot_type(),
-                                       _column_readers.at(slotId)->get_column_parquet_field(),
-                                       _group_reader->_param.timezone);
+        st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, column.slot_type(),
+                                                        _column_readers.at(slotId)->get_column_parquet_field(),
+                                                        _group_reader->_param.timezone);
         if (!st.ok()) {
             continue;
         }
         // deal with max_values
-        st = _decode_value_into_column(max_column, column_index.max_values, column.slot_type(),
-                                       _column_readers.at(slotId)->get_column_parquet_field(),
-                                       _group_reader->_param.timezone);
+        st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, column.slot_type(),
+                                                        _column_readers.at(slotId)->get_column_parquet_field(),
+                                                        _group_reader->_param.timezone);
         if (!st.ok()) {
             continue;
         }
@@ -179,76 +180,6 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
     }
 
     return page_filtered_flag;
-}
-
-Status PageIndexReader::_decode_value_into_column(ColumnPtr column, const std::vector<string>& values,
-                                                  const TypeDescriptor& type, const ParquetField* field,
-                                                  const std::string& timezone) {
-    std::unique_ptr<ColumnConverter> converter;
-    RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
-    bool ret = true;
-    switch (field->physical_type) {
-    case tparquet::Type::type::INT32: {
-        int32_t decode_value = 0;
-        if (!converter->need_convert) {
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
-                ret &= (column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
-            }
-        } else {
-            ColumnPtr src_column = converter->create_src_column();
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(values[i], &decode_value));
-                ret &= (src_column->append_numbers(&decode_value, sizeof(int32_t)) > 0);
-            }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
-        }
-        break;
-    }
-    case tparquet::Type::type::INT64: {
-        int64_t decode_value = 0;
-        if (!converter->need_convert) {
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                ret &= (column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
-            }
-        } else {
-            ColumnPtr src_column = converter->create_src_column();
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                ret &= (src_column->append_numbers(&decode_value, sizeof(int64_t)) > 0);
-            }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
-        }
-        break;
-    }
-    case tparquet::Type::type::BYTE_ARRAY:
-    // todo: FLBA need more test
-    case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
-        Slice decode_value;
-        if (!converter->need_convert) {
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
-                ret &= column->append_strings(std::vector<Slice>{decode_value});
-            }
-        } else {
-            ColumnPtr src_column = converter->create_src_column();
-            for (size_t i = 0; i < values.size(); i++) {
-                RETURN_IF_ERROR(PlainDecoder<Slice>::decode(values[i], &decode_value));
-                ret &= src_column->append_strings(std::vector<Slice>{decode_value});
-            }
-            RETURN_IF_ERROR(converter->convert(src_column, column.get()));
-        }
-        break;
-    }
-    default:
-        return Status::InternalError("Not Supported min/max value type");
-    }
-
-    if (UNLIKELY(!ret)) {
-        return Status::InternalError("Decode min-max column failed");
-    }
-    return Status::OK();
 }
 
 void PageIndexReader::select_column_offset_index() {

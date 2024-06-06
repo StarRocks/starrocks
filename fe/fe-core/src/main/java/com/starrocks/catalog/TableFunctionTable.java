@@ -306,7 +306,14 @@ public class TableFunctionTable extends Table {
         }
 
         if (properties.containsKey(PROPERTY_CSV_TRIM_SPACE)) {
-            csvTrimSpace = Boolean.parseBoolean(properties.get(PROPERTY_CSV_TRIM_SPACE));
+            String property = properties.get(PROPERTY_CSV_TRIM_SPACE);
+            if (property.equalsIgnoreCase("true")) {
+                csvTrimSpace = true;
+            } else if (property.equalsIgnoreCase("false")) {
+                csvTrimSpace = false;
+            } else {
+                throw new DdlException("illegal value of csv.trim_space: " + property + ", only true/false allowed");
+            }
         }
     }
 

@@ -36,6 +36,8 @@ add_library(Formats STATIC
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
+        json/struct_column.cpp
+        json/map_column.cpp
         avro/nullable_column.cpp
         avro/numeric_column.cpp
         avro/binary_column.cpp
@@ -73,6 +75,7 @@ add_library(Formats STATIC
         parquet/level_builder.cpp
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
+        parquet/statistics_helper.cpp
         )
 
 add_subdirectory(orc/apache-orc)

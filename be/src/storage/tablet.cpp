@@ -1780,7 +1780,7 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
-TabletSchemaCSPtr Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
+void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard l0(_meta_lock);
     std::lock_guard l1(_schema_lock);
     // Double Check for concurrent update
@@ -1790,10 +1790,8 @@ TabletSchemaCSPtr Tablet::update_max_version_schema(const TabletSchemaCSPtr& tab
         } else {
             _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
         }
+        _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
     }
-
-    _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
-    return _max_version_schema;
 }
 
 const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {

@@ -50,6 +50,7 @@
 #include "exprs/array_element_expr.h"
 #include "exprs/array_expr.h"
 #include "exprs/array_map_expr.h"
+#include "exprs/arrow_function_call.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/case_expr.h"
 #include "exprs/cast_expr.h"
@@ -376,6 +377,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::FUNCTION_CALL: {
         if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
             *expr = pool->add(new JavaFunctionCallExpr(texpr_node));
+        } else if (texpr_node.fn.binary_type == TFunctionBinaryType::PYTHON) {
+            *expr = pool->add(new ArrowFunctionCallExpr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "if") {
             *expr = pool->add(VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {

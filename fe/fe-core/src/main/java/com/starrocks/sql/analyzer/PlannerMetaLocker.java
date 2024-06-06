@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -73,53 +72,45 @@ public class PlannerMetaLocker {
      */
     public boolean tryLock(long timeout, TimeUnit unit) {
         Locker locker = new Locker();
-        List<Database> lockedDbs = Lists.newArrayList();
+
         boolean isLockSuccess = false;
+        List<Database> lockedDbs = Lists.newArrayList();
         try {
-            for (Map.Entry<Long, Database> e : dbs.entrySet()) {
-                if (!locker.tryLockDatabase(e.getValue(), LockType.READ, timeout, unit)) {
+            for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+                Database database = dbs.get(entry.getKey());
+                if (!locker.tryLockTablesWithIntensiveDbLock(database, new ArrayList<>(entry.getValue()),
+                        LockType.READ, timeout, unit)) {
                     return false;
                 }
-                lockedDbs.add(e.getValue());
+                lockedDbs.add(database);
             }
             isLockSuccess = true;
         } finally {
             if (!isLockSuccess) {
-                lockedDbs.stream().forEach(db -> locker.unLockDatabase(db, LockType.READ));
+                for (Database database : lockedDbs) {
+                    locker.unLockTablesWithIntensiveDbLock(database, new ArrayList<>(tables.get(database.getId())),
+                            LockType.READ);
+                }
             }
         }
-        return isLockSuccess;
+        return true;
     }
 
     public void lock() {
         Locker locker = new Locker();
-
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
-                Database database = dbs.get(entry.getKey());
-                List<Long> tableIds = new ArrayList<>(entry.getValue());
-                locker.lockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
-            }
-        } else {
-            for (Map.Entry<Long, Database> db : dbs.entrySet()) {
-                locker.lockDatabase(db.getValue(), LockType.READ);
-            }
+        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+            Database database = dbs.get(entry.getKey());
+            List<Long> tableIds = new ArrayList<>(entry.getValue());
+            locker.lockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
         }
     }
 
     public void unlock() {
         Locker locker = new Locker();
-
-        if (Config.lock_manager_enable_using_fine_granularity_lock) {
-            for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
-                Database database = dbs.get(entry.getKey());
-                List<Long> tableIds = new ArrayList<>(entry.getValue());
-                locker.unLockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
-            }
-        } else {
-            for (Map.Entry<Long, Database> db : dbs.entrySet()) {
-                locker.unLockDatabase(db.getValue(), LockType.READ);
-            }
+        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+            Database database = dbs.get(entry.getKey());
+            List<Long> tableIds = new ArrayList<>(entry.getValue());
+            locker.unLockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
         }
     }
 

@@ -284,7 +284,8 @@ void MetaFileBuilder::finalize_sstable_meta(const PersistentIndexSstableMetaPB& 
     _tablet_meta->mutable_sstable_meta()->CopyFrom(sstable_meta);
 }
 
-Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec) {
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
+                   DelVector* delvec) {
     // find delvec by segment id
     auto iter = metadata.delvec_meta().delvecs().find(segment_id);
     if (iter != metadata.delvec_meta().delvecs().end()) {
@@ -307,16 +308,18 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
             return Status::InternalError("Can't find delvec file name");
         }
         const auto& delvec_name = iter2->second.name();
-        RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+        RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
         ASSIGN_OR_RETURN(auto rf,
                          fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
         RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
         // parse delvec
         RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
         // put in cache
-        auto delvec_cache_ptr = std::make_shared<DelVector>();
-        delvec_cache_ptr->copy_from(*delvec);
-        tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+        if (fill_cache) {
+            auto delvec_cache_ptr = std::make_shared<DelVector>();
+            delvec_cache_ptr->copy_from(*delvec);
+            tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+        }
         TRACE("end load delvec");
         return Status::OK();
     }
@@ -331,30 +334,6 @@ bool is_primary_key(TabletMetadata* metadata) {
 
 bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
-}
-
-void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite* op_write,
-                          std::unordered_map<uint32_t, FileInfo>& rssid_to_file_info) {
-    auto get_file_info_from_rowset = [&](const RowsetMetadataPB& meta, const uint32_t rowset_id) -> void {
-        bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
-        for (int i = 0; i < meta.segments_size(); i++) {
-            FileInfo segment_info{.path = meta.segments(i)};
-            if (LIKELY(has_segment_size)) {
-                segment_info.size = meta.segment_size(i);
-            }
-            rssid_to_file_info[rowset_id + i] = segment_info;
-        }
-    };
-
-    for (auto& rs : metadata.rowsets()) {
-        get_file_info_from_rowset(rs, rs.id());
-    }
-    if (op_write != nullptr) {
-        const uint32_t rowset_id = metadata.next_rowset_id();
-        for (int i = 0; i < op_write->rowset().segments_size(); i++) {
-            get_file_info_from_rowset(op_write->rowset(), rowset_id);
-        }
-    }
 }
 
 } // namespace starrocks::lake

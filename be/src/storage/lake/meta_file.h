@@ -79,13 +79,10 @@ private:
     RecoverFlag _recover_flag = RecoverFlag::OK;
 };
 
-Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
+                   DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
-
-// TODO(yixin): cache rowset_rssid_to_path
-void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite* op_write,
-                          std::unordered_map<uint32_t, FileInfo>& rssid_to_path);
 
 } // namespace lake
 } // namespace starrocks

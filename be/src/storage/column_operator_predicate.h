@@ -159,6 +159,8 @@ public:
 
     bool can_vectorized() const override { return SpecColumnOperator::can_vectorized(); }
 
+    bool support_bitmap_filter() const override { return SpecColumnOperator::support_bitmap_filter(); }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return _predicate_operator.seek_bitmap_dictionary(iter, range);
     }

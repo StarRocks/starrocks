@@ -4,6 +4,42 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.7
+
+Release date: May 24, 2024
+
+### New Features
+
+- Stream Load supports data compression during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. [#43732](https://github.com/StarRocks/starrocks/pull/43732)
+- Optimized the garbage collection (GC) mechanism in shared-data clusters. Supports manual compaction for tables or partitions stored in object storage. [#39532](https://github.com/StarRocks/starrocks/issues/39532)
+- Flink connector supports reading complex data types ARRAY, MAP, and STRUCT from StarRocks. [#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+- Supports populating Data Cache asynchronously during queries, reducing the impact of populating cache on query performance. [#40489](https://github.com/StarRocks/starrocks/pull/40489)
+- ANALYZE TABLE supports collecting histograms for external tables, effectively addressing data skews. For more information, see [CBO statistics](https://docs.starrocks.io/docs/using_starrocks/Cost_based_optimizer/#collect-statistics-of-hiveiceberghudi-tables). [#42693](https://github.com/StarRocks/starrocks/pull/42693)
+- Lateral Join with [UNNEST](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/unnest/) supports LEFT JOIN. [#43973](https://github.com/StarRocks/starrocks/pull/43973)
+- Query Pool supports configuring memory usage threshold that triggers spilling via BE static parameter `query_pool_spill_mem_limit_threshold`. Once the threshold is reached, intermediate results of queries will be spilled to disks to reduce memory usage, thus avoiding OOM.
+- Supports creating asynchronous materialized views based on Hive views.
+
+### Improvements
+
+- Optimized the error message returned for Broker Load tasks when there is no data under the specified HDFS paths. [#43839](https://github.com/StarRocks/starrocks/pull/43839)
+- Optimized the error message returned when the Files function is used to read data from AWS S3 without Access Key and Secret Key specified. [#42450](https://github.com/StarRocks/starrocks/pull/42450)
+- Optimized the error message returned for Broker Load tasks that load no data to any partitions. [#44292](https://github.com/StarRocks/starrocks/pull/44292)
+- Optimized the error message returned for INSERT INTO SELECT tasks when the column count of the destination table does not match that in the SELECT statement. [#44331](https://github.com/StarRocks/starrocks/pull/44331)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Concurrent read or write of the BITMAP-type data may cause BE to crash. [#44167](https://github.com/StarRocks/starrocks/pull/44167)
+- Primary key indexes may cause BE to crash. [#43793](https://github.com/StarRocks/starrocks/pull/43793) [#43569](https://github.com/StarRocks/starrocks/pull/43569) [#44034](https://github.com/StarRocks/starrocks/pull/44034)
+- Under high query concurrency scenarios, the str_to_map function may cause BE to crash. [#43901](https://github.com/StarRocks/starrocks/pull/43901)
+- When the Masking policy of Apache Ranger is used, an error is returned when table aliases are specified in queries. [#44445](https://github.com/StarRocks/starrocks/pull/44445)
+- In shared-data clusters, query execution cannot be routed to a backup node when the current node encounters exceptions. The corresponding error message is optimized for this issue. [#43489](https://github.com/StarRocks/starrocks/pull/43489)
+- Memory information is incorrect in the container environment. [#43225](https://github.com/StarRocks/starrocks/issues/43225)
+- An exception is thrown when INSERT tasks are canceled. [#44239](https://github.com/StarRocks/starrocks/pull/44239)
+- Expression-based dynamic partitions cannot be automatically created. [#44163](https://github.com/StarRocks/starrocks/pull/44163)
+- Creating partitions may cause FE deadlock. [#44974](https://github.com/StarRocks/starrocks/pull/44974)
+
 ## 3.2.6
 
 Release date: April 18, 2024

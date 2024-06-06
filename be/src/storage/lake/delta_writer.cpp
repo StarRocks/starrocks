@@ -96,7 +96,9 @@ public:
 
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
-    StatusOr<TxnLogPtr> finish(DeltaWriterFinishMode mode);
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode);
+
+    Status finish();
 
     void close();
 
@@ -403,11 +405,17 @@ Status DeltaWriterImpl::init_write_schema() {
     return Status::OK();
 }
 
-StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
+Status DeltaWriterImpl::finish() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
+    return Status::OK();
+}
+
+StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mode) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(finish());
 
     if (UNLIKELY(_txn_id < 0)) {
         return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
@@ -523,7 +531,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
     auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
     Status st;
     if (metadata != nullptr) {
-        st = tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids, true);
+        st = tablet.update_mgr()->get_rowids_from_pkindex(tablet.id(), metadata->version(), upserts, &rss_rowids, true);
     }
 
     std::vector<uint8_t> filter;
@@ -619,9 +627,14 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return _impl->write(chunk, indexes, indexes_size);
 }
 
-StatusOr<TxnLogPtr> DeltaWriter::finish(DeltaWriterFinishMode mode) {
+StatusOr<TxnLogPtr> DeltaWriter::finish_with_txnlog(DeltaWriterFinishMode mode) {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish_with_txnlog() in a bthread";
+    return _impl->finish_with_txnlog(mode);
+}
+
+Status DeltaWriter::finish() {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
-    return _impl->finish(mode);
+    return _impl->finish();
 }
 
 void DeltaWriter::close() {

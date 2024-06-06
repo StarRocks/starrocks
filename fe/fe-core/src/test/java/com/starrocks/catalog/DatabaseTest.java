@@ -35,7 +35,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.persist.CreateTableInfo;
@@ -98,6 +100,10 @@ public class DatabaseTest {
                 globalStateMgr.getLockManager();
                 minTimes = 0;
                 result = new LockManager();
+
+                globalStateMgr.getNextId();
+                minTimes = 0;
+                result = 1L;
             }
         };
     }
@@ -222,5 +228,53 @@ public class DatabaseTest {
         Database db3 = new Database(101, "db3");
         db3.setCatalogName("hive");
         Assert.assertEquals("hive.db3", db3.getUUID());
+    }
+
+    @Test
+    public void testAddFunction() throws UserException {
+        // Add addIntInt function to database
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+        db.addFunction(f);
+
+        // Add addDoubleDouble function to database
+        FunctionName name2 = new FunctionName(null, "addDoubleDouble");
+        name2.setDb(db.getCatalogName());
+        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
+        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        db.addFunction(f2);
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExists() throws UserException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f);
+
+        // Attempt to add the same UDF again, expecting an exception
+        Assert.assertThrows(UserException.class, () -> db.addFunction(f));
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws UserException {
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setDb(db.getCatalogName());
+        final Type[] argTypes = {Type.INT, Type.INT};
+        Function f = new Function(name, argTypes, Type.INT, false);
+
+        // Add the UDF for the first time
+        db.addFunction(f, true);
+        // Attempt to add the same UDF again
+        db.addFunction(f, true);
+
+        List<Function> functions = db.getFunctions();
+        Assert.assertEquals(functions.size(), 1);
+        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
     }
 }

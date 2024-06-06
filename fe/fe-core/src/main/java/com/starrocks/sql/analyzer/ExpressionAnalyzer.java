@@ -1093,7 +1093,7 @@ public class ExpressionAnalyzer {
                 // need to distinct output columns in finalize phase
                 ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
                         (!isAscOrder.isEmpty() || outputConst));
-            } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
+            } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
                 argumentTypes[1] = Type.DOUBLE;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
                 // correct decimal's precision and scale

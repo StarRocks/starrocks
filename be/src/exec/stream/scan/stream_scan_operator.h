@@ -103,7 +103,7 @@ private:
 class StreamChunkSource : public ConnectorChunkSource {
 public:
     StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                      ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+                      ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer, bool enable_adaptive_io_task);
 
     [[nodiscard]] Status prepare(RuntimeState* state) override;
 

@@ -31,12 +31,9 @@ public class MvRewriteStrategy {
     // Whether enable force rewrite for query plans with join operator by rule based mv rewrite
     public boolean enableForceRBORewrite = false;
 
-    // rbo config
-    public boolean enableRBOViewBasedRewrite = false;
-    public boolean enableRBOSingleTableRewrite = false;
-
-    // cbo config
-    public boolean enableCBORewrite = false;
+    public boolean enableViewBasedRewrite = false;
+    public boolean enableSingleTableRewrite = false;
+    public boolean enableMultiTableRewrite = false;
 
     static class MvStrategyArbitrator {
         private final OptimizerConfig optimizerConfig;
@@ -128,10 +125,21 @@ public class MvRewriteStrategy {
         strategy.enableForceRBORewrite = sessionVariable.isEnableForceRuleBasedMvRewrite();
 
         // rbo strategies
-        strategy.enableRBOViewBasedRewrite = arbitrator.isEnableRBOViewBasedRewrite();
-        strategy.enableRBOSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
+        strategy.enableViewBasedRewrite = arbitrator.isEnableRBOViewBasedRewrite();
+        strategy.enableSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
 
         // cbo strategies
-        strategy.enableCBORewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
+        strategy.enableMultiTableRewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
+    }
+
+    @Override
+    public String toString() {
+        return "MvRewriteStrategy{" +
+                "enableMaterializedViewRewrite=" + enableMaterializedViewRewrite +
+                ", enableForceRBORewrite=" + enableForceRBORewrite +
+                ", enableViewBasedRewrite=" + enableViewBasedRewrite +
+                ", enableSingleTableRewrite=" + enableSingleTableRewrite +
+                ", enableMultiTableRewrite=" + enableMultiTableRewrite +
+                '}';
     }
 }

@@ -54,8 +54,6 @@ alter_clause1[, alter_clause2, ...]
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](../data-manipulation/SHOW_ALTER.md)。
 - rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
 
-:::
-
 ### Rename 对名称进行修改
 
 #### 修改表名
@@ -100,26 +98,97 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 #### 增加分区 (ADD PARTITION)
 
+增加分区时支持使用 Range 分区和 List 分区。
+
 语法：
 
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD PARTITION [IF NOT EXISTS] <partition_name>
-partition_desc ["key"="value"]
-[DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
-```
+- Range 分区
 
-注意：
+    ```SQL
+    ALTER TABLE
+        ADD { single_range_partition | multi_range_partitions } [distribution_desc] ["key"="value"];
+    
+    single_range_partition ::=
+        PARTITION [IF NOT EXISTS] <partition_name> VALUES partition_key_desc
 
-1. partition_desc 支持以下两种写法：
+    partition_key_desc ::=
+        { LESS THAN { MAXVALUE | value_list }
+        | [ value_list , value_list ) } -- 注意此处的 [ 代表左闭合区间
 
-   - `VALUES LESS THAN [MAXVALUE|("value1", ...)]`
-   - `VALUES [("value1", ...), ("value1", ...)]`
+    value_list ::=
+        ( <value> [, ...] )
 
-2. 分区为左闭右开区间，如果用户仅指定右边界，系统会自动确定左边界。
-3. 如果没有指定分桶方式，则自动使用建表使用的分桶方式。
-4. 如指定分桶方式，只能修改分桶数，不可修改分桶方式或分桶列。
-5. `["key" = "value"]` 部分可以设置分区的一些属性，具体说明见 [CREATE TABLE](./CREATE_TABLE.md)。
+    multi_range_partitions ::=
+        { PARTITIONS START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+        | PARTITIONS START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+    ```
+
+- List 分区
+
+    ```SQL
+    ALTER TABLE
+        ADD PARTITION <partition_name> VALUES IN (value_list) [distribution_desc] ["key"="value"];
+
+    value_list ::=
+        value_item [, ...]
+
+    value_item ::=
+        { <value> | ( <value> [, ...] ) }
+    ```
+
+参数：
+
+- 分区相关参数
+
+  - Range 分区支持新增单个分区 `single_range_partition` 或者批量创建分区 `multi_range_partition`。
+  - List 分区仅支持新增单个分区。
+
+- `distribution_desc`：
+
+   可以为新的分区单独设置分桶数量，但是不支持单独设置分桶方式。
+
+- `"key"="value"`：
+
+   可以为新的分区设置属性，具体说明见 [CREATE TABLE](./CREATE_TABLE.md#properties)。
+
+示例：
+
+- Range 分区
+
+  - 如果建表时指定分区列为 `event_day`，例如 `PARTITION BY RANGE(event_day)`，并且建表后需要新增一个分区，则可以执行：
+
+    ```sql
+    ALTER TABLE site_access ADD PARTITION p4 VALUES LESS THAN ("2020-04-30");
+    ```
+
+  - 如果建表时指定分区列为 `datekey`，例如 `PARTITION BY RANGE (datekey)`，并且建表后需要批量新增多个分区，则可以执行：
+
+    ```sql
+    ALTER TABLE site_access
+        ADD PARTITIONS START ("2021-01-05") END ("2021-01-10") EVERY (INTERVAL 1 DAY);
+    ```
+
+- List 分区
+
+  - 如果建表时指定单个分区列，例如 `PARTITION BY LIST (city)`，并且建表后需要新增一个分区，则可以执行：
+
+    ```sql
+    ALTER TABLE t_recharge_detail2
+    ADD PARTITION pCalifornia VALUES IN ("Los Angeles","San Francisco","San Diego");
+    ```
+
+  - 如果建表时指定多个分区列，例如 `PARTITION BY LIST (dt,city)`，并且建表后需要新增一个分区，则可以执行：
+
+    ```sql
+    ALTER TABLE t_recharge_detail4 
+    ADD PARTITION p202204_California VALUES IN
+    (
+        ("2022-04-01", "Los Angeles"),
+        ("2022-04-01", "San Francisco"),
+        ("2022-04-02", "Los Angeles"),
+        ("2022-04-02", "San Francisco")
+    );
+    ```
 
 #### 删除分区 (DROP PARTITION)
 

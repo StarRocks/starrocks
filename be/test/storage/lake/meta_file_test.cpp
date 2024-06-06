@@ -124,7 +124,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     // 3. read delvec
     DelVector after_delvec;
     ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, &after_delvec).ok());
+    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, true, &after_delvec).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
 
     // 4. read meta
@@ -225,7 +225,7 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
         // 3. read delvec
         DelVector after_delvec;
         ASSIGN_OR_ABORT(auto meta, _tablet_manager->get_tablet_metadata(tablet_id, version));
-        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, &after_delvec).ok());
+        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, false, &after_delvec).ok());
         EXPECT_EQ(before_delvec, after_delvec.save());
     };
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {

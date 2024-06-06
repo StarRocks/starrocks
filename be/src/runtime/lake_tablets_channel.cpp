@@ -159,11 +159,15 @@ private:
             return _logs;
         }
 
-        void wait() {
+        // Returns true on notified, false on timeout
+        bool wait(int64_t timeout_ms) {
             std::unique_lock l(_mtx);
             while (!_notified) {
-                _cond.wait(l);
+                if (_cond.wait_for(l, timeout_ms * 1000L) == ETIMEDOUT) {
+                    return false;
+                }
             }
+            return true;
         }
 
         void notify() {
@@ -275,6 +279,7 @@ LakeTabletsChannel::~LakeTabletsChannel() {
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
+    DCHECK_EQ(-1, _txn_id);
     SCOPED_TIMER(_open_timer);
     COUNTER_UPDATE(_open_counter, 1);
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
@@ -399,7 +404,15 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         total_row_num += size;
         int64_t tablet_id = tablet_ids[row_indexes[from]];
         auto& dw = _delta_writers[tablet_id];
-        DCHECK(dw != nullptr);
+        if (dw == nullptr) {
+            LOG(WARNING) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                         << " not found tablet_id: " << tablet_id;
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(
+                    fmt::format("Failed to add_chunk since tablet_id {} not exists, txn_id: {}, load_id: {}", tablet_id,
+                                _txn_id, print_id(request.id())));
+            return;
+        }
 
         // back pressure OlapTableSink since there are too many memtables need to flush
         while (dw->queueing_memtable_num() >= config::max_queueing_memtable_per_tablet) {
@@ -538,8 +551,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
         response->status().status_code() == TStatusCode::OK) {
         rolk.unlock();
-        _txn_log_collector.wait();
-        auto st = _txn_log_collector.status();
+        auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+        auto ok = _txn_log_collector.wait(t);
+        auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
         if (st.ok()) {
             context->add_txn_logs(_txn_log_collector.logs());
         } else {

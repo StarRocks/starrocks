@@ -707,7 +707,7 @@ showComputeNodesStatement
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
 
 createExternalCatalogStatement
-    : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
+    : CREATE EXTERNAL CATALOG catalogName=identifierOrString (IF NOT EXISTS)? comment? properties
     ;
 
 showCreateExternalCatalogStatement
@@ -1253,7 +1253,10 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    ;
+inlineFunction
+    : AS ATTACHMENT
     ;
 
 typeList
@@ -2342,7 +2345,7 @@ explainDesc
     ;
 
 optimizerTrace
-    : TRACE (ALL | LOGS | TIMES | VALUES) identifier?
+    : TRACE (ALL | LOGS | TIMES | VALUES | REASON) identifier?
     ;
 
 partitionDesc
@@ -2451,6 +2454,14 @@ userPropertyList
 
 property
     : key=string '=' value=string
+    ;
+
+inlineProperties
+    : inlineProperty ( inlineProperty)*
+    ;
+
+inlineProperty
+    : key=identifier '=' value=string
     ;
 
 varType
@@ -2650,7 +2661,7 @@ nonReserved
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLUGIN | PLUGINS | POLICY | POLICIES
     | PERCENT_RANK | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
-    | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
+    | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START

@@ -2313,7 +2313,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             // creating partition names is ordered
             for (String partitionName : creatingPartitionNames) {
-                txnState.lockCreatePartition(partitionName);
+                olapTable.lockCreatePartition(partitionName);
             }
 
             // ingestion is top priority, if schema change or rollup is running, cancel it
@@ -2341,14 +2341,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("failed to cancel alter operation", e);
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error:%s", e.getMessage())));
             result.setStatus(errorStatus);
             return result;
         } finally {
             for (String partitionName : creatingPartitionNames) {
-                txnState.unlockCreatePartition(partitionName);
+                olapTable.unlockCreatePartition(partitionName);
             }
         }
 

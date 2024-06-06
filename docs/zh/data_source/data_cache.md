@@ -158,3 +158,31 @@ datacache_disk_size = 1288490188800
  - __MAX_OF_BytesRead: 194.99 MB
  - __MIN_OF_BytesRead: 81.25 MB
 ```
+
+## Data Cache 填充
+
+### 异步填充
+
+Data Cache 支持以同步或异步的方式进行缓存填充。
+
+- 同步填充（默认方式）
+
+  使用同步填充方式时，会将当前查询所读取的远端数据都缓存在本地。同步方式填充效率较高，但由于缓存填充操作在数据读取时执行，可能会对首次查询效率带来影响。
+
+- 异步填充（3.2.7 及以后）
+
+  使用异步填充方式时，系统会尝试在尽可能不影响读取性能的前提下在后台对访问到的数据进行缓存。异步方式能够减少缓存填充对首次读取性能的影响，但填充效率较低。通常单次查询不能保证将访问到的所以数据都缓存到本地，往往需要多次。
+
+当前系统默认以同步方式进行缓存，您可以通过修改 session 变量 [enable_datacache_async_populate_mode](../reference/System_variable.md) 来启用异步填充：
+
+- 按需在单个会话中开启 Data Cache 异步填充。
+
+  ```sql
+  SET enable_datacache_async_populate_mode = true;
+  ```
+
+- 为当前所有会话开启 Data Cache 异步填充。
+
+  ```sql
+  SET GLOBAL enable_datacache_async_populate_mode = true;
+  ```
