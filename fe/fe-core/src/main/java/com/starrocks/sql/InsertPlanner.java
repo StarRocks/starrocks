@@ -383,9 +383,6 @@ public class InsertPlanner {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
                 }
 
-                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
-                session.getSessionVariable().setPreferComputeNode(false);
-                session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
                 TableName catalogDbTable = insertStmt.getTableName();
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
