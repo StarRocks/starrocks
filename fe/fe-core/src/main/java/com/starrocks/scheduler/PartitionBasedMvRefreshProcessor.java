@@ -529,7 +529,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         LinkedList<String> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
                 .map(Map.Entry::getKey)
-                .collect(Collectors.toCollection (LinkedList::new));
+                .collect(Collectors.toCollection(LinkedList::new));
 
         Iterator<String> partitionNameIter = Config.materialized_view_refresh_ascending
                 ? sortedPartition.iterator() : sortedPartition.descendingIterator();
