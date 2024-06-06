@@ -231,12 +231,8 @@ public:
                                                                  bool with_null) const = 0;
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
-<<<<<<< HEAD
-                                            size_t npage_hint, size_t nbucket, bool without_null) const = 0;
-=======
                                             size_t npage_hint, size_t page_size, size_t nbucket,
                                             bool with_null) const = 0;
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;

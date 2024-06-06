@@ -56,11 +56,6 @@ constexpr size_t kShardMax = 1 << 16;
 constexpr uint64_t kPageMaxNum = 1ULL << 16;
 constexpr size_t kPackSize = 16;
 constexpr size_t kBucketSizeMax = 256;
-<<<<<<< HEAD
-constexpr size_t kMinEnableBFKVNum = 10000000;
-constexpr size_t kLongKeySize = 64;
-=======
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
 constexpr size_t kFixedMaxKeySize = 128;
 constexpr size_t kBatchBloomFilterReadSize = 4ULL << 20;
 
@@ -991,13 +986,9 @@ public:
     }
 
     Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard, size_t npage_hint,
-<<<<<<< HEAD
-                                    size_t nbucket, bool without_null) const override {
-=======
                                     size_t page_size, size_t nbucket, bool with_null) const override {
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
         if (nshard > 0) {
-            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), without_null);
+            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), with_null);
             for (const auto& kvs : kv_ref_by_shard) {
                 RETURN_IF_ERROR(writer->write_shard(KeySize, npage_hint, page_size, nbucket, kvs));
             }
@@ -1417,13 +1408,9 @@ public:
     }
 
     Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard, size_t npage_hint,
-<<<<<<< HEAD
-                                    size_t nbucket, bool without_null) const override {
-=======
                                     size_t page_size, size_t nbucket, bool with_null) const override {
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
         if (nshard > 0) {
-            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), without_null);
+            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), with_null);
             for (const auto& kvs : kv_ref_by_shard) {
                 RETURN_IF_ERROR(writer->write_shard(kKeySizeMagicNum, npage_hint, page_size, nbucket, kvs));
             }
@@ -2352,14 +2339,8 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
                                             std::unique_ptr<ImmutableIndexShard>* shard) const {
     const auto& shard_info = _shards[shard_idx];
     uint8_t candidate_idxes[kBucketSizeMax];
-<<<<<<< HEAD
     for (size_t i = 0; i < keys_info.size(); i++) {
         IndexHash h(keys_info[i].second);
-=======
-
-    for (const auto& key_info : keys_info) {
-        IndexHash h(key_info.second);
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
         auto pageid = h.page() % shard_info.npage;
         auto bucketid = h.bucket() % shard_info.nbucket;
         auto& bucket_info = (*shard)->bucket(pageid, bucketid);
@@ -2650,16 +2631,9 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     std::unique_ptr<ImmutableIndexShard> shard =
             std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
     if (shard_info.uncompressed_size == 0) {
-<<<<<<< HEAD
-        DCHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
+        DCHECK(shard->npage() * shard_info.page_size == shard_info.bytes);
     } else {
-        DCHECK(shard->pages.size() * kPageSize == shard_info.uncompressed_size) << "illegal shard size";
-=======
-        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.bytes, "illegal shard size");
-    } else {
-        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.uncompressed_size,
-                              "illegal shard size");
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
+        DCHECK(shard->npage() * shard_info.page_size == shard_info.uncompressed_size);
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
@@ -2742,16 +2716,9 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
     std::unique_ptr<ImmutableIndexShard> shard =
             std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
     if (shard_info.uncompressed_size == 0) {
-<<<<<<< HEAD
-        DCHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
+        DCHECK(shard->npage() * shard_info.page_size == shard_info.bytes);
     } else {
-        DCHECK(shard->pages.size() * kPageSize == shard_info.uncompressed_size) << "illegal shard size";
-=======
-        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.bytes, "illegal shard size");
-    } else {
-        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.uncompressed_size,
-                              "illegal shard size");
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
+        DCHECK(shard->npage() * shard_info.page_size == shard_info.uncompressed_size);
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
@@ -5230,167 +5197,6 @@ void PersistentIndex::reset_cancel_major_compaction() {
     }
 }
 
-<<<<<<< HEAD
-=======
-Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
-    starrocks::Schema pkey_schema = loader->generate_pkey_schema();
-    DataDir* data_dir = loader->data_dir();
-    TTabletId tablet_id = loader->tablet_id();
-    ASSIGN_OR_RETURN(EditVersion applied_version, loader->applied_version());
-    loader->setting();
-
-    MonotonicStopWatch timer;
-    timer.start();
-
-    PersistentIndexMetaPB index_meta;
-    Status status = TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta);
-    if (!status.ok() && !status.is_not_found()) {
-        return Status::InternalError("get tablet persistent index meta failed");
-    }
-
-    // There are three conditions
-    // First is we do not find PersistentIndexMetaPB in TabletMeta, it maybe the first time to
-    // enable persistent index
-    // Second is we find PersistentIndexMetaPB in TabletMeta, but it's version is behind applied_version
-    // in TabletMeta. It could be happened as below:
-    //    1. Enable persistent index and apply rowset, applied_version is 1-0
-    //    2. Restart be and disable persistent index, applied_version is update to 2-0
-    //    3. Restart be and enable persistent index
-    // In this case, we don't have all rowset data in persistent index files, so we also need to rebuild it
-    // The last is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
-    // we can load from index file directly
-    if (status.ok()) {
-        // all applied rowsets has save in existing persistent index meta
-        // so we can load persistent index according to PersistentIndexMetaPB
-        EditVersion version = index_meta.version();
-        if (version == applied_version) {
-            if (_need_rebuild_index(index_meta)) {
-                LOG(WARNING) << "we need to rebuild persistent index, tablet id: " << tablet_id;
-                status = Status::InternalError("rebuild persistent index");
-            } else {
-                status = load(index_meta);
-            }
-            if (status.ok()) {
-                LOG(INFO) << "load persistent index tablet:" << tablet_id << " version:" << version.to_string()
-                          << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
-                          << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
-                          << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
-                          << " memory: " << memory_usage() << " status: " << status.to_string()
-                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
-                return status;
-            } else {
-                LOG(WARNING) << "load persistent index failed, tablet: " << tablet_id << ", status: " << status;
-                if (index_meta.has_l0_meta()) {
-                    EditVersion l0_version = index_meta.l0_meta().snapshot().version();
-                    std::string l0_file_name =
-                            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
-                    Status st = FileSystem::Default()->delete_file(l0_file_name);
-                    LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
-                }
-                if (index_meta.has_l1_version()) {
-                    EditVersion l1_version = index_meta.l1_version();
-                    std::string l1_file_name =
-                            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
-                    Status st = FileSystem::Default()->delete_file(l1_file_name);
-                    LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
-                }
-                if (index_meta.l2_versions_size() > 0) {
-                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
-                    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
-                        EditVersion l2_version = index_meta.l2_versions(i);
-                        std::string l2_file_name = strings::Substitute(
-                                "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
-                                index_meta.l2_version_merged(i) ? MergeSuffix : "");
-                        Status st = FileSystem::Default()->delete_file(l2_file_name);
-                        LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
-                    }
-                }
-            }
-        }
-    }
-
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
-
-    // Init PersistentIndex
-    _key_size = fix_size;
-    _size = 0;
-    _version = applied_version;
-    auto st = ShardByLengthMutableIndex::create(_key_size, _path);
-    if (!st.ok()) {
-        LOG(WARNING) << "Build persistent index failed because initialization failed: " << st.status().to_string();
-        return st.status();
-    }
-    _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
-    // set _dump_snapshot to true
-    // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
-    _dump_snapshot = true;
-
-    // clear l1
-    _l1_vec.clear();
-    _usage_and_size_by_key_length.clear();
-    _l1_merged_num.clear();
-    _has_l1 = false;
-    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
-        auto [l0_shard_offset, l0_shard_size] = shard_info;
-        const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                      std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                      0LL, [](size_t s, const auto& e) { return s + e->size(); });
-        const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                       0LL, [](size_t s, const auto& e) { return s + e->usage(); });
-        if (auto [_, inserted] =
-                    _usage_and_size_by_key_length.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
-            !inserted) {
-            std::string msg = strings::Substitute(
-                    "load persistent index from tablet failed, insert usage and size by key size failed, key_size: $0",
-                    key_size);
-            LOG(WARNING) << msg;
-            return Status::InternalError(msg);
-        }
-    }
-    // clear l2
-    _l2_vec.clear();
-    _l2_versions.clear();
-
-    // Init PersistentIndexMetaPB
-    //   1. reset |version| |key_size|
-    //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
-    //   3. reset SnapshotMeta
-    //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
-    index_meta.clear_l0_meta();
-    index_meta.clear_l1_version();
-    index_meta.clear_l2_versions();
-    index_meta.clear_l2_version_merged();
-    index_meta.set_key_size(_key_size);
-    index_meta.set_size(0);
-    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_5);
-    applied_version.to_pb(index_meta.mutable_version());
-    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->clear_wals();
-    IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
-    applied_version.to_pb(snapshot->mutable_version());
-    PagePointerPB* data = snapshot->mutable_data();
-    data->set_offset(0);
-    data->set_size(0);
-
-    std::unique_ptr<Column> pk_column;
-    if (pkey_schema.num_fields() > 1) {
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-    }
-    RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
-    RETURN_IF_ERROR(_build_commit(loader, index_meta));
-    LOG(INFO) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
-              << " #rowset:" << loader->rowset_num() << " #segment:" << loader->total_segments()
-              << " data_size:" << loader->total_data_size() << " size: " << _size << " l0_size: " << _l0->size()
-              << " l0_capacity:" << _l0->capacity() << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
-              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
-    return Status::OK();
-}
-
->>>>>>> 9f9d6dc5a7 ([BugFix] Fix the bug that causes incorrect pindex data when the key length is very long (#43568))
 Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
     for (const auto& l2 : _l2_vec) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
