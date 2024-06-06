@@ -833,6 +833,10 @@ public class ConnectProcessor {
             ctx.setQueryId(UUIDUtil.fromTUniqueid(request.getQueryId()));
         }
 
+        if (request.isSetWarehouse_id()) {
+            ctx.setCurrentWarehouseId(request.getWarehouse_id());
+        }
+
         if (request.isSetForward_times()) {
             ctx.setForwardTimes(request.getForward_times());
         }
