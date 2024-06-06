@@ -110,7 +110,7 @@ Status CacheLibWrapper::read_object(const std::string& key, DataCacheHandle* han
     return Status::NotSupported("not supported read object in cachelib");
 }
 
-Status CacheLibWrapper::update_mem_quota(size_t quota_bytes) {
+Status CacheLibWrapper::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
     return Status::NotSupported("not support updating memory cache quota for cachelib");
 }
 

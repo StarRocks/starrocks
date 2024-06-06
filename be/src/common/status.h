@@ -157,6 +157,8 @@ public:
 
     bool is_mem_limit_exceeded() const { return code() == TStatusCode::MEM_LIMIT_EXCEEDED; }
 
+    bool is_capacity_limit_exceeded() const { return code() == TStatusCode::CAPACITY_LIMIT_EXCEED; }
+
     bool is_thrift_rpc_error() const { return code() == TStatusCode::THRIFT_RPC_ERROR; }
 
     bool is_end_of_file() const { return code() == TStatusCode::END_OF_FILE; }

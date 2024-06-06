@@ -104,7 +104,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
             }
             size_t mem_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
-            (void)BlockCache::instance()->update_mem_quota(mem_size);
+            (void)BlockCache::instance()->update_mem_quota(mem_size, true);
         });
         _config_callback.emplace("datacache_disk_size", [&]() {
             std::vector<DirSpace> spaces;

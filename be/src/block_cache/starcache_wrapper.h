@@ -40,7 +40,7 @@ public:
 
     Status remove(const std::string& key) override;
 
-    Status update_mem_quota(size_t quota_bytes) override;
+    Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) override;
 
     Status update_disk_spaces(const std::vector<DirSpace>& spaces) override;
 
@@ -78,6 +78,8 @@ inline Status to_status(const butil::Status& st) {
         return Status::IOError(st.error_str());
     case ENOMEM:
         return Status::MemoryLimitExceeded(st.error_str());
+    case ENOSPC:
+        return Status::CapacityLimitExceed(st.error_str());
     case EBUSY:
         return Status::ResourceBusy(st.error_str());
     default:
