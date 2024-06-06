@@ -1,6 +1,12 @@
 -- name: testDeltaLakeCatalog
 
-create external catalog delta_test_${uuid0} PROPERTIES ("type"="deltalake", "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}");
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
 
 -- only partition column Predicate with runtime filter
 select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode where c3='a' order by c1;
