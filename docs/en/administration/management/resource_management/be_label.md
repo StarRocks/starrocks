@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Add labels on BEs
 
-Since v3.2.8, StarRocks supports adding labels on BEs. If you specify labels at table creation, identical replicas are evenly distributed across different labels, and also evenly distributed within the BEs of the same label. It can enhance data high availability and facilitate resource isolation.
+Since v3.2.8, StarRocks supports adding labels on BEs. If you specify labels at table creation, identical replicas are evenly distributed across different labels, and also evenly distributed within the BEs of the same label. This feature can enhance data high availability and isolate resource.
 
 ## Usage
 
