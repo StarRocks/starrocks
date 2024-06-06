@@ -265,6 +265,7 @@ public class Locker {
 
     /**
      * Try to lock databases in ascending order of id.
+     *
      * @return: true if all databases are locked successfully, false otherwise.
      */
     public boolean tryLockDatabases(List<Database> dbs, LockType lockType, long timeout, TimeUnit unit) {
@@ -311,8 +312,7 @@ public class Locker {
     public void lockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
@@ -338,8 +338,7 @@ public class Locker {
     public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, long timeout) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
@@ -385,8 +384,7 @@ public class Locker {
     public void unLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
-
-        if (Config.lock_manager_enabled) {
+        if (Config.lock_manager_enabled && Config.lock_manager_enable_using_fine_granularity_lock) {
             if (lockType == LockType.WRITE) {
                 this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
             } else {

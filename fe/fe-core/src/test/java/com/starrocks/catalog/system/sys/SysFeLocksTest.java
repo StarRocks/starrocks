@@ -15,6 +15,7 @@
 package com.starrocks.catalog.system.sys;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.thrift.TAuthInfo;
@@ -45,6 +46,8 @@ public class SysFeLocksTest {
 
     @Test
     public void testResolveLockItem() throws InterruptedException {
+        Config.lock_manager_enabled = false;
+
         Database db = new Database(1, "test_lock");
 
         // empty lock
@@ -117,6 +120,8 @@ public class SysFeLocksTest {
                     item.getWaiter_list());
             locker.unLockDatabase(db, LockType.READ);
         }
+
+        Config.lock_manager_enabled = true;
     }
 
 }
