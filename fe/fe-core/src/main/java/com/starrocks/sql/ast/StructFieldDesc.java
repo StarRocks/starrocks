@@ -97,7 +97,7 @@ public class StructFieldDesc implements ParseNode {
 
     public void analyze(Column baseCol, boolean dropField) throws AnalysisException {
         if (baseCol == null) {
-            throw new AnalysisException(String.format("Analyze add/drop field failed, modifyc column is not exist"));
+            throw new AnalysisException(String.format("Analyze add/drop field failed, modify column is not exist"));
         }
 
         Type targetFieldType = baseCol.getType();

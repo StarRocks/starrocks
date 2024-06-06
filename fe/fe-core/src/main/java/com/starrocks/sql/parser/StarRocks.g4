@@ -1009,7 +1009,7 @@ compactionClause
     ;
 
 subfieldName
-    : identifier | '[*]'
+    : identifier | ARRAY_ELEMENT
     ;
 
 nestedFieldName
@@ -2694,4 +2694,5 @@ nonReserved
     | YEAR
     | DOTDOTDOT | NGRAMBF
     | FIELD
+    | ARRAY_ELEMENT
     ;

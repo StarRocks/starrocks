@@ -487,7 +487,7 @@ LTE : '<=';
 GT  : '>';
 GTE : '>=';
 EQ_FOR_NULL: '<=>';
-ARRAR_ELEMENT: '[*]';
+ARRAY_ELEMENT: '[*]';
 
 PLUS_SYMBOL: '+';
 MINUS_SYMBOL: '-';

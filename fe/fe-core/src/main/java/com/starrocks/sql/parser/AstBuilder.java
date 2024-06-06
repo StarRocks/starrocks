@@ -4084,7 +4084,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAddFieldClause(StarRocksParser.AddFieldClauseContext context) {
         String columnName = getIdentifierName(context.identifier(0));
-        String rollupName = null;
         StarRocksParser.SubfieldDescContext subFieldDescContext = context.subfieldDesc();
         List<String> parts = new ArrayList<>();
         if (subFieldDescContext.nestedFieldName() != null) {
@@ -4108,7 +4107,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException("add field clause name is null");
         }
         StructFieldDesc fieldDesc = new StructFieldDesc(fieldName, parts, typeDef, fieldPosition);
-        return new AddFieldClause(columnName, fieldDesc, rollupName, getProperties(context.properties()));
+        return new AddFieldClause(columnName, fieldDesc, null, getProperties(context.properties()));
     }
 
     @Override
@@ -7419,8 +7418,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         for (ParseTree c : context.children) {
             if (c instanceof StarRocksParser.SubfieldNameContext) {
                 StarRocksParser.SubfieldNameContext subfieldNameContext = (StarRocksParser.SubfieldNameContext) c;
-                if (subfieldNameContext.ARRAR_ELEMENT() != null) {
-                    TerminalNode t = subfieldNameContext.ARRAR_ELEMENT();
+                if (subfieldNameContext.ARRAY_ELEMENT() != null) {
+                    TerminalNode t = subfieldNameContext.ARRAY_ELEMENT();
                     parts.add(t.getText());
                 } else {
                     StarRocksParser.IdentifierContext identifierContext = subfieldNameContext.identifier();
