@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Add labels on BEs
 
-Since v3.2.8, StarRocks supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures that data can be evenly distributed based on racks, data centers, etc., to address disaster recovery requirements in case that certain racks lose power or data centers encounter failures.
+Since v3.2.8, StarRocks supports adding labels on BEs. It can make sure that data can be evenly distributed based on racks, data centers, etc., to improve high availability for data.
 
 ## Overview
 
