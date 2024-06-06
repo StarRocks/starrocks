@@ -104,7 +104,6 @@ Status RowsetWriter::init() {
     _rowset_meta_pb->set_rowset_type(BETA_ROWSET);
     _rowset_meta_pb->set_rowset_state(_context.rowset_state);
     _rowset_meta_pb->set_segments_overlap_pb(_context.segments_overlap);
-    _rowset_meta_pb->set_insert_mode(_context.insert_mode);
 
     if (_context.rowset_state == PREPARED || _context.rowset_state == COMMITTED) {
         _is_pending = true;
@@ -125,7 +124,8 @@ Status RowsetWriter::init() {
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
 
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-        (_context.is_partial_update || !_context.merge_condition.empty() || _context.miss_auto_increment_column)) {
+        (_context.is_partial_update || !_context.merge_condition.empty() || _context.miss_auto_increment_column ||
+         _context.insert_mode == InsertMode::IGNORE_MODE)) {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
@@ -213,6 +213,9 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                     break;
                 }
             }
+            *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
+        } else if (_context.insert_mode == InsertMode::IGNORE_MODE) {
+            _rowset_txn_meta_pb->set_insert_mode(InsertMode::IGNORE_MODE);
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         }
     } else {

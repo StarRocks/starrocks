@@ -1262,9 +1262,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     }
     EditVersion latest_applied_version;
     st = get_latest_applied_version(&latest_applied_version);
-    InsertMode insert_mode = rowset->rowset_meta()->get_meta_pb_without_schema().has_insert_mode()
-                                     ? rowset->rowset_meta()->get_meta_pb_without_schema().insert_mode()
-                                     : InsertMode::UPSERT_MODE;
+    InsertMode insert_mode = txn_meta.insert_mode();
 
     int64_t full_row_size = 0;
     int64_t full_rowset_size = 0;

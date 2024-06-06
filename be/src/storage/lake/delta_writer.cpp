@@ -445,7 +445,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
-    op_write->set_insert_mode(_insert_mode);
 
     const auto is_partial_update = (_write_schema->num_columns() < _tablet_schema->num_columns());
 
@@ -492,6 +491,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                     op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
             }
+        }
+        // insert ignore
+        if (_insert_mode == InsertMode::IGNORE_MODE) {
+            op_write->mutable_txn_meta()->set_insert_mode(InsertMode::IGNORE_MODE);
         }
     }
     if (mode == kWriteTxnLog) {

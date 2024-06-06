@@ -91,6 +91,15 @@ enum PartialUpdateMode {
     AUTO_MODE = 3;
     COLUMN_UPDATE_MODE = 4;
 }
+
+// when primary key is duplicated, if the InsertMode is
+//     1. upsert, the newer record will replace the old record.
+//     2. ignore, it will keep the old record and ignore the newer one.
+enum InsertMode {
+    UPSERT_MODE = 0;
+    IGNORE_MODE = 1;
+}
+
 message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;
     repeated uint32 partial_update_column_unique_ids = 2;
@@ -105,14 +114,8 @@ message RowsetTxnMetaPB {
     optional PartialUpdateMode partial_update_mode = 6;
     // auto increment column unique id
     optional int32 auto_increment_partial_update_column_uid = 7;
-}
-
-// when primary key is duplicated, if the InsertMode is
-//     1. upsert, the newer record will replace the old record.
-//     2. ignore, it will keep the old record and ignore the newer one.
-enum InsertMode {
-    UPSERT_MODE = 0;
-    IGNORE_MODE = 1;
+    // insert mode
+    optional InsertMode insert_mode = 8 [default = UPSERT_MODE];
 }
 
 message RowsetMetaPB {
@@ -183,8 +186,6 @@ message RowsetMetaPB {
     optional uint32 max_compact_input_rowset_id = 61;
     // global transaction id
     optional int64 gtid = 62;
-    // insert mode
-    optional InsertMode insert_mode = 63 [default = UPSERT_MODE];
 }
 
 enum DataFileType {

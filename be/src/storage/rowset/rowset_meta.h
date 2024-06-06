@@ -178,8 +178,6 @@ public:
 
     SegmentsOverlapPB segments_overlap() const { return _rowset_meta_pb->segments_overlap_pb(); }
 
-    InsertMode insert_mode() const { return _rowset_meta_pb->insert_mode(); }
-
     // return true if segments in this rowset has overlapping data.
     // this is not same as `segments_overlap()` method.
     // `segments_overlap()` only return the value of "segments_overlap" field in rowset meta,
