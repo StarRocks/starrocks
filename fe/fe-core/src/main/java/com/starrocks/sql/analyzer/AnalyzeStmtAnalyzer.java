@@ -135,7 +135,7 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("External table %s don't support SAMPLE analyze",
                             statement.getTableName().toString());
                 }
-                if (!analyzeTable.isExternalTableSupportAnalyze()) {
+                if (!analyzeTable.isAnalyzableExternalTable()) {
                     throw new SemanticException(
                             "Analyze external table only support hive, iceberg, deltalake and odps table",
                             statement.getTableName().toString());
@@ -171,7 +171,7 @@ public class AnalyzeStmtAnalyzer {
                             session.getDatabase() : tbl.getDb();
                     tbl.setDb(dbName);
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
-                    if (!analyzeTable.isExternalTableSupportAnalyze()) {
+                    if (!analyzeTable.isAnalyzableExternalTable()) {
                         throw new SemanticException("Analyze external table only support hive, iceberg, deltalake and odps table",
                                 statement.getTableName().toString());
                     }

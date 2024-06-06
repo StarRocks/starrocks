@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -148,6 +149,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             return TableType.valueOf(serializedName);
         }
     }
+
+    public static final ImmutableSet<TableType> IS_ANALYZABLE_EXTERNAL_TABLE =
+            new ImmutableSet.Builder<TableType>()
+                    .add(TableType.HIVE)
+                    .add(TableType.ICEBERG)
+                    .add(TableType.HUDI)
+                    .add(TableType.ODPS)
+                    .add(TableType.DELTALAKE)
+                    .build();
 
     @SerializedName(value = "id")
     protected long id;
@@ -300,9 +310,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.ICEBERG_VIEW;
     }
 
-    public boolean isExternalTableSupportAnalyze() {
-        return type == TableType.HIVE || type == TableType.ICEBERG || type == TableType.HUDI
-                || type == TableType.ODPS || type == TableType.DELTALAKE;
+    public boolean isAnalyzableExternalTable() {
+        return IS_ANALYZABLE_EXTERNAL_TABLE.contains(type);
     }
 
     public boolean isView() {
