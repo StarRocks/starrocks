@@ -207,7 +207,7 @@ ROCKSDB_MD5SUM="02727e52cdb94fa6a9dbbd68d157e619"
 # libsasl
 SASL_DOWNLOAD="https://github.com/cyrusimap/cyrus-sasl/archive/refs/tags/cyrus-sasl-2.1.28.tar.gz"
 SASL_NAME=cyrus-sasl-2.1.28.tar.gz
-SASL_SOURCE=cyrus-sasl-2.1.28
+SASL_SOURCE=cyrus-sasl-cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
 # kerberos MIT
