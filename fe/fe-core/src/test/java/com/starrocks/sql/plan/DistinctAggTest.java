@@ -45,9 +45,10 @@ public class DistinctAggTest extends PlanTestBase {
         String sql = "select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), " +
                 "group_concat(distinct 1, 2 order by 1), array_agg(distinct 1 order by 1) from t0 group by v2;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (update finalize)\n" +
-                "  |  output: count(if(1 IS NULL, NULL, if(2 IS NULL, NULL, if(3 IS NULL, NULL, 4)))), sum(1), avg(1), " +
-                "group_concat('1', '2', ','), array_agg(1)");
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: multi_distinct_count(1, 2, 3, 4), multi_distinct_sum(1), avg(1), " +
+                "group_concat(DISTINCT '1', '2', ','), array_agg_distinct(1)");
         sql = "select count(distinct 1, 2, 3, 4) from t0 group by v2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
