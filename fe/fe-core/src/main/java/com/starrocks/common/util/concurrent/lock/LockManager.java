@@ -484,23 +484,31 @@ public class LockManager {
                 final Long lockHolderWaitingForRid = locker.getWaitingForRid();
                 final LockType lockHolderWaitingForType = locker.getWaitingForType();
 
+                /*
+                 * Because the lock of LockManager is reentrant, it is possible that the owner list of
+                 * the wait lock contains itself, but this situation should not be judged as a deadlock,
+                 * so it is necessary to skip the loop that directly points to itself.
+                 *
+                 * For example, if locker1 and locker2 both hold the S lock of the same resource,
+                 * any locker that request for X lock will wait, but this is not a deadlock state.
+                 */
                 if (locker != checkedLocker) {
                     if (locker.equals(rootLocker)) {
                         cycle.get(0).ownLockType = lockHolderOwnLockType;
                         return true;
                     }
-                }
 
-                for (int i = 0; i < cycle.size(); ++i) {
-                    if (cycle.get(i).getLocker().equals(locker)) {
-                        cycle.subList(0, i).clear();
-                        return true;
+                    for (int i = 0; i < cycle.size(); ++i) {
+                        if (cycle.get(i).getLocker().equals(locker)) {
+                            cycle.subList(0, i).clear();
+                            return true;
+                        }
                     }
-                }
 
-                if (lockHolderWaitingForRid != null) {
-                    if (hasCycleInternal(locker, lockHolderWaitingForRid, lockHolderWaitingForType, lockHolderOwnLockType)) {
-                        return true;
+                    if (lockHolderWaitingForRid != null) {
+                        if (hasCycleInternal(locker, lockHolderWaitingForRid, lockHolderWaitingForType, lockHolderOwnLockType)) {
+                            return true;
+                        }
                     }
                 }
             }

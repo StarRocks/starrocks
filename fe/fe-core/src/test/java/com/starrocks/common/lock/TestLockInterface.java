@@ -16,7 +16,6 @@ package com.starrocks.common.lock;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
@@ -37,7 +36,6 @@ public class TestLockInterface {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.slow_lock_threshold_ms = 0;
         Config.lock_manager_enabled = true;
         Config.lock_manager_enable_using_fine_granularity_lock = true;
         Config.lock_manager_enable_resolve_deadlock = true;
@@ -48,33 +46,6 @@ public class TestLockInterface {
         Config.lock_manager_enabled = false;
         Config.lock_manager_enable_using_fine_granularity_lock = false;
         Config.lock_manager_enable_resolve_deadlock = false;
-    }
-
-    @Test
-    public void testLockDatabase() {
-        long rid = 1L;
-        Database database = new Database(rid, "db");
-        Locker locker = new Locker();
-        locker.lockDatabase(database, LockType.READ);
-
-        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.READ));
-        Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(database, LockType.WRITE));
-
-        locker.unLockDatabase(database, LockType.READ);
-        Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.READ));
-    }
-
-    @Test
-    public void testTryLockDatabase() {
-        long rid = 1L;
-        Database database = new Database(rid, "db");
-        Locker locker = new Locker();
-        Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10, TimeUnit.MILLISECONDS));
-        Config.lock_manager_enable_resolve_deadlock = false;
-        Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
-        Config.lock_manager_enable_resolve_deadlock = true;
-        Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(database, LockType.WRITE));
     }
 
     @Test
@@ -111,8 +82,7 @@ public class TestLockInterface {
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
-        Assert.assertThrows(ErrorReportException.class, () ->
-                locker.lockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.WRITE));
+        locker.lockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.WRITE);
     }
 
     @Test
@@ -139,12 +109,12 @@ public class TestLockInterface {
         Assert.assertFalse(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.lock(rid2, LockType.READ);
-        Assert.assertFalse(locker.tryLockTablesWithIntensiveDbLock(database,
+        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database,
                 Lists.newArrayList(rid2, rid3), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
-        Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
-        Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.WRITE));
-        Assert.assertFalse(lockManager.isOwner(rid3, locker, LockType.WRITE));
+        Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
+        Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
+        Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.WRITE));
     }
 
     @Test

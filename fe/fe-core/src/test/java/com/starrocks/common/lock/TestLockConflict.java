@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.common.lock;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,7 +29,6 @@ public class TestLockConflict {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.slow_lock_threshold_ms = 0;
     }
 
     /**

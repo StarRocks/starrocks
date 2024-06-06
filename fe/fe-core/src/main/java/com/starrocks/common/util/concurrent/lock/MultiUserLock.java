@@ -97,12 +97,6 @@ public class MultiUserLock extends Lock {
                      * acquire the read lock first, so that there is no gap time to release the lock.
                      */
                     hasSameLockerWithDifferentLockType = true;
-
-                    // For compatibility with ReentrantLock, this can be opened in the future
-                    if (lockOwner.getLockType().equals(LockType.READ)
-                            && lockHolderRequest.getLockType().equals(LockType.WRITE)) {
-                        hasConflicts = true;
-                    }
                 }
             } else {
                 if (lockOwner.isConflict(lockHolderRequest)) {
