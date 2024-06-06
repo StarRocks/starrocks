@@ -67,6 +67,15 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
         return "HASH";
     }
 
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
+    }
+
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

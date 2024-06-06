@@ -91,7 +91,8 @@ public class DataPartition {
 
     public DataPartition(TPartitionType type) {
         Preconditions.checkState(
-                type == TPartitionType.UNPARTITIONED || type == TPartitionType.RANDOM);
+                type == TPartitionType.UNPARTITIONED || type == TPartitionType.RANDOM ||
+                        type == TPartitionType.HYBRID_HASH_PARTITIONED);
         this.type = type;
         this.partitionExprs = ImmutableList.of();
     }
