@@ -27,6 +27,10 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.s3a.Constants;
+import org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider;
+import org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider;
+import org.apache.hadoop.fs.s3a.auth.IAMInstanceCredentialsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -77,6 +81,12 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 public class AWSCloudCredential implements CloudCredential {
 
     private static final Logger LOG = LoggerFactory.getLogger(AWSCloudCredential.class);
+
+    private static final String DEFAULT_CREDENTIAL_PROVIDER = DefaultCredentialsProvider.class.getName();
+    private static final String IAM_CREDENTIAL_PROVIDER = IAMInstanceCredentialsProvider.class.getName();
+    private static final String ASSUME_ROLE_CREDENTIAL_PROVIDER = AssumedRoleCredentialProvider.class.getName();
+    private static final String SIMPLE_CREDENTIAL_PROVIDER = SimpleAWSCredentialsProvider.class.getName();
+    private static final String TEMPORARY_CREDENTIAL_PROVIDER = TemporaryAWSCredentialsProvider.class.getName();
 
     private final boolean useAWSSDKDefaultBehavior;
 
@@ -200,20 +210,20 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     private void applyAssumeRole(String baseCredentialsProvider, Configuration configuration) {
-        configuration.set("fs.s3a.assumed.role.credentials.provider", baseCredentialsProvider);
+        configuration.set(Constants.ASSUMED_ROLE_CREDENTIALS_PROVIDER, baseCredentialsProvider);
         // Original "org.apache.hadoop.fs.s3a.auth.AssumedRoleCredentialProvider" don't support external id,
         // so we use our own AssumedRoleCredentialProvider.
-        configuration.set("fs.s3a.aws.credentials.provider", AssumedRoleCredentialProvider.class.getName());
-        configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
+        configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, ASSUME_ROLE_CREDENTIAL_PROVIDER);
+        configuration.set(Constants.ASSUMED_ROLE_ARN, iamRoleArn);
         if (!stsRegion.isEmpty()) {
-            configuration.set("fs.s3a.assumed.role.sts.endpoint.region", stsRegion);
+            configuration.set(Constants.ASSUMED_ROLE_STS_ENDPOINT_REGION, stsRegion);
         }
         if (!stsEndpoint.isEmpty()) {
             // Hadoop is using aws sdk v1. If the user provides the sts endpoint, the sts region must also be specified.
             // But in aws sdk v2, user only need to provide one of the two
             Preconditions.checkArgument(!stsRegion.isEmpty(),
                     String.format("STS endpoint is set to %s but no signing region was provided", stsEndpoint));
-            configuration.set("fs.s3a.assumed.role.sts.endpoint", stsEndpoint);
+            configuration.set(Constants.ASSUMED_ROLE_STS_ENDPOINT, stsEndpoint);
         }
         configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
     }
@@ -222,41 +232,37 @@ public class AWSCloudCredential implements CloudCredential {
     public void applyToConfiguration(Configuration configuration) {
         if (useAWSSDKDefaultBehavior) {
             if (!iamRoleArn.isEmpty()) {
-                applyAssumeRole("com.amazonaws.auth.DefaultAWSCredentialsProviderChain", configuration);
+                applyAssumeRole(DEFAULT_CREDENTIAL_PROVIDER, configuration);
             } else {
-                configuration.set("fs.s3a.aws.credentials.provider",
-                        "com.amazonaws.auth.DefaultAWSCredentialsProviderChain");
+                configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, DEFAULT_CREDENTIAL_PROVIDER);
             }
         } else if (useInstanceProfile) {
             if (!iamRoleArn.isEmpty()) {
-                applyAssumeRole("com.amazonaws.auth.InstanceProfileCredentialsProvider", configuration);
+                applyAssumeRole(IAM_CREDENTIAL_PROVIDER, configuration);
             } else {
-                configuration.set("fs.s3a.aws.credentials.provider",
-                        "com.amazonaws.auth.InstanceProfileCredentialsProvider");
+                configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, IAM_CREDENTIAL_PROVIDER);
             }
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
-            configuration.set("fs.s3a.access.key", accessKey);
-            configuration.set("fs.s3a.secret.key", secretKey);
+            configuration.set(Constants.ACCESS_KEY, accessKey);
+            configuration.set(Constants.SECRET_KEY, secretKey);
             if (!iamRoleArn.isEmpty()) {
-                applyAssumeRole("org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider", configuration);
+                applyAssumeRole(SIMPLE_CREDENTIAL_PROVIDER, configuration);
             } else {
                 if (!sessionToken.isEmpty()) {
-                    configuration.set("fs.s3a.session.token", sessionToken);
-                    configuration.set("fs.s3a.aws.credentials.provider",
-                            "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider");
+                    configuration.set(Constants.SESSION_TOKEN, sessionToken);
+                    configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, TEMPORARY_CREDENTIAL_PROVIDER);
                 } else {
-                    configuration.set("fs.s3a.aws.credentials.provider",
-                            "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
+                    configuration.set(Constants.AWS_CREDENTIALS_PROVIDER, SIMPLE_CREDENTIAL_PROVIDER);
                 }
             }
         } else {
             Preconditions.checkArgument(false, "Unreachable");
         }
         if (!region.isEmpty()) {
-            configuration.set("fs.s3a.endpoint.region", region);
+            configuration.set(Constants.AWS_REGION, region);
         }
         if (!endpoint.isEmpty()) {
-            configuration.set("fs.s3a.endpoint", endpoint);
+            configuration.set(Constants.ENDPOINT, endpoint);
         }
     }
 
