@@ -55,7 +55,7 @@ public class StructFieldDescTest {
         Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(structCol1, true));
 
         // drop field is not exist
-        StructFieldDesc dropFieldDesc2 = new StructFieldDesc("v1", Lists.newArrayList("v4"), null, null);
+        StructFieldDesc dropFieldDesc2 = new StructFieldDesc("v1", Lists.newArrayList("v6"), null, null);
         Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc2.analyze(structCol1, true));
 
         // normal drop field
@@ -67,7 +67,7 @@ public class StructFieldDescTest {
         Assertions.assertThrows(AnalysisException.class, () -> addFieldDesc1.analyze(structCol1, false));
 
         // type not exist
-        StructFieldDesc addFieldDesc2 = new StructFieldDesc("v5", Lists.newArrayList("v4"), null, null);
+        StructFieldDesc addFieldDesc2 = new StructFieldDesc("v5", Lists.newArrayList("v6"), null, null);
         Assertions.assertThrows(AnalysisException.class, () -> addFieldDesc2.analyze(structCol1, false));
 
         // normal add field
