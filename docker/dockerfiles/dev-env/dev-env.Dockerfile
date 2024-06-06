@@ -33,6 +33,10 @@ ARG BUILD_ROOT=/build
 FROM starrocks/toolchains-${distro}:main-20231123 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
+Run if [ "$distro" = "ubuntu"] ; then \
+        apt-get install -y rpm2cpio ; \
+    fi
+
 WORKDIR /
 
 FROM base as builder_stage1
