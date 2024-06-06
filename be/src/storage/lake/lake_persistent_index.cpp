@@ -130,7 +130,7 @@ Status LakePersistentIndex::minor_compact() {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
-    sstable_pb.set_version(_immutable_memtable->max_version());
+    sstable_pb.set_max_rss_rowid(_immutable_memtable->max_rss_rowid());
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
@@ -354,7 +354,8 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
 
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.CopyFrom(op_compaction.output_sstable());
-    sstable_pb.set_version(op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).version());
+    sstable_pb.set_max_rss_rowid(
+            op_compaction.input_sstables(op_compaction.input_sstables().size() - 1).max_rss_rowid());
     auto sstable = std::make_unique<PersistentIndexSstable>();
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
@@ -378,13 +379,13 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
 
 Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
     PersistentIndexSstableMetaPB sstable_meta;
-    int64_t last_version = 0;
+    int64_t last_max_rss_rowid = 0;
     for (auto& sstable : _sstables) {
-        int64_t sstable_version = sstable->sstable_pb().version();
-        if (last_version > sstable_version) {
-            return Status::InternalError("Versions of sstables are not ordered");
+        int64_t max_rss_rowid = sstable->sstable_pb().max_rss_rowid();
+        if (last_max_rss_rowid > max_rss_rowid) {
+            return Status::InternalError("sstables are not ordered");
         }
-        last_version = sstable_version;
+        last_max_rss_rowid = max_rss_rowid;
         auto* sstable_pb = sstable_meta.add_sstables();
         sstable_pb->CopyFrom(sstable->sstable_pb());
     }
@@ -406,13 +407,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
     const auto& sstables = metadata->sstable_meta().sstables();
-    int64_t max_sstable_version = sstables.empty() ? 0 : sstables.rbegin()->version();
-    if (max_sstable_version > base_version) {
-        return Status::OK();
-    }
-    TRACE_COUNTER_INCREMENT("max_sstable_version", max_sstable_version);
-    TRACE_COUNTER_INCREMENT("new_version", metadata->version());
-
+    // Rebuild persistent index from `rebuild_rss_rowid_point`
+    const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
+    const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
     if (pk_columns.size() > 1) {
@@ -428,18 +425,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     // Rowset whose version is between max_sstable_version and base_version should be recovered.
     for (auto& rowset : rowsets) {
-        TRACE_COUNTER_INCREMENT("total_rowsets", 1);
-        TRACE_COUNTER_INCREMENT("total_segments", rowset->num_segments());
-        TRACE_COUNTER_INCREMENT("total_datasize_bytes", rowset->data_size());
+        TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
-        // If it is upgraded from old version of sr, the rowset version will be not set.
-        // The generated rowset version will be treated as base_version.
-        int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
-        // The data whose version is max_sstable_version in memtable may be not flushed to sstable.
-        // So rowset whose version is max_sstable_version should also be recovered.
-        if (rowset_version < max_sstable_version) {
-            continue;
-        }
+        const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
         auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
         if (!res.ok()) {
             return res.status();
@@ -451,6 +439,13 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             if (itr == nullptr) {
                 continue;
             }
+            if (rowset->id() + i < rebuild_rss_id) {
+                // lower than rebuild point, skip
+                // Notice: segment id that equal `rebuild_rss_id` can't be skip because
+                // there are maybe some rows need to rebuild.
+                continue;
+            }
+            TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
             while (true) {
                 chunk->reset();
                 rowids.clear();
@@ -476,6 +471,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     for (uint32_t i = 0; i < pkc->size(); i++) {
                         values.emplace_back(base + rowids[i]);
                     }
+                    if (values.back().get_value() <= rebuild_rss_rowid_point) {
+                        // lower AND equal than rebuild point, skip
+                        continue;
+                    }
+                    TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
                     Status st;
                     if (pkc->is_binary()) {
                         RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
@@ -495,10 +495,6 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             }
             itr->close();
         }
-        TRACE_COUNTER_INCREMENT("loaded_rowsets", 1);
-        TRACE_COUNTER_INCREMENT("loaded_segments", rowset->num_segments());
-        TRACE_COUNTER_INCREMENT("loaded_datasize_bytes", rowset->data_size());
-        TRACE_COUNTER_INCREMENT("loaded_num_rows", rowset->num_rows());
     }
     return Status::OK();
 }

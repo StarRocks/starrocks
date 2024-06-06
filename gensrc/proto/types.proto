@@ -184,9 +184,10 @@ message IndexValuesWithVerPB {
 }
 
 message PersistentIndexSstablePB {
-    optional int64 version = 1;
-    optional string filename = 2;
-    optional int64 filesize = 3;
+    optional string filename = 1;
+    optional int64 filesize = 2;
+    // used for rebuild point of persistent index
+    optional uint64 max_rss_rowid = 3;
 }
 
 message PersistentIndexSstableMetaPB {
