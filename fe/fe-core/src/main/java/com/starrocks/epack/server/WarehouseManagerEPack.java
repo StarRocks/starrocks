@@ -2,7 +2,7 @@
 
 package com.starrocks.epack.server;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
