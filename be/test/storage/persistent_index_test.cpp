@@ -3044,11 +3044,11 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule_with_migration) {
     ASSERT_OK(mgr.init());
     mgr.schedule([&]() {
         std::vector<TabletAndScore> ret;
-        ret.emplace_back(tablet->tablet_id(), 1.0);
+        ret.emplace_back(tablet, 1.0);
         return ret;
     });
     sleep(2);
-    ASSERT_FALSE(mgr.is_running(tablet->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet.get()));
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
