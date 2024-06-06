@@ -169,10 +169,6 @@ if [ ! -d $UDF_RUNTIME_DIR ]; then
     mkdir -p ${UDF_RUNTIME_DIR}
 fi
 
-if [ ! -z ${UDF_RUNTIME_DIR} ]; then
-    rm -f ${UDF_RUNTIME_DIR}/*
-fi
-
 if [ ${RUN_BE} -eq 1 ]; then
     pidfile=$PID_DIR/be.pid
 fi
