@@ -295,7 +295,7 @@ public class StatementPlanner {
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
                 final long finalPlanStartTime = planStartTime;
-                isSchemaValid = olapTables.stream().noneMatch(t -> OptimisticVersion.validateTableUpdate(t,
+                isSchemaValid = olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t,
                         finalPlanStartTime));
                 if (isSchemaValid) {
                     plan.setLogicalPlan(logicalPlan);
