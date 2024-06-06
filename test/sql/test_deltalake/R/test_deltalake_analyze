@@ -10,7 +10,7 @@ create external catalog delta_test_${uuid0} PROPERTIES (
 -- !result
 analyze table delta_test_${uuid0}.delta_oss_db.delta_lake_data_type;
 -- result:
-delta_test_9de3d8eb54da48e8bd5d9e6581044916.delta_oss_db.delta_lake_data_type	analyze	status	OK
+[REGEX].*analyze	status	OK
 -- !result
 select column_name, row_count, data_size, hll_cardinality(ndv), `max`, `min` from default_catalog._statistics_.external_column_statistics
     where catalog_name="delta_test_${uuid0}" and db_name="delta_oss_db" and table_name="delta_lake_data_type"
