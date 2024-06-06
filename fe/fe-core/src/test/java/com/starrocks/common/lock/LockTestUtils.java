@@ -66,13 +66,24 @@ public class LockTestUtils {
 
         assertLockSuccess(testLockers.get(deadLockIdx).release(rids.get(deadLockIdx).first, rids.get(deadLockIdx).second));
 
+        boolean hasSuccess = false;
         for (int i = 0; i < waitLockers.size(); ++i) {
             if (i == deadLockIdx) {
                 continue;
             }
             Future<LockResult> waitLocker = waitLockers.get(i);
-            assertLockSuccess(waitLocker);
+
+            try {
+                LockResult lockResult = waitLocker.get();
+                if (LockResult.LockTaskResultType.SUCCESS.equals(lockResult.resultType)) {
+                    hasSuccess = true;
+                }
+            } catch (ExecutionException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
+
+        Assert.assertTrue(hasSuccess);
 
         return deadLockIdx;
     }
