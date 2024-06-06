@@ -14,7 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -65,10 +64,6 @@ public class QueryPlanLockFreeTest {
     @Test
     public void testPlanStrategy() throws Exception {
         String sql = "select * from t0";
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable("default_catalog", DB_NAME, "t0");
-        table.lastVersionUpdateStartTime.set(2);
-        table.lastVersionUpdateEndTime.set(1);
         try {
             UtFrameUtils.getPlanAndFragment(connectContext, sql);
         } catch (Exception e) {
