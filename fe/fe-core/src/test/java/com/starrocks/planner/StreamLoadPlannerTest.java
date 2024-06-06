@@ -316,7 +316,7 @@ public class StreamLoadPlannerTest {
         DdlException ddlException = Assert.assertThrows(DdlException.class, () -> {
             planner.plan(streamLoadInfo.getId());
         });
-        Assert.assertEquals("Only primary key table support ignore insert mode.", ddlException.getMessage());
+        Assert.assertEquals("Only primary key table support insert ignore mode.", ddlException.getMessage());
     }
 
     @Test
@@ -363,7 +363,7 @@ public class StreamLoadPlannerTest {
         DdlException ddlException = Assert.assertThrows(DdlException.class, () -> {
             planner.plan(streamLoadInfo.getId());
         });
-        Assert.assertEquals("Ignore insert mode is not support partial update.", ddlException.getMessage());
+        Assert.assertEquals("Insert ignore mode does not support partial update.", ddlException.getMessage());
     }
 
     @Test
@@ -410,6 +410,6 @@ public class StreamLoadPlannerTest {
         DdlException ddlException = Assert.assertThrows(DdlException.class, () -> {
             planner.plan(streamLoadInfo.getId());
         });
-        Assert.assertEquals("Ignore insert mode is not support condition update.", ddlException.getMessage());
+        Assert.assertEquals("Insert ignore mode does not support condition update.", ddlException.getMessage());
     }
 }
