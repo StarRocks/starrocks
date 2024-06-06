@@ -29,10 +29,12 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
+import org.jetbrains.annotations.NotNull;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class ShortCircuitTest extends PlanTestBase {
@@ -94,16 +96,7 @@ public class ShortCircuitTest extends PlanTestBase {
         String sql = "select * from tprimary where pk=20";
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
-        TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
-        TScanRange scanRange = new TScanRange();
-        TInternalScanRange internalScanRange = new TInternalScanRange();
-        TScanRangeLocation scanRangeLocation = new TScanRangeLocation();
-        internalScanRange.setTablet_id(11L);
-        internalScanRange.setVersion("version_1");
-        internalScanRange.setHosts(ImmutableList.of(new TNetworkAddress("127.0.0.1", 8060)));
-        scanRangeLocation.setBackend_id(1L);
-        scanRange.setInternal_scan_range(internalScanRange);
-        scanRangeLocations.setScan_range(scanRange);
+        TScanRangeLocations scanRangeLocations = gettScanRangeLocations(10001);
 
         DescriptorTable desc = new DescriptorTable();
         TupleDescriptor tupleDescriptor = desc.createTupleDescriptor();
@@ -123,19 +116,36 @@ public class ShortCircuitTest extends PlanTestBase {
         Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
     }
 
+    @NotNull
+    private static TScanRangeLocations gettScanRangeLocations(long backendId) {
+        TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+        TScanRange scanRange = new TScanRange();
+        TInternalScanRange internalScanRange = new TInternalScanRange();
+        TScanRangeLocation scanRangeLocation = new TScanRangeLocation();
+        internalScanRange.setTablet_id(11L);
+        internalScanRange.setVersion("version_1");
+        internalScanRange.setHosts(ImmutableList.of(new TNetworkAddress("127.0.0.1", 8060)));
+        scanRangeLocation.setBackend_id(backendId);
+        scanRange.setInternal_scan_range(internalScanRange);
+        scanRangeLocations.setScan_range(scanRange);
+        scanRangeLocations.setLocations(Arrays.asList(scanRangeLocation));
+        return scanRangeLocations;
+    }
+
     @Test
     public void testShortCircuitPruneEmpty() throws Exception {
         // support short circuit read
         String sql = "select * from tprimary where pk=20";
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        TScanRangeLocations scanRangeLocations = gettScanRangeLocations(10001);
 
         DescriptorTable desc = new DescriptorTable();
         TupleDescriptor tupleDescriptor = desc.createTupleDescriptor();
         tupleDescriptor.setTable(getTable("tprimary"));
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
-                "OlapScanNodeForShortCircuit", ImmutableList.of(),
+                "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
