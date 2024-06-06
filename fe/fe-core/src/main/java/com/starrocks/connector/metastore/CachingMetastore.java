@@ -46,7 +46,6 @@ public abstract class CachingMetastore {
     protected LoadingCache<String, List<String>> databaseNamesCache;
     protected LoadingCache<String, List<String>> tableNamesCache;
     protected LoadingCache<String, Database> databaseCache;
-    protected LoadingCache<DatabaseTableName, MetastoreTable> metastoreTableCache;
     protected LoadingCache<DatabaseTableName, Table> tableCache;
 
     public CachingMetastore(Executor executor, long expireAfterWriteSec, long refreshIntervalSec, long maxSize) {
@@ -56,8 +55,6 @@ public abstract class CachingMetastore {
                 .build(asyncReloading(CacheLoader.from(this::loadAllTableNames), executor));
         databaseCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadDb), executor));
-        metastoreTableCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                .build(asyncReloading(CacheLoader.from(this::loadMetastoreTable), executor));
         tableCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(CacheLoader.from(this::loadTable), executor));
 
@@ -86,8 +83,6 @@ public abstract class CachingMetastore {
 
     protected abstract Table loadTable(DatabaseTableName databaseTableName);
 
-    protected abstract MetastoreTable loadMetastoreTable(DatabaseTableName databaseTableNam);
-
     protected static <K, V> V get(LoadingCache<K, V> cache, K key) {
         try {
             return cache.getUnchecked(key);
@@ -98,11 +93,19 @@ public abstract class CachingMetastore {
         }
     }
 
+    public boolean isTablePresent(DatabaseTableName tableName) {
+        return tableCache.getIfPresent(tableName) != null;
+    }
+
     public synchronized void invalidateAll() {
         databaseNamesCache.invalidateAll();
         databaseCache.invalidateAll();
         tableNamesCache.invalidateAll();
-        metastoreTableCache.invalidateAll();
         tableCache.invalidateAll();
+    }
+
+    public synchronized void invalidateTable(String dbName, String tableName) {
+        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
+        tableCache.invalidate(databaseTableName);
     }
 }

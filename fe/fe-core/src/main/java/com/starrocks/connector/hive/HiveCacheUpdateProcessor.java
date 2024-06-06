@@ -25,6 +25,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.CacheUpdateProcessor;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.RemoteFileIO;
@@ -47,8 +48,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
-public class CacheUpdateProcessor {
-    private static final Logger LOG = LogManager.getLogger(CacheUpdateProcessor.class);
+public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
+    private static final Logger LOG = LogManager.getLogger(HiveCacheUpdateProcessor.class);
 
     private enum Operator {
         UPDATE,
@@ -66,12 +67,12 @@ public class CacheUpdateProcessor {
 
     private final Map<BasePartitionInfo, Long> partitionUpdatedTimes;
 
-    public CacheUpdateProcessor(String catalogName,
-                                IHiveMetastore metastore,
-                                RemoteFileIO remoteFileIO,
-                                ExecutorService executor,
-                                boolean isRecursive,
-                                boolean enableHmsEventsIncrementalSync) {
+    public HiveCacheUpdateProcessor(String catalogName,
+                                    IHiveMetastore metastore,
+                                    RemoteFileIO remoteFileIO,
+                                    ExecutorService executor,
+                                    boolean isRecursive,
+                                    boolean enableHmsEventsIncrementalSync) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO instanceof CachingRemoteFileIO
@@ -92,6 +93,7 @@ public class CacheUpdateProcessor {
         }
     }
 
+    @Override
     public void refreshTable(String dbName, Table table, boolean onlyCachedPartitions) {
         if (table instanceof HiveMetaStoreTable) {
             HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
