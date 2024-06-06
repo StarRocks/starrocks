@@ -285,12 +285,19 @@ public class DefaultCoordinator extends Coordinator {
             isBinaryRow = true;
         }
 
-        shortCircuitExecutor = ShortCircuitExecutor.create(context, fragments, scanNodes, descTable,
-                isBinaryRow, jobSpec.isNeedReport(), jobSpec.getPlanProtocol());
+        shortCircuitExecutor =
+                ShortCircuitExecutor.create(context, fragments, scanNodes, descTable, isBinaryRow, jobSpec.isNeedReport(),
+                        jobSpec.getPlanProtocol(), coordinatorPreprocessor.getWorkerProvider());
 
         if (null != shortCircuitExecutor) {
             isShortCircuit = true;
         }
+<<<<<<< HEAD
+=======
+
+        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size(),
+                isShortCircuit);
+>>>>>>> 7abbfc9e9b ([Enhancement] skip dead be when short circuit read (#46256))
     }
 
     @Override
@@ -1152,7 +1159,7 @@ public class DefaultCoordinator extends Coordinator {
         return connectContext.getSessionVariable().getWarehouseName();
     }
 
-    private void execShortCircuit() {
+    private void execShortCircuit() throws Exception {
         shortCircuitExecutor.exec();
         Optional<RuntimeProfile> runtimeProfile = shortCircuitExecutor.getRuntimeProfile();
         if (jobSpec.isNeedReport() && runtimeProfile.isPresent()) {
