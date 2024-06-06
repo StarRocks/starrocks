@@ -608,7 +608,7 @@ KILL ANALYZE <ID>
 
 对于外部数据源中的表，需要创建一个自动采集任务，StarRocks 会根据采集任务中指定的属性，周期性检查采集任务是否需要执行，默认检查时间为 5 min。Hive 和 Iceberg 仅在发现有数据更新时，才会自动执行一次采集任务。
 
-Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由采集线程的时间间隔和用户设置的采集间隔决定，参考下面的属性进行调整）。
+StarRocks 目前不支持感知 Hudi 数据更新，所以只能周期性采集统计数据。您可以指定以下 FE 配置项来控制收集行为：
 
 - statistic_collect_interval_sec
 
@@ -636,6 +636,8 @@ Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周
 CREATE ANALYZE TABLE tbl_name (col_name [,col_name])
 [PROPERTIES (property [,property])]
 ```
+
+您可以通过 Property `statistic_auto_collect_interval` 为当前自动收集任务单独设置收集间隔。此时 FE 配置项 `statistic_auto_collect_small_table_interval` 和 `statistic_auto_collect_large_table_interval` 将不会对该任务生效。
 
 示例：
 
