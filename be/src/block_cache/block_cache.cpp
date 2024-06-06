@@ -70,6 +70,7 @@ Status BlockCache::init(const CacheOptions& options) {
         return Status::NotSupported("unsupported block cache engine");
     }
     RETURN_IF_ERROR(_kv_cache->init(cache_options));
+    _refresh_quota();
     _initialized.store(true, std::memory_order_relaxed);
     if (_disk_space_monitor) {
         _disk_space_monitor->start();
@@ -152,12 +153,16 @@ Status BlockCache::remove(const CacheKey& cache_key, off_t offset, size_t size) 
     return _kv_cache->remove(block_key);
 }
 
-Status BlockCache::update_mem_quota(size_t quota_bytes) {
-    return _kv_cache->update_mem_quota(quota_bytes);
+Status BlockCache::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
+    Status st = _kv_cache->update_mem_quota(quota_bytes, flush_to_disk);
+    _refresh_quota();
+    return st;
 }
 
 Status BlockCache::update_disk_spaces(const std::vector<DirSpace>& spaces) {
-    return _kv_cache->update_disk_spaces(spaces);
+    Status st = _kv_cache->update_disk_spaces(spaces);
+    _refresh_quota();
+    return st;
 }
 
 Status BlockCache::adjust_disk_spaces(const std::vector<DirSpace>& spaces) {
@@ -195,6 +200,12 @@ Status BlockCache::shutdown() {
 
 DataCacheEngineType BlockCache::engine_type() {
     return _kv_cache->engine_type();
+}
+
+void BlockCache::_refresh_quota() {
+    auto metrics = _kv_cache->cache_metrics(0);
+    _mem_quota.store(metrics.mem_quota_bytes, std::memory_order_relaxed);
+    _disk_quota.store(metrics.disk_quota_bytes, std::memory_order_relaxed);
 }
 
 } // namespace starrocks
