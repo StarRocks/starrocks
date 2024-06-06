@@ -347,6 +347,7 @@ public class ConnectProcessor {
                 sql,
                 ctx.getQualifiedUser(),
                 Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
+                ctx.getCurrentWarehouseName(),
                 ctx.getCurrentCatalog());
         ctx.setQueryDetail(queryDetail);
         // copy queryDetail, cause some properties can be changed in future
@@ -372,7 +373,8 @@ public class ConnectProcessor {
                 .setAuthorizedUser(
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
-                .setCatalog(ctx.getCurrentCatalog());
+                .setCatalog(ctx.getCurrentCatalog())
+                .setWarehouse(ctx.getCurrentWarehouseName());
         Tracers.register(ctx);
 
         // execute this query.
