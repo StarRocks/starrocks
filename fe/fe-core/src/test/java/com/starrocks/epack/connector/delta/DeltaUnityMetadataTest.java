@@ -10,6 +10,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.delta.CachingDeltaLakeMetastore;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.delta.DeltaMetastoreOperations;
 import com.starrocks.connector.delta.DeltaUtils;
@@ -54,10 +55,14 @@ public class DeltaUnityMetadataTest {
 
         DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
                 "databricks_catalog", new MockDatabricksWorkspaceClient(config), hdfsEnvironment);
-        DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(databricksUnityMetastore,
+        UnityBackedDeltaLakeMetastore unityBackedDeltaLakeMetastore = new UnityBackedDeltaLakeMetastore("databricks0",
+                databricksUnityMetastore, hdfsEnvironment.getConfiguration());
+
+        DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(
+                CachingDeltaLakeMetastore.createQueryLevelInstance(unityBackedDeltaLakeMetastore, 10000),
                 false, MetastoreType.UNITY);
         deltaLakeUnityMetadata = new DeltaLakeMetadata(hdfsEnvironment, "databricks0",
-                metastoreOperations);
+                metastoreOperations, Optional.empty());
     }
 
     @Test

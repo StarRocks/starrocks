@@ -13,21 +13,21 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.hive;
+package com.starrocks.connector;
 
 import java.util.Objects;
 
-public class HiveTableName {
+public class DatabaseTableName {
     private final String databaseName;
     private final String tableName;
 
-    public HiveTableName(String databaseName, String tableName) {
+    public DatabaseTableName(String databaseName, String tableName) {
         this.databaseName = databaseName;
         this.tableName = tableName;
     }
 
-    public static HiveTableName of(String databaseName, String tableName) {
-        return new HiveTableName(databaseName, tableName);
+    public static DatabaseTableName of(String databaseName, String tableName) {
+        return new DatabaseTableName(databaseName, tableName);
     }
 
     public String getDatabaseName() {
@@ -52,7 +52,7 @@ public class HiveTableName {
             return false;
         }
 
-        HiveTableName other = (HiveTableName) o;
+        DatabaseTableName other = (DatabaseTableName) o;
         return Objects.equals(databaseName.toLowerCase(), other.databaseName.toLowerCase()) &&
                 Objects.equals(tableName.toLowerCase(), other.tableName.toLowerCase());
     }

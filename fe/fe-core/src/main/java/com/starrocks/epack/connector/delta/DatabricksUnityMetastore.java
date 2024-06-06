@@ -11,6 +11,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.delta.DeltaUtils;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public class DatabricksUnityMetastore implements IMetastore {
@@ -55,57 +58,65 @@ public class DatabricksUnityMetastore implements IMetastore {
     }
 
     public List<String> getAllDatabaseNames() {
-        List<String> dbNames = Lists.newArrayList();
-        try {
-            dbNames = Streams.stream(workspaceClient.schemas().list(databricksCatalogName).iterator()).
-                    map(SchemaInfo::getName).collect(Collectors.toList());
-        } catch (NullPointerException e) {
-            LOG.warn("Null pointer exception when get all databases from {} catalog", databricksCatalogName);
-        } catch (Exception e) {
-            LOG.error("Catalog {} get all databases failed", databricksCatalogName, e);
-            throw e;
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "UNITY.getAllDatabases")) {
+            List<String> dbNames = Lists.newArrayList();
+            try {
+                dbNames = Streams.stream(workspaceClient.schemas().list(databricksCatalogName).iterator()).
+                        map(SchemaInfo::getName).collect(Collectors.toList());
+            } catch (NullPointerException e) {
+                LOG.warn("Null pointer exception when get all databases from {} catalog", databricksCatalogName);
+            } catch (Exception e) {
+                LOG.error("Catalog {} get all databases failed", databricksCatalogName, e);
+                throw e;
+            }
+            return dbNames;
         }
-        return dbNames;
     }
 
     public List<String> getAllTableNames(String dbName) {
-        List<String> tableNames = Lists.newArrayList();
-        try {
-            tableNames = Streams.stream(workspaceClient.tables().list(databricksCatalogName, dbName).iterator()).
-                    filter(tableInfo -> tableInfo.getTableType().equals(TableType.MANAGED)).
-                    map(TableInfo::getName).collect(Collectors.toList());
-        } catch (NullPointerException e) {
-            // empty database will throw null pointer exception, catch here and return empty list
-            LOG.warn("Null pointer exception when get all tables from {}.{}", databricksCatalogName, dbName);
-        } catch (Exception e) {
-            LOG.error("Database {}.{} get all tables failed", databricksCatalogName, dbName, e);
-            throw e;
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "UNITY.getAllTables")) {
+            List<String> tableNames = Lists.newArrayList();
+            try {
+                tableNames = Streams.stream(workspaceClient.tables().list(databricksCatalogName, dbName).iterator()).
+                        filter(tableInfo -> tableInfo.getTableType().equals(TableType.MANAGED)).
+                        map(TableInfo::getName).collect(Collectors.toList());
+            } catch (NullPointerException e) {
+                // empty database will throw null pointer exception, catch here and return empty list
+                LOG.warn("Null pointer exception when get all tables from {}.{}", databricksCatalogName, dbName);
+            } catch (Exception e) {
+                LOG.error("Database {}.{} get all tables failed", databricksCatalogName, dbName, e);
+                throw e;
+            }
+            return tableNames;
         }
-        return tableNames;
     }
 
     public Database getDb(String dbName) {
-        SchemaInfo schemaInfo = workspaceClient.schemas().get(databricksCatalogName + "." + dbName);
-        if (schemaInfo == null) {
-            throw new StarRocksConnectorException("Databricks database [%s] doesn't exist", dbName);
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "UNITY.getDatabase")) {
+            SchemaInfo schemaInfo = workspaceClient.schemas().get(databricksCatalogName + "." + dbName);
+            if (schemaInfo == null) {
+                throw new StarRocksConnectorException("Databricks database [%s] doesn't exist", dbName);
+            }
+            return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), schemaInfo.getName(),
+                    schemaInfo.getStorageLocation());
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), schemaInfo.getName(),
-                schemaInfo.getStorageLocation());
     }
 
     @Override
     public MetastoreTable getMetastoreTable(String dbName, String tableName) {
-        String fullName = Joiner.on(".").join(databricksCatalogName, dbName, tableName);
-        TableInfo tableInfo = workspaceClient.tables().get(fullName);
-        if (tableInfo == null) {
-            return null;
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "UNITY.getMetastoreTable")) {
+            String fullName = Joiner.on(".").join(databricksCatalogName, dbName, tableName);
+            TableInfo tableInfo = workspaceClient.tables().get(fullName);
+            if (tableInfo == null) {
+                return null;
+            }
+            if (!tableInfo.getTableType().equals(TableType.MANAGED)) {
+                return null;
+            }
+            String path = tableInfo.getStorageLocation();
+            long createTime = tableInfo.getCreatedAt();
+            return new MetastoreTable(dbName, tableName, path, createTime);
         }
-        if (!tableInfo.getTableType().equals(TableType.MANAGED)) {
-            return null;
-        }
-        String path = tableInfo.getStorageLocation();
-        long createTime = tableInfo.getCreatedAt();
-        return new MetastoreTable(dbName, tableName, path, createTime);
     }
 
     public DeltaLakeTable getTable(String dbName, String tblName) {

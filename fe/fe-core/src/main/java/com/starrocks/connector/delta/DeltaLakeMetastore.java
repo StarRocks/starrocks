@@ -17,6 +17,8 @@ package com.starrocks.connector.delta;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
@@ -35,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public abstract class DeltaLakeMetastore implements IMetastore {
@@ -79,36 +82,38 @@ public abstract class DeltaLakeMetastore implements IMetastore {
             LOG.error("Table {}.{}.{} doesn't exist", catalogName, dbName, tableName);
             return Lists.newArrayList();
         }
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "UNITY.listPartitionNames")) {
+            List<String> partitionKeys = Lists.newArrayList();
+            Engine deltaEngine = deltaLakeTable.getDeltaEngine();
+            List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
 
-        List<String> partitionKeys = Lists.newArrayList();
-        Engine deltaEngine = deltaLakeTable.getDeltaEngine();
-        List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
+            ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
+            Scan scan = scanBuilder.build();
+            try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
+                while (scanFilesAsBatches.hasNext()) {
+                    FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
 
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
-        Scan scan = scanBuilder.build();
-        try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
-            while (scanFilesAsBatches.hasNext()) {
-                FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
-
-                try (CloseableIterator<Row> scanFileRows = scanFileBatch.getRows()) {
-                    while (scanFileRows.hasNext()) {
-                        Row scanFileRow = scanFileRows.next();
-                        Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(scanFileRow);
-                        List<String> partitionValues =
-                                partitionColumnNames.stream().map(partitionValueMap::get).collect(
-                                        Collectors.toList());
-                        String partitionName = toHivePartitionName(partitionColumnNames, partitionValues);
-                        partitionKeys.add(partitionName);
+                    try (CloseableIterator<Row> scanFileRows = scanFileBatch.getRows()) {
+                        while (scanFileRows.hasNext()) {
+                            Row scanFileRow = scanFileRows.next();
+                            Map<String, String> partitionValueMap =
+                                    InternalScanFileUtils.getPartitionValues(scanFileRow);
+                            List<String> partitionValues =
+                                    partitionColumnNames.stream().map(partitionValueMap::get).collect(
+                                            Collectors.toList());
+                            String partitionName = toHivePartitionName(partitionColumnNames, partitionValues);
+                            partitionKeys.add(partitionName);
+                        }
                     }
                 }
+            } catch (Exception e) {
+                LOG.error("Failed to get partition keys for table {}.{}.{}", catalogName, dbName, tableName, e);
+                throw new StarRocksConnectorException(String.format("Failed to get partition keys for table %s.%s.%s",
+                        catalogName, dbName, tableName), e);
             }
-        } catch (Exception e) {
-            LOG.error("Failed to get partition keys for table {}.{}.{}", catalogName, dbName, tableName, e);
-            throw new StarRocksConnectorException(String.format("Failed to get partition keys for table %s.%s.%s",
-                    catalogName, dbName, tableName), e);
-        }
 
-        return partitionKeys;
+            return partitionKeys;
+        }
     }
 
     public boolean tableExists(String dbName, String tableName) {

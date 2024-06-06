@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -463,7 +464,7 @@ public class HiveMetastoreTest {
         public void addPartitions(String dbName, String tableName, List<Partition> partitions) {
         }
 
-        public Partition getPartition(HiveTableName name, List<String> partitionValues) {
+        public Partition getPartition(DatabaseTableName name, List<String> partitionValues) {
             StorageDescriptor sd = new StorageDescriptor();
             String hdfsPath = "hdfs://127.0.0.1:10000/hive";
             sd.setLocation(hdfsPath);

@@ -23,7 +23,6 @@ import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.epack.connector.delta.DeltaLakeInternalMgrEpack;
-import com.starrocks.epack.connector.delta.DeltaLakeMetadataFactoryEpack;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -55,7 +54,7 @@ public class DeltaLakeConnector implements Connector {
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
         IMetastore metastore = internalMgr.createDeltaLakeMetastore();
-        return new DeltaLakeMetadataFactoryEpack(
+        return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
                 internalMgr.getHiveMetastoreConf(),

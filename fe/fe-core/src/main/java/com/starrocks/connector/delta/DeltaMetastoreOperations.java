@@ -17,16 +17,16 @@ package com.starrocks.connector.delta;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.MetastoreType;
-import com.starrocks.connector.metastore.IMetastore;
 
 import java.util.List;
 
 public class DeltaMetastoreOperations {
-    private final IMetastore metastore;
+    private final CachingDeltaLakeMetastore metastore;
     private final boolean enableCatalogLevelCache;
     private final MetastoreType metastoreType;
 
-    public DeltaMetastoreOperations(IMetastore metastore, boolean enableCatalogLevelCache, MetastoreType metastoreType) {
+    public DeltaMetastoreOperations(CachingDeltaLakeMetastore metastore, boolean enableCatalogLevelCache,
+                                    MetastoreType metastoreType) {
         this.metastore = metastore;
         this.enableCatalogLevelCache = enableCatalogLevelCache;
         this.metastoreType = metastoreType;
@@ -58,5 +58,9 @@ public class DeltaMetastoreOperations {
 
     public MetastoreType getMetastoreType() {
         return metastoreType;
+    }
+
+    public void invalidateAll() {
+        this.metastore.invalidateAll();
     }
 }

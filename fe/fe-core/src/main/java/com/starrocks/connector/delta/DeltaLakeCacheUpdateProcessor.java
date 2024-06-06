@@ -13,16 +13,19 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.odps;
+package com.starrocks.connector.delta;
 
-import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.catalog.Table;
 
-public class OdpsTableName extends DatabaseTableName {
-    public OdpsTableName(String databaseName, String tableName) {
-        super(databaseName, tableName);
+public class DeltaLakeCacheUpdateProcessor {
+    private final String catalogName;
+    private final CachingDeltaLakeMetastore cachingMetastore;
+    public DeltaLakeCacheUpdateProcessor(String catalogName, CachingDeltaLakeMetastore cachingMetastore) {
+        this.catalogName = catalogName;
+        this.cachingMetastore = cachingMetastore;
     }
 
-    public static OdpsTableName of(String databaseName, String tableName) {
-        return new OdpsTableName(databaseName, tableName);
+    public void refreshTable(String dbName, Table table, boolean onlyCachedPartitions) {
+        cachingMetastore.refreshTable(dbName, table.getName(), onlyCachedPartitions);
     }
 }

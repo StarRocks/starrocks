@@ -26,6 +26,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -134,7 +135,7 @@ public class CacheUpdateProcessor {
         }
     }
 
-    public Set<HiveTableName> getCachedTableNames() {
+    public Set<DatabaseTableName> getCachedTableNames() {
         if (metastore instanceof CachingHiveMetastore) {
             return ((CachingHiveMetastore) metastore).getCachedTableNames();
         } else {
@@ -302,7 +303,7 @@ public class CacheUpdateProcessor {
         }
     }
 
-    public boolean isTablePresent(HiveTableName tableName) {
+    public boolean isTablePresent(DatabaseTableName tableName) {
         return ((CachingHiveMetastore) metastore).isTablePresent(tableName);
     }
 
