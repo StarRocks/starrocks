@@ -944,4 +944,17 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  limit: 100"));
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testDistinctConstantRewrite() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/distinct_constant"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("4:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_count(1)"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("9:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_count(NULL)"));
+    }
+>>>>>>> 3a2736fa4b ([BugFix] use two phase agg to process distinct constant (#46599))
 }
