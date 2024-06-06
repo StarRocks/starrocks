@@ -299,9 +299,7 @@ Status FileReader::_build_split_tasks() {
         const tparquet::RowGroup& row_group = _file_metadata->t_metadata().row_groups[i];
         bool selected = _select_row_group(row_group);
         if (!selected) continue;
-        StatusOr<bool> st = _filter_group(row_group);
-        if (!st.ok()) return st.status();
-        if (st.value()) {
+        if (_filter_group(row_group)) {
             DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
             continue;
         }
@@ -375,7 +373,7 @@ StatusOr<uint32_t> FileReader::_parse_metadata_length(const std::vector<char>& f
     return metadata_length;
 }
 
-StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
+bool FileReader::_filter_group_with_min_max_conjuncts(const tparquet::RowGroup& row_group) {
     // filter by min/max conjunct ctxs.
     if (!_scanner_ctx->min_max_conjunct_ctxs.empty()) {
         const TupleDescriptor& tuple_desc = *(_scanner_ctx->min_max_tuple_desc);
@@ -384,12 +382,20 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
 
         auto st = _read_min_max_chunk(row_group, tuple_desc.slots(), &min_chunk, &max_chunk);
         if (!st.ok()) {
+            // if there are some error when dealing statistics, shouldn't return the error status,
+            // just read data ignore the statistics.
             return false;
         }
 
         for (auto& min_max_conjunct_ctx : _scanner_ctx->min_max_conjunct_ctxs) {
-            ASSIGN_OR_RETURN(auto min_column, min_max_conjunct_ctx->evaluate(min_chunk.get()));
-            ASSIGN_OR_RETURN(auto max_column, min_max_conjunct_ctx->evaluate(max_chunk.get()));
+            auto res_min = min_max_conjunct_ctx->evaluate(min_chunk.get());
+            auto res_max = min_max_conjunct_ctx->evaluate(max_chunk.get());
+            if (!res_min.ok() || !res_max.ok()) {
+                // maybe one of the conjuncts encounter error when dealing statistics, just ignore it and continue
+                continue;
+            }
+            auto min_column = res_min.value();
+            auto max_column = res_max.value();
             auto f = [&](Column* c) {
                 // is_null(0) only when something unexpected happens
                 if (c->is_null(0)) return (int8_t)0;
@@ -402,7 +408,10 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             }
         }
     }
+    return false;
+}
 
+bool FileReader::_filter_group_with_bloom_filter_min_max_conjuncts(const tparquet::RowGroup& row_group) {
     // filter by min/max in runtime filter.
     if (_scanner_ctx->runtime_filter_collector) {
         std::vector<SlotDescriptor*> min_max_slots(1);
@@ -437,6 +446,80 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 return true;
             }
         }
+    }
+    return false;
+}
+
+bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_group) {
+    // runtime_in_filter, the sql-original in_filter and is_null/not_null filter will be in
+    // _scanner_ctx->conjunct_ctxs_by_slot
+    for (auto kv : _scanner_ctx->conjunct_ctxs_by_slot) {
+        StatisticsHelper::StatSupportedFilter filter_type;
+        for (auto ctx : kv.second) {
+            if (StatisticsHelper::can_be_used_for_statistics_filter(ctx, filter_type)) {
+                const TupleDescriptor& tuple_desc = *(_scanner_ctx->tuple_desc);
+                const std::vector<SlotDescriptor*>& slots = tuple_desc.slots();
+                SlotDescriptor* slot = nullptr;
+                for (auto s : slots) {
+                    if (s->id() == kv.first) {
+                        slot = s;
+                        break;
+                    }
+                }
+                std::unordered_map<std::string, size_t> column_name_2_pos_in_meta{};
+                std::vector<SlotDescriptor*> slot_v{slot};
+                _meta_helper->build_column_name_2_pos_in_meta(column_name_2_pos_in_meta, row_group, slot_v);
+                const tparquet::ColumnMetaData* column_meta =
+                        _meta_helper->get_column_meta(column_name_2_pos_in_meta, row_group, slot->col_name());
+                if (column_meta == nullptr || !column_meta->__isset.statistics) continue;
+                if (filter_type == StatisticsHelper::StatSupportedFilter::IS_NULL) {
+                    if (!column_meta->statistics.__isset.null_count) continue;
+                    if (column_meta->statistics.null_count == 0) {
+                        return true;
+                    }
+                } else if (filter_type == StatisticsHelper::StatSupportedFilter::IS_NOT_NULL) {
+                    if (!column_meta->statistics.__isset.null_count) continue;
+                    if (column_meta->statistics.null_count == row_group.num_rows) {
+                        return true;
+                    }
+                } else if (filter_type == StatisticsHelper::StatSupportedFilter::FILTER_IN) {
+                    std::vector<string> min_values;
+                    std::vector<string> max_values;
+
+                    const ParquetField* field = _meta_helper->get_parquet_field(slot->col_name());
+                    if (field == nullptr) {
+                        LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
+                        continue;
+                    }
+                    auto st = _get_min_max_value(slot, column_meta, field, min_values, max_values);
+                    if (!st.ok()) continue;
+                    std::vector<bool> selected(min_values.size(), true);
+                    st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctx, field,
+                                                                     _scanner_ctx->timezone, selected);
+                    if (!st.ok()) continue;
+                    if (!selected[0]) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// when doing row group filter, there maybe some error, but we'd better just ignore it instead of returning the error
+// status and lead to the query failed.
+bool FileReader::_filter_group(const tparquet::RowGroup& row_group) {
+    if (_filter_group_with_min_max_conjuncts(row_group)) {
+        return true;
+    }
+
+    if (_filter_group_with_bloom_filter_min_max_conjuncts(row_group)) {
+        return true;
+    }
+
+    if (config::parquet_statistics_process_more_filter_enable && _filter_group_with_more_filter(row_group)) {
+        return true;
     }
 
     return false;
@@ -477,29 +560,20 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
             // statistics not exist in parquet file
             return Status::Aborted("No exist statistics");
         } else {
-            // When statistics is empty, column_meta->__isset.statistics is still true,
-            // but statistics.__isset.xxx may be false, so judgment is required here.
-            bool is_set_min_max =
-                    (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
-                    (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
-            if (!is_set_min_max) {
-                return Status::Aborted("No exist min/max");
-            }
+            std::vector<string> min_values;
+            std::vector<string> max_values;
 
             const ParquetField* field = _meta_helper->get_parquet_field(slot->col_name());
             if (field == nullptr) {
                 LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
                 return Status::InternalError(strings::Substitute("Can't get $0 field", slot->col_name()));
             }
-            const tparquet::ColumnOrder* column_order = nullptr;
-            if (_file_metadata->t_metadata().__isset.column_orders) {
-                const auto& column_orders = _file_metadata->t_metadata().column_orders;
-                int column_idx = field->physical_column_index;
-                column_order = column_idx < column_orders.size() ? &column_orders[column_idx] : nullptr;
-            }
 
-            RETURN_IF_ERROR(_decode_min_max_column(*field, ctx.timezone, slot->type(), *column_meta, column_order,
-                                                   &(*min_chunk)->columns()[i], &(*max_chunk)->columns()[i]));
+            RETURN_IF_ERROR(_get_min_max_value(slot, column_meta, field, min_values, max_values));
+            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column((*min_chunk)->columns()[i], min_values,
+                                                                       slot->type(), field, ctx.timezone));
+            RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column((*max_chunk)->columns()[i], max_values,
+                                                                       slot->type(), field, ctx.timezone));
         }
     }
 
@@ -515,30 +589,31 @@ int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const
     return -1;
 }
 
-Status FileReader::_decode_min_max_column(const ParquetField& field, const std::string& timezone,
-                                          const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
-                                          const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
-                                          ColumnPtr* max_column) const {
-    DCHECK_EQ(field.physical_type, column_meta.type);
+Status FileReader::_get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
+                                      const ParquetField* field, std::vector<std::string>& min_values,
+                                      std::vector<std::string>& max_values) const {
+    // When statistics is empty, column_meta->__isset.statistics is still true,
+    // but statistics.__isset.xxx may be false, so judgment is required here.
+    bool is_set_min_max = (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
+                          (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
+    if (!is_set_min_max) {
+        return Status::Aborted("No exist min/max");
+    }
 
-    auto sort_order = sort_order_of_logical_type(type.type);
-    if (!_has_correct_min_max_stats(column_meta, sort_order)) {
+    DCHECK_EQ(field->physical_type, column_meta->type);
+    auto sort_order = sort_order_of_logical_type(slot->type().type);
+
+    if (!_has_correct_min_max_stats(*column_meta, sort_order)) {
         return Status::Aborted("The file has incorrect order");
     }
 
-    std::vector<std::string> min_value;
-    std::vector<std::string> max_value;
-
-    if (column_meta.statistics.__isset.min_value) {
-        min_value.emplace_back(column_meta.statistics.min_value);
-        max_value.emplace_back(column_meta.statistics.max_value);
+    if (column_meta->statistics.__isset.min_value) {
+        min_values.emplace_back(column_meta->statistics.min_value);
+        max_values.emplace_back(column_meta->statistics.max_value);
     } else {
-        min_value.emplace_back(column_meta.statistics.min);
-        max_value.emplace_back(column_meta.statistics.max);
+        min_values.emplace_back(column_meta->statistics.min);
+        max_values.emplace_back(column_meta->statistics.max);
     }
-
-    RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(*min_column, min_value, type, &field, timezone));
-    RETURN_IF_ERROR(StatisticsHelper::decode_value_into_column(*max_column, max_value, type, &field, timezone));
 
     return Status::OK();
 }
