@@ -36,7 +36,7 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
+        Assert.assertEquals("software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));
     }
 
@@ -50,7 +50,7 @@ public class AWSCloudConfigurationTest {
         Assert.assertNotNull(cloudConfiguration);
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
-        Assert.assertEquals("com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
+        Assert.assertEquals("software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider",
                 configuration.get("fs.s3a.assumed.role.credentials.provider"));
         Assert.assertEquals("com.starrocks.credential.provider.AssumedRoleCredentialProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));
