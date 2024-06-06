@@ -82,8 +82,12 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+<<<<<<< HEAD
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+=======
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+>>>>>>> 573ae83804 ([Enhancement] Optimize concurrent partition creation cross transaction (#46663))
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -351,7 +355,6 @@ public class TransactionState implements Writable {
     // Therefore, a snapshot of this information is maintained here.
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
-    private Map<String, Lock> createPartitionLocks = Maps.newHashMap();
 
     public TransactionState() {
         this.dbId = -1;
@@ -1141,6 +1144,7 @@ public class TransactionState implements Writable {
         tabletIdToTTabletLocation.clear();
     }
 
+<<<<<<< HEAD
     public void lockCreatePartition(String partitionName) {
         Lock locker = null;
         synchronized (createPartitionLocks) {
@@ -1161,5 +1165,10 @@ public class TransactionState implements Writable {
         if (locker != null) {
             locker.unlock();
         }
+=======
+    @Override
+    public void write(DataOutput out) throws IOException {
+
+>>>>>>> 573ae83804 ([Enhancement] Optimize concurrent partition creation cross transaction (#46663))
     }
 }
