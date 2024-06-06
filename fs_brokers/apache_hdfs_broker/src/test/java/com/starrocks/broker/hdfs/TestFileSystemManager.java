@@ -234,4 +234,20 @@ public class TestFileSystemManager extends TestCase {
         fs.getDFSFileSystem().close();
     }
 
+    @Test
+    public void testGetFileSystemForHarScheme() throws IOException {
+        Map<String, String> properties = new HashMap<String, String>();
+        properties.put("username", "user");
+        properties.put("password", "passwd");
+        properties.put("fs.defaultFS", "hdfs://starrocks");
+        properties.put("dfs.nameservices", "starrocks");
+        properties.put("dfs.ha.namenodes.starrocks", "nn1,nn2");
+        properties.put("dfs.namenode.rpc-address.starrocks.nn1", "host1:port1");
+        properties.put("dfs.namenode.rpc-address.starrocks.nn2", "host2:port2");
+        properties.put("dfs.client.failover.proxy.provider.bdos",
+                "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+        BrokerFileSystem fs = fileSystemManager.getFileSystem("har://testbucket/data/abc/logs", properties);
+        assertNotNull(fs);
+        fs.getDFSFileSystem().close();
+    }
 }
