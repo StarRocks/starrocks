@@ -313,17 +313,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.HIVE_VIEW;
     }
 
-<<<<<<< HEAD
-=======
-    public boolean isIcebergView() {
-        return type == TableType.ICEBERG_VIEW;
-    }
-
     public boolean isAnalyzableExternalTable() {
         return IS_ANALYZABLE_EXTERNAL_TABLE.contains(type);
     }
 
->>>>>>> 334b841ac8 ([Enhancement] Release the restrictions of DeltaLake analyze (#46704))
     public boolean isView() {
         return isOlapView() || isHiveView();
     }
