@@ -82,7 +82,15 @@ public class TaskBuilder {
         task.setCatalogName(submitTaskStmt.getCatalogName());
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
-        task.setProperties(submitTaskStmt.getProperties());
+
+        Map<String, String> taskProperties = Maps.newHashMap();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(context.getCurrentWarehouseId());
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
+        // the property of submit task has higher priority
+        taskProperties.putAll(submitTaskStmt.getProperties());
+        task.setProperties(taskProperties);
+
         task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
         task.setSchedule(submitTaskStmt.getSchedule());
         task.setType(submitTaskStmt.getSchedule() != null ? Constants.TaskType.PERIODICAL : Constants.TaskType.MANUAL);
