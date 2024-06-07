@@ -85,8 +85,6 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
         long maxPartitionVersionTime = -1;
 
-        table.lastVersionUpdateStartTime.set(System.nanoTime());
-
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -174,7 +172,6 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
-        table.lastVersionUpdateEndTime.set(System.nanoTime());
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
                 String columnName = validDictCacheColumns.get(i);

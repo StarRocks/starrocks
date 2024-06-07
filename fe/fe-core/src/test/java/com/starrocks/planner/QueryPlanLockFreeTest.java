@@ -21,6 +21,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -67,14 +68,10 @@ public class QueryPlanLockFreeTest {
         String sql = "select * from t0";
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getTable("default_catalog", DB_NAME, "t0");
-        table.lastVersionUpdateStartTime.set(2);
-        table.lastVersionUpdateEndTime.set(1);
-        try {
-            UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("The tablet write operation update metadata take a long time"));
-        }
+        table.lastSchemaUpdateTime.set(System.nanoTime() + 10000000000L);
+        Assert.assertThrows("schema of [t0] had been updated frequently during the plan generation",
+                StarRocksPlannerException.class, () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
+
         connectContext.getSessionVariable().setCboUseDBLock(true);
         Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         Assert.assertTrue(plan.first, plan.first.contains("SCAN"));

@@ -148,9 +148,6 @@ public class LakeTableTest {
         }
 
         Assert.assertEquals(-1, newLakeTable.lastSchemaUpdateTime.longValue());
-        Assert.assertEquals(-1, newLakeTable.lastVersionUpdateStartTime.longValue());
-        Assert.assertEquals(0, newLakeTable.lastVersionUpdateEndTime.longValue());
-
         Assert.assertTrue(newLakeTable.delete(dbId, false));
     }
 
