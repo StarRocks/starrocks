@@ -62,9 +62,9 @@ public class CatalogStmtTest {
         String sql_6 = "CREATE EXTERNAL CATALOG catalog_5 properties(\"type\"=\"hive\")";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql_6);
         Assert.assertEquals("CREATE EXTERNAL CATALOG 'catalog_5' PROPERTIES(\"type\"  =  \"hive\")", stmt2.toSql());
-        String sql_7 = "CREATE EXTERNAL CATALOG catalog_6 IF NOT EXISTS PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql_7 = "CREATE EXTERNAL CATALOG IF NOT EXISTS catalog_6 PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StatementBase stmt3 = AnalyzeTestUtil.analyzeSuccess(sql_7);
-        Assert.assertEquals("CREATE EXTERNAL CATALOG 'catalog_6' IF NOT EXISTS PROPERTIES(\"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\", \"type\"  =  \"hive\")", stmt3.toSql());
+        Assert.assertEquals("CREATE EXTERNAL CATALOG IF NOT EXISTS 'catalog_6' PROPERTIES(\"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\", \"type\"  =  \"hive\")", stmt3.toSql());
         Assert.assertTrue(stmt3 instanceof CreateCatalogStmt);
     }
 
@@ -123,7 +123,7 @@ public class CatalogStmtTest {
     @Test
     public void testCreateExistedCatalog() throws Exception {
         String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
-        String sql_2 = "CREATE EXTERNAL CATALOG hive_catalog IF NOT EXISTS PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql_2 = "CREATE EXTERNAL CATALOG IF NOT EXISTS hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
