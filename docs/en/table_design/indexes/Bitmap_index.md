@@ -30,7 +30,7 @@ Additionally, the **overhead of loading bitmap indexes during queries** should b
 
 To determine the appropriate cardinality and query conditions for bitmap indexes, it is recommended to refer to the [Performance test on bitmap index](#performance-test-on-bitmap-index) in this topic to conduct performance tests. You can use actual business data and queries to **create bitmap indexes on columns of different cardinalities, to analyze the filtering effect of bitmap indexes on queries (at least filtering out 999/1000 of the data),** **the** **disk space usage, the impact on loading performance, and the overhead of loading bitmap indexes during queries.**
 
-StarRocks has a built-in adaptive selection mechanism for bitmap indexes. If a bitmap index fails to accelerate queries, for example, if it cannot filter out many Pages, or the overhead of loading bitmap indexes during queries is high, it will not be used during the query, so query performance will not be significantly affected.
+StarRocks has a built-in [adaptive selection mechanism for bitmap indexes](#adaptive-selection-of-bitmap-indexes). If a bitmap index fails to accelerate queries, for example, if it cannot filter out many Pages, or the overhead of loading bitmap indexes during queries is high, it will not be used during the query, so query performance will not be significantly affected.
 
 ### Adaptive selection of bitmap indexes
 
@@ -166,33 +166,31 @@ To avoid caching Page data affecting query performance, ensure that the BE confi
 
 This section takes the table `lineorder` (SSB 20G) as an example.
 
-Example Illustration of the 
+- Original table (without bitmap indexes) as a reference
 
-- Original table (without bitmap indexes)-as a Reference
-
-```SQL
-CREATE TABLE `lineorder_without_index` (
-  `lo_orderkey` int(11) NOT NULL COMMENT "",
-  `lo_linenumber` int(11) NOT NULL COMMENT "",
-  `lo_custkey` int(11) NOT NULL COMMENT "",
-  `lo_partkey` int(11) NOT NULL COMMENT "",
-  `lo_suppkey` int(11) NOT NULL COMMENT "",
-  `lo_orderdate` int(11) NOT NULL COMMENT "",
-  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
-  `lo_shippriority` int(11) NOT NULL COMMENT "",
-  `lo_quantity` int(11) NOT NULL COMMENT "",
-  `lo_extendedprice` int(11) NOT NULL COMMENT "",
-  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
-  `lo_discount` int(11) NOT NULL COMMENT "",
-  `lo_revenue` int(11) NOT NULL COMMENT "",
-  `lo_supplycost` int(11) NOT NULL COMMENT "",
-  `lo_tax` int(11) NOT NULL COMMENT "",
-  `lo_commitdate` int(11) NOT NULL COMMENT "",
-  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`lo_orderkey`)
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
-```
+    ```SQL
+    CREATE TABLE `lineorder_without_index` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_linenumber` int(11) NOT NULL COMMENT "",
+    `lo_custkey` int(11) NOT NULL COMMENT "",
+    `lo_partkey` int(11) NOT NULL COMMENT "",
+    `lo_suppkey` int(11) NOT NULL COMMENT "",
+    `lo_orderdate` int(11) NOT NULL COMMENT "",
+    `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
+    `lo_shippriority` int(11) NOT NULL COMMENT "",
+    `lo_quantity` int(11) NOT NULL COMMENT "",
+    `lo_extendedprice` int(11) NOT NULL COMMENT "",
+    `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+    `lo_discount` int(11) NOT NULL COMMENT "",
+    `lo_revenue` int(11) NOT NULL COMMENT "",
+    `lo_supplycost` int(11) NOT NULL COMMENT "",
+    `lo_tax` int(11) NOT NULL COMMENT "",
+    `lo_commitdate` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+    ) ENGINE=OLAP 
+    DUPLICATE KEY(`lo_orderkey`)
+    DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
+    ```
 
 - Table with bitmap indexes: Bitmap indexes created based on `lo_shipmode`, `lo_quantity`, `lo_discount`, `lo_orderdate`, `lo_tax`, and `lo_partkey`.
 
@@ -226,7 +224,7 @@ DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
     ```
 
-### Disk space usage of bitmap index
+### Disk space usage of bitmap indexes
 
 - `lo_shipmode`: String type, cardinality 7, occupies 130M
 - `lo_quantity`: Integer type, cardinality 50, occupies 291M
@@ -239,13 +237,13 @@ DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
 
 #### Query table without bitmap index
 
-**Query****:**
+**Query**:
 
 ```SQL
 SELECT count(1) FROM lineorder_without_index WHERE lo_shipmode="MAIL";
 ```
 
-**Query** **performance analysis**: Since the table queried does not have bitmap index, all pages containing the `lo_shipmode` column data need to be read and then predicate filtering is applied.
+**Query performance analysis**: Since the table queried does not have bitmap index, all pages containing the `lo_shipmode` column data need to be read and then predicate filtering is applied.
 
 Total Time: Approximately 0.91 milliseconds, **with data loading taking 0.47 milliseconds**, decoding dictionary for low cardinality optimization taking 0.31 milliseconds, and predicate filtering taking 0.23 milliseconds.
 
@@ -277,7 +275,7 @@ To use the bitmap index compulsorily, according to Starrocks' configuration,  `b
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 ```
 
-**Query** **Performance Analysis**: Since the column queried is of low cardinality, bitmap index does not filter the data efficiently. Even though bitmap index can quickly locate the row numbers of actual data, a large number of rows need to be read, scattered across multiple pages. As a result, it cannot effectively filter out the pages that need to be read. Moreover, additional overhead for loading the bitmap index and using the bitmap index to filter data is incurred, resulting in a longer total time.
+**Query Performance Analysis**: Since the column queried is of low cardinality, bitmap index does not filter the data efficiently. Even though bitmap index can quickly locate the row numbers of actual data, a large number of rows need to be read, scattered across multiple pages. As a result, it cannot effectively filter out the pages that need to be read. Moreover, additional overhead for loading the bitmap index and using the bitmap index to filter data is incurred, resulting in a longer total time.
 
 Total time: 2.7 seconds, **with 0.93 seconds spent loading data and bitmap index**, 0.33 seconds on decoding dictionary for low cardinality optimization, 0.42 seconds on filtering data with bitmap index, and 0.17 seconds on filtering data with ZoneMap Index.
 
@@ -302,9 +300,7 @@ IOTaskExecTime: 2s77ms // Total time for scanning data, longer than without bitm
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 ```
 
-**Query** **Performance Analysis**:
-
-According to StarRocks default configuration, bitmap index is used only if the number of distinct values in the filter condition column / column cardinality < `bitmap_max_filter_ratio/1000` (default is 1/1000). In this case, the value is greater than 1/1000, so bitmap index is not used, resulting in performance similar to querying a table without bitmap index.
+**Query performance analysis**: According to StarRocks default configuration, bitmap index is used only if the number of distinct values in the filter condition column / column cardinality < `bitmap_max_filter_ratio/1000` (default is 1/1000). In this case, the value is greater than 1/1000, so bitmap index is not used, resulting in performance similar to querying a table without bitmap index.
 
 ```Bash
 PullRowNum: 20.566M (20566493) // Number of rows in the result set.
@@ -332,7 +328,7 @@ WHERE lo_shipmode = "MAIL"
   AND lo_tax = 8;
 ```
 
-**Query** **Performance Analysis**: Since the table queried does not have any bitmap index, all Pages containing data of `lo_shipmode`, `lo_quantity`, `lo_discount`, and `lo_tax` columns are read and then predicate filtering is applied.
+**Query performance analysis**: Since the table queried does not have any bitmap index, all Pages containing data of `lo_shipmode`, `lo_quantity`, `lo_discount`, and `lo_tax` columns are read and then predicate filtering is applied.
 
 Total time taken: 1.76 seconds, **with 1.6 seconds spent loading data (4 columns)**, and 0.1 seconds on predicate filtering.
 
@@ -363,9 +359,7 @@ To use bitmap index compulsorily, according to Starrocks' configuration, the `bi
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL" AND lo_quantity=10 AND lo_discount=9 AND lo_tax=8;
 ```
 
-**Query** **performance analysis**:
-
-Since this is a combination query based on multiple low cardinality columns, bitmap index is effective, filtering out a portion of the Pages and significantly reducing data read time.
+**Query performance analysis**: Since this is a combination query based on multiple low cardinality columns, bitmap index is effective, filtering out a portion of the Pages and significantly reducing data read time.
 
 Total time taken: 0.68 seconds, **with 0.54 seconds spent loading data and bitmap index**, and 0.14 seconds filtering data with bitmap index.
 
@@ -387,7 +381,7 @@ IOTaskExecTime: 683.471ms // Total time for scanning data, significantly less th
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL" AND lo_quantity=10 AND lo_discount=9 AND lo_tax=8;
 ```
 
-**Query** **performance analysis**: According to StarRocks default configuration, the bitmap index is used if the number of distinct values in the filter condition columns / column cardinality < `bitmap_max_filter_ratio/1000` (default is 1/1000). In this case, the value is less than 1/1000, so the bitmap index is used, resulting in performance similar to use the bitmap index compulsorily.
+**Query performance analysis**: According to StarRocks default configuration, the bitmap index is used if the number of distinct values in the filter condition columns / column cardinality < `bitmap_max_filter_ratio/1000` (default is 1/1000). In this case, the value is less than 1/1000, so the bitmap index is used, resulting in performance similar to use the bitmap index compulsorily.
 
 Total time taken: 0.67 seconds, **with 0.54 seconds spent loading data and bitmap index**, and 0.13 seconds filtering data with bitmap index.
 
@@ -401,7 +395,7 @@ IOTaskExecTime: 672.029ms // Total time for scanning data, significantly less th
     BitmapIndexFilterRows: 143.995M (143995376) // Number of rows filtered out by bitmap index.
 ```
 
-### Query 3: Query Based on Single High Cardinality Column
+### Query 3: Query on single Column of high cardinality 
 
 #### Query table without bitmap index
 
@@ -411,7 +405,7 @@ IOTaskExecTime: 672.029ms // Total time for scanning data, significantly less th
 select count(1) from lineorder_without_index where lo_partkey=10000;
 ```
 
-**Query** **Performance Analysis**: Since the table queried does not have a bitmap index, pages containing the `lo_partkey` column data are read and then predicate filtering is applied.
+**Query performance analysis**: Since the table queried does not have a bitmap index, pages containing the `lo_partkey` column data are read and then predicate filtering is applied.
 
 Total time: approximately 0.43 ms, **including 0.39 ms for data loading** and 0.02 ms for predicate filtering.
 
@@ -442,7 +436,7 @@ To use the bitmap index compulsorily, according to StarRocks' configuration, you
 SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 ```
 
-**Query** **Performance Analysis**: Since the queried column is of high cardinality, the bitmap index is effective, allowing for filtering out a portion of the pages and significantly reducing time for reading data.
+**Query performance analysis**: Since the queried column is of high cardinality, the bitmap index is effective, allowing for filtering out a portion of the pages and significantly reducing time for reading data.
 
 Total time: 0.015 seconds, **including 0.009 seconds for loading data and** **bitmap** **index**, and 0.003 seconds for bitmap index filtering.
 
@@ -465,9 +459,9 @@ IOTaskExecTime: 15.354ms // Total time for scanning data, significantly less tha
 SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 ```
 
-**Query** **Performance Analysis**: According to StarRocks' default configuration, Bitmap Index is used when the number of distinct values/column cardinality < `bitmap_max_filter_ratio/1000` (default 1/1000). Since this condition is met, the query uses the Bitmap Index, and the performance is similar to use the Bitmap Index compulsorily.
+**Query performance analysis**: According to StarRocks' default configuration, Bitmap Index is used when the number of distinct values/column cardinality < `bitmap_max_filter_ratio/1000` (default 1/1000). Since this condition is met, the query uses the Bitmap Index, and the performance is similar to use the Bitmap Index compulsorily.
 
-Total time: 0.014 seconds, including **0.008 seconds for loading data and** **Bitmap** **Index**, and 0.003 seconds for Bitmap Index filtering.
+Total time: 0.014 seconds, including **0.008 seconds for loading data and bitmap index**, and 0.003 seconds for Bitmap Index filtering.
 
 ```Bash
 PullRowNum: 255 // Number of rows in the result set.
