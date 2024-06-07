@@ -44,7 +44,7 @@ int decimal_precision_to_byte_count_inner(int precision) {
     return std::ceil((std::log(std::pow(10, precision) - 1) / std::log(2) + 1) / 8);
 }
 
-inline int decimal_precision_to_byte_count(int precision) {
+int decimal_precision_to_byte_count(int precision) {
     DCHECK(precision > 0 && precision <= 38);
     static std::array<int, 39> table = {
             0,
