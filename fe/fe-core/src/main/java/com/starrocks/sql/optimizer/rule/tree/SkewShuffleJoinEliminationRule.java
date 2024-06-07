@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -157,6 +158,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             Map<ColumnRefOperator, ColumnRefOperator> rightSplitOutputColumnRefMap =
                     generateOutputColumnRefMap(
                             rightExchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory));
+
             PhysicalSplitConsumeOperator leftSplitConsumerOptForShuffleJoin =
                     new PhysicalSplitConsumeOperator(leftSplitProduceOperator.getSplitId(),
                             notInSkewPredicateForLeftTable,
@@ -164,7 +166,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             PhysicalSplitConsumeOperator leftSplitConsumerOptForBroadcastJoin =
                     new PhysicalSplitConsumeOperator(leftSplitProduceOperator.getSplitId(), inSkewPredicateForLeftTable,
-                            leftExchangeOp.getDistributionSpec(), leftSplitOutputColumnRefMap);
+                            new RoundRobinDistributionSpec(), leftSplitOutputColumnRefMap);
 
             PhysicalSplitConsumeOperator rightSplitConsumerOptForShuffleJoin =
                     new PhysicalSplitConsumeOperator(rightSplitProduceOperator.getSplitId(),
@@ -174,7 +176,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalSplitConsumeOperator rightSplitConsumerOptForBroadcastJoin =
                     new PhysicalSplitConsumeOperator(rightSplitProduceOperator.getSplitId(),
                             inSkewPredicateForRightTable,
-                            rightExchangeOp.getDistributionSpec(), rightSplitOutputColumnRefMap);
+                            DistributionSpec.createReplicatedDistributionSpec(), rightSplitOutputColumnRefMap);
 
             PhysicalHashJoinOperator newShuffleJoinOpt = new PhysicalHashJoinOperator(
                     originalShuffleJoinOperator.getJoinType(), originalShuffleJoinOperator.getOnPredicate(),

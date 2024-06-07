@@ -52,8 +52,9 @@ public class SplitCastDataSink extends DataSink {
         StringBuilder sb = new StringBuilder();
 
         sb.append(prefix).append("SplitCastDataSink:\n");
-        for (DataStreamSink dataStreamSink : dataStreamSinks) {
-            sb.append(dataStreamSink.getVerboseExplain(prefix));
+        for (int i = 0; i < dataStreamSinks.size(); i++) {
+            sb.append(dataStreamSinks.get(i).getVerboseExplain(prefix));
+            sb.append(splitExprs.get(i).explain() + "\n");
         }
 
         return sb.toString();
