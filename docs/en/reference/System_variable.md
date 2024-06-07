@@ -96,7 +96,11 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### Set variables in a single query statement
 
-In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement. Example:
+In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement.
+
+`SET_VAR` must be enclosed in `/*+...*/`.
+
+Example:
 
 ```sql
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
@@ -104,9 +108,12 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
 
-> **NOTE**
->
-> `SET_VAR` can only be placed after the `SELECT` keyword and enclosed in `/*+...*/`.
+StarRocks supports using `SET_VAR` in the following statements;
+
+- SELECT
+- INSERT (from v3.1.12 and v3.2.0 onwards)
+- UPDATE (from v3.1.12 and v3.2.0 onwards)
+- DELETE (from v3.1.12 and v3.2.0 onwards)
 
 You can also set multiple variables in a single statement. Example:
 
