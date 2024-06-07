@@ -192,9 +192,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     // Record the alter, schema change, MV update time
     public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
-    // Record the start and end time for data load version update phase
-    public AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
-    public AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -298,6 +295,45 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
+<<<<<<< HEAD
+=======
+
+        // Shallow copy shared data to check whether the copied table has changed or not.
+        olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
+        olapTable.sessionId = this.sessionId;
+    }
+
+    public BinlogConfig getCurBinlogConfig() {
+        if (tableProperty != null) {
+            return tableProperty.getBinlogConfig();
+        }
+        return null;
+    }
+
+    public void setCurBinlogConfig(BinlogConfig curBinlogConfig) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(Maps.newHashMap());
+        }
+        tableProperty.modifyTableProperties(curBinlogConfig.toProperties());
+        tableProperty.setBinlogConfig(curBinlogConfig);
+    }
+
+    public boolean containsBinlogConfig() {
+        if (tableProperty == null ||
+                tableProperty.getBinlogConfig() == null ||
+                tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
+            return false;
+        }
+        return true;
+    }
+
+    public long getBinlogTxnId() {
+        return binlogTxnId;
+    }
+
+    public void setBinlogTxnId(long binlogTxnId) {
+        this.binlogTxnId = binlogTxnId;
+>>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
     }
 
     public void setTableProperty(TableProperty tableProperty) {
@@ -1578,9 +1614,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         clusterId = GlobalStateMgr.getCurrentState().getClusterId();
 
         lastSchemaUpdateTime = new AtomicLong(-1);
-        // Record the start and end time for data load version update phase
-        lastVersionUpdateStartTime = new AtomicLong(-1);
-        lastVersionUpdateEndTime = new AtomicLong(0);
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {

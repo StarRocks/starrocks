@@ -121,10 +121,20 @@ public class LakeTableTest {
         }
 
         Assert.assertEquals(-1, newLakeTable.lastSchemaUpdateTime.longValue());
+<<<<<<< HEAD
         Assert.assertEquals(-1, newLakeTable.lastVersionUpdateStartTime.longValue());
         Assert.assertEquals(0, newLakeTable.lastVersionUpdateEndTime.longValue());
 
         Assert.assertNull(table.delete(true));
         Assert.assertNotNull(table.delete(false));
+=======
+        Assert.assertTrue(newLakeTable.delete(dbId, false));
+    }
+
+    @Test
+    public void testDeserialize() {
+        LakeTable lakeTable = new LakeTable();
+        Assert.assertNotNull(lakeTable.getIndexIdToMeta());
+>>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
     }
 }
