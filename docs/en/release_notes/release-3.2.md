@@ -4,6 +4,22 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.8
+
+Release date: June 7, 2024
+
+### New Features
+
+- **[Supports adding labels on BEs](https://docs.starrocks.io/docs/administration/management/resource_management/be_label/)**: Supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures even data distribution among racks and data centers, and facilitates disaster recovery in case of power failures in certain racks or faults in data centers. [#38833](https://github.com/StarRocks/starrocks/pull/38833)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- An error is returned when users DELETE data rows from tables that use the expression partitioning method with str2date. [#45939](https://github.com/StarRocks/starrocks/pull/45939)
+- BEs in the destination cluster crash when the StarRocks Cross-cluster Data Migration Tool fails to retrieve the Schema information from the source cluster. [#46068](https://github.com/StarRocks/starrocks/pull/46068)
+- The error `Multiple entries with same key` is returned to queries with random functions. [#46602](https://github.com/StarRocks/starrocks/pull/46602)
+
 ## 3.2.7
 
 Release date: May 24, 2024
