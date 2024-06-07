@@ -602,7 +602,7 @@ You can view the task ID in the output of SHOW ANALYZE STATUS.
 
 For the system to automatically collect statistics of tables in an external data source, you can create an Analyze job. StarRocks automatically checks whether to run the task at the default check interval of 5 minutes. For Hive and Iceberg tables, StarRocks runs a collection task only when data in the tables are updated.
 
-However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval you specified. You can specify the following properties when you create an Analyze job:
+However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval you specified. You can specify the following FE configuration items to control the collection behaviors:
 
 - statistic_collect_interval_sec
 
@@ -632,6 +632,8 @@ Syntax:
 CREATE ANALYZE TABLE tbl_name (col_name [,col_name])
 [PROPERTIES (property [,property])]
 ```
+
+You can specify the property `statistic_auto_collect_interval` to set the collection interval exclusively for the automatic collection task. The FE configuration items `statistic_auto_collect_small_table_interval` and `statistic_auto_collect_large_table_interval` will not take effect on this task.
 
 Example:
 
