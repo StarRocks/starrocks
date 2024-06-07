@@ -148,11 +148,10 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
 #ifdef __AVX2__
                 // erms(enhanced repeat movsv/stosb) version works well in this region.
                 asm volatile("rep movsb" : "=D"(dst), "=S"(src), "=c"(size) : "0"(dst), "1"(src), "2"(size) : "memory");
-#elif defined(USE_AVX2KI)
-                goto common;
+#else
+                std::memcpy(dst, src, size);
 #endif
             } else {
-            common:
                 size_t padding = (32 - (reinterpret_cast<size_t>(dst) & 31)) & 31;
 
                 if (padding > 0) {
