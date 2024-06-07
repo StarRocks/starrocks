@@ -22,6 +22,8 @@
 #include "storage/aggregate_type.h"
 #include "storage/column_aggregate_func.h"
 #include "types/array_type_info.h"
+#include "types/map_type_info.h"
+#include "types/struct_type_info.h"
 
 namespace starrocks {
 
@@ -917,19 +919,19 @@ TEST(ColumnAggregator, testFirstTpeDispatch) {
     auto aggregator9 = ColumnAggregatorFactory::create_value_column_aggregator(field9);
     ASSERT_TRUE(aggregator9);
 
-    auto decimal32_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_DECIMAL32));
+    auto decimal32_type_info = get_type_info(LogicalType::TYPE_DECIMAL32);
     FieldPtr field10 = std::make_shared<Field>(1, "test3", decimal32_type_info,
                                                StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
     auto aggregator10 = ColumnAggregatorFactory::create_value_column_aggregator(field10);
     ASSERT_TRUE(aggregator10);
 
-    auto decimal64_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_DECIMAL64));
+    auto decimal64_type_info = get_type_info(LogicalType::TYPE_DECIMAL64);
     FieldPtr field11 = std::make_shared<Field>(1, "test3", decimal64_type_info,
                                                StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
     auto aggregator11 = ColumnAggregatorFactory::create_value_column_aggregator(field11);
     ASSERT_TRUE(aggregator11);
 
-    auto decimal128_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_DECIMAL128));
+    auto decimal128_type_info = get_type_info(LogicalType::TYPE_DECIMAL128);
     FieldPtr field12 = std::make_shared<Field>(1, "test3", decimal128_type_info,
                                                StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
     auto aggregator12 = ColumnAggregatorFactory::create_value_column_aggregator(field12);
@@ -975,19 +977,22 @@ TEST(ColumnAggregator, testFirstTpeDispatch) {
     auto aggregator20 = ColumnAggregatorFactory::create_value_column_aggregator(field20);
     ASSERT_TRUE(aggregator20);
 
-    auto array_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_ARRAY));
+    auto array_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_INT));
     FieldPtr field21 = std::make_shared<Field>(1, "test3", array_type_info,
                                                StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
     auto aggregator21 = ColumnAggregatorFactory::create_value_column_aggregator(field21);
     ASSERT_TRUE(aggregator21);
 
-    auto map_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_MAP));
+    auto map_type_info = get_map_type_info(get_type_info(LogicalType::TYPE_INT), get_type_info(LogicalType::TYPE_INT));
     FieldPtr field22 = std::make_shared<Field>(1, "test3", map_type_info, StorageAggregateType::STORAGE_AGGREGATE_FIRST,
                                                1, false, false);
     auto aggregator22 = ColumnAggregatorFactory::create_value_column_aggregator(field22);
     ASSERT_TRUE(aggregator22);
 
-    auto struct_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_STRUCT));
+    std::vector<TypeInfoPtr> field_types;
+    field_types.emplace_back(get_type_info(LogicalType::TYPE_INT));
+    field_types.emplace_back(get_type_info(LogicalType::TYPE_VARCHAR));
+    auto struct_type_info = get_struct_type_info(std::move(field_types));
     FieldPtr field23 = std::make_shared<Field>(1, "test3", struct_type_info,
                                                StorageAggregateType::STORAGE_AGGREGATE_FIRST, 1, false, false);
     auto aggregator23 = ColumnAggregatorFactory::create_value_column_aggregator(field23);

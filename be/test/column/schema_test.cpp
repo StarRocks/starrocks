@@ -132,4 +132,13 @@ TEST_F(SchemaTest, get_field_index) {
     delete schema;
 }
 
+TEST_F(SchemaTest, copy) {
+    Schema* schema = make_schema(2);
+    size_t idx1 = schema->get_field_index_by_name("c0");
+    ASSERT_EQ(0, idx1);
+    Schema new_schema = schema->copy();
+    ASSERT_EQ(0, new_schema.get_field_index_by_name("c0"));
+    delete schema;
+}
+
 } // namespace starrocks
