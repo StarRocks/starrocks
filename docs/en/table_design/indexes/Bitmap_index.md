@@ -28,7 +28,7 @@ However, excessively high cardinality can also cause issues such as **occupying 
 
 Additionally, the **overhead of loading bitmap indexes during queries** should be considered. During a query, bitmap indexes are loaded on demand, and the larger the value of `number of column values involved in query conditions/cardinality x bitmap index`, the greater the overhead of loading bitmap indexes during queries.
 
-To determine the appropriate cardinality and query conditions for bitmap indexes, it is recommended to refer to the [Performance test on bitmap index](#performance-test-on-bitmap-index) in this topic to conduct performance tests. You can use actual business data and queries to **create bitmap indexes on columns of different cardinalities, to analyze the filtering effect of bitmap indexes on queries (at least filtering out 999/1000 of the data),** **the** **disk space usage, the impact on loading performance, and the overhead of loading bitmap indexes during queries.**
+To determine the appropriate cardinality and query conditions for bitmap indexes, it is recommended to refer to the [Performance test on bitmap index](#performance-test-on-bitmap-index) in this topic to conduct performance tests. You can use actual business data and queries to **create bitmap indexes on columns of different cardinalities, to analyze the filtering effect of bitmap indexes on queries (at least filtering out 999/1000 of the data),the disk space usage, the impact on loading performance, and the overhead of loading bitmap indexes during queries.**
 
 StarRocks has a built-in [adaptive selection mechanism for bitmap indexes](#adaptive-selection-of-bitmap-indexes). If a bitmap index fails to accelerate queries, for example, if it cannot filter out many Pages, or the overhead of loading bitmap indexes during queries is high, it will not be used during the query, so query performance will not be significantly affected.
 
@@ -106,7 +106,7 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
 
 ### Progress of creating an index
 
-Creating a bitmap index is an **asynchronous** process. After executing the index creation statement, you can check the index creation progress using the [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) command. When the `State` field in the returned value shows `FINISHED`, the index is successfully created.
+Creating a bitmap index is an asynchronous process. After executing the index creation statement, you can check the index creation progress using the [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) command. When the `State` field in the returned value shows `FINISHED`, the index is successfully created.
 
 ```SQL
 SHOW ALTER TABLE COLUMN;
@@ -275,7 +275,7 @@ To use the bitmap index compulsorily, according to Starrocks' configuration,  `b
 SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 ```
 
-**Query Performance Analysis**: Since the column queried is of low cardinality, bitmap index does not filter the data efficiently. Even though bitmap index can quickly locate the row numbers of actual data, a large number of rows need to be read, scattered across multiple pages. As a result, it cannot effectively filter out the pages that need to be read. Moreover, additional overhead for loading the bitmap index and using the bitmap index to filter data is incurred, resulting in a longer total time.
+**Query performance analysis**: Since the column queried is of low cardinality, bitmap index does not filter the data efficiently. Even though bitmap index can quickly locate the row numbers of actual data, a large number of rows need to be read, scattered across multiple pages. As a result, it cannot effectively filter out the pages that need to be read. Moreover, additional overhead for loading the bitmap index and using the bitmap index to filter data is incurred, resulting in a longer total time.
 
 Total time: 2.7 seconds, **with 0.93 seconds spent loading data and bitmap index**, 0.33 seconds on decoding dictionary for low cardinality optimization, 0.42 seconds on filtering data with bitmap index, and 0.17 seconds on filtering data with ZoneMap Index.
 
@@ -438,7 +438,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 
 **Query performance analysis**: Since the queried column is of high cardinality, the bitmap index is effective, allowing for filtering out a portion of the pages and significantly reducing time for reading data.
 
-Total time: 0.015 seconds, **including 0.009 seconds for loading data and** **bitmap** **index**, and 0.003 seconds for bitmap index filtering.
+Total time: 0.015 seconds, **including 0.009 seconds for loading data and bitmap index**, and 0.003 seconds for bitmap index filtering.
 
 ```Bash
 PullRowNum: 255 // Number of rows in the result set.
