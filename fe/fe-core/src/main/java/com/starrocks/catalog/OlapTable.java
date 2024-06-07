@@ -228,9 +228,6 @@ public class OlapTable extends Table {
 
     // Record the alter, schema change, MV update time
     public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
-    // Record the start and end time for data load version update phase
-    public AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
-    public AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -337,8 +334,12 @@ public class OlapTable extends Table {
 
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
+<<<<<<< HEAD
         olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
         olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
+=======
+        olapTable.sessionId = this.sessionId;
+>>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -1717,9 +1718,6 @@ public class OlapTable extends Table {
         clusterId = GlobalStateMgr.getCurrentState().getClusterId();
 
         lastSchemaUpdateTime = new AtomicLong(-1);
-        // Record the start and end time for data load version update phase
-        lastVersionUpdateStartTime = new AtomicLong(-1);
-        lastVersionUpdateEndTime = new AtomicLong(0);
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {

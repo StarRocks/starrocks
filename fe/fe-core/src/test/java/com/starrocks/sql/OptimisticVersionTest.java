@@ -33,7 +33,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -58,13 +57,6 @@ class OptimisticVersionTest extends PlanTestBase {
 
         // schema change
         table.lastSchemaUpdateTime.set(OptimisticVersion.generate());
-        assertTrue(OptimisticVersion.validateTableUpdate(table, OptimisticVersion.generate()));
-
-        // in update
-        table.lastVersionUpdateStartTime.set(OptimisticVersion.generate());
-        assertFalse(OptimisticVersion.validateTableUpdate(table, OptimisticVersion.generate()));
-
-        table.lastVersionUpdateEndTime.set(OptimisticVersion.generate());
         assertTrue(OptimisticVersion.validateTableUpdate(table, OptimisticVersion.generate()));
     }
 
