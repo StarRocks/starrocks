@@ -120,7 +120,7 @@ Each table can only have one ongoing Schema Change task at a time. You cannot cr
 
 ### View an index
 
-View all bitmap indexes for a specified table. For detailed parameters and returned results, refer to [SHOW INDEX](../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md).
+View all bitmap indexes for a specified table. For detailed parameters and returned results, refer to [SHOW INDEX](../sql-reference/sql-statements/administration/SHOW_INDEX.md).
 
 ```SQL
 SHOW INDEXES FROM lineorder_partial;
