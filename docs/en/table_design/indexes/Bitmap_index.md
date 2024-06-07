@@ -28,7 +28,7 @@ However, excessively high cardinality can also cause issues such as **occupying 
 
 Additionally, the **overhead of loading bitmap indexes during queries** should be considered. During a query, bitmap indexes are loaded on demand, and the larger the value of `number of column values involved in query conditions/cardinality x bitmap index`, the greater the overhead of loading bitmap indexes during queries.
 
-To determine the appropriate cardinality and query conditions for bitmap indexes, it is recommended to refer to the [Performance test on bitmap index](#performance-test-on-bitmap-index) in this topic to conduct performance tests. You can use actual business data and queries to **create bitmap indexes on columns of different cardinalities, to analyze the filtering effect of bitmap indexes on queries (at least filtering out 999/1000 of the data),the disk space usage, the impact on loading performance, and the overhead of loading bitmap indexes during queries.**
+To determine the appropriate cardinality and query conditions for bitmap indexes, it is recommended to refer to the [Performance test on bitmap index](#performance-test-on-bitmap-index) in this topic to conduct performance tests. You can use actual business data and queries to **create bitmap indexes on columns of different cardinalities, to analyze the filtering effect of bitmap indexes on queries (at least filtering out 999/1000 of the data), the disk space usage, the impact on loading performance, and the overhead of loading bitmap indexes during queries.**
 
 StarRocks has a built-in [adaptive selection mechanism for bitmap indexes](#adaptive-selection-of-bitmap-indexes). If a bitmap index fails to accelerate queries, for example, if it cannot filter out many Pages, or the overhead of loading bitmap indexes during queries is high, it will not be used during the query, so query performance will not be significantly affected.
 
@@ -36,11 +36,11 @@ StarRocks has a built-in [adaptive selection mechanism for bitmap indexes](#adap
 
 StarRocks can adaptively choose whether to use a bitmap index based on column cardinality and query conditions. If a bitmap index does not effectively filter out many Pages or the overhead of loading bitmap indexes during queries is high, StarRocks will not use the bitmap index by default to avoid degrading query performance.
 
-StarRocks determines whether to use a bitmap index based on the ratio of the number of values involved in the query condition to the column cardinality. Generally, the smaller this ratio, the better the filtering effect of the bitmap index. Thus, StarRocks uses `bitmap_max_filter_ratio/1000` as the threshold. When the number of values in the filter condition / column cardinality < `bitmap_max_filter_ratio/1000`, the bitmap index will be used. The default value of `bitmap_max_filter_ratio` is `1`.
+StarRocks determines whether to use a bitmap index based on the ratio of the number of values involved in the query condition to the column cardinality. Generally, the smaller this ratio, the better the filtering effect of the bitmap index. Thus, StarRocks uses `bitmap_max_filter_ratio/1000` as the threshold. When the `number of values in the filter condition/column cardinality` is less than `bitmap_max_filter_ratio/1000`, the bitmap index will be used. The default value of `bitmap_max_filter_ratio` is `1`.
 
-Take a query based on a single column as example, such as `SELECT * FROM employees WHERE gender = 'male';`. The `gender` column in the `employees` table has values 'male' and 'female', so the cardinality is 2 (two distinct values). The query condition involves one value, so the ratio is 1/2, which is greater than 1/1000. Therefore, this query will not use the bitmap index.
+Take a query based on a single column as an example, such as `SELECT * FROM employees WHERE gender = 'male';`. The `gender` column in the `employees` table has values 'male' and 'female', so the cardinality is 2 (two distinct values). The query condition involves one value, so the ratio is 1/2, which is greater than 1/1000. Therefore, this query will not use the bitmap index.
 
-Take another query based on combination of multiple columns as example, such as `SELECT * FROM employees WHERE gender = 'male' AND city IN ('Beijing', 'Shanghai');`. The cardinality of the `city` column is of 10,000, and the query condition involves two values, so the ratio is calculated as `(1*2)/(2*10000)`, which is less than 1/1000. Therefore, this query will use the bitmap index.
+Take another query based on a combination of multiple columns as an example, such as `SELECT * FROM employees WHERE gender = 'male' AND city IN ('Beijing', 'Shanghai');`. The cardinality of the `city` column is of 10,000, and the query condition involves two values, so the ratio is calculated as `(1*2)/(2*10000)`, which is less than 1/1000. Therefore, this query will use the bitmap index.
 
 :::info
 
@@ -436,7 +436,7 @@ To use the bitmap index compulsorily, according to StarRocks' configuration, you
 SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 ```
 
-**Query performance analysis**: Since the queried column is of high cardinality, the bitmap index is effective, allowing for filtering out a portion of the pages and significantly reducing time for reading data.
+**Query performance analysis**: Since the queried column is of high cardinality, the bitmap index is effective, allowing for filtering out a portion of the pages and significantly reducing the time for reading data.
 
 Total time: 0.015 seconds, **including 0.009 seconds for loading data and bitmap index**, and 0.003 seconds for bitmap index filtering.
 
@@ -459,7 +459,7 @@ IOTaskExecTime: 15.354ms // Total time for scanning data, significantly less tha
 SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 ```
 
-**Query performance analysis**: According to StarRocks' default configuration, Bitmap Index is used when the number of distinct values/column cardinality < `bitmap_max_filter_ratio/1000` (default 1/1000). Since this condition is met, the query uses the Bitmap Index, and the performance is similar to use the Bitmap Index compulsorily.
+**Query performance analysis**: According to StarRocks' default configuration, Bitmap Index is used when the number of distinct values/column cardinality < `bitmap_max_filter_ratio/1000` (default 1/1000). Since this condition is met, the query uses the Bitmap Index, and the performance is similar to that when the Bitmap Index is compulsorily used..
 
 Total time: 0.014 seconds, including **0.008 seconds for loading data and bitmap index**, and 0.003 seconds for Bitmap Index filtering.
 
