@@ -48,6 +48,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -59,6 +60,7 @@ import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
@@ -68,6 +70,7 @@ import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRenameClause;
@@ -970,6 +973,34 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
         if (!AlterMaterializedViewStatusClause.SUPPORTED_MV_STATUS.contains(status)) {
             throw new SemanticException("Unsupported modification for materialized view status:" + status);
         }
+        return null;
+    }
+
+    // ------------------------------------------- Alter partition clause ----------------------------------==--------------------
+
+    @Override
+    public Void visitAddPartitionClause(AddPartitionClause clause, ConnectContext context) {
+        PartitionDescAnalyzer.analyze(clause.getPartitionDesc());
+
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(clause.getPartitionDesc(), olapTable);
+        }
+
+        return null;
+    }
+
+    @Override
+    public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
+        MultiRangePartitionDesc multiRangePartitionDesc = clause.getMultiRangePartitionDesc();
+        if (multiRangePartitionDesc != null) {
+            PartitionDescAnalyzer.analyze(multiRangePartitionDesc);
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(multiRangePartitionDesc, olapTable);
+            }
+        }
+
         return null;
     }
 }

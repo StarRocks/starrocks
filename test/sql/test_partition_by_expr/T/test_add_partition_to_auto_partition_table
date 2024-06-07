@@ -1,0 +1,37 @@
+-- name: test_add_partition_to_auto_partition_table
+CREATE TABLE t1 (
+    id BIGINT,
+    dt DATETIME NOT NULL
+)
+DUPLICATE KEY(id, dt)
+PARTITION BY time_slice(dt, INTERVAL 1 day)
+DISTRIBUTED BY HASH(id, dt);
+
+alter table t1 add partition p20230228 values [("2023-02-28 00:00:00"),("2023-02-29 00:00:00"));
+alter table t1 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 3 day);
+alter table t1 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 week);
+alter table t1 add partitions start ("2020-01-15 01:02:03") end ("2020-01-20") every (interval 1 day);
+alter table t1 add partitions start ("2020-01-15") end ("2020-01-20 01:02:03") every (interval 1 day);
+alter table t1 add partitions start ("2020-01-20") end ("2020-01-15") every (interval 1 day);
+
+-- success
+alter table t1 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 day);
+
+-- name: test_add_partition_to_auto_partition_table_2
+CREATE TABLE t2 (
+    id BIGINT,
+    dt DATETIME NOT NULL
+)
+DUPLICATE KEY(id, dt)
+PARTITION BY date_trunc("day", dt)
+DISTRIBUTED BY HASH(id, dt);
+
+alter table t2 add partition p20230228 values [("2023-02-28 00:00:00"),("2023-02-29 00:00:00"));
+alter table t2 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 3 day);
+alter table t2 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 week);
+alter table t2 add partitions start ("2020-01-15 01:02:03") end ("2020-01-20") every (interval 1 day);
+alter table t2 add partitions start ("2020-01-15") end ("2020-01-20 01:02:03") every (interval 1 day);
+alter table t2 add partitions start ("2020-01-20") end ("2020-01-15") every (interval 1 day);
+
+-- success
+alter table t2 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 day);

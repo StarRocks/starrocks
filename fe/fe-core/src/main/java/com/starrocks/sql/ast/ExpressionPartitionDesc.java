@@ -33,6 +33,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.PartitionFunctionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -136,6 +137,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
                 }
             }
             rangePartitionDesc.partitionType = partitionType;
+            PartitionDescAnalyzer.analyze(rangePartitionDesc);
             rangePartitionDesc.analyze(columnDefs, otherProperties);
         } else {
             // for materialized view
