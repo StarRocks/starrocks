@@ -1551,7 +1551,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 LocalDateTime startTime =
                         DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
                 schedule.setStartTime(startTime.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
                         timePos);
             }
@@ -4198,7 +4198,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             identifierList = visit(identifierListContext.identifier(), Identifier.class);
         }
         if (context.multiRangePartition() != null) {
-            PartitionDesc partitionDesc = (PartitionDesc) visitMultiRangePartition(context.multiRangePartition());
+            MultiRangePartitionDesc partitionDesc = (MultiRangePartitionDesc)
+                    visitMultiRangePartition(context.multiRangePartition());
             return new DropPartitionClause(exists, partitionDesc, temp, force, createPos(context));
         } else if (identifier != null) {
             String partitionName = ((Identifier) visit(context.identifier())).getValue();
@@ -7112,7 +7113,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
                     startTime = tempStartTime;
                     defineStartTime = true;
-                } catch (AnalysisException e) {
+                } catch (SemanticException e) {
                     throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
                             timePos);
                 }

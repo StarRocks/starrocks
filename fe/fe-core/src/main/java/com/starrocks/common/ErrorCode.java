@@ -289,7 +289,7 @@ public enum ErrorCode {
                     "A default storage volume can be created by following these steps: " +
                     "1. Create a storage volume. 2. Set the storage volume as default"),
     ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
-                "Can not enable replicated storage when the table has GIN"),
+            "Can not enable replicated storage when the table has GIN"),
     ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO(5507, new byte[] {'4', '2', '0', '0', '0'},
             "Batch drop partition only support RangePartitionInfo"),
     ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(5508, new byte[] {'4', '2', '0', '0', '0'},
@@ -312,6 +312,21 @@ public enum ErrorCode {
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
             "Current error rows: %d is more than max error num: %d. Check the 'TrackingSQL' field for detailed information"),
+
+    /**
+     * 5700 - 5799: Partition
+     */
+    ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE(5700, new byte[] {'4', '2', '0', '0', '0'},
+            "Cannot add a Range partition to a table that partition type is not of Range"),
+
+    ERR_ADD_PARTITION_WITH_ERROR_STEP_LENGTH(5701, new byte[] {'4', '2', '0', '0', '0'},
+            "Step length [%d] in the operation is not equal to the partition step length [%d] stored in the table"),
+
+    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702,  new byte[] {'4', '2', '0', '0', '0'},
+            "Can't add multi range partition to multi partition column table"),
+
+    ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
+            "The interval of the Multi-Range Partition must be greater than 0"),
 
     /**
      * 10000 - 10099: warehouse
