@@ -693,7 +693,7 @@ public class MetadataMgr {
         if (statistics == null ||
                 statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
             session.setObtainedFromInternalStatistics(false);
-            // Avoid `analyze table` to collect table statistics.
+            // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return statistics;
             } else {
