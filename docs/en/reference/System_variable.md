@@ -119,7 +119,6 @@ FROM my_table PARTITION p1
 WHERE k1 = 3;
 
 INSERT /*+ SET_VAR(query_timeout = 10000000) */
-
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
