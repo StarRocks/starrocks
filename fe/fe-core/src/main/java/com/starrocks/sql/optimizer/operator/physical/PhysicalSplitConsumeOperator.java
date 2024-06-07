@@ -13,12 +13,18 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalSplitConsumeOperator extends PhysicalOperator {
@@ -26,11 +32,15 @@ public class PhysicalSplitConsumeOperator extends PhysicalOperator {
 
     private ScalarOperator splitPredicate;
 
-    public PhysicalSplitConsumeOperator(int splitId, ScalarOperator splitPredicate, DistributionSpec distributionSpec) {
+    private final Map<ColumnRefOperator, ColumnRefOperator> outputColumnRefMap;
+
+    public PhysicalSplitConsumeOperator(int splitId, ScalarOperator splitPredicate, DistributionSpec distributionSpec,
+                                        Map<ColumnRefOperator, ColumnRefOperator> outputColumnRefMap) {
         // distributionSpec specifies the distribution of the input of this operator
         super(OperatorType.PHYSICAL_SPLIT_CONSUME, distributionSpec);
         this.splitId = splitId;
         this.splitPredicate = splitPredicate;
+        this.outputColumnRefMap = outputColumnRefMap;
     }
 
     public int getSplitId() {
@@ -39,6 +49,15 @@ public class PhysicalSplitConsumeOperator extends PhysicalOperator {
 
     public ScalarOperator getSplitPredicate() {
         return splitPredicate;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
+        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : outputColumnRefMap.entrySet()) {
+            entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+        }
+        return new RowOutputInfo(entryList);
     }
 
     @Override
