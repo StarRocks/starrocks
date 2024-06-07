@@ -114,6 +114,8 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
+UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+
 DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
