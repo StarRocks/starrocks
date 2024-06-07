@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
@@ -35,6 +38,13 @@ public class PhysicalMergeOperator extends PhysicalSetOperation {
     @Override
     public int hashCode() {
         return super.hashCode();
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        outputColumnRefOp.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+        return new RowOutputInfo(columnOutputInfoList, outputColumnRefOp);
     }
 
     @Override

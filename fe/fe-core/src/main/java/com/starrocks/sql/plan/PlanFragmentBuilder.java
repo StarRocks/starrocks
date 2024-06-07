@@ -3491,16 +3491,16 @@ public class PlanFragmentBuilder {
                 leftFragment.mergeQueryDictExprs(rightFragment.getQueryGlobalDictExprs());
                 return leftFragment;
             } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
-                DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                        leftFragment.getDataPartition().getPartitionExprs());
-                DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                        rightFragment.getDataPartition().getPartitionExprs());
-
-                leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
-                rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
+                //                DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
+                //                        leftFragment.getDataPartition().getPartitionExprs());
+                //                DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
+                //                        rightFragment.getDataPartition().getPartitionExprs());
+                //
+                //                leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
+                //                rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
 
                 PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
-                        joinNode, lhsJoinPartition);
+                        joinNode, leftFragment.getChild(0).getOutputPartition());
                 // Currently, we always generate new fragment for PhysicalDistribution.
                 // So we need to remove exchange node only fragment for Join.
                 mergeChildFragmentsIntoParent(joinFragment, Lists.newArrayList(leftFragment, rightFragment), context);
@@ -3770,7 +3770,7 @@ public class PlanFragmentBuilder {
             context.getSplitProduceFragments().put(splitId, splitProduce);
             context.getFragments().add(splitProduce);
 
-            return null;
+            return splitProduce;
         }
 
         @Override
