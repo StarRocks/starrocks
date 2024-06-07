@@ -62,8 +62,13 @@ set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
+<<<<<<< HEAD
 set(GENSRC_DIR "${BASE_DIR}/../gensrc/build/")
 set(SRC_DIR "${BASE_DIR}/src/")
+=======
+set(SRC_DIR "${BASE_DIR}/src")
+set(GENSRC_DIR "${SRC_DIR}/gen_cpp/build")
+>>>>>>> 152da12a89 ([BugFix] fix compiling errors from clang15 (#46757))
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")

@@ -116,6 +116,10 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
     auto cb = std::make_shared<CompactionTaskCallback>(this, request, response, done);
+<<<<<<< HEAD
+=======
+    bool is_checker = true; // make the first tablet as checker
+>>>>>>> 152da12a89 ([BugFix] fix compiling errors from clang15 (#46757))
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(), cb);
@@ -125,6 +129,10 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         }
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
+<<<<<<< HEAD
+=======
+        is_checker = false;
+>>>>>>> 152da12a89 ([BugFix] fix compiling errors from clang15 (#46757))
     }
     _task_queues.put_by_txn_id(request->txn_id(), contexts_vec);
     // DO NOT touch `contexts_vec` from here!
