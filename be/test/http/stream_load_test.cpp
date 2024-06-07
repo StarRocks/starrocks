@@ -362,5 +362,4 @@ TEST_F(StreamLoadActionTest, insert_mode_error) {
     ASSERT_STREQ("Fail", doc["Status"].GetString());
 }
 
-
 } // namespace starrocks

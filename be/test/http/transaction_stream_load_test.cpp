@@ -792,7 +792,6 @@ TEST_F(TransactionStreamLoadActionTest, upsert_insert_mode) {
     }
 }
 
-
 TEST_F(TransactionStreamLoadActionTest, ignore_insert_mode) {
     TransactionManagerAction txn_action(&_env);
 
