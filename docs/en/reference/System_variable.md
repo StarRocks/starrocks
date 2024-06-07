@@ -98,7 +98,14 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement.
 
-`SET_VAR` must be enclosed in `/*+...*/`.
+StarRocks supports using `SET_VAR` in the following statements;
+
+- SELECT
+- INSERT (from v3.1.12 and v3.2.0 onwards)
+- UPDATE (from v3.1.12 and v3.2.0 onwards)
+- DELETE (from v3.1.12 and v3.2.0 onwards)
+
+`SET_VAR` can only be placed after the above keywords and enclosed in `/*+...*/`.
 
 Example:
 
@@ -106,14 +113,22 @@ Example:
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
+
+DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
+FROM my_table PARTITION p1
+WHERE k1 = 3;
+
+INSERT /*+ SET_VAR(query_timeout = 10000000) */
+
+INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
 ```
-
-StarRocks supports using `SET_VAR` in the following statements;
-
-- SELECT
-- INSERT (from v3.1.12 and v3.2.0 onwards)
-- UPDATE (from v3.1.12 and v3.2.0 onwards)
-- DELETE (from v3.1.12 and v3.2.0 onwards)
 
 You can also set multiple variables in a single statement. Example:
 
