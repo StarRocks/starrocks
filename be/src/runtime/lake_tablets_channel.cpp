@@ -272,9 +272,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
         int64_t tablet_id = tablet_ids[row_indexes[from]];
         auto& dw = _delta_writers[tablet_id];
-<<<<<<< HEAD
-        DCHECK(dw != nullptr);
-=======
         if (dw == nullptr) {
             LOG(WARNING) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                          << " not found tablet_id: " << tablet_id;
@@ -285,19 +282,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             return;
         }
 
-        // back pressure OlapTableSink since there are too many memtables need to flush
-        while (dw->queueing_memtable_num() >= config::max_queueing_memtable_per_tablet) {
-            if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
-                LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                          << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
-                          << "ms still has queueing num " << dw->queueing_memtable_num();
-                break;
-            }
-            bthread_usleep(10000); // 10ms
-            wait_memtable_flush_time_ns += 10000000;
-        }
-
->>>>>>> 90a10ba157 ([BugFix] Add failure handle and warning log for delta writer not exist (#46593))
         if (auto st = dw->open(); !st.ok()) { // Fail to `open()` AsyncDeltaWriter
             context->update_status(st);
             count_down_latch.count_down(channel_size - i);
