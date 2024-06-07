@@ -93,7 +93,11 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### 设置变量在单个查询语句中生效
 
-在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (hint) 在查询中设置仅在单个语句内生效的会话变量。举例：
+在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (Hint) 在查询中设置仅在单个语句内生效的会话变量。
+
+Hint 必须以 `/*+` 开头，以 `*/` 结束。
+
+举例：
 
 ```sql
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
@@ -101,9 +105,12 @@ SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY na
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
 
-> **注意**
->
-> `SET_VAR` 只能跟在 SELECT 关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
+当前，StarRocks 支持在以下语句中使用 `SET_VAR` Hint：
+
+- SELECT
+- INSERT（自 v3.1.12 和 v3.2.0 起支持）
+- UPDATE（自 v3.1.12 和 v3.2.0 起支持）
+- DELETE（自 v3.1.12 和 v3.2.0 起支持）
 
 StarRocks 同时支持在单个语句中设置多个变量，参考如下示例：
 
