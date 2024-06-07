@@ -65,6 +65,9 @@ public class OffHeapColumnVector {
 
     private OffHeapColumnVector[] childColumns;
 
+    // Only for test，record the size of the NULL indicator
+    private int nullsLength = 0;
+
     public OffHeapColumnVector(int capacity, ColumnType type) {
         this.capacity = capacity;
         this.type = type;
@@ -174,7 +177,7 @@ public class OffHeapColumnVector {
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
         capacity = newCapacity;
-
+        this.nullsLength = capacity;
         if (offsetData != 0) {
             // offsetData[0] == 0 always.
             // we have to set it explicitly otherwise it's undefined value here.
@@ -458,6 +461,8 @@ public class OffHeapColumnVector {
         for (int i = 0; i < childColumns.length; i++) {
             childColumns[i].appendValue(values.get(i));
         }
+        // for nulls indicator
+        reserve(elementsAppended + 1);
         return elementsAppended++;
     }
 
@@ -768,5 +773,46 @@ public class OffHeapColumnVector {
         long timestamp = (((((hour * minsPerHour) + minute) * secsPerMinute) + second) * usecsPerSec)
                 + microsecond;
         return julianDate << timeStampBits | timestamp;
+    }
+
+    // for test only
+    public boolean checkNullsLength() {
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        switch (typeValue) {
+            case TINYINT:
+            case BOOLEAN:
+            case SHORT:
+            case INT:
+            case FLOAT:
+            case LONG:
+            case DOUBLE:
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return nullsLength >= elementsAppended;
+            case BINARY:
+            case STRING:
+            case DATE:
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+            case ARRAY:
+                return nullsLength >= elementsAppended && childColumns[0].checkNullsLength();
+            case MAP:
+                return nullsLength >= elementsAppended && childColumns[0].checkNullsLength()
+                        && childColumns[1].checkNullsLength();
+            case STRUCT: {
+                List<String> names = type.getChildNames();
+                for (int c = 0; c < names.size(); c++) {
+                    if (!childColumns[c].checkNullsLength()) {
+                        return false;
+                    }
+                }
+                return nullsLength >= elementsAppended;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
     }
 }
