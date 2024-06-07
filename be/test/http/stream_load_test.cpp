@@ -299,4 +299,68 @@ TEST_F(StreamLoadActionTest, plan_fail) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+TEST_F(StreamLoadActionTest, upsert_insert_mode) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request._headers.emplace(HTTP_INSERT_MODE, "upsert");
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Success", doc["Status"].GetString());
+}
+
+TEST_F(StreamLoadActionTest, ignore_insert_mode) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request._headers.emplace(HTTP_INSERT_MODE, "ignore");
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Success", doc["Status"].GetString());
+}
+
+TEST_F(StreamLoadActionTest, insert_mode_error) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request._headers.emplace(HTTP_INSERT_MODE, "insert");
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Fail", doc["Status"].GetString());
+}
+
+
 } // namespace starrocks

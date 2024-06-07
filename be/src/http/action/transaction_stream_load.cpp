@@ -441,6 +441,8 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
             request.__set_insert_mode(TInsertMode::type::UPSERT_MODE);
         } else if (http_req->header(HTTP_INSERT_MODE) == "ignore") {
             request.__set_insert_mode(TInsertMode::type::IGNORE_MODE);
+        } else {
+            return Status::InvalidArgument("Invalid insert mode flag format. Must be upsert or ignore");
         }
     }
     return Status::OK();
