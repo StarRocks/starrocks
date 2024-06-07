@@ -95,7 +95,14 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (Hint) 在查询中设置仅在单个语句内生效的会话变量。
 
-Hint 必须以 `/*+` 开头，以 `*/` 结束。
+当前，StarRocks 支持在以下语句中使用 `SET_VAR` Hint：
+
+- SELECT
+- INSERT（自 v3.1.12 和 v3.2.0 起支持）
+- UPDATE（自 v3.1.12 和 v3.2.0 起支持）
+- DELETE（自 v3.1.12 和 v3.2.0 起支持）
+
+`SET_VAR` 只能跟在以上关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
 
 举例：
 
@@ -103,14 +110,21 @@ Hint 必须以 `/*+` 开头，以 `*/` 结束。
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
+
+DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
+FROM my_table PARTITION p1
+WHERE k1 = 3;
+
+INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
 ```
-
-当前，StarRocks 支持在以下语句中使用 `SET_VAR` Hint：
-
-- SELECT
-- INSERT（自 v3.1.12 和 v3.2.0 起支持）
-- UPDATE（自 v3.1.12 和 v3.2.0 起支持）
-- DELETE（自 v3.1.12 和 v3.2.0 起支持）
 
 StarRocks 同时支持在单个语句中设置多个变量，参考如下示例：
 
