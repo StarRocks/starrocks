@@ -59,6 +59,9 @@ public class OffHeapColumnVector {
 
     private OffHeapColumnVector[] childColumns;
 
+    // Only for test，record the size of the NULL indicator
+    private int nullsLength = 0;
+
     public OffHeapColumnVector(int capacity, ColumnType type) {
         this.capacity = capacity;
         this.type = type;
@@ -155,7 +158,7 @@ public class OffHeapColumnVector {
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
         capacity = newCapacity;
-
+        this.nullsLength = capacity;
         if (offsetData != 0) {
             // offsetData[0] == 0 always.
             // we have to set it explicitly otherwise it's undefined value here.
@@ -393,6 +396,8 @@ public class OffHeapColumnVector {
         for (int i = 0; i < childColumns.length; i++) {
             childColumns[i].appendValue(values.get(i));
         }
+        // for nulls indicator
+        reserve(elementsAppended + 1);
         return elementsAppended++;
     }
 
@@ -627,4 +632,94 @@ public class OffHeapColumnVector {
             checker.check(context + "#data", data);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public byte[] changeByteOrder(byte[] bytes) {
+        int length = bytes.length;
+        for (int i = 0; i < length / 2; ++i) {
+            byte temp = bytes[i];
+            bytes[i] = bytes[length - 1 - i];
+            bytes[length - 1 - i] = temp;
+        }
+        return bytes;
+    }
+
+    /**
+     * logical components in be: time_types.cpp, date::from_date
+     */
+    private int convertToDate(int year, int month, int day) {
+        int century;
+        int julianDate;
+
+        if (month > 2) {
+            month += 1;
+            year += 4800;
+        } else {
+            month += 13;
+            year += 4799;
+        }
+        century = year / 100;
+        julianDate = year * 365 - 32167;
+        julianDate += year / 4 - century + century / 4;
+        julianDate += 7834 * month / 256 + day;
+
+        return julianDate;
+    }
+
+    /**
+     * logical components in be: time_types.h, timestamp::from_datetime
+     */
+    private long convertToDateTime(int year, int month, int day, int hour, int minute, int second, int microsecond) {
+        int secsPerMinute = 60;
+        int minsPerHour = 60;
+        long usecsPerSec = 1000000;
+        int timeStampBits = 40;
+        long julianDate = convertToDate(year, month, day);
+        long timestamp = (((((hour * minsPerHour) + minute) * secsPerMinute) + second) * usecsPerSec)
+                + microsecond;
+        return julianDate << timeStampBits | timestamp;
+    }
+
+    // for test only
+    public boolean checkNullsLength() {
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        switch (typeValue) {
+            case TINYINT:
+            case BOOLEAN:
+            case SHORT:
+            case INT:
+            case FLOAT:
+            case LONG:
+            case DOUBLE:
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return nullsLength >= elementsAppended;
+            case BINARY:
+            case STRING:
+            case DATE:
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+            case ARRAY:
+                return nullsLength >= elementsAppended && childColumns[0].checkNullsLength();
+            case MAP:
+                return nullsLength >= elementsAppended && childColumns[0].checkNullsLength()
+                        && childColumns[1].checkNullsLength();
+            case STRUCT: {
+                List<String> names = type.getChildNames();
+                for (int c = 0; c < names.size(); c++) {
+                    if (!childColumns[c].checkNullsLength()) {
+                        return false;
+                    }
+                }
+                return nullsLength >= elementsAppended;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
+    }
+>>>>>>> c349de8ac9 ([BugFix] Fix JniScanner crash due to struct null indicator (#46492))
 }
