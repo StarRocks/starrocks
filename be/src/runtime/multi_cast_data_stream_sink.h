@@ -34,4 +34,19 @@ private:
     std::vector<std::unique_ptr<DataStreamSender> > _sinks;
 };
 
+class SplitDataStreamSink : public MultiCastDataStreamSink {
+public:
+    SplitDataStreamSink(RuntimeState* state) : MultiCastDataStreamSink(state), _pool(state->obj_pool()){};
+    ~SplitDataStreamSink() override = default;
+
+    // create split exprs and init data stream senders
+    Status init(const TDataSink& thrift_sink, RuntimeState* state) override;
+    std::vector<ExprContext*>& get_split_expr_ctxs() { return _split_expr_ctxs; }
+
+private:
+    ObjectPool* _pool;
+    // init here and move to SplitLocalExchanger when split pipeline
+    std::vector<ExprContext*> _split_expr_ctxs;
+};
+
 } // namespace starrocks
