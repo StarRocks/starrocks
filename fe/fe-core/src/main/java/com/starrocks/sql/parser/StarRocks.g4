@@ -707,7 +707,7 @@ showComputeNodesStatement
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
 
 createExternalCatalogStatement
-    : CREATE EXTERNAL CATALOG catalogName=identifierOrString (IF NOT EXISTS)? comment? properties
+    : CREATE EXTERNAL CATALOG (IF NOT EXISTS)? catalogName=identifierOrString comment? properties
     ;
 
 showCreateExternalCatalogStatement
