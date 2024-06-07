@@ -18,7 +18,7 @@ Fixed the following issues:
 
 - An error is returned when users DELETE data rows from tables that use the expression partitioning method with str2date. [#45939](https://github.com/StarRocks/starrocks/pull/45939)
 - BEs in the destination cluster crash when the StarRocks Cross-cluster Data Migration Tool fails to retrieve the Schema information from the source cluster. [#46068](https://github.com/StarRocks/starrocks/pull/46068)
-- The error `Multiple entries with same key` is returned to queries with random functions. [#46602](https://github.com/StarRocks/starrocks/pull/46602)
+- The error `Multiple entries with same key` is returned to queries with non-deterministic functions. [#46602](https://github.com/StarRocks/starrocks/pull/46602)
 
 ## 3.2.7
 
