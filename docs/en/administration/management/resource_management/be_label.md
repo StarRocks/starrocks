@@ -4,15 +4,7 @@ displayed_sidebar: "English"
 
 # Add labels on BEs
 
-Since v3.3.0, StarRocks supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures that data can be evenly distributed based on racks, data centers, etc., to address disaster recovery requirements in case that certain racks lose power or data centers encounter failures.
-
-## Overview
-
-The core of high-reliability data storage lies in that **all the identical replicas are not** **located in the same location and are distributed as evenly as possible to avoid data loss in case of failures in a single location.**
-
-Currently, in StarRocks, tablets are distributed across BEs in the form of multiple replicas, which only ensure that all the identical replicas are not placed in the same BE. This indeed can avoid the abnormality of a BE to affect the availability of the service. However, in real-world scenarios, the deployment scope of one cluster may span across multiple racks or data centers. When distributing replicas, you do not think about the overall deployment scope of BEs, such as the racks or data centers they are in. It may result in all identical replicas being placed within the same rack or data center. In the event of a rack power outage or data center failure, data of these replicas may be lost.
-
-To further enhance data reliability, since v3.3.0, StarRocks supports adding labels on BEs based on information such as the racks and data centers where the BEs are located. This allows StarRocks to be aware of the geographical locations of BEs. StarRocks ensures balanced distribution of identical replicas across different labels during replica distribution, while also ensuring that identical replicas are evenly distributed within the BEs of the same label. This ensures that data can be evenly distributed based on rack, data center, etc., to mitigate the impact of regional failures on service availability.
+Since v3.2.8, StarRocks supports adding labels on BEs. If you specify labels at table creation, identical replicas are evenly distributed across different labels, and also evenly distributed within the BEs of the same label. This feature can enhance data high availability and isolate resource.
 
 ## Usage
 
@@ -76,7 +68,7 @@ ALTER TABLE example_table
 
 :::note
 
-For historical tables that are created before v3.3.0, data of these historical tables is not distributed based on labels by default. If you need to distribute data of a historical table based on labels, you can execute the following statement to add labels to the historical table:
+If you have upgraded StarRocks to version 3.2.8 or later, for historical tables created before the upgrade, data is not distributed based on labels by default.  If you need to distribute data of a historical table based on labels, you can execute the following statement to add labels to the historical table:
 
 ```SQL
 ALTER TABLE example_table1
