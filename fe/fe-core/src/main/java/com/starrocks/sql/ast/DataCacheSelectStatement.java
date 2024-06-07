@@ -39,7 +39,7 @@ public class DataCacheSelectStatement extends DdlStmt {
         this.insertStmt = insertStmt;
         this.properties = properties;
         Preconditions.checkNotNull(properties, "properties can't be null");
-        insertStmt.setOrigStmt(new OriginStatement("CACHE SELECT " + AstToSQLBuilder.toSQL(insertStmt.getQueryStatement())));
+        insertStmt.setOrigStmt(new OriginStatement("CACHE " + AstToSQLBuilder.toSQL(insertStmt.getQueryStatement())));
     }
 
     public InsertStmt getInsertStmt() {
