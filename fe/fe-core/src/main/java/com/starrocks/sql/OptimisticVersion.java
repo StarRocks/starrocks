@@ -36,10 +36,6 @@ public class OptimisticVersion {
      */
     public static boolean validateTableUpdate(OlapTable olapTable, long candidateVersion) {
         long schemaUpdate = olapTable.lastSchemaUpdateTime.get();
-        long dataUpdateStart = olapTable.lastVersionUpdateStartTime.get();
-        long dataUpdateEnd = olapTable.lastVersionUpdateEndTime.get();
-
-        return (schemaUpdate < candidateVersion) &&
-                (dataUpdateEnd >= dataUpdateStart && dataUpdateEnd < candidateVersion);
+        return schemaUpdate < candidateVersion;
     }
 }
