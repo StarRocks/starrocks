@@ -10,11 +10,11 @@ This topic describes how to create and manage a bitmap index, along with usage c
 
 A bitmap index is a special database index that uses bitmaps, which are an array of bits. A bit is always in one of two values: 0 and 1. Each bit in the bitmap corresponds to a single row in the table. The value of each bit depends upon the value of the corresponding row.
 
-**A bitmap index can help improve the query performance on a given column.** If a query's filter conditions match a prefix index, it can significantly improve query efficiency and quickly return results. However, a table can only have one prefix index. If the query's filter conditions do not include the prefix of the prefix index, a bitmap index can be created for that column to improve query efficiency.
+A bitmap index can help improve the query performance on a given column. If a query's filter conditions match a prefix index, it can significantly improve query efficiency and quickly return results. However, a table can only have one prefix index. If the query's filter conditions do not include the prefix of the prefix index, a bitmap index can be created for that column to improve query efficiency.
 
 ### How to design a bitmap index to accelerate queries
 
-The primary considerations for choosing a bitmap index are **column cardinality and the filtering effect of the bitmap index on queries**. Contrary to popular belief, bitmap indexes **in StarRocks** are more suitable for **queries on columns with high cardinality and queries on the combination of multiple low cardinality columns. Furthermore, bitmap indexes need to effectively filter out data, potentially filtering out at least 999/1000 of the data, thereby reducing the amount of Page data read.***\***
+The primary considerations for choosing a bitmap index are **column cardinality and the filtering effect of the bitmap index on queries**. Contrary to popular belief, bitmap indexes in StarRocks are more suitable for **queries on columns with high cardinality and queries on the combination of multiple low cardinality columns. Furthermore, bitmap indexes need to effectively filter out data, potentially filtering out at least 999/1000 of the data, thereby reducing the amount of Page data read.**
 
 For queries on a single low cardinality column, the filtering effect of a bitmap index is poor, because too many rows need to be read and scattered across multiple Pages.
 
@@ -26,9 +26,9 @@ You need to consider the cost of loading data when evaluating the filtering effe
 
 However, excessively high cardinality can also cause issues such as **occupying more disk space**, and because bitmap indexes need to be constructed during data loading, frequent data loading can **affect loading performance**.
 
-Additionally, the **overhead of loading** **bitmap** **indexes during queries** should be considered. During a query, bitmap indexes are loaded on demand, and the larger the value of `number of column values involved in query conditions/cardinality x bitmap index`, the greater the overhead of loading bitmap indexes during queries.
+Additionally, the **overhead of loading bitmap indexes during queries** should be considered. During a query, bitmap indexes are loaded on demand, and the larger the value of `number of column values involved in query conditions/cardinality x bitmap index`, the greater the overhead of loading bitmap indexes during queries.
 
-To determine the appropriate cardinality and query conditions for bitmap indexes, it is recommended to refer to the [Performance test on bitmap index](#performance-test-on-bitmap-index) in this topic to conduct performance tests. You can use actual business data and queries to **create bitmap indexes on columns of different cardinalities, to** **analyze the filtering effect of bitmap indexes on queries (at least filtering out 999/1000 of the data),** **the** **disk space usage, the impact on loading performance, and the overhead of loading bitmap indexes during queries.**
+To determine the appropriate cardinality and query conditions for bitmap indexes, it is recommended to refer to the [Performance test on bitmap index](#performance-test-on-bitmap-index) in this topic to conduct performance tests. You can use actual business data and queries to **create bitmap indexes on columns of different cardinalities, to analyze the filtering effect of bitmap indexes on queries (at least filtering out 999/1000 of the data),** **the** **disk space usage, the impact on loading performance, and the overhead of loading bitmap indexes during queries.**
 
 StarRocks has a built-in adaptive selection mechanism for bitmap indexes. If a bitmap index fails to accelerate queries, for example, if it cannot filter out many Pages, or the overhead of loading bitmap indexes during queries is high, it will not be used during the query, so query performance will not be significantly affected.
 
@@ -36,7 +36,7 @@ StarRocks has a built-in adaptive selection mechanism for bitmap indexes. If a b
 
 StarRocks can adaptively choose whether to use a bitmap index based on column cardinality and query conditions. If a bitmap index does not effectively filter out many Pages or the overhead of loading bitmap indexes during queries is high, StarRocks will not use the bitmap index by default to avoid degrading query performance.
 
-StarRocks determines whether to use a bitmap index based on the ratio of the number of values involved in the query condition to the column cardinality. Generally, the smaller this ratio, the better the filtering effect of the bitmap index. Thus, StarRocks uses `bitmap_max_filter_ratio/1000` as the threshold. When the number of **comparison** values in the filter condition / column cardinality < `bitmap_max_filter_ratio/1000`, the bitmap index will be used. The default value of `bitmap_max_filter_ratio` is `1`.
+StarRocks determines whether to use a bitmap index based on the ratio of the number of values involved in the query condition to the column cardinality. Generally, the smaller this ratio, the better the filtering effect of the bitmap index. Thus, StarRocks uses `bitmap_max_filter_ratio/1000` as the threshold. When the number of values in the filter condition / column cardinality < `bitmap_max_filter_ratio/1000`, the bitmap index will be used. The default value of `bitmap_max_filter_ratio` is `1`.
 
 Take a query based on a single column as example, such as `SELECT * FROM employees WHERE gender = 'male';`. The `gender` column in the `employees` table has values 'male' and 'female', so the cardinality is 2 (two distinct values). The query condition involves one value, so the ratio is 1/2, which is greater than 1/1000. Therefore, this query will not use the bitmap index.
 
@@ -59,7 +59,7 @@ The value range for `bitmap_max_filter_ratio` is 1-1000. If `bitmap_max_filter_r
 
 Bitmap indexes are suitable for optimizing equality `=` queries, `[NOT] IN` range queries, `>`, `>=`, `<`, `<=` queries, and `IS NULL` queries. They are not suitable for optimizing `!=` and `[NOT] LIKE` queries.
 
-### Supported Columns and Data Types
+### Supported columns and data types
 
 Bitmap indexes can be created on all columns in primary key and duplicate key tables, and on key columns in aggregate and unique key tables. Bitmap indexes can be created on the columns of the following data types:
 
@@ -68,13 +68,13 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
 - String types: CHAR, STRING, VARCHAR.
 - Other types: HLL.
 
-## Basic Operations
+## Basic operations
 
 ### Create an index
 
 - Create a bitmap index during table creation.
 
-  - ```SQL
+    ```SQL
     CREATE TABLE `lineorder_partial` (
       `lo_orderkey` int(11) NOT NULL COMMENT "",
       `lo_orderdate` int(11) NOT NULL COMMENT "",
@@ -87,23 +87,20 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
     ```
 
-  -  In this example, a bitmap index named `lo_orderdate_index` is created on the `lo_orderdate` column. Naming requirements for bitmap indexes can be found in [System Limits](../../reference/System_limit.md). Identical bitmap indexes cannot be created within the same table.
+    In this example, a bitmap index named `lo_orderdate_index` is created on the `lo_orderdate` column. Naming requirements for bitmap indexes can be found in [System Limits](../../reference/System_limit.md). Identical bitmap indexes cannot be created within the same table.
 
-  -  Multiple bitmap indexes can be created for multiple columns, separated by commas (,).
+    Multiple bitmap indexes can be created for multiple columns, separated by commas (,).
 
-  -  :::note
+    :::note
 
-  - 
 
-  -  For more parameters of table creation, refer to [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+    For more parameters of table creation, refer to [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
-  - 
-
-  -  :::
+    :::
 
 - `CREATE INDEX` can be used to create a bitmap index after table creation. For detailed parameter descriptions and examples, refer to [CREATE INDEX](../../sql-reference/sql-statements/data-definition/CREATE_INDEX.md).
 
-  - ```SQL
+    ```SQL
     CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
     ```
 
@@ -154,7 +151,7 @@ Check the `BitmapIndexFilterRows` field in the query Profile. For information on
 To analyze the filtering effect and other impacts, such as disk usage, of bitmap indexes on queries with different cardinalities:
 
 - [Query on a single column of low cardinality](#query-1-query-on-single-column-of-low-cardinality)
-- [Query on the combination of multiple columns low cardinality](#query-2-combination-query-based-on-multiple-low-cardinality-columns)
+- [Query on the combination of multiple columns of low cardinality](#query-2-query-on-the-combination-of-multiple-columns-of-low-cardinality)
 - [Query on a single column of high cardinality](#query-3-query-based-on-single-high-cardinality-column)
 
 This section also compares the performance between always using bitmap index and using bitmap indexes adaptively to verify the effectiveness of [StarRocks' adaptive selection of bitmap indexes](#adaptive-selection-of-bitmap-indexes).
@@ -320,7 +317,7 @@ IOTaskExecTime: 914.279ms // Total time for scanning data.
     PredFilterRows: 123.433M (123432975) // Number of rows filtered out by predicate.
 ```
 
-### Query 2: Query on the combination of multiple columns low cardinality
+### Query 2: Query on the combination of multiple columns of low cardinality
 
 #### Query table without bitmap index
 
