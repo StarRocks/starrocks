@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Bitmap indexing
+# Bitmap indexes
 
 This topic describes how to create and manage a bitmap index, along with usage cases.
 
@@ -10,9 +10,6 @@ This topic describes how to create and manage a bitmap index, along with usage c
 
 A bitmap index is a special database index that uses bitmaps, which are an array of bits. A bit is always in one of two values: 0 and 1. Each bit in the bitmap corresponds to a single row in the table. The value of each bit depends upon the value of the corresponding row.
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-A bitmap index can help improve the query performance on a given column. If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](../table_design/Sort_key.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key, you can create a bitmap index for the column.
-=======
 A bitmap index can help improve the query performance on a given column. If a query's filter conditions match a prefix index, it can significantly improve query efficiency and quickly return results. However, a table can only have one prefix index. If the query's filter conditions do not include the prefix of the prefix index, a bitmap index can be created for that column to improve query efficiency.
 
 ### How to design a bitmap index to accelerate queries
@@ -20,36 +17,18 @@ A bitmap index can help improve the query performance on a given column. If a qu
 The primary considerations for choosing a bitmap index are **column cardinality and the filtering effect of the bitmap index on queries**. Contrary to popular belief, bitmap indexes in StarRocks are more suitable for **queries on columns with high cardinality and queries on the combination of multiple low cardinality columns. Furthermore, bitmap indexes need to effectively filter out data, potentially filtering out at least 999/1000 of the data, thereby reducing the amount of Page data read.**
 
 For queries on a single low cardinality column, the filtering effect of a bitmap index is poor, because too many rows need to be read and scattered across multiple Pages.
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
 
 :::info
 
 You need to consider the cost of loading data when evaluating the filtering effect of bitmap indexes on queries. In StarRocks, underlying data is organized and loaded by Pages (default size is 64K). The cost of loading data includes the time to load Pages from disk, decompress Pages, and decode.
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-- Reduce response time when the column has low cardinality, such as the columns of the ENUM type. If the number of distinct values in a column is relatively high, we recommend that you use a bloom filter index to improve query speed. For more information, see [Bloom filter indexing](../using_starrocks/Bloomfilter_index.md).
-- Use less storage space compared to other indexing techniques. Bitmap indexes typically take up only a fraction of the size of the indexed data in a table.
-- Combine multiple bitmap indexes together to fire queries on multiple columns. For more information, see [Query multiple columns](#query-multiple-columns).
-=======
 :::
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
 
 However, excessively high cardinality can also cause issues such as **occupying more disk space**, and because bitmap indexes need to be constructed during data loading, frequent data loading can **affect loading performance**.
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-- You can create a bitmap index for a column that can be filtered by using the equal (`=`) or [NOT] IN operator.
-- You can create bitmap indexes for all columns of a Primary Key table or Duplicate Key table. For an Aggregate table or Unique Key table, you can only create bitmap indexes for key columns.
-- Bitmap indexes can be created for columns of the following data types:
-    - Numeric types: TINYINT, SMALLINT, INT, BITGINT, LARGEINT, DECIMAL, and BOOLEAN.
-    - String types: CHAR, STRING, and VARCHAR.
-    - Date types: DATE and DATETIME.
-    - Other types: HLL.
-- You can check whether a query uses bitmap indexes by viewing the `BitmapIndexFilterRows` field of the query's profile.
-=======
 Additionally, the **overhead of loading bitmap indexes during queries** should be considered. During a query, bitmap indexes are loaded on demand, and the larger the value of `number of column values involved in query conditions/cardinality x bitmap index`, the greater the overhead of loading bitmap indexes during queries.
 
 To determine the appropriate cardinality and query conditions for bitmap indexes, it is recommended to refer to the [Performance test on bitmap index](#performance-test-on-bitmap-index) in this topic to conduct performance tests. You can use actual business data and queries to **create bitmap indexes on columns of different cardinalities, to analyze the filtering effect of bitmap indexes on queries (at least filtering out 999/1000 of the data), the disk space usage, the impact on loading performance, and the overhead of loading bitmap indexes during queries.**
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
 
 StarRocks has a built-in [adaptive selection mechanism for bitmap indexes](#adaptive-selection-of-bitmap-indexes). If a bitmap index fails to accelerate queries, for example, if it cannot filter out many Pages, or the overhead of loading bitmap indexes during queries is high, it will not be used during the query, so query performance will not be significantly affected.
 
@@ -96,20 +75,6 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
 - Create a bitmap index during table creation.
 
     ```SQL
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-    CREATE TABLE d0.table_hash
-    (
-        k1 TINYINT,
-        k2 DECIMAL(10, 2) DEFAULT "10.5",
-        v1 CHAR(10) REPLACE,
-        v2 INT SUM,
-        INDEX index_name (column_name [, ...]) [USING BITMAP] [COMMENT '']
-    )
-    ENGINE = olap
-    AGGREGATE KEY(k1, k2)
-    DISTRIBUTED BY HASH(k1) BUCKETS 10
-    PROPERTIES ("storage_type" = "column");
-=======
     CREATE TABLE `lineorder_partial` (
       `lo_orderkey` int(11) NOT NULL COMMENT "",
       `lo_orderdate` int(11) NOT NULL COMMENT "",
@@ -120,33 +85,20 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
     ) ENGINE=OLAP 
     DUPLICATE KEY(`lo_orderkey`)
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 1;
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
     ```
 
-    In this example, a bitmap index named `lo_orderdate_index` is created on the `lo_orderdate` column. Naming requirements for bitmap indexes can be found in [System Limits](../../reference/System_limit.md). Identical bitmap indexes cannot be created within the same table.
+    In this example, a bitmap index named `lo_orderdate_index` is created on the `lo_orderdate` column. Naming requirements for bitmap indexes can be found in [System Limits](../reference/System_limit.md). Identical bitmap indexes cannot be created within the same table.
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-    | **Parameter** | **Required** | **Description**                                              |
-    | ------------- | ------------ | ------------------------------------------------------------ |
-    | index_name    | Yes          | The name of the bitmap index.  The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li>The name cannot exceed 64 characters in length.</li></ul>The name of bitmap index must be unique in a table.                              |
-    | column_name   | Yes          | The name of the column on which a bitmap index is created. You can specify multiple column names to create bitmap indexes for multiple columns at a time. Separate multiple columns with commas (`,`).  |
-    | COMMENT       | No           | The comment of the bitmap index.                             |
-
-    You can create bitmap indexes for multiple columns at a time by specifying multiple `INDEX index_name (column_name [, ...]) [USING BITMAP] [COMMENT '']` commands. These commands need to be separated with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
-
-- Create a bitmap index for a column of a table using the CREATE INDEX statement. For parameter descriptions and examples, see [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE_INDEX.md).
-=======
     Multiple bitmap indexes can be created for multiple columns, separated by commas (,).
 
     :::note
 
 
-    For more parameters of table creation, refer to [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+    For more parameters of table creation, refer to [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
     :::
 
-- `CREATE INDEX` can be used to create a bitmap index after table creation. For detailed parameter descriptions and examples, refer to [CREATE INDEX](../../sql-reference/sql-statements/data-definition/CREATE_INDEX.md).
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
+- `CREATE INDEX` can be used to create a bitmap index after table creation. For detailed parameter descriptions and examples, refer to [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE_INDEX.md).
 
     ```SQL
     CREATE INDEX lo_quantity_index (lo_quantity) USING BITMAP;
@@ -154,11 +106,7 @@ Bitmap indexes can be created on all columns in primary key and duplicate key ta
 
 ### Progress of creating an index
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-You can view all bitmap indexes created in a table using the SHOW INDEX statement. For parameter descriptions and examples, see [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW_INDEX.md).
-=======
-Creating a bitmap index is an asynchronous process. After executing the index creation statement, you can check the index creation progress using the [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) command. When the `State` field in the returned value shows `FINISHED`, the index is successfully created.
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
+Creating a bitmap index is an asynchronous process. After executing the index creation statement, you can check the index creation progress using the [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) command. When the `State` field in the returned value shows `FINISHED`, the index is successfully created.
 
 ```SQL
 SHOW ALTER TABLE COLUMN;
@@ -168,15 +116,11 @@ SHOW ALTER TABLE COLUMN;
 
 Each table can only have one ongoing Schema Change task at a time. You cannot create a new bitmap index until the current bitmap index is created.
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-You can delete a bitmap index from a table using the DROP INDEX statement. For parameter descriptions and examples, see [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP_INDEX.md).
-=======
 :::
 
 ### View an index
 
-View all bitmap indexes for a specified table. For detailed parameters and returned results, refer to [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md).
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
+View all bitmap indexes for a specified table. For detailed parameters and returned results, refer to [SHOW INDEX](../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md).
 
 ```SQL
 SHOW INDEXES FROM lineorder_partial;
@@ -190,7 +134,7 @@ Creating a bitmap index is an asynchronous process. Using the above statement, y
 
 ### Delete an index
 
-Delete a bitmap index for a specified table. For detailed parameters and examples, refer to [DROP INDEX](../../sql-reference/sql-statements/data-definition/DROP_INDEX.md).
+Delete a bitmap index for a specified table. For detailed parameters and examples, refer to [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP_INDEX.md).
 
 ```SQL
 DROP INDEX lo_orderdate_index ON lineorder_partial;
@@ -198,11 +142,7 @@ DROP INDEX lo_orderdate_index ON lineorder_partial;
 
 ### Verify whether the bitmap index accelerates queries
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-![figure](../assets/3.6.1-2.png)
-=======
-Check the `BitmapIndexFilterRows` field in the query Profile. For information on viewing the Profile, refer to [Query analysis](../../administration/Query_planning.md).
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
+Check the `BitmapIndexFilterRows` field in the query Profile. For information on viewing the Profile, refer to [Query analysis](../administration/Query_planning.md).
 
 ## Performance test on bitmap index
 
@@ -212,7 +152,7 @@ To analyze the filtering effect and other impacts, such as disk usage, of bitmap
 
 - [Query on a single column of low cardinality](#query-1-query-on-single-column-of-low-cardinality)
 - [Query on the combination of multiple columns of low cardinality](#query-2-query-on-the-combination-of-multiple-columns-of-low-cardinality)
-- [Query on a single column of high cardinality](#query-3-query-based-on-single-high-cardinality-column)
+- [Query on a single column of high cardinality](#query-3-query-on-single-column-of-high-cardinality)
 
 This section also compares the performance between always using bitmap index and using bitmap indexes adaptively to verify the effectiveness of [StarRocks' adaptive selection of bitmap indexes](#adaptive-selection-of-bitmap-indexes).
 
@@ -286,16 +226,12 @@ This section takes the table `lineorder` (SSB 20G) as an example.
 
 ### Disk space usage of bitmap indexes
 
-<<<<<<< HEAD:docs/en/using_starrocks/Bitmap_index.md
-![figure](../assets/3.6.1-3.png)
-=======
 - `lo_shipmode`: String type, cardinality 7, occupies 130M
 - `lo_quantity`: Integer type, cardinality 50, occupies 291M
 - `lo_discount`: Integer type, cardinality 11, occupies 198M
 - `lo_orderdate`: Integer type, cardinality 2406, occupies 191M
 - `lo_tax`: Integer type, cardinality 9, occupies 160M
 - `lo_partkey`: Integer type, cardinality 600,000, occupies 601M
->>>>>>> 8b437bf6ec ([Doc] add bitmap index en (#46759)):docs/en/table_design/indexes/Bitmap_index.md
 
 ### Query 1: Query on single column of low cardinality 
 
