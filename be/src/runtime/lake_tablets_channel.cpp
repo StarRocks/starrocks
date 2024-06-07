@@ -272,7 +272,16 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
         int64_t tablet_id = tablet_ids[row_indexes[from]];
         auto& dw = _delta_writers[tablet_id];
-        DCHECK(dw != nullptr);
+        if (dw == nullptr) {
+            LOG(WARNING) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                         << " not found tablet_id: " << tablet_id;
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(
+                    fmt::format("Failed to add_chunk since tablet_id {} not exists, txn_id: {}, load_id: {}", tablet_id,
+                                _txn_id, print_id(request.id())));
+            return;
+        }
+
         if (auto st = dw->open(); !st.ok()) { // Fail to `open()` AsyncDeltaWriter
             context->update_status(st);
             count_down_latch.count_down(channel_size - i);
