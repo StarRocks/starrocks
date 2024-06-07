@@ -989,9 +989,9 @@ You can build views upon tables in external catalogs and then materialized views
 
 StarRocks supports building asynchronous materialized views on Hive catalogs, Hudi catalogs, Iceberg catalogs, and Paimon catalogs, and transparently rewriting queries with them. External catalog-based materialized views support most of the query rewrite capabilities, but there are some limitations:
 
-- Hudi, Iceberg, Paimon, or JDBC catalog-based materialized views do not support Union rewrite.
-- Hudi, Iceberg, Paimon, or JDBC catalog-based materialized views do not support View Delta Join rewrite.
-- Hudi, Iceberg, or JDBC catalog-based materialized views do not support the incremental refresh of partitions.
+- Hudi, Paimon, or JDBC catalog-based materialized views do not support Union rewrite.
+- Hudi, Paimon, or JDBC catalog-based materialized views do not support View Delta Join rewrite.
+- Hudi or JDBC catalog-based materialized views do not support the incremental refresh of partitions.
 
 ## Configure query rewrite
 
