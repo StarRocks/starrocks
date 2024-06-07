@@ -1,0 +1,6 @@
+-- name: test_create_partition_fail @sequential
+CREATE TABLE ss( event_day DATE, pv BIGINT, cc int) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+admin set frontend config ("max_automatic_partition_number"="0");
+insert into ss values('2002-01-01', 1, 2);
+admin set frontend config ("max_automatic_partition_number"="4096");
+insert into ss values('2002-01-01', 1, 2);
