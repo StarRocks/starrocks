@@ -4,6 +4,22 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+## 3.2.8
+
+发布日期：2024 年 6 月 7 日
+
+### 新增特性
+
+- **[使用标签管理 BE](https://docs.starrocks.io/zh/docs/3.3/administration/management/resource_management/be_label/)**：支持基于 BE 节点所在机架、数据中心等信息，使用标签对 BE 节点进行分组，以保证数据在机架或数据中心等之间均匀分布，应对某些机架断电或数据中心故障情况下的灾备需求。[#38833](https://github.com/StarRocks/starrocks/pull/38833)
+
+### 问题修复
+
+修复了如下问题：
+
+- 基于 str2date 函数的表达式分区表使用 DELETE 语句删除数据报错。[#45939](https://github.com/StarRocks/starrocks/pull/45939)
+- 跨集群迁移工具因获取不到源集群 Schema 信息而导致目标集群 BE Crash。[#46068](https://github.com/StarRocks/starrocks/pull/46068)
+- 查询使用非确定性函数时报错 `Multiple entries with same key`。[#46602](https://github.com/StarRocks/starrocks/pull/46602)
+
 ## 3.2.7
 
 发布日期：2024 年 5 月 24 日
