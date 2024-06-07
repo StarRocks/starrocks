@@ -133,13 +133,8 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
    ![added service](../../assets/ranger_added_service.png)
 
-<<<<<<< HEAD
-5. Click **Test connection** to test the connectivity, and save it after the connection is successful.
-6. On each FE machine of the StarRocks cluster, create [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
-=======
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful. If you didn't install ranger-starrocks-plugin, then you can skip test connection and create directly.
-6. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
->>>>>>> cdbcfd81f9 ([Doc]Update ranger_plugin.md (#46366))
+6. On each FE machine of the StarRocks cluster, create [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:
 
    - `ranger.plugin.starrocks.service.name`: Change to the name of the StarRocks Service you created in Step 4.
    - `ranger.plugin.starrocks.policy.rest the url`: Change to the address of the Ranger Admin.
