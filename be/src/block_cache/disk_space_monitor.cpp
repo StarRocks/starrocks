@@ -29,7 +29,7 @@ const size_t DiskSpaceMonitor::QUOTA_ALIGN_UNIT = 10uL * 1024 * 1024;
 
 const int64_t DiskSpaceMonitor::AUTO_INCREASE_THRESHOLD = 90;
 
-StatusOr<size_t> DiskSpaceMonitor::FileSystemWrapper::directory_capacity(const std::string& dir) {
+StatusOr<size_t> DiskSpaceMonitor::FileSystemWrapper::directory_size(const std::string& dir) {
     size_t capacity = 0;
     auto st = FileSystem::Default()->iterate_dir2(dir, [&](DirEntry entry) {
         capacity += entry.size.value();
@@ -146,6 +146,8 @@ void DiskSpaceMonitor::_update_disk_stats() {
         auto& space_info = ret.value();
         disk.capacity_bytes = space_info.capacity;
         disk.available_bytes = space_info.available;
+        VLOG(1) << "Get disk statistics, capaticy: " << disk.capacity_bytes << ", available: " << disk.available_bytes
+                << ", used_rate: " << (disk.capacity_bytes - disk.available_bytes) * 100 / disk.capacity_bytes << "%";
     }
 }
 
@@ -165,9 +167,8 @@ int64_t DiskSpaceMonitor::_max_disk_used_rate() {
 void DiskSpaceMonitor::_init_spaces_by_cache_dir() {
     _total_cache_usage = 0;
     for (auto& dir_space : _dir_spaces) {
-        auto ret = _fs->directory_capacity(dir_space.path);
+        auto ret = _fs->directory_size(dir_space.path);
         if (ret.ok()) {
-            dir_space.size = ret.value();
             _total_cache_usage += ret.value();
         }
         _total_cache_quota += dir_space.size;
@@ -193,9 +194,9 @@ void DiskSpaceMonitor::_update_cache_stats() {
 bool DiskSpaceMonitor::_adjust_spaces_by_disk_usage(bool immediate) {
     bool shrink = false;
     int64_t max_disk_used_rate = _max_disk_used_rate();
-    if (max_disk_used_rate > config::datacache_disk_urgent_level) {
+    if (max_disk_used_rate > config::datacache_disk_high_level) {
         shrink = true;
-    } else if (max_disk_used_rate < config::datacache_disk_safe_level) {
+    } else if (max_disk_used_rate < config::datacache_disk_low_level) {
         _disk_free_period += config::datacache_disk_adjust_interval_seconds;
         if (!immediate && _disk_free_period < config::datacache_disk_idle_seconds_for_expansion) {
             return false;
@@ -219,8 +220,8 @@ bool DiskSpaceMonitor::_adjust_spaces_by_disk_usage(bool immediate) {
         // Decrease cache quota
         delta_rate = (config::datacache_disk_safe_level - max_disk_used_rate) / _min_disk_dirs;
         DCHECK_LT(delta_rate, 0);
-        _update_spaces_by_cache_usage();
     }
+    _update_spaces_by_cache_usage();
 
     int64_t total_cache_quota = 0;
     for (const auto& pair : _disk_to_dirs) {
@@ -243,6 +244,7 @@ bool DiskSpaceMonitor::_adjust_spaces_by_disk_usage(bool immediate) {
         // If the current available disk space is too small, cache quota will be reset to zero to avoid overly frequent
         // population and eviction.
         _reset_spaces();
+        total_cache_quota = 0;
         if (_total_cache_quota == 0) {
             // If the cache quata is already zero, skip adjusting it repeatedly.
             return false;
@@ -252,6 +254,7 @@ bool DiskSpaceMonitor::_adjust_spaces_by_disk_usage(bool immediate) {
                          << "still need it, you could reduce the value of `datacache_min_disk_quota_for_adjustment`";
         }
     }
+    LOG(INFO) << "Adjusting datacache disk quota from " << _total_cache_quota << " to " << total_cache_quota;
     return true;
 }
 
