@@ -908,8 +908,10 @@ public class TabletScheduler extends FrontendDaemon {
                     break;
                 case DISK_MIGRATION:
                     handleDiskMigration(tabletCtx, batchTask);
+                    break;
                 case LOCATION_MISMATCH:
                     handleLocationMismatch(tabletCtx, batchTask);
+                    break;
                 default:
                     break;
             }
