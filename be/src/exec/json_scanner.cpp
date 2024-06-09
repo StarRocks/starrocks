@@ -445,6 +445,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
 
 template <typename ParserType>
 Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read) {
+    SCOPED_RAW_TIMER(&_counter->json_read_row_ns);
     simdjson::ondemand::object row;
     auto parser = down_cast<ParserType*>(_parser.get());
 
@@ -808,6 +809,7 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     _empty_parser = false;
+    SCOPED_RAW_TIMER(&_counter->json_parse_ns);
     return _parser->parse(_payload, _payload_size, _payload_capacity);
 }
 

@@ -89,6 +89,8 @@ private:
     RuntimeProfile::Counter* _scanner_init_chunk_timer = nullptr;
     RuntimeProfile::Counter* _scanner_file_reader_timer = nullptr;
     RuntimeProfile::Counter* _scanner_file_read_count = nullptr;
+    RuntimeProfile::Counter* _scanner_json_parese_timer = nullptr;
+    RuntimeProfile::Counter* _scanner_json_read_row_timer = nullptr;
 
     // =========================
     Status _create_scanner();
