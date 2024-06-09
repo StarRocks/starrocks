@@ -30,6 +30,7 @@ class TabletSchema;
 class ThreadPool;
 struct FileInfo;
 class TxnLogPB;
+class FlushStatistic;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -103,6 +104,8 @@ public:
     Status check_immutable();
 
     int64_t last_write_ts() const;
+
+    const FlushStatistic& get_flush_stats() const;
 
 private:
     DeltaWriterImpl* _impl;

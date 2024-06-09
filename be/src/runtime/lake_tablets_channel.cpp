@@ -37,6 +37,7 @@
 #include "storage/lake/async_delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable.h"
+#include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"
@@ -79,9 +80,7 @@ public:
 
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
 
-    void update_profile() override {
-        // TODO add profile for lake
-    }
+    void update_profile() override;
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -201,6 +200,8 @@ private:
 
     void _flush_stale_memtables();
 
+    void _update_tablet_profile(AsyncDeltaWriter* writer, RuntimeProfile* profile);
+
     LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
@@ -239,6 +240,10 @@ private:
     std::set<int64_t> _immutable_partition_ids;
 
     // Profile counters
+    // Number of times that update_profile() is called
+    RuntimeProfile::Counter* _profile_update_counter = nullptr;
+    // Accumulated time for update_profile()
+    RuntimeProfile::Counter* _profile_update_timer = nullptr;
     // Number of tablets
     RuntimeProfile::Counter* _tablets_num = nullptr;
     // Number of times that open() is called
@@ -255,7 +260,75 @@ private:
     RuntimeProfile::Counter* _wait_flush_timer = nullptr;
     // Accumulated time to wait for async delta writers in add_chunk()
     RuntimeProfile::Counter* _wait_writer_timer = nullptr;
+
+    std::atomic<bool> _is_updating_profile{false};
+    std::unique_ptr<RuntimeProfile> _tablets_profile;
 };
+
+void LakeTabletsChannel::update_profile() {
+    if (_profile == nullptr) {
+        return;
+    }
+
+    bool expect = false;
+    if (!_is_updating_profile.compare_exchange_strong(expect, true)) {
+        // skip concurrent update
+        return;
+    }
+    DeferOp defer([this]() { _is_updating_profile.store(false); });
+    _profile->inc_version();
+    COUNTER_UPDATE(_profile_update_counter, 1);
+    SCOPED_TIMER(_profile_update_timer);
+
+    std::vector<AsyncDeltaWriter*> async_writers;
+    {
+        std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+        async_writers.reserve(_delta_writers.size());
+        for (auto& [tablet_id, delta_writer] : _delta_writers) {
+            async_writers.push_back(delta_writer.get());
+        }
+    }
+
+    std::vector<RuntimeProfile*> tablet_profiles;
+    for (auto async_writer : async_writers) {
+        RuntimeProfile* profile = _tablets_profile->create_child(fmt::format("{}", async_writer->tablet_id()));
+        _update_tablet_profile(async_writer, profile);
+        tablet_profiles.push_back(profile);
+    }
+
+    ObjectPool obj_pool;
+    if (!tablet_profiles.empty()) {
+        auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, tablet_profiles);
+        RuntimeProfile* final_profile = _profile->create_child("Tablets");
+        auto* tablets_counter = ADD_COUNTER(_profile, "TabletsNum", TUnit::UNIT);
+        COUNTER_UPDATE(tablets_counter, tablet_profiles.size());
+        final_profile->copy_all_info_strings_from(merged_profile);
+        final_profile->copy_all_counters_from(merged_profile);
+    }
+}
+
+#define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
+#define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
+
+void LakeTabletsChannel::_update_tablet_profile(AsyncDeltaWriter* writer, RuntimeProfile* profile) {
+    const FlushStatistic& flush_stat = writer->get_flush_stats();
+    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
+    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
+    ADD_AND_UPDATE_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
+    ADD_AND_UPDATE_COUNTER(profile, "FlushTaskPendingTime", TUnit::UNIT, flush_stat.pending_time_ns);
+    auto& memtable_stat = flush_stat.memtable_stats;
+    ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count);
+    ADD_AND_UPDATE_TIMER(profile, "MemtableInsertTime", memtable_stat.insert_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "MemtableFinalizeTime", memtable_stat.finalize_time_ns);
+    ADD_AND_UPDATE_COUNTER(profile, "MemtableSortCount", TUnit::UNIT, memtable_stat.sort_count);
+    ADD_AND_UPDATE_TIMER(profile, "MemtableSortTime", memtable_stat.sort_time_ns);
+    ADD_AND_UPDATE_COUNTER(profile, "MemtableAggCount", TUnit::UNIT, memtable_stat.agg_count);
+    ADD_AND_UPDATE_TIMER(profile, "MemtableAggTime", memtable_stat.agg_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "MemtableFlushTime", memtable_stat.flush_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "MemtableIOTime", memtable_stat.io_time_ns);
+    ADD_AND_UPDATE_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES, memtable_stat.flush_memory_size);
+    ADD_AND_UPDATE_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES, memtable_stat.flush_disk_size);
+}
 
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                        const TabletsChannelKey& key, MemTracker* mem_tracker,
@@ -267,6 +340,8 @@ LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletMa
           _mem_tracker(mem_tracker),
           _mem_pool(std::make_unique<MemPool>()) {
     _profile = parent_profile->create_child(fmt::format("Index (id={})", key.index_id));
+    _profile_update_counter = ADD_COUNTER(_profile, "ProfileUpdateCount", TUnit::UNIT);
+    _profile_update_timer = ADD_TIMER(_profile, "ProfileUpdateTime");
     _tablets_num = ADD_COUNTER(_profile, "TabletsNum", TUnit::UNIT);
     _open_counter = ADD_COUNTER(_profile, "OpenCount", TUnit::UNIT);
     _open_timer = ADD_TIMER(_profile, "OpenTime");
@@ -275,6 +350,7 @@ LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletMa
     _add_row_num = ADD_COUNTER(_profile, "AddRowNum", TUnit::UNIT);
     _wait_flush_timer = ADD_CHILD_TIMER(_profile, "WaitFlushTime", "AddChunkTime");
     _wait_writer_timer = ADD_CHILD_TIMER(_profile, "WaitWriterTime", "AddChunkTime");
+    _tablets_profile = std::make_unique<RuntimeProfile>("TabletsProfile");
 }
 
 LakeTabletsChannel::~LakeTabletsChannel() {

@@ -27,6 +27,7 @@
 namespace starrocks {
 class MemTracker;
 class SlotDescriptor;
+class FlushStatistic;
 } // namespace starrocks
 
 namespace starrocks {
@@ -111,6 +112,8 @@ public:
     [[nodiscard]] Status check_immutable();
 
     [[nodiscard]] int64_t last_write_ts() const;
+
+    const FlushStatistic& get_flush_stats() const;
 
 private:
     AsyncDeltaWriterImpl* _impl;
