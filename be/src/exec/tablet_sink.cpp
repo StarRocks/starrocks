@@ -188,6 +188,11 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
     _ts_profile->open_timer = ADD_TIMER(_profile, "OpenTime");
     _ts_profile->close_timer = ADD_TIMER(_profile, "CloseWaitTime");
+    _ts_profile->close_wait_response_timer = ADD_CHILD_TIMER(_profile, "CloseWaitResponseTime", "CloseWaitTime");
+    _ts_profile->close_send_rpc_timer = ADD_CHILD_TIMER(_profile, "CloseSendRpcTime", "CloseWaitTime");
+    _ts_profile->close_serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "CloseSerializeChunkTime", "CloseSendRpcTime");
+    _ts_profile->close_compress_timer = ADD_CHILD_TIMER(_profile, "CloseCompressTime", "CloseSendRpcTime");
+    _ts_profile->close_call_rpc_timer = ADD_CHILD_TIMER(_profile, "CloseCallRpcTime", "CloseSendRpcTime");
     _ts_profile->prepare_data_timer = ADD_TIMER(_profile, "PrepareDataTime");
     _ts_profile->convert_chunk_timer = ADD_CHILD_TIMER(_profile, "ConvertChunkTime", "PrepareDataTime");
     _ts_profile->validate_data_timer = ADD_CHILD_TIMER(_profile, "ValidateDataTime", "PrepareDataTime");
@@ -197,6 +202,7 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
     _ts_profile->serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
     _ts_profile->compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
+    _ts_profile->call_rpc_timer = ADD_CHILD_TIMER(_profile, "CallRpcTime", "SendRpcTime");
     _ts_profile->client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
     _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
@@ -844,7 +850,10 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         do {
             close_status = try_close(state);
             if (!close_status.ok()) break;
-            SleepFor(MonoDelta::FromMilliseconds(5));
+            {
+                SCOPED_TIMER(_ts_profile->close_wait_response_timer);
+                SleepFor(MonoDelta::FromMilliseconds(5));
+            }
         } while (!is_close_done());
     }
     return close_wait(state, close_status);

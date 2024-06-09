@@ -493,6 +493,7 @@ void PlanFragmentExecutor::close() {
             // We can easily know the exec node execute time without child time consumed.
             _runtime_state->runtime_profile()->compute_time_in_profile();
             _runtime_state->runtime_profile()->pretty_print(&ss);
+            _runtime_state->load_channel_profile()->pretty_print(&ss);
             LOG(INFO) << ss.str();
         }
     }

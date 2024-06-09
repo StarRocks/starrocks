@@ -87,9 +87,15 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* validate_data_timer = nullptr;
     RuntimeProfile::Counter* open_timer = nullptr;
     RuntimeProfile::Counter* close_timer = nullptr;
+    RuntimeProfile::Counter* close_wait_response_timer = nullptr;
+    RuntimeProfile::Counter* close_send_rpc_timer = nullptr;
+    RuntimeProfile::Counter* close_serialize_chunk_timer = nullptr;
+    RuntimeProfile::Counter* close_compress_timer = nullptr;
+    RuntimeProfile::Counter* close_call_rpc_timer = nullptr;
     RuntimeProfile::Counter* serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* wait_response_timer = nullptr;
     RuntimeProfile::Counter* compress_timer = nullptr;
+    RuntimeProfile::Counter* call_rpc_timer = nullptr;
     RuntimeProfile::Counter* pack_chunk_timer = nullptr;
     RuntimeProfile::Counter* send_rpc_timer = nullptr;
     RuntimeProfile::Counter* client_rpc_timer = nullptr;
@@ -149,10 +155,12 @@ public:
     void cancel();
 
     void time_report(std::unordered_map<int64_t, AddBatchCounter>* add_batch_counter_map, int64_t* serialize_batch_ns,
-                     int64_t* actual_consume_ns) {
+                     int64_t* actual_consume_ns, int64_t* close_serialize_batch_ns, int64_t* close_send_rpc_ns) {
         (*add_batch_counter_map)[_node_id] += _add_batch_counter;
         *serialize_batch_ns += _serialize_batch_ns;
         *actual_consume_ns += _actual_consume_ns;
+        *close_serialize_batch_ns += _close_serialize_batch_ns;
+        *close_send_rpc_ns += _close_send_rpc_ns;
     }
 
     int64_t node_id() const { return _node_id; }
@@ -177,7 +185,7 @@ private:
     Status _wait_one_prev_request();
     bool _check_prev_request_done();
     bool _check_all_prev_request_done();
-    Status _serialize_chunk(const Chunk* src, ChunkPB* dst);
+    Status _serialize_chunk(const Chunk* src, ChunkPB* dst, bool close = false);
     void _open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure,
                std::vector<PTabletWithPartition>& tablets, bool incrmental_open);
     Status _open_wait(RefCountClosure<PTabletWriterOpenResult>* open_closure);
@@ -232,6 +240,7 @@ private:
 
     AddBatchCounter _add_batch_counter;
     int64_t _serialize_batch_ns = 0;
+    int64_t _close_serialize_batch_ns = 0;
 
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
@@ -245,6 +254,7 @@ private:
     size_t _max_request_queue_size = 8;
 
     int64_t _actual_consume_ns = 0;
+    int64_t _close_send_rpc_ns = 0;
     Status _err_st = Status::OK();
 
     RuntimeState* _runtime_state = nullptr;

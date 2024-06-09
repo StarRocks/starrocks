@@ -255,13 +255,14 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
     if (status.ok()) {
         // BE id -> add_batch method counter
         std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
-        int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
+        int64_t serialize_batch_ns = 0, actual_consume_ns = 0, close_serialize_batch_ns = 0, close_send_rpc_ns = 0;
+        ;
         {
             SCOPED_TIMER(ts_profile->close_timer);
             Status err_st = Status::OK();
 
             for_each_node_channel([this, &state, &node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns,
-                                   &err_st](NodeChannel* ch) {
+                                   &close_serialize_batch_ns, &close_send_rpc_ns, &err_st](NodeChannel* ch) {
                 auto channel_status = ch->close_wait(state);
                 if (!channel_status.ok()) {
                     LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
@@ -270,7 +271,8 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
                     err_st = channel_status;
                     this->_mark_as_failed(ch);
                 }
-                ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
+                ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns,
+                                &close_serialize_batch_ns, &close_send_rpc_ns);
             });
             if (_has_intolerable_failure()) {
                 status = err_st;
@@ -290,8 +292,8 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
             SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
             COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
             COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
-            COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
-            COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
+            COUNTER_SET(ts_profile->close_serialize_chunk_timer, close_serialize_batch_ns);
+            COUNTER_SET(ts_profile->close_send_rpc_timer, close_send_rpc_ns);
 
             int64_t total_server_rpc_time_us = 0;
             int64_t total_server_wait_memtable_flush_time_us = 0;

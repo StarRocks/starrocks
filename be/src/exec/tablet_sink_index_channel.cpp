@@ -338,11 +338,12 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     return status;
 }
 
-Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
+Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst, bool close) {
     VLOG_ROW << "serializing " << src->num_rows() << " rows";
 
     {
-        SCOPED_RAW_TIMER(&_serialize_batch_ns);
+        auto serialize_batch_ns = close ? &_close_serialize_batch_ns : &_serialize_batch_ns;
+        SCOPED_RAW_TIMER(serialize_batch_ns);
         StatusOr<ChunkPB> res = Status::OK();
         // This lambda is to get the result of TRY_CATCH_ALLOC_SCOPE_END()
         auto st = [&]() {
@@ -372,7 +373,8 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
 
     // try compress the ChunkPB data
     if (_compress_codec != nullptr && uncompressed_size > 0) {
-        SCOPED_TIMER(_ts_profile->compress_timer);
+        auto timer = close ? _ts_profile->close_compress_timer : _ts_profile->compress_timer;
+        SCOPED_TIMER(timer);
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
@@ -432,43 +434,45 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         RETURN_IF_ERROR(_wait_one_prev_request());
     }
 
-    SCOPED_TIMER(_ts_profile->pack_chunk_timer);
-    // 1. append data
-    if (_where_clause == nullptr) {
-        _cur_chunk->append_selective(*input, indexes.data(), from, size);
-        auto req = _rpc_request.mutable_requests(0);
-        for (size_t i = 0; i < size; ++i) {
-            req->add_tablet_ids(tablet_ids[indexes[from + i]]);
+    {
+        SCOPED_TIMER(_ts_profile->pack_chunk_timer);
+        // 1. append data
+        if (_where_clause == nullptr) {
+            _cur_chunk->append_selective(*input, indexes.data(), from, size);
+            auto req = _rpc_request.mutable_requests(0);
+            for (size_t i = 0; i < size; ++i) {
+                req->add_tablet_ids(tablet_ids[indexes[from + i]]);
+            }
+        } else {
+            std::vector<uint32_t> filtered_indexes;
+            RETURN_IF_ERROR(_filter_indexes_with_where_expr(input, indexes, filtered_indexes));
+            size_t filter_size = filtered_indexes.size();
+            _cur_chunk->append_selective(*input, filtered_indexes.data(), from, filter_size);
+            auto req = _rpc_request.mutable_requests(0);
+            for (size_t i = 0; i < filter_size; ++i) {
+                req->add_tablet_ids(tablet_ids[filtered_indexes[from + i]]);
+            }
         }
-    } else {
-        std::vector<uint32_t> filtered_indexes;
-        RETURN_IF_ERROR(_filter_indexes_with_where_expr(input, indexes, filtered_indexes));
-        size_t filter_size = filtered_indexes.size();
-        _cur_chunk->append_selective(*input, filtered_indexes.data(), from, filter_size);
-        auto req = _rpc_request.mutable_requests(0);
-        for (size_t i = 0; i < filter_size; ++i) {
-            req->add_tablet_ids(tablet_ids[filtered_indexes[from + i]]);
-        }
-    }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
-        // 2. chunk not full
-        if (_request_queue.empty()) {
+        if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+            // 2. chunk not full
+            if (_request_queue.empty()) {
+                return Status::OK();
+            }
+            // passthrough: try to send data if queue not empty
+        } else {
+            // 3. chunk full push back to queue
+            _mem_tracker->consume(_cur_chunk->memory_usage());
+            _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
+            _cur_chunk = input->clone_empty_with_slot();
+            _rpc_request.mutable_requests(0)->clear_tablet_ids();
+        }
+
+        // 4. check last request
+        if (!_check_prev_request_done()) {
+            // 4.1 noblock here so that other node channel can send data
             return Status::OK();
         }
-        // passthrough: try to send data if queue not empty
-    } else {
-        // 3. chunk full push back to queue
-        _mem_tracker->consume(_cur_chunk->memory_usage());
-        _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
-        _cur_chunk = input->clone_empty_with_slot();
-        _rpc_request.mutable_requests(0)->clear_tablet_ids();
-    }
-
-    // 4. check last request
-    if (!_check_prev_request_done()) {
-        // 4.1 noblock here so that other node channel can send data
-        return Status::OK();
     }
 
     return _send_request(false);
@@ -486,41 +490,44 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
     }
 
     if (is_full()) {
+        SCOPED_TIMER(_ts_profile->wait_response_timer);
         // wait previous request done then we can pop data from queue to send request
         // and make new space to push data.
         RETURN_IF_ERROR(_wait_one_prev_request());
     }
 
-    SCOPED_TIMER(_ts_profile->pack_chunk_timer);
-    // 1. append data
-    _cur_chunk->append_selective(*input, indexes.data(), from, size);
-    for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
-        auto req = _rpc_request.mutable_requests(index_i);
-        for (size_t i = from; i < size; ++i) {
-            req->add_tablet_ids(index_tablet_ids[index_i][indexes[from + i]]);
+    {
+        SCOPED_TIMER(_ts_profile->pack_chunk_timer);
+        // 1. append data
+        _cur_chunk->append_selective(*input, indexes.data(), from, size);
+        for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
+            auto req = _rpc_request.mutable_requests(index_i);
+            for (size_t i = from; i < size; ++i) {
+                req->add_tablet_ids(index_tablet_ids[index_i][indexes[from + i]]);
+            }
         }
-    }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
-        // 2. chunk not full
-        if (_request_queue.empty()) {
+        if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+            // 2. chunk not full
+            if (_request_queue.empty()) {
+                return Status::OK();
+            }
+            // passthrough: try to send data if queue not empty
+        } else {
+            // 3. chunk full push back to queue
+            _mem_tracker->consume(_cur_chunk->memory_usage());
+            _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
+            _cur_chunk = input->clone_empty_with_slot();
+            for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
+                _rpc_request.mutable_requests(index_i)->clear_tablet_ids();
+            }
+        }
+
+        // 4. check last request
+        if (!_check_prev_request_done()) {
+            // 4.1 noblock here so that other node channel can send data
             return Status::OK();
         }
-        // passthrough: try to send data if queue not empty
-    } else {
-        // 3. chunk full push back to queue
-        _mem_tracker->consume(_cur_chunk->memory_usage());
-        _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
-        _cur_chunk = input->clone_empty_with_slot();
-        for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
-            _rpc_request.mutable_requests(index_i)->clear_tablet_ids();
-        }
-    }
-
-    // 4. check last request
-    if (!_check_prev_request_done()) {
-        // 4.1 noblock here so that other node channel can send data
-        return Status::OK();
     }
 
     return _send_request(false);
@@ -558,6 +565,7 @@ void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf) {
 }
 
 Status NodeChannel::_send_request(bool eos, bool finished) {
+    bool from_close = eos || finished;
     if (eos || finished) {
         if (_request_queue.empty()) {
             if (_cur_chunk.get() == nullptr) {
@@ -583,9 +591,14 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
 
     _mem_tracker->release(chunk->memory_usage());
 
-    RETURN_IF_ERROR(_wait_one_prev_request());
+    {
+        auto timer = from_close ? _ts_profile->close_wait_response_timer : _ts_profile->wait_response_timer;
+        SCOPED_TIMER(timer);
+        RETURN_IF_ERROR(_wait_one_prev_request());
+    }
 
-    SCOPED_RAW_TIMER(&_actual_consume_ns);
+    auto send_rpc_time = from_close ? &_close_send_rpc_ns : &_actual_consume_ns;
+    SCOPED_RAW_TIMER(send_rpc_time);
 
     for (int i = 0; i < request.requests_size(); i++) {
         auto req = request.mutable_requests(i);
@@ -617,7 +630,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
         // only serialize one chunk if is_repeated_request is true
         if ((!_enable_colocate_mv_index || i == 0) && chunk->num_rows() > 0) {
             auto pchunk = req->mutable_chunk();
-            RETURN_IF_ERROR(_serialize_chunk(chunk.get(), pchunk));
+            RETURN_IF_ERROR(_serialize_chunk(chunk.get(), pchunk, from_close));
         }
     }
 
@@ -629,6 +642,8 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
 
     _mem_tracker->consume(_add_batch_closures[_current_request_index]->request_size);
 
+    auto call_rpc_timer = from_close ? _ts_profile->close_call_rpc_timer : _ts_profile->call_rpc_timer;
+    SCOPED_TIMER(call_rpc_timer);
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
         if (UNLIKELY(request.ByteSizeLong() > _parent->_rpc_http_min_size)) {
@@ -917,7 +932,10 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     }
 
     // 2. wait eos request finish
-    RETURN_IF_ERROR(_wait_all_prev_request());
+    {
+        SCOPED_TIMER(_ts_profile->close_wait_response_timer);
+        RETURN_IF_ERROR(_wait_all_prev_request());
+    }
 
     // assign tablet dict infos
     if (!_tablet_commit_infos.empty()) {
