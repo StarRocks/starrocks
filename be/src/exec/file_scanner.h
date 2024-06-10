@@ -45,6 +45,7 @@ struct ScannerCounter {
 
     int64_t file_read_ns = 0;
     int64_t file_read_count = 0;
+    int64_t file_decompress_ns = 0;
 
     int64_t json_parse_ns = 0;
     int64_t json_read_row_ns = 0;

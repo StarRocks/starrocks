@@ -670,7 +670,8 @@ Status JsonReader::_read_file_stream() {
     if (_range_desc.compression_type != TCompressionType::NO_COMPRESSION &&
         _range_desc.compression_type != TCompressionType::UNKNOWN_COMPRESSION) {
         pipe = std::make_shared<CompressedStreamLoadPipeReader>(
-                down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe(), _range_desc.compression_type);
+                down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe(), _range_desc.compression_type,
+                &_counter->file_decompress_ns);
     }
     ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);

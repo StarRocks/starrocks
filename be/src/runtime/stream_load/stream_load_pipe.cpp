@@ -36,6 +36,7 @@
 
 #include "util/alignment.h"
 #include "util/compression/compression_utils.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -282,6 +283,13 @@ CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<S
                                                                TCompressionType::type compression_type)
         : StreamLoadPipeReader(std::move(pipe)), _compression_type(compression_type) {}
 
+CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe,
+                                                               TCompressionType::type compression_type,
+                                                               int64_t* file_decompress_ns)
+        : StreamLoadPipeReader(std::move(pipe)),
+          _compression_type(compression_type),
+          _file_decompress_ns(file_decompress_ns) {}
+
 StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     size_t buffer_size = DEFAULT_DECOMPRESS_BUFFER_SIZE;
     if (_decompressor == nullptr) {
@@ -298,6 +306,8 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
 
     ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());
 
+    int64_t fake_decompress_timer = 0;
+    SCOPED_RAW_TIMER(_file_decompress_ns == nullptr ? &fake_decompress_timer : _file_decompress_ns);
     // try to read all compressed data into _decompressed_buffer
     bool stream_end = false;
     size_t total_bytes_read = 0;

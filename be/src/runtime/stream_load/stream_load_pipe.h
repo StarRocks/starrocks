@@ -123,6 +123,9 @@ private:
 class CompressedStreamLoadPipeReader : public StreamLoadPipeReader {
 public:
     CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe, TCompressionType::type compression_type);
+    CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe, TCompressionType::type compression_type,
+                                   int64_t* file_decompress_ns);
+
     ~CompressedStreamLoadPipeReader() override = default;
     StatusOr<ByteBufferPtr> read() override;
 
@@ -132,6 +135,7 @@ private:
     TCompressionType::type _compression_type;
     ByteBufferPtr _decompressed_buffer;
     std::unique_ptr<StreamCompression> _decompressor;
+    int64_t* _file_decompress_ns = nullptr;
 };
 
 // TODO: Make `StreamLoadPipe` as a derived class of `io::InputStream`.
