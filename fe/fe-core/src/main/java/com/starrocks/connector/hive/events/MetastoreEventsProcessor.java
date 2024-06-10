@@ -211,6 +211,9 @@ public class MetastoreEventsProcessor extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         List<String> catalogs = Lists.newArrayList(cacheUpdateProcessors.keySet());
+        if (catalogs.isEmpty()) {
+            return;
+        }
         int resourceCatalogNum = (int) cacheUpdateProcessors.keySet().stream()
                 .filter(CatalogMgr.ResourceMappingCatalog::isResourceMappingCatalog).count();
         int catalogNum = cacheUpdateProcessors.size() - resourceCatalogNum;
