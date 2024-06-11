@@ -350,6 +350,21 @@ public class AnalyzeInsertTest {
                 "got invalid parameter \"single\" = \"false-false\", expect a boolean value (true or false).");
 
         analyzeFail("insert into files ( \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                        "\t\"format\"=\"parquet\", \n" +
+                        "\t\"compression\" = \"uncompressed\", \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"f\" ) \n" +
+                        "select \"abc\" as k1, 123 as k2",
+                "got invalid parameter \"parquet.use_legacy_encoding\" = \"f\", expect a boolean value (true or false).");
+
+        analyzeSuccess("insert into files ( \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                        "\t\"format\"=\"parquet\", \n" +
+                        "\t\"compression\" = \"uncompressed\", \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"true\" ) \n" +
+                        "select \"abc\" as k1, 123 as k2");
+
+        analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\", \n" +
