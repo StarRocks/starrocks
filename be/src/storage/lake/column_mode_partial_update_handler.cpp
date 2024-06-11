@@ -65,7 +65,7 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
     if (metadata.dcg_meta().dcgs().empty()) {
         return false;
     }
-    std::unordered_set<uint32_t> input_rowsets; //all rowset that have been compacted
+    std::unordered_set<uint32_t> input_rowsets; // all rowsets that have been compacted
     std::vector<uint32_t> input_segments;       // all segment that have been compacted
     for (uint32_t input_rowset : op_compaction.input_rowsets()) {
         input_rowsets.insert(input_rowset);

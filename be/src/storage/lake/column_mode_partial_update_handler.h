@@ -23,9 +23,9 @@ namespace starrocks::lake {
 class LakeDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
 public:
     LakeDeltaColumnGroupLoader(TabletMetadataPtr tablet_metadata);
-    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
+    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) override;
     Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
-                DeltaColumnGroupList* pdcgs);
+                DeltaColumnGroupList* pdcgs) override;
 
 private:
     TabletMetadataPtr _tablet_metadata;

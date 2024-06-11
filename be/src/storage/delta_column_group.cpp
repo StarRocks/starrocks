@@ -123,9 +123,9 @@ Status DeltaColumnGroup::load(int64_t version, const DeltaColumnGroupVerPB& dcg_
     for (const auto& column_file : dcg_ver_pb.column_files()) {
         _column_files.push_back(column_file);
     }
-    for (const auto& cids : dcg_ver_pb.column_ids()) {
+    for (const auto& ucids : dcg_ver_pb.unique_column_ids()) {
         _column_uids.emplace_back();
-        for (const auto& cid : cids.column_ids()) {
+        for (const auto& cid : ucids.column_ids()) {
             _column_uids.back().push_back(cid);
         }
     }

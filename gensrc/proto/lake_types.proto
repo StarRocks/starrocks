@@ -55,7 +55,7 @@ message DelvecMetadataPB {
 }
 
 message DeltaColumnGroupVerPB {
-    repeated DeltaColumnGroupColumnIdsPB column_ids = 1;
+    repeated DeltaColumnGroupColumnIdsPB unique_column_ids = 1;
     repeated string column_files = 2;
     // To do conflict check with compaction task
     repeated int64 versions = 3;
