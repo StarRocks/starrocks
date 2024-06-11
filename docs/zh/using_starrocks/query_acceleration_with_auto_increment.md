@@ -175,4 +175,3 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
       SELECT id, BITMAP_UNION_COUNT(order_id_bitmap) FROM dest_table_bitmap
       GROUP BY id ORDER BY id;
       ```
-
