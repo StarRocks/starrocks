@@ -882,6 +882,7 @@ public class TabletScheduler extends FrontendDaemon {
                     break;
                 case DISK_MIGRATION:
                     handleDiskMigration(tabletCtx, batchTask);
+                    break;
                 default:
                     break;
             }
