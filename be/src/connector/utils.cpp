@@ -24,28 +24,15 @@ namespace starrocks::connector {
 
 StatusOr<std::string> HiveUtils::make_partition_name(
         const std::vector<std::string>& column_names,
-        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk) {
+        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
+        bool support_null_partition) {
     DCHECK_EQ(column_names.size(), column_evaluators.size());
     std::stringstream ss;
     for (size_t i = 0; i < column_evaluators.size(); i++) {
         ASSIGN_OR_RETURN(auto column, column_evaluators[i]->evaluate(chunk));
-        if (column->has_null()) {
+        if (!support_null_partition && column->has_null()) {
             return Status::NotSupported("Partition value can't be null.");
         }
-        auto type = column_evaluators[i]->type();
-        ASSIGN_OR_RETURN(auto value, column_value(type, column, 0));
-        ss << column_names[i] << "=" << value << "/";
-    }
-    return ss.str();
-}
-
-StatusOr<std::string> HiveUtils::make_partition_name_nullable(
-        const std::vector<std::string>& column_names,
-        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk) {
-    DCHECK_EQ(column_names.size(), column_evaluators.size());
-    std::stringstream ss;
-    for (size_t i = 0; i < column_evaluators.size(); i++) {
-        ASSIGN_OR_RETURN(auto column, column_evaluators[i]->evaluate(chunk));
         auto type = column_evaluators[i]->type();
         ASSIGN_OR_RETURN(auto value, column_value(type, column, 0));
         ss << column_names[i] << "=" << value << "/";

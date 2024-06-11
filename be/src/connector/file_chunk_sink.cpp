@@ -35,7 +35,8 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
                              std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
                              RuntimeState* state)
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(location_provider), std::move(file_writer_factory), max_file_size, state) {}
+                             std::move(location_provider), std::move(file_writer_factory), max_file_size, state, true) {
+}
 
 void FileChunkSink::callback_on_commit(const CommitResult& result) {
     _rollback_actions.push_back(std::move(result.rollback_action));

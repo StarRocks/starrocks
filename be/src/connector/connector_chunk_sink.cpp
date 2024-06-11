@@ -26,13 +26,14 @@ ConnectorChunkSink::ConnectorChunkSink(std::vector<std::string> partition_column
                                        std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                        std::unique_ptr<LocationProvider> location_provider,
                                        std::unique_ptr<formats::FileWriterFactory> file_writer_factory,
-                                       int64_t max_file_size, RuntimeState* state)
+                                       int64_t max_file_size, RuntimeState* state, bool support_null_partition)
         : _partition_column_names(std::move(partition_columns)),
           _partition_column_evaluators(std::move(partition_column_evaluators)),
           _location_provider(std::move(location_provider)),
           _file_writer_factory(std::move(file_writer_factory)),
           _max_file_size(max_file_size),
-          _state(state) {}
+          _state(state),
+          _support_null_partition(support_null_partition) {}
 
 Status ConnectorChunkSink::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
@@ -46,8 +47,9 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     if (partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name_nullable(_partition_column_names,
-                                                                            _partition_column_evaluators, chunk));
+        ASSIGN_OR_RETURN(partition,
+                         HiveUtils::make_partition_name(_partition_column_names, _partition_column_evaluators, chunk,
+                                                        _support_null_partition));
     }
 
     auto it = _writer_stream_pairs.find(partition);

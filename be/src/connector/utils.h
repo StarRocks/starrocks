@@ -34,11 +34,8 @@ class HiveUtils {
 public:
     static StatusOr<std::string> make_partition_name(
             const std::vector<std::string>& column_names,
-            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
-
-    static StatusOr<std::string> make_partition_name_nullable(
-            const std::vector<std::string>& column_names,
-            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
+            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
+            bool support_null_partition);
 
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int idx);
 };

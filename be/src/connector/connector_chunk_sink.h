@@ -40,7 +40,7 @@ public:
                        std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                        std::unique_ptr<LocationProvider> location_provider,
                        std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
-                       RuntimeState* state);
+                       RuntimeState* state, bool support_null_partition);
 
     void set_io_poller(AsyncFlushStreamPoller* poller) { _io_poller = poller; }
 
@@ -66,8 +66,9 @@ protected:
     std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
     std::unique_ptr<LocationProvider> _location_provider;
     std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
-    int64_t _max_file_size;
-    RuntimeState* _state;
+    int64_t _max_file_size = 1024L * 1024 * 1024;
+    RuntimeState* _state = nullptr;
+    bool _support_null_partition{false};
     std::vector<std::function<void()>> _rollback_actions;
 
     std::unordered_map<std::string, WriterStreamPair> _writer_stream_pairs;
