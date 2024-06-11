@@ -79,9 +79,9 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         }
                         Pair<Boolean, String> result = connectScheduler.registerConnection(context);
                         if (result.first) {
-                            MysqlProto.sendResponsePacket(context);
                             connection.setCloseListener(
                                     streamConnection -> connectScheduler.unregisterConnection(context));
+                            MysqlProto.sendResponsePacket(context);
                         } else {
                             context.getState().setError(result.second);
                             MysqlProto.sendResponsePacket(context);
