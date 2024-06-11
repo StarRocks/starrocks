@@ -1539,7 +1539,7 @@ public class StmtExecutor {
     // Process use warehouse statement
     private void handleSetWarehouseStmt() throws AnalysisException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new AnalysisException("unsupported statement in shared_nothing mode");
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
         }
 
         SetWarehouseStmt setWarehouseStmt = (SetWarehouseStmt) parsedStmt;

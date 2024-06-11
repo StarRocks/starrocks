@@ -20,6 +20,8 @@ import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.TimeUtils;
@@ -56,6 +58,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -93,6 +96,10 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
     public ShowResultSet visitShowWarehousesStatement(ShowWarehousesStmt statement, ConnectContext context) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            ErrorReportException.report(ErrorCode.ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE);
+        }
 
         PatternMatcher matcher = null;
         if (!statement.getPattern().isEmpty()) {
