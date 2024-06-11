@@ -715,7 +715,7 @@ showCreateExternalCatalogStatement
     ;
 
 dropExternalCatalogStatement
-    : DROP CATALOG catalogName=identifierOrString (IF EXISTS)?
+    : DROP CATALOG (IF EXISTS)? catalogName=identifierOrString
     ;
 
 showCatalogsStatement

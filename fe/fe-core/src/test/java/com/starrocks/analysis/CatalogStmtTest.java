@@ -115,7 +115,7 @@ public class CatalogStmtTest {
             Assert.assertTrue(e.getMessage().contains("exists"));
         }
 
-        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog", false));
+        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
         Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
     }

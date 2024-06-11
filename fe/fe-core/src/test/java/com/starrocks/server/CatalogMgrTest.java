@@ -132,7 +132,7 @@ public class CatalogMgrTest {
         out.flush();
         out.close();
 
-        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog", false));
+        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
         Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
 
         DataInputStream in = new DataInputStream(new FileInputStream(file));

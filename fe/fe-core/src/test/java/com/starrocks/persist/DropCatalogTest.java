@@ -72,7 +72,7 @@ public class DropCatalogTest {
     }
     @Test
     public void testDropCatalog() throws Exception {
-        String dropSql = "DROP CATALOG hive_catalog IF EXISTS";
+        String dropSql = "DROP CATALOG IF EXISTS hive_catalog";
 
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
