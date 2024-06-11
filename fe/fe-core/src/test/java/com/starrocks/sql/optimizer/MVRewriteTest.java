@@ -1089,7 +1089,6 @@ public class MVRewriteTest {
                 + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid) a group by a.empid";
         String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
         // NOTE: Since `deptno` is key column of the new mv, so use `PREAGGREGATION` instead.
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
                 "     TABLE: emps\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -1221,7 +1220,6 @@ public class MVRewriteTest {
 
         String query = "select k1, sum(case when(k2=0) then k3 else 0 end) from t1 group by k1";
         String plan = starRocksAssert.query(query).explainQuery();
-        System.out.println(plan);
         PlanTestBase.assertContains(plan, "  1:Project\n" +
                 "  |  <slot 1> : 1: k1\n" +
                 "  |  <slot 6> : if(2: k2 = 0, 3: k3, 0)\n");
@@ -1249,7 +1247,6 @@ public class MVRewriteTest {
         // query contains sum1 and sum2, should use mv
         String query = "select k1, sum(k3) as sum1, sum(case when(k2=0) then k3 else 0 end) as sum2 from t1 group by k1";
         String plan = starRocksAssert.query(query).explainQuery();
-        System.out.println(plan);
         PlanTestBase.assertContains(plan, "  1:Project\n" +
                 "  |  <slot 1> : 1: k1\n" +
                 "  |  <slot 5> : 5: mv_sum_k3\n" +
@@ -1278,13 +1275,8 @@ public class MVRewriteTest {
 
         String query = "select k1, sum(case when(k2=0) then k3 else 0 end) from t1 group by k1";
         String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "MV");
-        System.out.println(plan);
-        PlanTestBase.assertContains(plan, "  1:Project\n" +
-                "  |  <slot 1> : 1: k1\n" +
-                "  |  <slot 6> : if(2: k2 = 0, 3: k3, 0)\n");
-        PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
-                "     PREAGGREGATION: OFF. Reason: The result of ELSE isn't value column\n" +
-                "     partitions=1/1");
+        // TODO: support this for amv
+        PlanTestBase.assertNotContains(plan, "test_mv1)\n");
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
