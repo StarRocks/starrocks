@@ -284,7 +284,7 @@ public interface ConnectorMetadata {
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
     }
 
-    default void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
+    default void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
     }
 

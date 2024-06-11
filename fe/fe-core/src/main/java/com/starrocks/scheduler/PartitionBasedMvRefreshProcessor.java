@@ -1711,7 +1711,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             AddPartitionClause alterPartition = new AddPartitionClause(rangePartitionDesc, distributionDesc,
                     partitionProperties, false);
             try {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
                         database, materializedView.getName(), alterPartition);
             } catch (Exception e) {
                 throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
@@ -1734,7 +1734,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MultiItemListPartitionDesc multiItemListPartitionDesc =
                     new MultiItemListPartitionDesc(false, mvPartitionName, partitionKeyList, partitionProperties);
             try {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
                         database, materializedView.getName(), new AddPartitionClause(
                                 multiItemListPartitionDesc, distributionDesc,
                                 partitionProperties, false));
