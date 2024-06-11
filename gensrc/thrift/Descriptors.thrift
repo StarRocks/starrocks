@@ -460,6 +460,8 @@ struct TTableFunctionTable {
     8: optional string csv_row_delimiter
 
     9: optional string csv_column_seperator
+
+    10: optional bool parquet_use_legacy_encoding
 }
 
 struct TIcebergSchema {

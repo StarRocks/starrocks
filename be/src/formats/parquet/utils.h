@@ -25,4 +25,6 @@ enum ColumnContentType { VALUE, DICT_CODE };
 
 enum ColumnIOType { PAGE_INDEX, PAGES };
 
+int decimal_precision_to_byte_count(int precision);
+
 } // namespace starrocks::parquet
