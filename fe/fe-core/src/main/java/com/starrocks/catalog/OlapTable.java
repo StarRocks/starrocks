@@ -295,9 +295,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
-
-        // Shallow copy shared data to check whether the copied table has changed or not.
-        olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
     }
 
     public void setTableProperty(TableProperty tableProperty) {
