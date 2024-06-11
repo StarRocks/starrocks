@@ -77,14 +77,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         if (!MysqlProto.negotiate(context)) {
                             throw new AfterConnectedException("mysql negotiate failed");
                         }
-<<<<<<< HEAD
                         Pair<Boolean, String> result = connectScheduler.registerConnection(context);
                         if (result.first) {
-                            MysqlProto.sendResponsePacket(context);
-=======
-                        Pair<Boolean, String> registerResult = connectScheduler.registerConnection(context);
-                        if (registerResult.first) {
->>>>>>> 25ae3ad80e ([BugFix] Fix an issue When connection failed, CloseListener was not executed. (#46164))
                             connection.setCloseListener(
                                     streamConnection -> connectScheduler.unregisterConnection(context));
                             MysqlProto.sendResponsePacket(context);
