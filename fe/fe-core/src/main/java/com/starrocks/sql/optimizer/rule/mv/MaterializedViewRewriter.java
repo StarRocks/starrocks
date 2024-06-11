@@ -75,7 +75,11 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                 if (kv.getValue() instanceof ColumnRefOperator) {
                     newProjectMap.put(context.mvColumnRef, context.mvColumnRef);
                 } else {
-                    newProjectMap.put(kv.getKey(), context.mvColumnRef);
+                    // rewrite query column ref into mv agg column ref
+                    Map<ColumnRefOperator, ScalarOperator> replaceMap = new HashMap<>();
+                    replaceMap.put(context.queryColumnRef, context.mvColumnRef);
+                    ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
+                    newProjectMap.put(kv.getKey(), replaceColumnRefRewriter.rewrite(kv.getValue()));
                 }
             } else {
                 newProjectMap.put(kv.getKey(), kv.getValue());

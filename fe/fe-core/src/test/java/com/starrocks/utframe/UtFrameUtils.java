@@ -522,6 +522,22 @@ public class UtFrameUtils {
         }
     }
 
+    public static String getFragmentPlan(ConnectContext connectContext, String sql, String traceModule) {
+        try {
+            Pair<String, Pair<ExecPlan, String>> result =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+            Pair<ExecPlan, String> execPlanWithQuery = result.second;
+            String traceLog = execPlanWithQuery.second;
+            if (!Strings.isNullOrEmpty(traceLog)) {
+                System.out.println(traceLog);
+            }
+            return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+            return null;
+        }
+    }
+
     public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
             ConnectContext connectContext, String sql, String module) throws Exception {
         if (Strings.isNullOrEmpty(module)) {
