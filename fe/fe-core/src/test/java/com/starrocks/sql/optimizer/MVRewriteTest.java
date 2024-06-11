@@ -1290,9 +1290,8 @@ public class MVRewriteTest {
         String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "MV");
         System.out.println(plan);
         PlanTestBase.assertContains(plan, USER_TAG_MV_NAME);
-        PlanTestBase.assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: bitmap_agg(2: user_id)\n" +
-                "  |  group by: ");
+        PlanTestBase.assertContains(plan, "  |  <slot 2> : 2: user_id\n" +
+                "  |  <slot 6> : 5: mv_bitmap_union_tag_id");
         starRocksAssert.dropMaterializedView(USER_TAG_MV_NAME);
     }
 
