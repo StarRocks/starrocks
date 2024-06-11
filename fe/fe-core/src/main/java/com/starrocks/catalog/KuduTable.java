@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -43,7 +44,7 @@ public class KuduTable extends Table {
     private String catalogName;
     private String databaseName;
     private String tableName;
-    private String kuduTableName;
+    private Optional<String> kuduTableName;
     private List<String> partColNames;
     private Map<String, String> properties;
 
@@ -58,7 +59,7 @@ public class KuduTable extends Table {
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
-        this.kuduTableName = kuduTableName;
+        this.kuduTableName = Optional.ofNullable(kuduTableName);
         this.partColNames = partColNames;
     }
 
@@ -84,7 +85,7 @@ public class KuduTable extends Table {
     public String getTableName() {
         return tableName;
     }
-    public String getKuduTableName() {
+    public Optional<String> getKuduTableName() {
         return kuduTableName;
     }
 

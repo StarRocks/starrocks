@@ -250,8 +250,8 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     private String getKuduFullTableName(KuduTable table) {
-        return table.getKuduTableName() != null ? table.getKuduTableName() :
-                getKuduFullTableName(table.getDbName(), table.getTableName());
+        return table.getKuduTableName().orElse(
+                getKuduFullTableName(table.getDbName(), table.getTableName()));
     }
 
     @Override
