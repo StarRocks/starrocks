@@ -261,9 +261,15 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
         normal.addPartitions(db, tableName, addPartitionClause);
+=======
+    public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
+            throws DdlException {
+        normal.addPartitions(ctx, db, tableName, addPartitionClause);
+>>>>>>> 792ff27f18 ([BugFix] In order to pass warehouse information, use context to pass it (#46500))
     }
 
     @Override

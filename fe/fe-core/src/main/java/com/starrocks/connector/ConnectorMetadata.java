@@ -284,8 +284,13 @@ public interface ConnectorMetadata {
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
     }
 
+<<<<<<< HEAD
     default void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
+=======
+    default void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
+            throws DdlException {
+>>>>>>> 792ff27f18 ([BugFix] In order to pass warehouse information, use context to pass it (#46500))
     }
 
     default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {

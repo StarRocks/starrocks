@@ -22,6 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.Util;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
@@ -86,7 +87,8 @@ public class AlterTest {
                 "    PARTITION p3 VALUES LESS THAN (\"2014-01-01\")";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_lake_partition", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addPartitions(Util.getOrCreateConnectContext(), db, "test_lake_partition", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_lake_partition");
@@ -131,7 +133,8 @@ public class AlterTest {
 
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "site_access", addPartitionClause);
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("site_access");

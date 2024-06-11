@@ -862,8 +862,13 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
+=======
+    public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
+            throws DdlException {
+>>>>>>> 792ff27f18 ([BugFix] In order to pass warehouse information, use context to pass it (#46500))
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         Map<String, String> tableProperties;
@@ -884,15 +889,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 || partitionDesc instanceof MultiItemListPartitionDesc
                 || partitionDesc instanceof SingleRangePartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
-            addPartitions(db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
+            addPartitions(ctx, db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
         } else if (partitionDesc instanceof RangePartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
-            addPartitions(db, tableName,
+            addPartitions(ctx, db, tableName,
                     Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()),
                     addPartitionClause);
         } else if (partitionDesc instanceof ListPartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
-            addPartitions(db, tableName,
+            addPartitions(ctx, db, tableName,
                     Lists.newArrayList(((ListPartitionDesc) partitionDesc).getPartitionDescs()),
                     addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
@@ -936,7 +941,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
             List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream()
                     .map(item -> (PartitionDesc) item).collect(Collectors.toList());
-            addPartitions(db, tableName, partitionDescs, addPartitionClause);
+            addPartitions(ctx, db, tableName, partitionDescs, addPartitionClause);
         }
     }
 
@@ -1374,7 +1379,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void addPartitions(Database db, String tableName, List<PartitionDesc> partitionDescs,
+    private void addPartitions(ConnectContext ctx, Database db, String tableName, List<PartitionDesc> partitionDescs,
                                AddPartitionClause addPartitionClause) throws DdlException {
         DistributionInfo distributionInfo;
         OlapTable olapTable;
@@ -1421,20 +1426,15 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSetForAll = Sets.newHashSet();
         HashMap<String, Set<Long>> partitionNameToTabletSet = Maps.newHashMap();
         try {
-            long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-            if (ConnectContext.get() != null) {
-                warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            }
-
             // create partition list
             List<Pair<Partition, PartitionDesc>> newPartitions =
                     createPartitionMap(db, copiedTable, partitionDescs, partitionNameToTabletSet, tabletIdSetForAll,
-                            checkExistPartitionName, warehouseId);
+                            checkExistPartitionName, ctx.getCurrentWarehouseId());
 
             // build partitions
             List<Partition> partitionList = newPartitions.stream().map(x -> x.first).collect(Collectors.toList());
             buildPartitions(db, copiedTable, partitionList.stream().map(Partition::getSubPartitions)
-                    .flatMap(p -> p.stream()).collect(Collectors.toList()), warehouseId);
+                    .flatMap(p -> p.stream()).collect(Collectors.toList()), ctx.getCurrentWarehouseId());
 
             // check again
             if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
