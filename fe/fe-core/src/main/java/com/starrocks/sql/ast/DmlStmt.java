@@ -19,7 +19,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class DmlStmt extends StatementBase {
-    private long txnId;
+    private long txnId = 0L;
     protected DmlStmt(NodePosition pos) {
         super(pos);
     }
