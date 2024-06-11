@@ -108,6 +108,8 @@ struct BatchPKs {
 using BatchPKsPtr = std::shared_ptr<BatchPKs>;
 // from source rowid -> upt rowid
 using RowidPairs = std::pair<uint32_t, uint32_t>;
+// update file id -> <source rowid, upt rowid>
+using UptidToRowidPairs = std::map<uint32_t, std::vector<RowidPairs>>;
 
 // `RowsetColumnUpdateState` is used for maintain the middle state when handling partial update in column mode.
 // It will be maintain in update_manager by `DynamicCache<string, RowsetColumnUpdateState>`, mapped from each rowset to it.
@@ -116,8 +118,6 @@ using RowidPairs = std::pair<uint32_t, uint32_t>;
 class RowsetColumnUpdateState {
 public:
     using DeltaColumnGroupPtr = std::shared_ptr<DeltaColumnGroup>;
-    // update file id -> <source rowid, upt rowid>
-    using UptidToRowidPairs = std::map<uint32_t, std::vector<RowidPairs>>;
 
     RowsetColumnUpdateState();
     ~RowsetColumnUpdateState();
