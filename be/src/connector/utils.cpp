@@ -66,7 +66,7 @@ std::vector<formats::FileColumnId> IcebergUtils::generate_parquet_field_ids(
 // TODO(letian-jiang): translate org.apache.hadoop.hive.common.FileUtils#makePartName
 StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int i) {
     DCHECK(i < column->size() && i >= 0);
-    auto datum = column->get(0);
+    auto datum = column->get(i);
     if (datum.is_null()) {
         return "null";
     }
