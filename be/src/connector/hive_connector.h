@@ -81,7 +81,7 @@ public:
     bool can_estimate_mem_usage() const override { return true; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
-    void _init_chunk(ChunkPtr* chunk, size_t n) override;
+    Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) override;
 
 private:
     const HiveDataSourceProvider* _provider;
