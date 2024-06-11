@@ -25,6 +25,6 @@ public class PaimonPartitionKey extends PartitionKey implements NullablePartitio
 
     @Override
     public List<String> nullPartitionValueList() {
-        return ImmutableList.of("__DEFAULT_PARTITION__");
+        return ImmutableList.of("__DEFAULT_PARTITION__", "null");
     }
 }
