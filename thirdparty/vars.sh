@@ -406,7 +406,7 @@ LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 #clucene
 CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2024.06.03.tar.gz"
 CLUCENE_NAME="starrocks-clucene-2024.06.03.tar.gz"
-CLUCENE_SOURCE="clucene-starrocks-2024.06.03"
+CLUCENE_SOURCE="starrocks-clucene-2024.06.03"
 CLUCENE_MD5SUM="c218eb0fbbfe7f295e81ab1c8a9317cb"
 
 
