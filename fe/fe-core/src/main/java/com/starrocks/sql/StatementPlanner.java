@@ -248,14 +248,9 @@ public class StatementPlanner {
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
         // TODO: double check relatedMvs for OlapTable
-        // only collect once to save the original olapTable info
-<<<<<<< HEAD
-        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
-=======
         // the original olapTable in queryStmt had been replaced with the copied olapTable
-        Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
+        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         long planStartTime = 0;
->>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
