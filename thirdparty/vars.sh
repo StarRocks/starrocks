@@ -419,7 +419,7 @@ ABSL_MD5SUM="955b6faedf32ec2ce1b7725561d15618"
 # cares - grpc dependency
 CARES_DOWNLOAD="https://github.com/c-ares/c-ares/archive/tags/cares-1_19_1.tar.gz"
 CARES_NAME=cares-1_19_1.tar.gz
-CARES_SOURCE=c-ares-tags-cares-1_19_1
+CARES_SOURCE=cares-1_19_1
 CARES_MD5SUM="ae2177836c9dbbacb8f303d167fe700f"
 
 # grpc
