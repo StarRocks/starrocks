@@ -254,8 +254,8 @@ TEST_F(ParquetFileWriterTest, TestWriteDecimal) {
     }
 
     // write chunk
-    ASSERT_TRUE(writer->write(chunk).get().ok());
-    auto result = writer->commit().get();
+    ASSERT_TRUE(writer->write(chunk.get()).ok());
+    auto result = writer->commit();
 
     ASSERT_TRUE(result.io_status.ok());
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -281,7 +281,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDecimalCompatibleWithHiveReader) {
     writer_options->use_legacy_decimal_encoding = true;
     auto writer = std::make_unique<formats::ParquetFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -547,7 +547,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
     writer_options->use_int96_timestamp_encoding = true;
     auto writer = std::make_unique<formats::ParquetFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+            TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -573,8 +573,8 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
     }
 
     // write chunk
-    ASSERT_TRUE(writer->write(chunk).get().ok());
-    auto result = writer->commit().get();
+    ASSERT_TRUE(writer->write(chunk.get()).ok());
+    auto result = writer->commit();
 
     ASSERT_TRUE(result.io_status.ok());
     ASSERT_EQ(result.file_statistics.record_count, 4);
