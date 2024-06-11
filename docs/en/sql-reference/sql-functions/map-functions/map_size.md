@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # map_size
 
-## Description
+
 
 Returns the number of elements in a MAP value. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`. One key-value pair constitutes one element, for example, `{"a":1, "b":2}` contains two elements.
 

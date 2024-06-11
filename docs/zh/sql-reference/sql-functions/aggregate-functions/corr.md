@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # corr
 
-## 功能
+
 
 返回两个随机变量的皮尔逊相关系数（correlation coefficient）。该函数从 2.5.10 版本开始支持，也可用作窗口函数。
 

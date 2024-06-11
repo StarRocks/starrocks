@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # hll_empty
 
-## 功能
+
 
 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。
 

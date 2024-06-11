@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_sum
 
-## Description
+
 
 Sums all the elements in an array.
 

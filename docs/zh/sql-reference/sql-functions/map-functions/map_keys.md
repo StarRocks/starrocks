@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # map_keys
 
-## 功能
+
 
 返回 Map 中所有 key 组成的数组。MAP 里保存的是键值对 (key-value pair)，比如 `{"a":1, "b":2}`。
 

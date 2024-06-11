@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # weekofyear
 
-## Description
+
 
 Returns the week number for a given date within a year.
 

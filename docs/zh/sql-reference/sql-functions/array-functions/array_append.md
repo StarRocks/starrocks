@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_append
 
-## 功能
+
 
 在数组末尾添加一个新的元素。返回 ARRAY 类型的值。
 

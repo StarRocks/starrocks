@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # FILES
 
-## Description
+
 
 Defines data files in remote storage.
 

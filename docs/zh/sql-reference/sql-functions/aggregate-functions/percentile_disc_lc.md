@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # percentile_disc_lc
 
-## 功能
+
 
 计算百分位数。和 percentile_disc 行为一致. 但是实现算法不同 percentile_disc 需要获取所有的输入数据，通过归并排序获取百分位的值需要消耗的内存为所有输入数据的内存。而 percentile_disc_lc 是构建一个 key->count的一个hash表，因此当输入的基数比较低的时候即使输入的数据量很大也没有明显的内存增长。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_agg
 
-## Description
+
 
 Aggregates values (including `NULL`) in a column into an array (multiple rows to one row), and optionally order the elements by specific columns. From v3.0, array_agg() supports using ORDER BY to sort elements.
 

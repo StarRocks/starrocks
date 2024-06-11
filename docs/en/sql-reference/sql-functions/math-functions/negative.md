@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # negative
 
-## Description
+
 
 Returns the negative of input `arg`.
 

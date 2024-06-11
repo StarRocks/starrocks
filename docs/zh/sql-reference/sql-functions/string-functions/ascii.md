@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # ascii
 
-## 功能
+
 
 返回字符串第一个字符对应的 ASCII 码。
 
