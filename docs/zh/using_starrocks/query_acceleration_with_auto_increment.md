@@ -67,17 +67,18 @@ displayed_sidebar: "Chinese"
     ```
 
 ### 具体步骤
+
 **阶段一：创建全局字典表，并且导入** **CSV** **文件中的订单编号列值，从而构建 STRING 和 INTEGER 值之间的映射关系。**
 
 1. 创建一个主键表作为全局字典，定义主键也就是 key 列为 `order_uuid` （ STRING 类型），value 列为 `order_id_int`（ BIGINT 类型）并且为自增列。
 
-   1.  :::info
+   :::info
 
-   2.  `dict_mapping` 要求全局字典表必须为主键表。
+   `dict_mapping` 要求全局字典表必须为主键表。
 
-   3.  :::
+   :::
 
-   4. ```SQL
+      ```SQL
       CREATE TABLE dict (
           order_uuid STRING,
           order_id_int BIGINT AUTO_INCREMENT  -- 自动为每个 order_uuid 值分配一个唯一 ID 
@@ -89,7 +90,7 @@ displayed_sidebar: "Chinese"
 
 2. 本示例使用 Stream Load 将两个 CSV 文件的 `order_uuid` 列分批导入至字典表 `dict` 的 `order_uuid` 列，并且需要注意的是，此处需要使用部分列更新。
 
-   1. ```Bash
+      ```Bash
       curl --location-trusted -u root: \
           -H "partial_update: true" \
           -H "format: CSV" -H "column_separator:," -H "columns: id, order_uuid" \
@@ -103,11 +104,11 @@ displayed_sidebar: "Chinese"
           -XPUT http://<fe_host>:<fe_http_port>/api/example_db/dict/_stream_load
       ```
 
-**阶段二：**创建目标表，并且包含具有 `dict_mapping` 属性的字典 ID 列，后续导入订单数据至目标表时，系统将自动关联字典表并插入对应的字典 ID。
+**阶段二**：创建目标表，并且包含具有 `dict_mapping` 属性的字典 ID 列，后续导入订单数据至目标表时，系统将自动关联字典表并插入对应的字典 ID。
 
-1. 创建一张**表** `dest_table`，包含 CSV 文件的所有列。 并且您还需要定义一个 INTEGER 类型的 `order_id_int` 列，与 STRING 类型的 `order_id_int` 列进行映射，并且具有 dict_mapping 列属性。后续会基于 `order_id_int` 列进行查询分析。
+1. 创建一张表 `dest_table`，包含 CSV 文件的所有列。 并且您还需要定义一个 INTEGER 类型的 `order_id_int` 列，与 STRING 类型的 `order_id_int` 列进行映射，并且具有 dict_mapping 列属性。后续会基于 `order_id_int` 列进行查询分析。
 
-   1. ```SQL
+      ```SQL
       -- 目标数据表里，订单编号`order_uuid`对应的字典ID 增加 dict_mapping 列属性
       CREATE TABLE dest_table (
           id BIGINT,
@@ -121,7 +122,7 @@ displayed_sidebar: "Chinese"
 
 2. 正常导入数据到目标表。这步可以采用 Stream Load 在内的各种导入方式。`order_id_int` 列因为有配置 `dict_mapping` 属性，系统会在导入数据时自动从`dict`获取字典 ID 并填充：
 
-   1. ```Bash
+      ```Bash
       curl --location-trusted -u root: \
           -H "format: CSV" -H "column_separator:," -H "columns: id, order_uuid, batch=1" \
           -T batch1.csv \
