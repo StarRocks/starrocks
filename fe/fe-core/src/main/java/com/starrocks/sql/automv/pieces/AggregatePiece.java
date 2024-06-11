@@ -269,6 +269,9 @@ public class AggregatePiece extends PlanPiece {
             boolean noIdConflict =
                     Sets.intersection(flatTable.getColumns().keySet(), metrics.merge(distinctMetrics).keySet())
                             .isEmpty();
+            if (!shouldUnique || !noIdConflict) {
+                System.out.println("SATANSON");
+            }
             Preconditions.checkArgument(shouldUnique && noIdConflict);
             if (getColumns() != null) {
                 ColumnRefSet columnIds = ColumnRefSet.createByIds(columns.keySet());

@@ -18,6 +18,8 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.TableName;
@@ -52,6 +54,42 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class OpUtil {
+
+    private static final Set<String> ROLLUP_ABLE_TIME_GRANULE_SET = ImmutableSet.<String>builder()
+            .add(FunctionSet.DATE_FORMAT)
+            .add(FunctionSet.DATE)
+            .add(FunctionSet.DATE_SLICE)
+            .add(FunctionSet.DATE_TRUNC)
+            .add(FunctionSet.DAY)
+            .add(FunctionSet.DAYNAME)
+            .add(FunctionSet.DAYOFMONTH)
+            //.add(FunctionSet.DAY_OF_WEEK_ISO)
+            .add(FunctionSet.DAYOFWEEK)
+            .add(FunctionSet.DAYOFYEAR)
+            .add(FunctionSet.HOUR)
+            //.add(FunctionSet.JODATIME_FORMAT)
+            .add(FunctionSet.LAST_DAY)
+            .add(FunctionSet.MINUTE)
+            .add(FunctionSet.SECOND)
+            .add(FunctionSet.MONTH)
+            .add(FunctionSet.MONTHNAME)
+            .add(FunctionSet.NEXT_DAY)
+            .add(FunctionSet.PREVIOUS_DAY)
+            .add(FunctionSet.QUARTER)
+            .add(FunctionSet.STR2DATE)
+            .add(FunctionSet.STR_TO_DATE)
+            //.add(FunctionSet.STR_TO_JODATIME)
+            .add(FunctionSet.TIME_SLICE)
+            .add(FunctionSet.TO_DATE)
+            .add(FunctionSet.TO_DAYS)
+            //.add(FunctionSet.TO_ISO8601)
+            .add(FunctionSet.TO_TERA_DATE)
+            //.add(FunctionSet.WEEK_ISO)
+            .add(FunctionSet.YEAR)
+            //.add(FunctionSet.YEARWEEK)
+            .add(FunctionSet.WEEK)
+            .add(FunctionSet.WEEKOFYEAR)
+            .build();
 
     public static Optional<StrictOp> getExpr(GenericColumn column) {
         return column.cast(DerivedColumn.class).map(DerivedColumn::getExpr);
@@ -237,6 +275,85 @@ public class OpUtil {
         Op var = hllAggOpPlus.get().toVar();
         Op hllCardinalityOp = Apply.apply(type, FunctionSet.HLL_CARDINALITY, true, var);
         return Optional.of(OpPlus2.of(OpPlus.of(hllCardinalityOp, distinctId), hllAggOpPlus));
+    }
+
+    public static boolean isFunctionNameInSet(Op op, Set<String> functionNames) {
+        return op.cast(Apply.class)
+                .map(Apply::getKind)
+                .map(kind -> Util.downcast(kind, FunctionKind.class)
+                        .map(functionKind -> functionNames.contains(functionKind.toString()))
+                        .orElse(false))
+                .orElse(false);
+    }
+
+    public static boolean isRollupAbleTimeGranule(Op op) {
+        return isFunctionNameInSet(op, ROLLUP_ABLE_TIME_GRANULE_SET);
+    }
+
+    public static Optional<TimeGranule> getPartitionByTimeGranule(Op op, ColumnRefSet partitionColumnIds) {
+        Optional<TimeGranule> optGranule = Optional.ofNullable(TimeGranule.of(op));
+        if (optGranule.isEmpty() || !partitionColumnIds.contains(optGranule.get().getVar().getId())) {
+            return Optional.empty();
+        }
+        return optGranule;
+    }
+
+    public static Optional<OpPlus2> rewriteRollupAbleTimeGranule(
+            OpPlus opPlus, Supplier<Integer> idGen, Map<StrictOp, Integer> alreadyExists) {
+        Op op = opPlus.getOp();
+        List<Op> timeGranuleOps = op.collect(OpUtil::isRollupAbleTimeGranule);
+        if (timeGranuleOps.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<StrictOp, Var> uniqueTimeGranuleMap = Maps.newHashMap();
+        ImmutableList.Builder<EitherOr<OpPlus>> argsBuilder = ImmutableList.builder();
+        for (Op timeGranule : timeGranuleOps) {
+            StrictOp strictTimeGranule = timeGranule.strict();
+            if (uniqueTimeGranuleMap.containsKey(strictTimeGranule)) {
+                continue;
+            }
+            EitherOr<OpPlus> timeGranulePlus = Optional.ofNullable(alreadyExists.get(strictTimeGranule))
+                    .map(id -> EitherOr.either(OpPlus.of(timeGranule, id)))
+                    .orElse(EitherOr.or(OpPlus.of(timeGranule, idGen.get())));
+            uniqueTimeGranuleMap.put(strictTimeGranule, timeGranulePlus.get().toVar());
+            argsBuilder.add(timeGranulePlus);
+        }
+        Optional<Op> optNewOp = substSubOp(op, uniqueTimeGranuleMap);
+        Preconditions.checkArgument(optNewOp.isPresent());
+        return Optional.of(OpPlus2.of(OpPlus.of(optNewOp.get(), opPlus.getId()), argsBuilder.build()));
+    }
+
+    public static Optional<Op> substSubOp(Op op, Map<StrictOp, Var> subOpMap) {
+
+        Optional<Op> result = Optional.ofNullable(subOpMap.get(op.strict()));
+        if (result.isPresent()) {
+            return result;
+        }
+        List<Pair<Op, Optional<Op>>> optArgs = op.getArgs().stream()
+                .map(arg -> Pair.create(arg, substSubOp(arg, subOpMap)))
+                .collect(Collectors.toList());
+
+        if (optArgs.stream().allMatch(p -> p.second.isEmpty())) {
+            return Optional.empty();
+        }
+
+        List<Op> newArgs = optArgs.stream()
+                .map(p -> p.second.orElse(p.first))
+                .collect(ImmutableList.toImmutableList());
+        Apply apply = op.cast();
+        return Optional.of(Op.apply(apply.getType(), apply.getKind(), apply.isOrdered(), newArgs));
+    }
+
+    public static TieredMap<StrictOp, Integer> columnsToStrictOpMap(TieredMap<Integer, GenericColumn> columns) {
+        return columns.entrySet()
+                .stream()
+                .collect(TieredMap.toMap(e -> OpUtil.columnToOp(e.getKey(), e.getValue()).strict(), Map.Entry::getKey));
+    }
+
+    public static TieredMap<Integer, Op> columnsToOpMap(TieredMap<Integer, GenericColumn> columns) {
+        return columns.entrySet()
+                .stream()
+                .collect(TieredMap.toMap(Map.Entry::getKey, e -> OpUtil.columnToOp(e.getKey(), e.getValue())));
     }
 
     public static boolean isNdv(GenericColumn column) {
@@ -650,9 +767,18 @@ public class OpUtil {
 
     public static Op columnToOp(int id, GenericColumn column) {
         if (column.isOriginal()) {
-            return Apply.var(column.getType(), id);
+            return toVar(id, column);
         } else {
             return column.getOp();
+        }
+    }
+
+    public static Pair<Integer, GenericColumn> opToColumn(Op op, Supplier<Integer> idGen) {
+        if (op.isVar()) {
+            Var var = op.cast();
+            return Pair.create(var.getId(), var.getTenuredColumn());
+        } else {
+            return Pair.create(idGen.get(), GenericColumn.derived(op));
         }
     }
 
@@ -728,7 +854,7 @@ public class OpUtil {
         return Apply.le(coalesceOp, constUb);
     }
 
-    public static Var toVar(int id, GenericColumn column) {
+    private static Var toVar(int id, GenericColumn column) {
         Preconditions.checkArgument(column.isOriginal());
         Var var = Apply.var(column.getType(), id);
         var.getSymbol().tenured(column);
@@ -835,5 +961,57 @@ public class OpUtil {
         return column.cast(DerivedColumn.class)
                 .map(dColumn -> !dColumn.getOp().collect(op -> (op.isCase() || op.isFun(FunctionSet.IF))).isEmpty())
                 .orElse(false);
+    }
+
+    public static List<Pair<Integer, TimeGranule>> extractPartitionByTimeGranule(
+            TieredMap<Integer, GenericColumn> columns,
+            ColumnRefSet partitionByColumnIds) {
+        return columns.entrySet()
+                .stream()
+                .map(e -> Pair.create(e.getKey(), OpUtil.columnToOp(e.getKey(), e.getValue())))
+                .map(p -> Pair.create(p.first, OpUtil.getPartitionByTimeGranule(p.second, partitionByColumnIds)))
+                .filter(p -> p.second.isPresent())
+                .map(p -> Pair.create(p.first, p.second.get()))
+                .collect(Collectors.toList());
+    }
+
+    public static boolean isTrivialDerivedColumn(GenericColumn column) {
+        return column.cast(DerivedColumn.class).map(GenericColumn::getOp).map(Op::isVar).orElse(false);
+    }
+
+    public static Map<Boolean, TieredMap<Integer, GenericColumn>> splitTrivialColumns(
+            TieredMap<Integer, GenericColumn> columns) {
+        return columns.entrySet().stream().collect(Collectors.partitioningBy(
+                e -> OpUtil.isTrivialDerivedColumn(e.getValue()),
+                TieredMap.toMap()));
+    }
+
+    public static ColumnsAndSubstMap eliminateDerivedVars(ColumnsAndSubstMap columnsAndSubstMap) {
+        TieredMap<Integer, GenericColumn> columns = columnsAndSubstMap.getColumns();
+        TieredMap<Integer, Op> substMap = columnsAndSubstMap.getSubstMap();
+        Map<Boolean, TieredMap<Integer, GenericColumn>> columnGroup =
+                OpUtil.splitTrivialColumns(OpUtil.subst(columns, substMap));
+
+        TieredMap<Integer, GenericColumn> trivialColumns = columnGroup.get(true);
+        TieredMap<Integer, GenericColumn> nonTrivialColumns = columnGroup.get(false);
+        if (trivialColumns.isEmpty()) {
+            TieredMap<Integer, Op> extraSubstMap = OpUtil.columnsToOpMap(nonTrivialColumns);
+            substMap = TieredMap.mergeIntegerKey(substMap, extraSubstMap);
+            return ColumnsAndSubstMap.of(nonTrivialColumns, substMap);
+        }
+
+        TieredMap<Integer, Op> extraSubstMap = OpUtil.columnsToOpMap(nonTrivialColumns);
+        substMap = TieredMap.mergeIntegerKey(substMap, extraSubstMap);
+        Map<Boolean, TieredMap<Integer, GenericColumn>> newColumnGroup =
+                OpUtil.splitTrivialColumns(OpUtil.subst(trivialColumns, substMap));
+
+        TieredMap<Integer, GenericColumn> newTrivialColumns = newColumnGroup.get(true);
+        TieredMap<Integer, GenericColumn> newNonTrivialColumns = newColumnGroup.get(false);
+
+        TieredMap<Integer, GenericColumn> newColumns = nonTrivialColumns.merge(newNonTrivialColumns);
+        TieredMap<Integer, Op> extraTrivialSubstMap =
+                OpUtil.columnsToOpMap(newTrivialColumns.merge(newNonTrivialColumns));
+        substMap = TieredMap.mergeIntegerKey(substMap, extraTrivialSubstMap);
+        return ColumnsAndSubstMap.of(newColumns, substMap);
     }
 }

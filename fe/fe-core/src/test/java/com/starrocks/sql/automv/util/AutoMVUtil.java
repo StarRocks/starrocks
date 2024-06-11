@@ -46,6 +46,8 @@ import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.qe.TunespaceExecutor;
 import com.starrocks.sql.automv.tunespace.PlanPieceInfo;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -127,6 +129,25 @@ public class AutoMVUtil {
                                   Consumer<List<List<String>>> resultChecker) {
         testHelper(ctx, queryList, svSetter, (pieces, mvResults) -> {
             resultChecker.accept(mvResults);
+            return null;
+        });
+    }
+
+    public static void testSingleQueryHelper(StarRocksAssert starRocksAssert, String query,
+                                             Consumer<SessionVariable> svSetter,
+                                             Consumer<List<List<String>>> resultChecker) {
+        List<Pair<String, String>> queryList = Collections.singletonList(Pair.create("query", query));
+        testHelper(starRocksAssert.getCtx(), queryList, svSetter, (pieces, mvResults) -> {
+            resultChecker.accept(mvResults);
+            if (!mvResults.isEmpty()) {
+                Assert.assertEquals(mvResults.size(), 1);
+                String mvName = mvResults.get(0).get(1);
+                String mv = mvResults.get(0).get(2);
+                starRocksAssert.withMaterializedView(mv, () -> {
+                    String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), query);
+                    Assert.assertTrue(plan, plan.contains(mvName));
+                });
+            }
             return null;
         });
     }

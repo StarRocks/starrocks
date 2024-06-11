@@ -36,6 +36,7 @@ public class AutoMVOptions {
     private final int maxCalculateSteps;
     private final boolean enableComplexDerivedMetrics;
     private final boolean enableComplexDerivedDimensions;
+    private final String defaultPartitionByTimeGranule;
 
     private AutoMVOptions(
             int partialRollupMinAggregatePieces,
@@ -54,7 +55,9 @@ public class AutoMVOptions {
             long samplingTimeout,
             double cardRowCountRatioLWM, double cardRowCountRatioHWM, int maxCalculateSteps,
             boolean enableComplexDerivedMetrics,
-            boolean enableComplexDerivedDimensions) {
+            boolean enableComplexDerivedDimensions,
+            String defaultPartitionByTimeGranule
+    ) {
         this.partialRollupMinAggPieces = partialRollupMinAggregatePieces;
         this.useCardinalityEstimation = useCardinalityEstimation;
         this.pruneRollupAbleWithConjuncts = pruneRollupAbleWithConjuncts;
@@ -74,6 +77,7 @@ public class AutoMVOptions {
         this.maxCalculateSteps = maxCalculateSteps;
         this.enableComplexDerivedMetrics = enableComplexDerivedMetrics;
         this.enableComplexDerivedDimensions = enableComplexDerivedDimensions;
+        this.defaultPartitionByTimeGranule = defaultPartitionByTimeGranule;
     }
 
     public static AutoMVOptions of(SessionVariable sv) {
@@ -96,7 +100,12 @@ public class AutoMVOptions {
                 sv.getAutoMVCardRowCountRatioHWM(),
                 sv.getAutoMVMaxCalculateSteps(),
                 sv.isAutoMVEnableComplexDerivedMetrics(),
-                sv.isAutoMVEnableComplexDerivedDimensions());
+                sv.isAutoMVEnableComplexDerivedDimensions(),
+                sv.getAutoMVDefaultPartitionByTimeGranule());
+    }
+
+    public String getDefaultPartitionByTimeGranule() {
+        return defaultPartitionByTimeGranule;
     }
 
     public boolean isEnableSemiAntiJoin() {

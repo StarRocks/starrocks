@@ -56,6 +56,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.BackendCoreStat;
@@ -782,6 +783,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String AUTOMV_ENABLE_COMPLEX_DERIVED_METRICS = "automv_enable_complex_derived_metrics";
 
     public static final String AUTOMV_ENABLE_COMPLEX_DERIVED_DIMENSIONS = "automv_enable_complex_derived_dimensions";
+
+    public static final String AUTOMV_DEFAULT_PARTITION_BY_TIME_GRANULE = "automv_default_partition_by_time_granule";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -2123,6 +2126,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = AUTOMV_ENABLE_COMPLEX_DERIVED_DIMENSIONS)
     private boolean autoMVEnableComplexDerivedDimensions = true;
 
+    @VarAttr(name = AUTOMV_DEFAULT_PARTITION_BY_TIME_GRANULE)
+    private String autoMVDefaultPartitionByTimeGranule = TimeGranule.Unit.DAY.name();
     public void setChooseExecuteInstancesMode(String mode) {
         SessionVariableConstants.ChooseInstancesMode result =
                 Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class, StringUtils.upperCase(mode))
@@ -4112,6 +4117,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isAutoMVEnableComplexDerivedDimensions() {
         return this.autoMVEnableComplexDerivedDimensions;
+    }
+
+    public void setAutoMVDefaultPartitionByTimeGranule(String granule) {
+        //TimeGranule.validate(granule);
+        autoMVDefaultPartitionByTimeGranule = granule;
+    }
+
+    public String getAutoMVDefaultPartitionByTimeGranule() {
+        return autoMVDefaultPartitionByTimeGranule;
     }
 
     // Serialize to thrift object

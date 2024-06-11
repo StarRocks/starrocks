@@ -93,6 +93,10 @@ public class TestUtil {
         return getSqlList("sql/click_bench/", "hits");
     }
 
+    public static List<String> getPartitionedTableSqlList() {
+        return getSqlList("sql/partitioned_tables/", "hits_daily", "hits_hourly", "hits_daily_list");
+    }
+
     public static List<Pair<String, String>> getClickBenchQueryList() {
         if (cachedClickBenchQueryList == null) {
             cachedClickBenchQueryList = getQueryList("sql/click_bench/", Pattern.compile("(Q\\d+)\\.sql"));

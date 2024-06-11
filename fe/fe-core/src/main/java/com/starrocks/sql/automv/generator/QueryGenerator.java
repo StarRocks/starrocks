@@ -256,7 +256,6 @@ public class QueryGenerator {
             ColumnRefSet inputColumnIds = context.getInputColumnIds();
             List<Pair<Integer, GenericColumn>> tableOutputColumns =
                     tablePiece.getOutputColumns(inputColumnIds);
-            Preconditions.checkArgument(tableOutputColumns.stream().allMatch(p -> p.second.isOriginal()));
 
             String tableName = tablePiece.getTableName();
             String tableAlias = aliasGenerator.nextAliasIfTableNameAbsent(tableName);

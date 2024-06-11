@@ -1184,4 +1184,13 @@ public abstract class Op {
             opList.add(this);
         }
     }
+
+    public GenericColumn getTenuredColumn() {
+        Preconditions.checkArgument(getSymTab().getEntries().size() == 1);
+        SymTabEntry entry = getSymTab().getEntries().get(0);
+        GenericColumn column = Util.downcast(entry, Symbol.class)
+                .map(Symbol::getTenuredColumn)
+                .orElse(null);
+        return Objects.requireNonNull(column);
+    }
 }

@@ -14,19 +14,19 @@
 
 package com.starrocks.sql.automv.generator;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnAlias;
-import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
+import com.starrocks.sql.automv.pn.OpUtil;
+import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 //TODO(by satanson): PartitionPolicy is too naive to use it in product environment,
 // a new sophisticated partition policy will substitute this naive one soon to support MV
@@ -34,52 +34,35 @@ import java.util.stream.Collectors;
 // 1. partition by data_trunc('day', dt);
 // 2. partition by str2date(dt, '%Y-%m-%d');
 public class PartitionPolicy {
-    private static int typeWeight(Type type) {
-        if (type.isDate()) {
-            return 1;
-        } else if (type.isDatetime()) {
-            return 2;
-        } else if (type.isIntegerType()) {
-            return 3;
-        } else if (type.isStringType()) {
-            return 4;
-        } else {
-            return 5;
-        }
-    }
-
     public static Optional<PrettyPrinter> getPartitionExpr(AggregatePiece aggPiece,
                                                            TieredMap<Integer, ColumnAlias> columnAliases) {
         if (aggPiece.getDimensions().isEmpty()) {
             return Optional.empty();
         }
-        List<GenericColumn> candiPartitionColumns = aggPiece.getPartitionColumns().stream()
-                .flatMap(p -> p.second.values().stream())
-                .collect(Collectors.toList());
 
-        if (!candiPartitionColumns.isEmpty()) {
-            Set<String> normSet = candiPartitionColumns.stream()
-                    .map(GenericColumn::getNorm)
-                    .map(GenericColumn::toString)
-                    .collect(Collectors.toSet());
+        ColumnRefSet partitionByColumnIds = ColumnRefSet.of();
+        aggPiece.getPartitionColumns().forEach(p ->
+                partitionByColumnIds.union(ColumnRefSet.createByIds(p.second.keySet())));
 
-            List<Integer> candiPartitionColumnIds = aggPiece.getFlatTable().getColumns().entrySet().stream()
-                    .filter(e -> normSet.contains(e.getValue().getNorm().toString()))
-                    .sorted(Comparator.comparingInt(e -> typeWeight(e.getValue().getType())))
-                    .map(Map.Entry::getKey)
-                    .collect(Collectors.toList());
+        List<Pair<Integer, TimeGranule>> partitionByTimeGranules =
+                OpUtil.extractPartitionByTimeGranule(aggPiece.getDimensions(), partitionByColumnIds);
 
-            for (Integer candiId : candiPartitionColumnIds) {
-                Optional<String> optPartitionColumn =
-                        Optional.ofNullable(columnAliases.get(candiId)).map(ColumnAlias::getName);
-                if (optPartitionColumn.isPresent()) {
-                    PrettyPrinter printer = new PrettyPrinter()
-                            .add("PARTITION BY ")
-                            .add(optPartitionColumn.get()).newLine();
-                    return Optional.of(printer);
-                }
-            }
+        Optional<Pair<Integer, TimeGranule>> optChosenTimeGranule =
+                partitionByTimeGranules.stream().max(Comparator.comparing(p -> p.second, TimeGranule.getComparator()));
+        if (optChosenTimeGranule.isEmpty()) {
+            return Optional.empty();
         }
-        return Optional.empty();
+
+        Pair<Integer, TimeGranule> chosenTimeGranule = optChosenTimeGranule.get();
+        int timeGranuleId = chosenTimeGranule.first;
+        TimeGranule timeGranule = chosenTimeGranule.second;
+        if (timeGranule.isFineGrained(TimeGranule.Unit.MINUTE)) {
+            return Optional.empty();
+        }
+
+        PrettyPrinter printer = new PrettyPrinter()
+                .add("PARTITION BY ")
+                .add(Objects.requireNonNull(columnAliases.get(timeGranuleId)).getName()).newLine();
+        return Optional.of(printer);
     }
 }

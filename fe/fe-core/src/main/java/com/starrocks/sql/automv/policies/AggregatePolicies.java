@@ -131,6 +131,16 @@ public class AggregatePolicies {
         return policy.convert(aggPiece).orElse(aggPiece);
     }
 
+    public static AggregatePolicy.AbstractAggregatePolicy partitionByPolicies(AutoMVOptions options) {
+        return AggregatePolicy.and(
+                ConditionalPolicy.EXISTS_ONLY_ROLLUP_ABLE_METRICS,
+                AggregatePolicy.seq(
+                        TimeGranuleExtractPolicy.INSTANCE,
+                        TimeGranulePartitionPolicy.resolvePolicy(options.getDefaultPartitionByTimeGranule())
+                )
+        );
+    }
+
     public static AggregatePolicy.AbstractAggregatePolicy defaultPolicies(AutoMVOptions options,
                                                                           PrettyPrinter traceLog) {
 
@@ -138,6 +148,7 @@ public class AggregatePolicies {
                 distinctRollupPolicy(options);
 
         AggregatePolicy.AbstractAggregatePolicy basicPolicies = AggregatePolicy.seq(
+                EliminateDerivedVarPolicy.INSTANCE,
                 AvgPolicy.INSTANCE,
                 ExpandAggregateMetricsPolicy.INSTANCE,
                 SumExprAddConstantPolicy.INSTANCE,
@@ -153,7 +164,9 @@ public class AggregatePolicies {
                         AggregatePolicy.and(
                                 ConditionalPolicy.EXISTS_ROLLUP_REWRITABLE_BUT_ROLLUP_UNABLE_METRICS,
                                 basicPolicies
-                        ));
+                        ),
+                        partitionByPolicies(options)
+                );
 
         return Optional.ofNullable(traceLog).map(log -> AggregatePolicy.trace(policy, traceLog, 1)).orElse(policy);
     }
@@ -350,6 +363,15 @@ public class AggregatePolicies {
                                     .noneMatch(AggregatePolicies::isRollupUnable);
                             return existsRollupRewritable && existsNoRollupUnable;
                         });
+
+        public static final ConditionalPolicy EXISTS_ONLY_ROLLUP_ABLE_METRICS =
+                ConditionalPolicy.of("Exist only rollup-able metrics", aggPiece -> {
+                    boolean hasNoDistinctMetrics = aggPiece.getDistinctMetrics().isEmpty();
+                    boolean hasOnlyRollupAbleMetrics = aggPiece.getMetrics().values()
+                            .stream()
+                            .allMatch(AggregatePolicies::isRollupAble);
+                    return hasNoDistinctMetrics && hasOnlyRollupAbleMetrics;
+                });
         private final String description;
         private final Predicate<AggregatePiece> predicate;
 

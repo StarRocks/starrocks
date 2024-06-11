@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.DoNotCall;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -77,6 +78,15 @@ public class TieredMap<K, V> implements Map<K, V> {
                 (builder, item) -> builder.put(keyMapper.apply(item), valueMapper.apply(item)),
                 TieredMap::merge,
                 Builder::build);
+    }
+
+    public static <V> TieredMap<Integer, V> mergeIntegerKey(TieredMap<Integer, V> lhsMap,
+                                                            TieredMap<Integer, V> rhsMap) {
+        ColumnRefSet ids = ColumnRefSet.createByIds(lhsMap.keySet());
+        TieredMap<Integer, V> newMap = rhsMap.entrySet().stream()
+                .filter(e -> !ids.contains(e.getKey()))
+                .collect(TieredMap.toMap());
+        return lhsMap.merge(newMap);
     }
 
     public Builder<K, V> newTier() {

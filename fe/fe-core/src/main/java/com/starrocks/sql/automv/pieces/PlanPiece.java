@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.pieces;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pn.Op;
@@ -69,6 +70,12 @@ public abstract class PlanPiece {
 
     private static Map<Integer, GenericColumn> getPartitionColumns(TablePiece tablePiece) {
         FQTable fqTable = tablePiece.getTable();
+        // TODO(by satanson): A MV with list-partition base tables is not supported in present,
+        //  it would be supported soon in future.
+        if ((fqTable.getTable() instanceof OlapTable) &&
+                ((OlapTable) fqTable.getTable()).getPartitionInfo().isListPartition()) {
+            return Collections.emptyMap();
+        }
         Optional<List<String>> optPartitionColNames =
                 Optional.ofNullable(fqTable.getTable().getPartitionColumnNames());
 
@@ -77,7 +84,7 @@ public abstract class PlanPiece {
                         .filter(e -> Objects.equals(e.getValue().getColumnName(), column.getName()))
                         .findFirst().map(e -> Pair.create(e.getKey(), e.getValue()));
 
-        return optPartitionColNames.map(strings -> strings.stream()
+        return optPartitionColNames.map(names -> names.stream()
                         .map(name -> fqTable.getTable().getColumn(name))
                         .map(getGenericColumn)
                         .filter(Optional::isPresent)

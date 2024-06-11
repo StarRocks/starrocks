@@ -1,0 +1,15 @@
+-- hits_hourly
+CREATE TABLE hits_hourly (
+    EventDate DATE NOT NULL,
+    EventTime DATETIME NOT NULL,
+    EventDateS VARCHAR(128) NOT NULL,
+    EventTimeS VARCHAR(128) NOT NULL,
+    UserID BIGINT NOT NULL,
+    M0 DECIMAL(7,2)
+)  
+DUPLICATE KEY (EventDate,EventTime,EventDateS,EventTimeS,UserID)
+PARTITION BY RANGE(EventTime)(
+    START("2024-01-01 00:00:00") END("2024-01-07 00:00:00") EVERY(INTERVAL 1 HOUR)
+)
+DISTRIBUTED BY HASH(UserID) BUCKETS 48
+PROPERTIES ( "replication_num"="1");

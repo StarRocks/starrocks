@@ -15,7 +15,9 @@
 package com.starrocks.sql.automv.pn;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.util.EitherOr;
+import com.starrocks.sql.automv.util.TieredMap;
 
 import java.util.List;
 import java.util.Objects;
@@ -58,5 +60,9 @@ public class OpPlus2 {
 
     public Stream<OpPlus> getNewArgs() {
         return args.stream().map(EitherOr::getSecond).flatMap(op -> op.map(Stream::of).orElseGet(Stream::empty));
+    }
+
+    public TieredMap<Integer, GenericColumn> getNewColumns() {
+        return getNewArgs().collect(TieredMap.toMap(OpPlus::getId, opp -> GenericColumn.derived(opp.getOp())));
     }
 }

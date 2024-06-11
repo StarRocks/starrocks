@@ -101,6 +101,20 @@ public class AutoMVTPCDSTest {
     }
 
     @Test
+    public void testSingleQuery28() throws Exception {
+        String query28 = TestUtil.getTPCDSQuery("query28");
+        List<Pair<String, String>> queryList = Collections.singletonList(Pair.create("query28", query28));
+        AutoMVUtil.testHelper(
+                getStarRocksAssert().getCtx(),
+                queryList,
+                AutoMVUtil::configDefaultAutoMV,
+                results -> {
+                    Assert.assertFalse(results.isEmpty());
+                }
+        );
+    }
+
+    @Test
     public void testShowRecommendations1() {
         String q0 = "SELECT COUNT(DISTINCT ss_item_sk) FROM store_sales";
         String q1 = "SELECT MIN(ss_quantity), MAX(ss_quantity) FROM store_sales";
@@ -190,7 +204,10 @@ public class AutoMVTPCDSTest {
         AutoMVUtil.testHelper(
                 getStarRocksAssert().getCtx(),
                 queryList,
-                AutoMVUtil::configDefaultAutoMV,
+                sv -> {
+                    AutoMVUtil.configDefaultAutoMV(sv);
+                    sv.setAutoMVDefaultPartitionByTimeGranule("none");
+                },
                 results -> {
                     String mv = results.get(0).get(2);
                     Assert.assertTrue(mv, mv.contains("SELECT\n" +
@@ -216,7 +233,10 @@ public class AutoMVTPCDSTest {
         AutoMVUtil.testHelper(
                 getStarRocksAssert().getCtx(),
                 queryList,
-                sv -> sv.setAutoMVCardRowCountRatioHWM(1.0),
+                sv -> {
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVDefaultPartitionByTimeGranule("none");
+                },
                 results -> {
                     String mv = results.get(0).get(2);
                     Assert.assertTrue(mv, mv.contains("SELECT\n" +
@@ -247,7 +267,10 @@ public class AutoMVTPCDSTest {
         AutoMVUtil.testHelper(
                 getStarRocksAssert().getCtx(),
                 queryList,
-                sv -> sv.setAutoMVCardRowCountRatioHWM(1.0),
+                sv -> {
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVDefaultPartitionByTimeGranule("none");
+                },
                 results -> {
                     String mv = results.get(0).get(2);
                     String numAcceleratedQueries = results.get(0).get(12);
@@ -281,7 +304,10 @@ public class AutoMVTPCDSTest {
         AutoMVUtil.testHelper(
                 getStarRocksAssert().getCtx(),
                 queryList,
-                sv -> sv.setAutoMVCardRowCountRatioHWM(1.0),
+                sv -> {
+                    sv.setAutoMVCardRowCountRatioHWM(1.0);
+                    sv.setAutoMVDefaultPartitionByTimeGranule("none");
+                },
                 results -> {
                     String mv0 = results.get(0).get(2);
                     String numAcceleratedQueries0 = results.get(0).get(12);
@@ -339,6 +365,7 @@ public class AutoMVTPCDSTest {
                     sv.setAutoMVUseBitmapCountDistinct(false);
                     sv.setAutoMVUseHllCountDistinct(true);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(true);
+                    sv.setAutoMVDefaultPartitionByTimeGranule("none");
                 },
                 results -> {
                     Assert.assertEquals(results.size(), 2);
@@ -363,6 +390,7 @@ public class AutoMVTPCDSTest {
                     sv.setAutoMVUseHllCountDistinct(false);
                     sv.setAutoMVUseArrayAggCountDistinct(true);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(true);
+                    sv.setAutoMVDefaultPartitionByTimeGranule("none");
                 },
                 results -> {
                     Assert.assertEquals(results.size(), 2);
@@ -600,6 +628,7 @@ public class AutoMVTPCDSTest {
                 sv -> {
                     sv.setAutoMVCardRowCountRatioHWM(1.0);
                     sv.setAutoMVPruneRollupUnableAggregateWithConjuncts(false);
+                    sv.setAutoMVDefaultPartitionByTimeGranule("none");
                 },
                 results -> {
                     Assert.assertEquals(results.size(), 1);

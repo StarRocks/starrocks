@@ -156,7 +156,7 @@ public class CardEstimator {
         TieredMap<Integer, GenericColumn> requiredDerivedColumns = columnGroups.get(false);
 
         for (Map.Entry<Integer, GenericColumn> e : requiredOriginalColumns.entrySet()) {
-            Var var = OpUtil.toVar(e.getKey(), e.getValue());
+            Var var = OpUtil.columnToOp(e.getKey(), e.getValue()).cast();
             usedVars.putIfAbsent(e.getKey(), var);
         }
 
@@ -172,7 +172,7 @@ public class CardEstimator {
             usedColumns.getStream().forEach(cid -> {
                 freqs.merge(cid, freq, Integer::sum);
                 if (originalColumnIds.contains(cid)) {
-                    Var var = OpUtil.toVar(cid, originalColumns.get(cid));
+                    Var var = OpUtil.columnToOp(cid, originalColumns.get(cid)).cast();
                     usedVars.putIfAbsent(cid, var);
                 }
             });
@@ -210,7 +210,9 @@ public class CardEstimator {
                         .collect(Collectors.groupingBy(p -> p.first,
                                 Collectors.mapping(p -> p.second, TieredList.<Op>toList())));
 
-        Map<Boolean, List<Pair<Integer, GenericColumn>>> columnGroups = this.dimensionColumnIds.stream()
+        ColumnRefSet requiredColumnIds = ColumnRefSet.createByIds(this.dimensionColumnIds);
+        flatTable.getConjuncts().forEach(conjunct -> requiredColumnIds.union(conjunct.getIds()));
+        Map<Boolean, List<Pair<Integer, GenericColumn>>> columnGroups = requiredColumnIds.getStream()
                 .map(cId -> Pair.create(cId, flatTable.getColumns().get(cId)))
                 .collect(Collectors.partitioningBy(p -> p.second.isOriginal()));
 
