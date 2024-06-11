@@ -219,8 +219,10 @@ do
             continue
         fi
 
-        if [[ ! -d $TP_SOURCE_DIR/tmp_dir/${!SOURCE} ]]; then
-            mkdir -p $TP_SOURCE_DIR/${!SOURCE}
+        if [[ "${TP_ARCH}" == "AVX2KI" ]]; then
+            if [[ ! -d $TP_SOURCE_DIR/tmp_dir/${!SOURCE} ]]; then
+                mkdir -p $TP_SOURCE_DIR/${!SOURCE}
+            fi
         fi
 
         mv $TP_SOURCE_DIR/tmp_dir/* $TP_SOURCE_DIR/${!SOURCE}
