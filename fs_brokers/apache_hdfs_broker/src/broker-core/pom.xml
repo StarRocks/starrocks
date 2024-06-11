@@ -235,21 +235,6 @@ under the License.
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
         </dependency>
-
-<<<<<<< HEAD:fs_brokers/apache_hdfs_broker/pom.xml
-=======
-        <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
-        <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-aliyun</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/com.ksyun.kmr/hadoop-ks3 -->
-        <dependency>
-            <groupId>com.ksyun.kmr</groupId>
-            <artifactId>hadoop-ks3</artifactId>
-        </dependency>
->>>>>>> 96e44d4d9e ([Feature] Broker support COS posix bucket (#46597)):fs_brokers/apache_hdfs_broker/src/broker-core/pom.xml
     </dependencies>
 
     <build>
