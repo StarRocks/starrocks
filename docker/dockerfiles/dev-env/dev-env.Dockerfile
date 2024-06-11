@@ -34,7 +34,9 @@ FROM starrocks/toolchains-${distro}:main-20231123 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 Run if [ "$distro" = "ubuntu"] ; then \
+        apt-get update ; \
         apt-get install -y rpm2cpio ; \
+        apt-get clean ; \
     fi
 
 WORKDIR /
