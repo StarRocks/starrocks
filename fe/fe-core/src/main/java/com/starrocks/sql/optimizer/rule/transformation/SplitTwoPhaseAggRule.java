@@ -79,7 +79,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
         }
 
         if (!isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
-            return List.of();
+            return Lists.newArrayList();
         }
 
         Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap(aggOp.getAggregations());

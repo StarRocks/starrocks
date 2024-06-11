@@ -100,7 +100,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         }
 
         if (isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
-            return List.of();
+            return Lists.newArrayList();
         }
 
         if (aggOp.getGroupingKeys().isEmpty()) {
