@@ -261,9 +261,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
+    public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
-        normal.addPartitions(db, tableName, addPartitionClause);
+        normal.addPartitions(ctx, db, tableName, addPartitionClause);
     }
 
     @Override
