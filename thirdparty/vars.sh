@@ -346,7 +346,7 @@ BENCHMARK_MD5SUM="6f852815d48db788f5bb87e2e561dc5e"
 # fast-float
 FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz"
 FAST_FLOAT_NAME="fast-float-3.5.1.tar.gz"
-FAST_FLOAT_SOURCE="fast_float-3.5.1"
+FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
 
 # streamvbyte
