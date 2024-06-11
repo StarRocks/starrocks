@@ -1282,6 +1282,21 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testCaseWhenSelectMV5() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, time, " +
+                "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id, time;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        String query = "select bitmap_union_count(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "MV");
+        System.out.println(plan);
+        PlanTestBase.assertContains(plan, USER_TAG_MV_NAME);
+        PlanTestBase.assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: bitmap_agg(2: user_id)\n" +
+                "  |  group by: ");
+        starRocksAssert.dropMaterializedView(USER_TAG_MV_NAME);
+    }
+
+    @Test
     public void testQueryOnStar() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select time, deptno, empid, name, " +
                 "salary from " + EMPS_TABLE_NAME + " order by time, deptno, empid;";
