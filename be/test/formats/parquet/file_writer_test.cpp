@@ -195,19 +195,19 @@ TEST_F(FileWriterTest, TestWriteDecimal) {
     auto chunk = std::make_shared<Chunk>();
     {
         auto col0 = ColumnHelper::create_column(type_descs[0], true);
-        std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
+        std::vector<int32_t> int32_nums{-999999, 999999, 0, 1};
         auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col0, chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(type_descs[1], true);
-        std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
+        std::vector<int64_t> int64_nums{-999999999999, 999999999999, 0, 1};
         count = col1->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col1, chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[2], true);
-        std::vector<int128_t> int128_nums{INT64_MIN, INT64_MAX, 0, 1};
+        std::vector<int128_t> int128_nums{-999999999999, 999999999999, 0, 1};
         count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col2, chunk->num_columns());

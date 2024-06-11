@@ -102,6 +102,10 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     if (target_table.__isset.csv_row_delimiter) {
         sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = target_table.csv_row_delimiter;
     }
+    if (target_table.__isset.parquet_use_legacy_encoding && target_table.parquet_use_legacy_encoding) {
+        sink_ctx->options[formats::ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING] = "true";
+        sink_ctx->options[formats::ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING] = "true";
+    }
 
     auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
     auto sink_provider = connector->create_data_sink_provider();
