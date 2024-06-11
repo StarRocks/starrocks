@@ -118,7 +118,7 @@ public:
 
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
 
-    void commit(MetaFileBuilder* builder);
+    Status commit(MetaFileBuilder* builder);
 
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);

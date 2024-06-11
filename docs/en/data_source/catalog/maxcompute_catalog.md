@@ -236,8 +236,8 @@ ANALYZE TABLE mc_table;
 
 ## Manually update metadata cache
 
-By default, StarRocks caches the metadata of MaxCompute to improve query performance. Therefore, after making schema changes or other updates to a Maxcompute table, you can use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update the metadata of the table, thereby ensuring that StarRocks can obtain the most recent metadata promptly:
+By default, StarRocks caches the metadata of MaxCompute to improve query performance. Therefore, after making schema changes or other updates to a MaxCompute table, you can use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update the metadata of the table, thereby ensuring that StarRocks can obtain the most recent metadata promptly:
 
 ```SQL
-REFRESH EXTERNAL TABLE <table_name>
+REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 ```

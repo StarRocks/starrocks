@@ -16,11 +16,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
@@ -53,6 +56,8 @@ public class AlterSystemStmtAnalyzerTest {
         connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         starRocksAssert = new StarRocksAssert(connectContext);
         AnalyzeTestUtil.init();
+
+        UtFrameUtils.setUpForPersistTest();
     }
 
     @Mocked
@@ -72,7 +77,7 @@ public class AlterSystemStmtAnalyzerTest {
         mockNet();
         AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
         ModifyBackendClause clause = new ModifyBackendClause("test", "fqdn");
-        Void resutl = visitor.visitModifyBackendClause(clause, null);
+        Void result = visitor.visitModifyBackendClause(clause, null);
     }
 
     @Test
@@ -137,22 +142,54 @@ public class AlterSystemStmtAnalyzerTest {
         }
     }
 
-    @Test
-    public void testShowBackendLocation() throws Exception {
+    private void modifyBackendLocation(String location) throws Exception {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         System.out.println(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
                 ":" + backend.getHeartbeatPort() + "' set ('" +
-                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'a:b')";
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + location + "')";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
                 connectContext);
+    }
+
+    @Test
+    public void testShowBackendLocation() throws Exception {
+        modifyBackendLocation("a:b");
         String showBackendLocationSqlStr = "show backends";
         ShowBackendsStmt showBackendsStmt = (ShowBackendsStmt) UtFrameUtils.parseStmtWithNewParser(showBackendLocationSqlStr,
                 connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showBackendsStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("a:b"));
+    }
+
+    @Test
+    public void testModifyBackendLocationPersistence() throws Exception {
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(initialImage.getDataOutputStream());
+
+        modifyBackendLocation("c:d");
+
+        // make final image
+        UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(finalImage.getDataOutputStream());
+
+        // test replay
+        NodeMgr nodeMgrFollower = new NodeMgr();
+        nodeMgrFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+        Backend persistentState =
+                (Backend) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        nodeMgrFollower.getClusterInfo().updateInMemoryStateBackend(persistentState);
+        Assert.assertEquals("{c=d}",
+                nodeMgrFollower.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
+
+        // test restart
+        NodeMgr nodeMgrLeader = new NodeMgr();
+        nodeMgrLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        Assert.assertEquals("{c=d}",
+                nodeMgrLeader.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
     }
 }

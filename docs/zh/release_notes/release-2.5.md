@@ -54,7 +54,6 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- 新增模糊/正则匹配函数：[regexp_extract_all](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/)。
 - 新增 Bitmap 取值的处理函数：serialize、deserialize、serializeToString。 [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
 
 ### 功能优化

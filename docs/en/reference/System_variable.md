@@ -906,8 +906,6 @@ Used to set the time zone of the current session. The time zone can affect the r
   * `command`: Return query trace profile logs as the **Explain String** after executing TRACE LOGS.
   * `file`: Return query trace profile logs in the FE log file **fe.log** with the class name being `FileLogTracer`.
 
-  For more information on query trace profile, see [Query Trace Profile](../developers/trace-tools/query_trace_profile.md).
-
 * **Default**: `command`
 * **Data type**: String
 * **Introduced in**: v3.2.0
