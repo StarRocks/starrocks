@@ -325,7 +325,7 @@ TEST_F(MetaFileTest, test_dcg) {
         EXPECT_TRUE(dcg_ver_iter != metadata->dcg_meta().dcgs().end());
         EXPECT_TRUE(dcg_ver_iter->second.versions_size() == 3);
         EXPECT_TRUE(dcg_ver_iter->second.column_files_size() == 3);
-        EXPECT_TRUE(dcg_ver_iter->second.column_ids_size() == 3);
+        EXPECT_TRUE(dcg_ver_iter->second.unique_column_ids_size() == 3);
         // <3, 5> -> ddd.cols
         // <6, 8> -> bbb.cols
         // <4, 7> -> ccc.cols

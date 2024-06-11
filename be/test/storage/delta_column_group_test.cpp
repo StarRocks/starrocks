@@ -25,8 +25,8 @@ TEST(TestDeltaColumnGroup, testLoad) {
     DeltaColumnGroup new_dcg;
     ASSERT_TRUE(new_dcg.load(100, pb_str.data(), pb_str.length()).ok());
     ASSERT_TRUE(dcg.column_files("111") == new_dcg.column_files("111"));
-    auto v1 = dcg.unique_column_ids();
-    auto v2 = new_dcg.unique_column_ids();
+    auto v1 = dcg.column_ids();
+    auto v2 = new_dcg.column_ids();
     ASSERT_TRUE(v1.size() == v2.size());
     for (int i = 0; i < v1.size(); ++i) {
         ASSERT_TRUE(v1[i].size() == v2[i].size());
@@ -179,16 +179,16 @@ TEST(TestDeltaColumnGroup, testDeltaColumnGroupVerPBLoad) {
     dcg_ver.add_column_files("bbb.cols");
     dcg_ver.add_column_files("ccc.cols");
     DeltaColumnGroupColumnIdsPB unique_cids;
-    unique_cids.add_unique_column_ids(3);
-    unique_cids.add_unique_column_ids(4);
+    unique_cids.add_column_ids(3);
+    unique_cids.add_column_ids(4);
     dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
     unique_cids.Clear();
-    unique_cids.add_unique_column_ids(5);
-    unique_cids.add_unique_column_ids(6);
+    unique_cids.add_column_ids(5);
+    unique_cids.add_column_ids(6);
     dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
     unique_cids.Clear();
-    unique_cids.add_unique_column_ids(7);
-    unique_cids.add_unique_column_ids(8);
+    unique_cids.add_column_ids(7);
+    unique_cids.add_column_ids(8);
     dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
     unique_cids.Clear();
     DeltaColumnGroup dcg;

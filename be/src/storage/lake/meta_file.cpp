@@ -64,7 +64,7 @@ void MetaFileBuilder::append_dcg(uint32_t rssid, const std::vector<std::string>&
         new_dcg_ver.add_column_files(filenames[i]);
         DeltaColumnGroupColumnIdsPB unique_cids;
         for (const ColumnUID uid : unique_column_id_list[i]) {
-            unique_cids.add_unique_column_ids(uid);
+            unique_cids.add_column_ids(uid);
             // Build filter so we can remove old columns at second step.
             need_to_remove_cuids_filter.insert(uid);
         }
@@ -75,7 +75,7 @@ void MetaFileBuilder::append_dcg(uint32_t rssid, const std::vector<std::string>&
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.column_files_size());
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.versions_size());
     for (int i = 0; i < dcg_ver.unique_column_ids_size(); i++) {
-        auto* mcids = dcg_ver.mutable_unique_column_ids(i)->mutable_unique_column_ids();
+        auto* mcids = dcg_ver.mutable_unique_column_ids(i)->mutable_column_ids();
         mcids->erase(std::remove_if(mcids->begin(), mcids->end(),
                                     [&](uint32 cuid) { return need_to_remove_cuids_filter.count(cuid) > 0; }),
                      mcids->end());
