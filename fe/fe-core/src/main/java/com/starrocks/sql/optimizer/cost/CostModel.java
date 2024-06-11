@@ -506,7 +506,6 @@ public class CostModel {
         private Optional<CostEstimate> invalidOneStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
             boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
             if (mustMultiStageAgg && !node.isSplit() && node.getType().isGlobal()) {
-
                 return Optional.of(CostEstimate.infinite());
             }
             return Optional.empty();
