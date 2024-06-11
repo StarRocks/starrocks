@@ -486,7 +486,7 @@ public class MVRewriteTest {
         query = "select deptno, sum(if(empid=0,0,1)) from " + EMPS_TABLE_NAME + " group by deptno";
         starRocksAssert.query(query).explainWithout(EMPS_MV_NAME);
     }
-    
+
     @Test
     public void testAggregateMVCalcGroupByQuery1() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, sum(salary) "
@@ -1191,14 +1191,14 @@ public class MVRewriteTest {
                     "FROM kkk AS T1\n" +
                     "GROUP BY T1.dt";
             String plan  = starRocksAssert.query(query).explainQuery();
-        PlanTestBase.assertContains(plan, "  1:Project\n" +
-                "  |  <slot 3> : 3: dt\n" +
-                "  |  <slot 5> : 5: mv_bitmap_union_user_id_td\n" +
-                "  |  <slot 6> : if(1: is_finish = '1', 5: mv_bitmap_union_user_id_td, NULL)");
-        PlanTestBase.assertContains(plan, "     TABLE: kkk\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: kkk_mv");
+            PlanTestBase.assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 3> : 3: dt\n" +
+                    "  |  <slot 5> : 5: mv_bitmap_union_user_id_td\n" +
+                    "  |  <slot 6> : if(1: is_finish = '1', 5: mv_bitmap_union_user_id_td, NULL)");
+            PlanTestBase.assertContains(plan, "     TABLE: kkk\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: kkk_mv");
         }
 
         starRocksAssert.dropTable("kkk");
@@ -1443,7 +1443,7 @@ public class MVRewriteTest {
                 + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
         String query = "select * from ods_order where bank_transaction_id " +
                 "not in (select sum(cast(salary as smallint)) as ssalary from " +
-                        EMPS_TABLE_NAME + " group by deptno)";
+                EMPS_TABLE_NAME + " group by deptno)";
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
     }
 
