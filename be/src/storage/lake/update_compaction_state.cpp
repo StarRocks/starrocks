@@ -65,7 +65,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
 
     if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &_stats));
+        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == rowset->num_segments());
 

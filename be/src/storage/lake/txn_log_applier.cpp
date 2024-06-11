@@ -174,7 +174,7 @@ private:
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
-        return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, *_metadata, &_tablet, _index_entry,
+        return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet, _index_entry,
                                                                 &_builder, _base_version);
     }
 

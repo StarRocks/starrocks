@@ -246,7 +246,11 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
 
     // Test new_column_iterator
     {
-        auto r = segment->new_column_iterator(5 /* nonexist column id*/, nullptr);
+        TabletColumn column;
+        column.set_unique_id(5);
+        column.set_type(LogicalType::TYPE_BIGINT);
+        column.set_is_nullable(false);
+        auto r = segment->new_column_iterator(column, nullptr);
         ASSERT_FALSE(r.ok());
         ASSERT_TRUE(r.status().is_not_found()) << r.status();
     }

@@ -167,4 +167,44 @@ TEST(TestDeltaColumnGroup, testGC) {
     };
 };
 
+TEST(TestDeltaColumnGroup, testDeltaColumnGroupVerPBLoad) {
+    // version 10 -> aaa.cols -> <3, 4>
+    // version 11 -> bbb.cols -> <5, 6>
+    // version 12 -> ccc.cols -> <7, 8>
+    DeltaColumnGroupVerPB dcg_ver;
+    dcg_ver.add_versions(10);
+    dcg_ver.add_versions(11);
+    dcg_ver.add_versions(12);
+    dcg_ver.add_column_files("aaa.cols");
+    dcg_ver.add_column_files("bbb.cols");
+    dcg_ver.add_column_files("ccc.cols");
+    DeltaColumnGroupColumnIdsPB unique_cids;
+    unique_cids.add_column_ids(3);
+    unique_cids.add_column_ids(4);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(5);
+    unique_cids.add_column_ids(6);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    unique_cids.add_column_ids(7);
+    unique_cids.add_column_ids(8);
+    dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
+    unique_cids.Clear();
+    DeltaColumnGroup dcg;
+    ASSERT_TRUE(dcg.load(12, dcg_ver).ok());
+    auto idx = dcg.get_column_idx(4);
+    ASSERT_TRUE(idx.first == 0);
+    ASSERT_TRUE(idx.second == 1);
+    ASSERT_TRUE("tmp/aaa.cols" == dcg.column_files("tmp")[idx.first]);
+    idx = dcg.get_column_idx(5);
+    ASSERT_TRUE(idx.first == 1);
+    ASSERT_TRUE(idx.second == 0);
+    ASSERT_TRUE("tmp/bbb.cols" == dcg.column_files("tmp")[idx.first]);
+    idx = dcg.get_column_idx(8);
+    ASSERT_TRUE(idx.first == 2);
+    ASSERT_TRUE(idx.second == 1);
+    ASSERT_TRUE("tmp/ccc.cols" == dcg.column_files("tmp")[idx.first]);
+}
+
 } // namespace starrocks

@@ -273,8 +273,8 @@ private:
     // search delta column group by column uniqueid, if this column exist in delta column group,
     // then return column iterator and delta column's fillname.
     // Or just return null
-    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(uint32_t ucid, std::string* filename,
-                                                                       ColumnAccessPath* path);
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(const TabletColumn& column,
+                                                                       std::string* filename, ColumnAccessPath* path);
 
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
@@ -511,16 +511,16 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
     return nullptr;
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(uint32_t ucid,
+StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(const TabletColumn& column,
                                                                                     std::string* filename,
                                                                                     ColumnAccessPath* path) {
     // build column iter from delta column group
-    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(ucid));
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(column.unique_id()));
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
         }
-        return dcg_segment->new_column_iterator(ucid, path);
+        return dcg_segment->new_column_iterator(column, path);
     }
     return nullptr;
 }
@@ -562,11 +562,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         LOG(ERROR) << "invalid unique columnid in segment iterator, ucid: " << ucid
                    << ", segment: " << _segment->file_name();
     }
-    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename, access_path));
+    auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
+    const auto& col = tablet_schema->column(cid);
+    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(col, &dcg_filename, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
-        auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
-        const auto& col = tablet_schema->column(cid);
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&

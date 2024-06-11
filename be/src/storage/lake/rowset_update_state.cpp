@@ -52,18 +52,18 @@ void RowsetUpdateState::_reset() {
 }
 
 void RowsetUpdateState::init(const RowsetUpdateStateParams& params) {
-    DCHECK_GT(params.metadata.version(), 0);
-    DCHECK_EQ(params.tablet->id(), params.metadata.id());
-    if (!_base_versions.empty() && _schema_version < params.metadata.schema().schema_version()) {
+    DCHECK_GT(params.metadata->version(), 0);
+    DCHECK_EQ(params.tablet->id(), params.metadata->id());
+    if (!_base_versions.empty() && _schema_version < params.metadata->schema().schema_version()) {
         LOG(INFO) << "schema version has changed from " << _schema_version << " to "
-                  << params.metadata.schema().schema_version() << ", need to reload the update state."
+                  << params.metadata->schema().schema_version() << ", need to reload the update state."
                   << " tablet_id: " << params.tablet->id() << " old base version: " << _base_versions[0]
-                  << " new base version: " << params.metadata.version();
+                  << " new base version: " << params.metadata->version();
         // The data has been loaded, but the schema has changed and needs to be reloaded according to the new schema
         _reset();
     }
-    _tablet_id = params.metadata.id();
-    _schema_version = params.metadata.schema().schema_version();
+    _tablet_id = params.metadata->id();
+    _schema_version = params.metadata->schema().schema_version();
 }
 
 static bool has_partial_update_state(const RowsetUpdateStateParams& params) {
@@ -201,7 +201,7 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
 
     if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, &_stats));
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     // only hold pkey, so can use larger chunk size
@@ -425,7 +425,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     const RowsetMetadata& rowset_meta = params.op_write.rowset();
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
         rowset_meta.num_rows() == 0 || params.op_write.txn_meta().has_merge_condition()) {
@@ -513,7 +513,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     // There are two cases that we must resolve conflict here:
     // 1. Current transaction's base version isn't equal latest base version, which means that conflict happens.
     // 2. We use batch publish here. This transaction may conflict with a transaction in the same batch.
-    if (base_version == _base_versions[segment_id] && base_version + 1 == params.metadata.version()) {
+    if (base_version == _base_versions[segment_id] && base_version + 1 == params.metadata->version()) {
         return Status::OK();
     }
     _base_versions[segment_id] = base_version;
@@ -530,7 +530,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id], &new_rss_rowids, false));
 
     size_t total_conflicts = 0;
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
     // get rss_rowids to identify conflict exist or not
     int64_t t_start = MonotonicMillis();

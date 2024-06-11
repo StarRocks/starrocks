@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/status.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "storage/olap_common.h"
 
@@ -36,6 +37,7 @@ public:
     void init(int64_t version, const std::vector<std::vector<ColumnUID>>& column_ids,
               const std::vector<std::string>& column_files);
     Status load(int64_t version, const char* data, size_t length);
+    Status load(int64_t version, const DeltaColumnGroupVerPB& dcg_ver_pb);
     std::string save() const;
     // merge this dcg into dst dcgs by version, returns the number of successful merges
     int merge_into_by_version(DeltaColumnGroupList& dcgs, const std::string& dir, const RowsetId& rowset_id,
@@ -104,7 +106,9 @@ class DeltaColumnGroupLoader {
 public:
     DeltaColumnGroupLoader() = default;
     virtual ~DeltaColumnGroupLoader() = default;
+    // Used for PK table
     virtual Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) = 0;
+    // Used for non-PK table
     virtual Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
                         DeltaColumnGroupList* pdcgs) = 0;
 };

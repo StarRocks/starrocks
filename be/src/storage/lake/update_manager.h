@@ -79,10 +79,13 @@ public:
                            const std::map<int, FileInfo>& replace_segments);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
+    const std::unordered_map<uint32_t, uint32_t>& rssid_to_rowid() const { return _rssid_to_rowid; }
 
 private:
     // From rowset segment id to segment file
     std::unordered_map<uint32_t, FileInfo> _rssid_to_file_info;
+    // From rowset segment id to rowset id
+    std::unordered_map<uint32_t, uint32_t> _rssid_to_rowid;
 };
 
 class UpdateManager {
@@ -95,9 +98,9 @@ public:
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
     // publish primary key tablet, update primary index and delvec, then update meta file
-    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadata& metadata,
-                                      Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
-                                      int64_t base_version);
+    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                      const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
+                                      MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
