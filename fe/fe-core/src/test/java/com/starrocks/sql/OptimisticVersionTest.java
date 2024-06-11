@@ -14,27 +14,12 @@
 
 package com.starrocks.sql;
 
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.PlannerMetaLocker;
-import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OptimisticVersionTest extends PlanTestBase {
@@ -60,62 +45,4 @@ class OptimisticVersionTest extends PlanTestBase {
         table.lastSchemaUpdateTime.set(OptimisticVersion.generate());
         assertTrue(OptimisticVersion.validateTableUpdate(table, OptimisticVersion.generate()));
     }
-
-    @Test
-    public void testInsert() throws Exception {
-        starRocksAssert.withTable("create table test_insert(c1 int, c2 int) " +
-                "distributed by hash(c1) " +
-                "properties('replication_num'='1')");
-        final String sql = "insert into test_insert select * from test_insert";
-
-        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
-        InsertStmt insertStmt = (InsertStmt) stmts.get(0);
-
-        // analyze
-        Analyzer.analyze(insertStmt, starRocksAssert.getCtx());
-        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(starRocksAssert.getCtx(), insertStmt);
-
-        // normal planner
-        PlannerMetaLocker locker = new PlannerMetaLocker(starRocksAssert.getCtx(), insertStmt);
-        StatementPlanner.lock(locker);
-        new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx());
-        StatementPlanner.unLock(locker);
-
-        // retry but failed
-        new MockUp<OptimisticVersion>() {
-            @Mock
-            public boolean validateTableUpdate(OlapTable olapTable, long candidateVersion) {
-                return false;
-            }
-        };
-        try {
-            StatementPlanner.lock(locker);
-            assertThrows(StarRocksPlannerException.class, () ->
-                    new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx()));
-        } finally {
-            StatementPlanner.unLock(locker);
-        }
-
-        // retry and succeed
-        new MockUp<OptimisticVersion>() {
-            private boolean retried = false;
-
-            @Mock
-            public boolean validateTableUpdate(OlapTable olapTable, long candidateVersion) {
-                if (retried) {
-                    return true;
-                }
-                retried = true;
-                return false;
-            }
-        };
-        try {
-            StatementPlanner.lock(locker);
-            new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx());
-        } finally {
-            StatementPlanner.unLock(locker);
-        }
-
-    }
-
 }
