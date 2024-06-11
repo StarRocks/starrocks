@@ -70,6 +70,16 @@ public class ShortCircuitTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
+        //  support limit short circuit
+        sql = "select * from tprimary1 where pk1 in (20) limit 10";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+
+        //  support limit short circuit
+        sql = "select * from tprimary1 where pk1 in (20, 30) limit 10";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+
         // complex convert for short circuit
         sql = "select * from tprimary_bool where pk1 = 1 and pk2 = true " +
                 "and pk1 =(select pk1 from tprimary_bool where pk1 = 2 and pk2 = true) ";
