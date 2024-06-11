@@ -112,6 +112,8 @@ public class QueryRuntimeProfile {
     private Supplier<RuntimeProfile> topProfileSupplier;
     private ExecPlan execPlan;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
+    // whether this profile is belong to short-circuit query
+    private final boolean isShortCircuit;
 
     // ------------------------------------------------------------------------------------
     // Fields for load.
@@ -138,9 +140,11 @@ public class QueryRuntimeProfile {
 
     public QueryRuntimeProfile(ConnectContext connectContext,
                                JobSpec jobSpec,
-                               int numFragments) {
+                               int numFragments,
+                               boolean isShortCircuit) {
         this.connectContext = connectContext;
         this.jobSpec = jobSpec;
+        this.isShortCircuit = isShortCircuit;
 
         this.queryProfile = new RuntimeProfile("Execution");
         this.fragmentProfiles = new ArrayList<>(numFragments);
@@ -244,6 +248,15 @@ public class QueryRuntimeProfile {
         if (EXECUTOR.getQueue().size() > Config.profile_process_blocking_queue_size) {
             return false;
         }
+
+        // short circuit point query will get profile from be synchronously, so just submit task here
+        if (isShortCircuit) {
+            EXECUTOR.submit(() -> {
+                task.accept(true);
+            });
+            return true;
+        }
+
         // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
         profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
             task.accept(true);
