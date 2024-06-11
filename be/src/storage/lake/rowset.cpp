@@ -18,6 +18,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
@@ -78,6 +79,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), nullptr,
                                                                        seg_options.lake_io_opts.fill_data_cache);
+        seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
         seg_options.version = options.version;
         seg_options.tablet_id = tablet_id();
         seg_options.rowset_id = metadata().id();
@@ -177,10 +179,10 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
     }
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema,
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema, bool file_data_cache,
                                                                           OlapReaderStatistics* stats) {
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
@@ -215,6 +217,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.is_primary_keys = true;
     seg_options.delvec_loader =
             std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), builder, true /*fill cache*/);
+    seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     seg_options.version = version;
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();

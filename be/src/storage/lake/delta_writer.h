@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
@@ -174,6 +175,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -189,6 +195,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
 };
 
 } // namespace starrocks::lake

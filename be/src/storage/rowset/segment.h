@@ -118,10 +118,10 @@ public:
     // the elements in a column of a segment. The iterator starts from the beginning
     // of the column.
     //
-    // @param id The unique identifier of the column.
+    // @param column The column that need to be read.
     // @param path A pointer to the access path of the column.
     // @return A new iterator object for the specified column, or NotFound if the segment does not have the column.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(ColumnUID id, ColumnAccessPath* path);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(const TabletColumn& column, ColumnAccessPath* path);
 
     // Creates a new iterator for a specific column in a segment.
     //
