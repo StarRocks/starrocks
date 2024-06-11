@@ -52,7 +52,7 @@ Status SysObjectDependencies::start(RuntimeState* state) {
     TObjectDependencyReq request;
     request.__set_auth_info(auth);
 
-    return (SchemaHelper::list_object_dependencies(_ss_state, request, &_result));
+    return SchemaHelper::list_object_dependencies(_ss_state, request, &_result);
 }
 
 Status SysObjectDependencies::_fill_chunk(ChunkPtr* chunk) {

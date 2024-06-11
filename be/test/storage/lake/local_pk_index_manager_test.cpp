@@ -258,4 +258,95 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
 }
 
+TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1",
+                                          [](void* arg) { *(double*)arg = 1.0; });
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+
+    Chunk chunk0({c0, c1}, _schema);
+    auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
+
+    int64_t txn_id = next_id();
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    // write segment #1
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    // write txnlog
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    writer->close();
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    auto stores = StorageEngine::instance()->get_stores();
+    ASSERT_TRUE(stores.size() > 0);
+    ASSERT_OK(FileSystem::Default()->path_exists(stores[0]->get_persistent_index_path() + "/" +
+                                                 std::to_string(_tablet_metadata->id())));
+    auto local_pk_index_manager = std::make_unique<LocalPkIndexManager>();
+    ASSERT_OK(local_pk_index_manager->init());
+    local_pk_index_manager->schedule(
+            [&]() { return local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(_update_mgr.get()); });
+    // LocalPkIndexManager use the global update manager to do major compaction.
+    // But we are using _update_mgr constructed in ut, so we have to call pk_index_major_compaction explicitly.
+    std::vector<TabletAndScore> pick_tablets =
+            local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(_update_mgr.get());
+    for (auto& tablet_score : pick_tablets) {
+        auto tablet_id = tablet_score.first;
+        auto* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
+        if (data_dir == nullptr) {
+            continue;
+        }
+        _update_mgr->pk_index_major_compaction(tablet_id, data_dir);
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1");
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    txn_id = next_id();
+    ASSIGN_OR_ABORT(writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+
+    // write segment #2
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    // write txnlog
+    txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_id = next_id();
+    txn_log->set_txn_id(txn_id);
+    op_write = txn_log->mutable_op_write();
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    writer->close();
+    // publish again should be successful
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 3, txn_id).status());
+}
+
 } // namespace starrocks::lake

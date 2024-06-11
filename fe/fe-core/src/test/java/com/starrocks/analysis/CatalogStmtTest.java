@@ -15,6 +15,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -61,6 +62,10 @@ public class CatalogStmtTest {
         String sql_6 = "CREATE EXTERNAL CATALOG catalog_5 properties(\"type\"=\"hive\")";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql_6);
         Assert.assertEquals("CREATE EXTERNAL CATALOG 'catalog_5' PROPERTIES(\"type\"  =  \"hive\")", stmt2.toSql());
+        String sql_7 = "CREATE EXTERNAL CATALOG IF NOT EXISTS catalog_6 PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        StatementBase stmt3 = AnalyzeTestUtil.analyzeSuccess(sql_7);
+        Assert.assertEquals("CREATE EXTERNAL CATALOG IF NOT EXISTS 'catalog_6' PROPERTIES(\"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\", \"type\"  =  \"hive\")", stmt3.toSql());
+        Assert.assertTrue(stmt3 instanceof CreateCatalogStmt);
     }
 
     @Test
@@ -106,10 +111,37 @@ public class CatalogStmtTest {
 
         try {
             DDLStmtExecutor.execute(statement, connectCtx);
-        } catch (IllegalStateException e) {
+        } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("exists"));
         }
 
+        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
+        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
+        Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
+    }
+
+    @Test
+    public void testCreateExistedCatalog() throws Exception {
+        String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql_2 = "CREATE EXTERNAL CATALOG IF NOT EXISTS hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof CreateCatalogStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
+        DDLStmtExecutor.execute(statement, connectCtx);
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
+        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
+        Assert.assertTrue(connectorMgr.connectorExists("hive_catalog"));
+        try {
+            DDLStmtExecutor.execute(statement, connectCtx);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("exists"));
+        }
+        StatementBase stmt_2 = AnalyzeTestUtil.analyzeSuccess(sql_2);
+        CreateCatalogStmt statement_2 = (CreateCatalogStmt) stmt_2;
+        DDLStmtExecutor.execute(statement_2, connectCtx);
         catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
         Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));

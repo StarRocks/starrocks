@@ -278,6 +278,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             rewriteTask.setPartitionName(partitionName);
             rewriteTask.setTempPartitionName(tmpPartitionName);
             rewriteTask.setLastVersion(partitionLastVersion.get(i));
+            // use half of the alter timeout as rewrite task timeout
+            rewriteTask.getProperties().put("session.query_timeout", String.valueOf(timeoutMs / 2000));
             rewriteTasks.add(rewriteTask);
         }
 

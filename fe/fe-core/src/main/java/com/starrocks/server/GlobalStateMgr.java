@@ -62,10 +62,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveView;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
@@ -94,6 +91,7 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
@@ -1844,17 +1842,16 @@ public class GlobalStateMgr {
                 editLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
-                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
-                            replayedJournalId.incrementAndGet(),
-                            entity == null ? null : GsonUtils.GSON.toJson(entity.getData()),
-                            e);
+                    LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
+                            replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
                     if (!readSucc) {
                         cursor.skipNext();
                     }
                     continue;
                 }
                 // handled in outer loop
-                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                LOG.warn("catch exception when replaying journal, id: {}, data: {},",
+                        replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
                 throw e;
             }
 
@@ -1890,6 +1887,19 @@ public class GlobalStateMgr {
             return true;
         }
         return false;
+    }
+
+    private String journalEntityToReadableString(JournalEntity entity) {
+        if (entity == null) {
+            return "null";
+        }
+        Writable data = entity.getData();
+        try {
+            return GsonUtils.GSON.toJson(data);
+        } catch (Exception e) {
+            // In older version, data may not be json, here we just return the class name.
+            return data.getClass().getName();
+        }
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
@@ -2295,6 +2305,11 @@ public class GlobalStateMgr {
         return task;
     }
 
+    private boolean supportRefreshTableType(Table table) {
+        return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
+                || table.isJDBCTable() || table.isDeltalakeTable();
+    }
+
     public void refreshExternalTable(TableName tableName, List<String> partitions) {
         String catalogName = tableName.getCatalog();
         String dbName = tableName.getDb();
@@ -2309,10 +2324,14 @@ public class GlobalStateMgr {
         locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)
-                    && !(table instanceof IcebergTable) && !(table instanceof JDBCTable)) {
-                throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps/jdbc external table/view");
+            if (table == null) {
+                throw new StarRocksConnectorException("table %s.%s.%s not exists", catalogName, dbName,
+                        tblName);
+            }
+            if (!supportRefreshTableType(table)) {
+                throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
+                                "do not support refresh external table which type is %s", catalogName, dbName,
+                        tblName, table.getType());
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);

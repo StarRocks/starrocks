@@ -102,7 +102,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
@@ -261,7 +260,7 @@ public class DefaultCoordinator extends Coordinator {
         FragmentInstanceExecState execState = FragmentInstanceExecState.createFakeExecution(queryId, address);
         executionDAG.addExecution(execState);
 
-        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, 1);
+        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, 1, false);
         queryProfile.attachInstances(Collections.singletonList(queryId));
         queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
 
@@ -276,7 +275,6 @@ public class DefaultCoordinator extends Coordinator {
         this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec);
         this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
 
-        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size());
         List<PlanFragment> fragments = jobSpec.getFragments();
         List<ScanNode> scanNodes = jobSpec.getScanNodes();
         TDescriptorTable descTable = jobSpec.getDescTable();
@@ -285,12 +283,16 @@ public class DefaultCoordinator extends Coordinator {
             isBinaryRow = true;
         }
 
-        shortCircuitExecutor = ShortCircuitExecutor.create(context, fragments, scanNodes, descTable,
-                isBinaryRow, jobSpec.isNeedReport(), jobSpec.getPlanProtocol());
+        shortCircuitExecutor =
+                ShortCircuitExecutor.create(context, fragments, scanNodes, descTable, isBinaryRow, jobSpec.isNeedReport(),
+                        jobSpec.getPlanProtocol(), coordinatorPreprocessor.getWorkerProvider());
 
         if (null != shortCircuitExecutor) {
             isShortCircuit = true;
         }
+
+        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size(),
+                isShortCircuit);
     }
 
     @Override
@@ -416,6 +418,11 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public boolean isUsingBackend(Long backendID) {
         return coordinatorPreprocessor.getWorkerProvider().isWorkerSelected(backendID);
+    }
+
+    @Override
+    public boolean isShortCircuit() {
+        return isShortCircuit;
     }
 
     private void lock() {
@@ -1017,7 +1024,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     public boolean tryProcessProfileAsync(Consumer<Boolean> task) {
-        if (executionDAG.getExecutions().isEmpty()) {
+        if (executionDAG.getExecutions().isEmpty() && (!isShortCircuit)) {
             return false;
         }
         if (!jobSpec.isNeedReport()) {
@@ -1083,8 +1090,12 @@ public class DefaultCoordinator extends Coordinator {
         return false;
     }
 
+    // build execution profile  from every BE's report
     @Override
     public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        if (isShortCircuit) {
+            return shortCircuitExecutor.buildQueryProfile(needMerge);
+        }
         return queryProfile.buildQueryProfile(needMerge);
     }
 
@@ -1144,13 +1155,15 @@ public class DefaultCoordinator extends Coordinator {
         return this.queryProfile.isProfileAlreadyReported();
     }
 
-    private void execShortCircuit() {
-        shortCircuitExecutor.exec();
-        Optional<RuntimeProfile> runtimeProfile = shortCircuitExecutor.getRuntimeProfile();
-        if (jobSpec.isNeedReport() && runtimeProfile.isPresent()) {
-            RuntimeProfile profile = runtimeProfile.get();
-            profile.setName("Short Circuit Executor");
-            queryProfile.getQueryProfile().addChild(profile);
+    @Override
+    public String getWarehouseName() {
+        if (connectContext == null) {
+            return "";
         }
+        return connectContext.getSessionVariable().getWarehouseName();
+    }
+
+    private void execShortCircuit() throws Exception {
+        shortCircuitExecutor.exec();
     }
 }

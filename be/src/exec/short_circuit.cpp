@@ -234,8 +234,7 @@ Status ShortCircuitExecutor::build_source_exec_node(starrocks::ObjectPool* pool,
                                                     starrocks::ExecNode** node) {
     switch (t_node.node_type) {
     case TPlanNodeType::OLAP_SCAN_NODE: {
-        *node = pool->add(
-                new ShortCircuitHybridScanNode(pool, t_node, descs, scan_range, _runtime_profile, *_common_request));
+        *node = pool->add(new ShortCircuitHybridScanNode(pool, t_node, descs, scan_range, *_common_request));
         break;
     }
     case TPlanNodeType::PROJECT_NODE:

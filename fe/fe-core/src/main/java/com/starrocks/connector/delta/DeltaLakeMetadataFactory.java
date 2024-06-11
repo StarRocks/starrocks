@@ -16,16 +16,15 @@ package com.starrocks.connector.delta;
 
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
-import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
-import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.connector.metastore.IMetastore;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.Map;
+import java.util.Optional;
 
+import static com.starrocks.connector.delta.CachingDeltaLakeMetastore.createQueryLevelInstance;
 import static com.starrocks.connector.delta.DeltaLakeConnector.HIVE_METASTORE_URIS;
-import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevelInstance;
 
 public class DeltaLakeMetadataFactory {
     private final String catalogName;
@@ -48,18 +47,27 @@ public class DeltaLakeMetadataFactory {
         this.metastoreType = metastoreType;
     }
 
-    protected IMetastore createQueryLevelCacheMetastore() {
-        return createQueryLevelInstance((IHiveMetastore) metastore, perQueryMetastoreMaxNum);
+    protected CachingDeltaLakeMetastore createQueryLevelCacheMetastore() {
+        return createQueryLevelInstance(metastore, perQueryMetastoreMaxNum);
     }
 
     public DeltaLakeMetadata create() {
-        IMetastore queryLevelCacheMetastore = createQueryLevelCacheMetastore();
-        boolean enableCatalogLevelCache = metastore instanceof CachingHiveMetastore;
+        CachingDeltaLakeMetastore queryLevelCacheMetastore = createQueryLevelCacheMetastore();
+        DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(queryLevelCacheMetastore,
+                metastore instanceof CachingDeltaLakeMetastore, metastoreType);
 
-        DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(catalogName, queryLevelCacheMetastore,
-                enableCatalogLevelCache,
-                hdfsEnvironment.getConfiguration(), metastoreType);
+        Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
+        return new DeltaLakeMetadata(hdfsEnvironment, catalogName, metastoreOperations, cacheUpdateProcessor);
+    }
 
-        return new DeltaLakeMetadata(hdfsEnvironment, catalogName, metastoreOperations);
+    public synchronized Optional<DeltaLakeCacheUpdateProcessor> getCacheUpdateProcessor() {
+        Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor;
+        if (metastore instanceof CachingDeltaLakeMetastore) {
+            cacheUpdateProcessor = Optional.of(new DeltaLakeCacheUpdateProcessor((CachingDeltaLakeMetastore) metastore));
+        } else {
+            cacheUpdateProcessor = Optional.empty();
+        }
+
+        return cacheUpdateProcessor;
     }
 }

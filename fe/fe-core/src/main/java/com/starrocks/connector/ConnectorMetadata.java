@@ -159,6 +159,14 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+        return Lists.newArrayList();
+    }
+
+    default List<RemoteFileInfo> getRemoteFileInfoForPartitions(Table table, List<String> partitionNames) {
+        return Lists.newArrayList();
+    }
+
     /**
      * Get table meta serialized specification
      * @param dbName
@@ -284,7 +292,7 @@ public interface ConnectorMetadata {
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
     }
 
-    default void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
+    default void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException {
     }
 

@@ -301,9 +301,12 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "agg-blocking-spill";
+    _spill_options->enable_block_compaction = state->spill_enable_compaction();
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
     _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 
     return Status::OK();
 }

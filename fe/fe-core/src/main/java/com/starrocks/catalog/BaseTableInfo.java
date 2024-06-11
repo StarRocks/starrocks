@@ -18,9 +18,9 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.CatalogMgr;
-import org.apache.parquet.Strings;
 
 /**
  * BaseTableInfo is used for MaterializedView persisted as a base table's meta info which can be an olap

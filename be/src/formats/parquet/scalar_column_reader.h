@@ -42,11 +42,6 @@ public:
         _reader->get_levels(def_levels, rep_levels, num_levels);
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                           Column* column) override {
-        return _reader->get_dict_values(dict_codes, nulls, column);
-    }
-
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
 
     bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,

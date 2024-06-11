@@ -652,6 +652,8 @@ service PInternalService {
     rpc transmit_chunk_via_http(PHttpRequest) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunk_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunks_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 

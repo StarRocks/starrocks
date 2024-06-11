@@ -32,7 +32,6 @@ public class TestLightWeightLock {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.slow_lock_threshold_ms = 0;
         Config.lock_manager_enabled = true;
         Config.lock_manager_enable_resolve_deadlock = true;
     }

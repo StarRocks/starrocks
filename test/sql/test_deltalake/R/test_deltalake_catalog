@@ -1,5 +1,11 @@
 -- name: testDeltaLakeCatalog
-create external catalog delta_test_${uuid0} PROPERTIES ("type"="deltalake", "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}");
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
 -- result:
 -- !result
 select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode where c3='a' order by c1;
@@ -161,6 +167,25 @@ select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type 
 select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
 -- result:
 E: (1064, "Unknown table 'Delta table feature [column mapping] is not supported'")
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 01:01:01' order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp = '2023-01-01 01:01:01' order by col_smallint;
+-- result:
+2	2	2023-01-01 01:01:01
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double order by col_smallint;
+-- result:
+E: (1064, 'Table partition by float/double/decimal datatype is not supported')
 -- !result
 drop catalog delta_test_${uuid0}
 -- result:

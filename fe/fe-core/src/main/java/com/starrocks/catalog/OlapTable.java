@@ -139,6 +139,8 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 import javax.annotation.Nullable;
@@ -257,9 +259,8 @@ public class OlapTable extends Table {
 
     // Record the alter, schema change, MV update time
     public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
-    // Record the start and end time for data load version update phase
-    public AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
-    public AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
+
+    private Map<String, Lock> createPartitionLocks = Maps.newHashMap();
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -366,8 +367,6 @@ public class OlapTable extends Table {
 
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
-        olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
-        olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
         olapTable.sessionId = this.sessionId;
     }
 
@@ -1202,8 +1201,6 @@ public class OlapTable extends Table {
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
-
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
     }
 
     protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
@@ -1969,9 +1966,6 @@ public class OlapTable extends Table {
         }
 
         lastSchemaUpdateTime = new AtomicLong(-1);
-        // Record the start and end time for data load version update phase
-        lastVersionUpdateStartTime = new AtomicLong(-1);
-        lastVersionUpdateEndTime = new AtomicLong(0);
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
@@ -3327,4 +3321,27 @@ public class OlapTable extends Table {
         return true;
     }
     // ------ for lake table and lake materialized view end ------
+
+    public void lockCreatePartition(String partitionName) {
+        Lock locker = null;
+        synchronized (createPartitionLocks) {
+            locker = createPartitionLocks.get(partitionName);
+            if (locker == null) {
+                locker = new ReentrantLock();
+                createPartitionLocks.put(partitionName, locker);
+            }
+        }
+        locker.lock();
+    }
+
+    public void unlockCreatePartition(String partitionName) {
+        Lock locker = null;
+        synchronized (createPartitionLocks) {
+            locker = createPartitionLocks.get(partitionName);
+        }
+        if (locker != null) {
+            locker.unlock();
+        }
+    }
+
 }

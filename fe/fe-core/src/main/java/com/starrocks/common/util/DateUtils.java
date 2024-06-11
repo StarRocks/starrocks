@@ -18,8 +18,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -154,7 +154,7 @@ public class DateUtils {
         }
     }
 
-    public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
+    public static DateTimeFormatter probeFormat(String dateTimeStr) {
         if (dateTimeStr.length() == 8) {
             return DATEKEY_FORMATTER;
         } else if (dateTimeStr.length() == 10) {
@@ -164,7 +164,7 @@ public class DateUtils {
         } else if (dateTimeStr.length() == 26) {
             return DATE_TIME_MS_FORMATTER_UNIX;
         } else {
-            throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
+            throw new SemanticException("can not probe datetime format:" + dateTimeStr);
         }
     }
 
@@ -206,7 +206,7 @@ public class DateUtils {
         }
     }
 
-    public static LocalDateTime parseDatTimeString(String datetime) throws AnalysisException {
+    public static LocalDateTime parseDatTimeString(String datetime) {
         DateTimeFormatter dateTimeFormatter = probeFormat(datetime);
         return parseStringWithDefaultHSM(datetime, dateTimeFormatter);
     }

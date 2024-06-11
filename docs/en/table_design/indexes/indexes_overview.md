@@ -35,12 +35,20 @@ Each data chunk can be a segment, or a data page of a column. So correspondingly
 
 ## Manually created indexes
 
-If the column in the query condition is not a prefix field, you can manually apply a Bitmap index or Bloom filter index to this column to improve query efficiency.
+If the column in the query condition is not a prefix field, you can manually create an index to this column based on the characteristics of data and queries to improve query efficiency.
 
 ### [Bitmap indexes](./Bitmap_index.md)
 
-Bitmap indexes are generally suitable for columns with high cardinality. Bitmap indexes are a good choice when Bitmap indexes can exhibit high selectivity, and its filtering effect (number of data rows filtered by the Bitmap index/total number of data rows) is lower than one in ten thousand.
+The bitmap index is suitable for queries on high cardinality columns or combinations of multiple low cardinality columns. And the bitmap index can exhibit ideal filtering performance for those queries, filtering out at least 999 out of 1000 rows.
 
 ### [Bloom filter indexes](./Bloomfilter_index.md)
 
-Bloom filter indexes are suitable for columns with relatively high cardinality, such as ID columns, but they may incur a certain rate of misjudgment.
+The bloom filter index is suitable for columns with relatively high cardinality, such as ID columns, but it may incur a certain rate of misjudgment.
+
+### [N-Gram bloom filter indexes](./Ngram_Bloom_Filter_Index.md)
+
+The n-gram bloom filter index is a special type of Bloom filter index, typically used to speed up `LIKE` queries or the operations of the `ngram_search` and `ngram_search_case_insensitive` functions.
+
+### [Full-Text inverted indexes](./inverted_index.md)
+
+A full-text inverted index can quickly locate data rows that match keywords, thereby speeding up full-text searches.

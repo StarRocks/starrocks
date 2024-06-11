@@ -321,8 +321,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
     // 3. return input AggRewriteInfo as return value if you want to rewrite upper nodes.
     private class PostVisitor extends OptExpressionVisitor<AggRewriteInfo, AggRewriteInfo> {
         private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
-            return context.isEmpty() || context.groupBys.isEmpty() ||
-                    context.aggregations.isEmpty() || optExpression.getOp().hasLimit();
+            return context.isEmpty() || context.groupBys.isEmpty() || optExpression.getOp().hasLimit();
         }
 
         // Default visit method do nothing but just pass the AggRewriteInfo to its parent
@@ -336,7 +335,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
 
         @Override
         public AggRewriteInfo visitLogicalAggregate(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
-            if (!rewriteInfo.getRemapping().isPresent()) {
+            if (!rewriteInfo.getRemappingUnChecked().isPresent()) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
 
@@ -345,7 +344,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
             final AggregatePushDownContext ctx = rewriteInfo.getCtx();
 
-            Map<ColumnRefOperator, ColumnRefOperator> remapping = rewriteInfo.getRemapping().get().getRemapping();
+            Map<ColumnRefOperator, ColumnRefOperator> remapping = rewriteInfo.getRemappingUnChecked().get().getRemapping();
             Map<ColumnRefOperator, ScalarOperator> aggProjection = Maps.newHashMap();
             Map<ColumnRefOperator, ScalarOperator> aggColRefToAggMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
@@ -528,9 +527,8 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             if (!checkJoinOpt(optExpression)) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
-            return combinedRemapping.isEmpty() ? AggRewriteInfo.NOT_REWRITE : new AggRewriteInfo(true, combinedRemapping,
-                    optExpression,
-                    context);
+            return !aggRewriteInfo0.hasRewritten() && !aggRewriteInfo1.hasRewritten() ? AggRewriteInfo.NOT_REWRITE :
+                    new AggRewriteInfo(true, combinedRemapping, optExpression, context);
         }
 
         private Map<ColumnRefOperator, CallOperator> replaceAggregationExprs(
@@ -580,18 +578,10 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                                                           int child) {
             LogicalJoinOperator join = (LogicalJoinOperator) expression.getOp();
             ColumnRefSet childOutput = expression.getChildOutputColumns(child);
-            // check aggregations
-            ColumnRefSet aggregationsRefs = new ColumnRefSet();
             Map<ColumnRefOperator, CallOperator> rewriteAggregations = replaceAggregationExprs(replacer,
                     context.aggregations);
             if (rewriteAggregations == null) {
                 logMVRewrite(mvRewriteContext, "Join's child {} rewrite aggregations failed", child);
-                return AggregatePushDownContext.EMPTY;
-            }
-            rewriteAggregations.values().stream().map(CallOperator::getUsedColumns).forEach(aggregationsRefs::union);
-            if (!childOutput.containsAll(aggregationsRefs)) {
-                logMVRewrite(mvRewriteContext, "Join's child {} column refs {} not contains all aggregate column refs: {}",
-                        child, childOutput, aggregationsRefs);
                 return AggregatePushDownContext.EMPTY;
             }
 
@@ -604,9 +594,6 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 ColumnRefSet groupByUseColumns = entry.getValue().getUsedColumns();
                 if (childOutput.containsAll(groupByUseColumns)) {
                     childContext.groupBys.put(entry.getKey(), entry.getValue());
-                } else {
-                    // TODO: e.g. group by abs(a + b), we can derive group by a
-                    return AggregatePushDownContext.EMPTY;
                 }
             }
 
@@ -620,6 +607,12 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 join.getPredicate().getUsedColumns().getStream().map(queryColumnRefFactory::getColumnRef)
                         .filter(childOutput::contains)
                         .forEach(v -> childContext.groupBys.put(v, v));
+            }
+
+            if (childContext.groupBys.isEmpty()) {
+                logMVRewrite(mvRewriteContext, "Join's child {} push down group by empty, childOutput: {}",
+                        child, childOutput);
+                return AggregatePushDownContext.EMPTY;
             }
 
             childContext.origAggregator = context.origAggregator;
@@ -743,7 +736,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
 
         @Override
         public AggRewriteInfo visitLogicalProject(OptExpression optExpression, AggRewriteInfo rewriteInfo) {
-            if (!rewriteInfo.getRemapping().isPresent()) {
+            if (!rewriteInfo.getRemappingUnChecked().isPresent()) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
             LogicalProjectOperator project = optExpression.getOp().cast();
@@ -752,7 +745,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
             columnRefSet.union(columnRefMap.keySet());
             columnRefSet.union(getReferencedColumnRef(columnRefMap.values()));
             Map<ColumnRefOperator, ScalarOperator> newColumnRefMap =
-                    replaceColumnRefMap(rewriteInfo.getCtx(), rewriteInfo.getRemapping().get(),
+                    replaceColumnRefMap(rewriteInfo.getCtx(), rewriteInfo.getRemappingUnChecked().get(),
                             columnRefMap);
             LogicalProjectOperator newProject = LogicalProjectOperator.builder()
                     .withOperator(project)
@@ -818,7 +811,7 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
         Iterator<AggRewriteInfo> nextAggRewriteInfo = childAggRewriteInfoList.iterator();
         optExpression.getInputs().replaceAll(input -> nextAggRewriteInfo.next().getOp().orElse(input));
         AggColumnRefRemapping combinedRemapping = new AggColumnRefRemapping();
-        childAggRewriteInfoList.forEach(rewriteInfo -> rewriteInfo.getRemapping().ifPresent(
+        childAggRewriteInfoList.forEach(rewriteInfo -> rewriteInfo.getRemappingUnChecked().ifPresent(
                 combinedRemapping::combine));
         return new AggRewriteInfo(true, combinedRemapping, optExpression, context);
     }

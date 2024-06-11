@@ -59,7 +59,6 @@ public class MultiUserLock extends Lock {
             return LockGrantType.NEW;
         }
 
-
         LockHolder lockOwner = null;
         Iterator<LockHolder> ownerIterator = null;
         if (otherOwners != null) {
@@ -86,9 +85,10 @@ public class MultiUserLock extends Lock {
                 if (lockHolderRequest.getLockType().equals(lockOwner.getLockType())) {
                     lockOwner.increaseRefCount();
                     return LockGrantType.EXISTING;
-                } else if (lockOwner.getLockType() == LockType.WRITE
-                        && lockHolderRequest.getLockType() == LockType.READ) {
+                } else {
                     /*
+                     * The same Locker can upgrade or degrade locks when it requests different types of locks
+                     *
                      * If you acquire an exclusive lock first and then request a shared lock,
                      * you can successfully acquire the lock. This scenario is generally called "lock downgrade",
                      * but this lock does not actually reduce the original write lock directly to a read lock.
@@ -98,10 +98,10 @@ public class MultiUserLock extends Lock {
                      */
                     hasSameLockerWithDifferentLockType = true;
                 }
-            }
-
-            if (lockOwner.isConflict(lockHolderRequest)) {
-                hasConflicts = true;
+            } else {
+                if (lockOwner.isConflict(lockHolderRequest)) {
+                    hasConflicts = true;
+                }
             }
 
             if (ownerIterator != null && ownerIterator.hasNext()) {
@@ -111,7 +111,7 @@ public class MultiUserLock extends Lock {
             }
         }
 
-        if (hasSameLockerWithDifferentLockType || (!hasConflicts && waiterNum() == 0)) {
+        if (!hasConflicts && (hasSameLockerWithDifferentLockType || waiterNum() == 0)) {
             return LockGrantType.NEW;
         } else {
             return LockGrantType.WAIT;

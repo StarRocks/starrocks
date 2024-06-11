@@ -230,7 +230,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         }
 
         if (!hasFailedCollectJob) {
-            setStatus(StatsConstants.ScheduleStatus.PENDING);
+            setStatus(ScheduleStatus.FINISH);
             setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }

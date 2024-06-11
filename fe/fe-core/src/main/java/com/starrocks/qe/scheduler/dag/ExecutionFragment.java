@@ -163,7 +163,8 @@ public class ExecutionFragment {
 
     public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(OlapScanNode scanNode) {
         if (colocatedAssignment == null) {
-            colocatedAssignment = new ColocatedBackendSelector.Assignment(scanNode);
+            final int numOlapScanNodes = scanNodes.values().stream().mapToInt(node -> node instanceof OlapScanNode ? 1 : 0).sum();
+            colocatedAssignment = new ColocatedBackendSelector.Assignment(scanNode, numOlapScanNodes);
         }
         return colocatedAssignment;
     }

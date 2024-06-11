@@ -37,19 +37,17 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensation;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -76,7 +74,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (MvUtils.isOpAppliedRule(input.getOp(), Operator.OP_TRANSPARENT_MV_BIT)) {
+        if (Utils.isOpAppliedRule(input.getOp(), Operator.OP_TRANSPARENT_MV_BIT)) {
             return false;
         }
         return true;
@@ -117,7 +115,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         // merge projection
         Map<ColumnRefOperator, ScalarOperator> originalProjectionMap =
                 olapScanOperator.getProjection() == null ? null : olapScanOperator.getProjection().getColumnRefMap();
-        OptExpression result = mergeProjection(mvTransparentPlan, originalProjectionMap);
+        OptExpression result = Utils.mergeProjection(mvTransparentPlan, originalProjectionMap);
 
         // merge predicate
         if (olapScanOperator.getPredicate() != null) {
@@ -329,8 +327,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                 MaterializationContext mvContext,
                                                 List<ColumnRefOperator> originalOutputColumns) {
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvContext);
-        OptExpression newMvQueryPlan = duplicator.duplicate(mvPlan);
-        newMvQueryPlan = MVPartitionPruner.resetSelectedPartitions(newMvQueryPlan, true);
+        OptExpression newMvQueryPlan = duplicator.duplicate(mvPlan, true, true);
 
         List<ColumnRefOperator> orgMvQueryOutputColumnRefs = mvContext.getMvOutputColumnRefs();
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(orgMvQueryOutputColumnRefs);
@@ -338,26 +335,6 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         for (int i = 0; i < originalOutputColumns.size(); i++) {
             newProjectionMap.put(originalOutputColumns.get(i), newQueryOutputColumns.get(i));
         }
-        return mergeProjection(newMvQueryPlan, newProjectionMap);
-    }
-
-    private OptExpression mergeProjection(OptExpression input, Map<ColumnRefOperator, ScalarOperator> newProjectionMap) {
-        if (newProjectionMap == null || newProjectionMap.isEmpty()) {
-            return input;
-        }
-        Operator newOp = input.getOp();
-        if (newOp.getProjection() == null) {
-            newOp.setProjection(new Projection(newProjectionMap));
-        } else {
-            // merge two projections
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
-            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
-                ScalarOperator result = rewriter.rewrite(entry.getValue());
-                resultMap.put(entry.getKey(), result);
-            }
-            newOp.setProjection(new Projection(resultMap));
-        }
-        return input;
+        return Utils.mergeProjection(newMvQueryPlan, newProjectionMap);
     }
 }

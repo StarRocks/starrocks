@@ -15,7 +15,6 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
@@ -38,9 +37,7 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.commons.collections.MapUtils;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -85,7 +82,15 @@ public class TaskBuilder {
         task.setCatalogName(submitTaskStmt.getCatalogName());
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
-        task.setProperties(submitTaskStmt.getProperties());
+
+        Map<String, String> taskProperties = Maps.newHashMap();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(context.getCurrentWarehouseId());
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
+        // the property of submit task has higher priority
+        taskProperties.putAll(submitTaskStmt.getProperties());
+        task.setProperties(taskProperties);
+
         task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
         task.setSchedule(submitTaskStmt.getSchedule());
         task.setType(submitTaskStmt.getSchedule() != null ? Constants.TaskType.PERIODICAL : Constants.TaskType.MANUAL);
@@ -102,25 +107,12 @@ public class TaskBuilder {
      */
     private static void handleSpecialTaskProperties(Task task) {
         Map<String, String> properties = task.getProperties();
-        if (MapUtils.isEmpty(properties)) {
-            return;
-        }
-
-        List<String> toRemove = Lists.newArrayList();
-        Map<String, String> toAdd = Maps.newHashMap();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            // warehouse: translate the warehouse into warehouse_id, in case it changed after renaming
-            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE)) {
+            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
                 Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getValue());
                 Preconditions.checkArgument(wa != null, "warehouse not exists: " + entry.getValue());
-
-                toRemove.add(entry.getKey());
-                toAdd.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID, String.valueOf(wa.getId()));
             }
         }
-
-        toRemove.forEach(properties::remove);
-        properties.putAll(toAdd);
     }
 
     public static String getAnalyzeMVStmt(String tableName) {
@@ -159,15 +151,18 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
+
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
-        // alter mv set warehouse
-        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
-                String.valueOf(materializedView.getWarehouseId()));
-
+        // In PropertyAnalyzer.analyzeMVProperties, it removed the warehouse property, because
+        // it only keeps session started properties
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(materializedView.getWarehouseId());
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
         task.setProperties(taskProperties);
+
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);

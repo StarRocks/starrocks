@@ -1466,3 +1466,41 @@ PROPERTIES (
 DROP TABLE t_gin_var;
 -- result:
 -- !result
+-- name: test_gin_match_empty
+CREATE TABLE `t_gin_match_empty` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v1` string COMMENT "",
+  `v2` string COMMENT "",
+  `v3` string COMMENT "",
+   INDEX idx1 (v1) USING GIN ('parser' = 'english'),
+   INDEX idx2 (v2) USING GIN ('parser' = 'chinese'),
+   INDEX idx3 (v3) USING GIN ('parser' = 'standard')
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+insert into t_gin_match_empty values (1, "中文50中文", "中文50中文", "中文50中文");
+-- result:
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH "";
+-- result:
+0
+-- !result
+DROP TABLE t_gin_match_empty;
+-- result:
+-- !result

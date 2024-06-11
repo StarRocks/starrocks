@@ -97,10 +97,10 @@ OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
 OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
 
 # thrift
-THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz"
-THRIFT_NAME=thrift-0.13.0.tar.gz
-THRIFT_SOURCE=thrift-0.13.0
-THRIFT_MD5SUM="38a27d391a2b03214b444cb13d5664f1"
+THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.20.0/thrift-0.20.0.tar.gz"
+THRIFT_NAME=thrift-0.20.0.tar.gz
+THRIFT_SOURCE=thrift-0.20.0
+THRIFT_MD5SUM="aadebde599e1f5235acd3c730721b873"
 
 # protobuf
 PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
@@ -404,14 +404,33 @@ LLVM_SOURCE="llvm-project-16.0.6.src"
 LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2023.11.28.tar.gz"
-CLUCENE_NAME="starrocks-clucene-2023.11.28.tar.gz"
-CLUCENE_SOURCE="starrocks-clucene-2023.11.28"
-CLUCENE_MD5SUM="d71f8156bbcbe78e5064ec5616072a5a"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2024.06.03.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2024.06.03.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2024.06.03"
+CLUCENE_MD5SUM="c218eb0fbbfe7f295e81ab1c8a9317cb"
+
+
+#absl
+ABSL_DOWNLOAD="https://github.com/abseil/abseil-cpp/archive/refs/tags/20220623.0.tar.gz"
+ABSL_NAME="abseil-cpp-20220623.0.tar.gz"
+ABSL_SOURCE="abseil-cpp-20220623.0"
+ABSL_MD5SUM="955b6faedf32ec2ce1b7725561d15618"
+
+# cares - grpc dependency
+CARES_DOWNLOAD="https://github.com/c-ares/c-ares/archive/tags/cares-1_19_1.tar.gz"
+CARES_NAME=cares-1_19_1.tar.gz
+CARES_SOURCE=cares-1_19_1
+CARES_MD5SUM="ae2177836c9dbbacb8f303d167fe700f"
+
+# grpc
+GRPC_DOWNLOAD="https://github.com/grpc/grpc/archive/refs/tags/v1.43.0.tar.gz"
+GRPC_NAME="grpc-1.43.0.tar.gz"
+GRPC_SOURCE="grpc-1.43.0"
+GRPC_MD5SUM="92559743e7b5d3f67486c4c0de2f5cbe"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC"

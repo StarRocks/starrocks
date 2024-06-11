@@ -221,4 +221,18 @@ public class AggregatePushDownTest extends PlanTestBase {
                         "  |  \n" +
                         "  2:EXCHANGE");
     }
+
+    @Test
+    public void testPruneDistinctWindow() throws Exception {
+        String sql = "select distinct t1c, t1d, t1g, amount " +
+                " from (" +
+                " select  t1b, t1c, t1d, t1g, id_date, \n" +
+                "     sum(id_decimal)over(partition by t1c) as amount\n" +
+                "from test_all_type_not_null) tt";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:ANALYTIC\n" +
+                "  |  functions: [, sum[([12: sum, DECIMAL128(38,2), true]);" +
+                " args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true], ]");
+        assertContains(plan, "2:AGGREGATE (update finalize)");
+    }
 }

@@ -49,6 +49,8 @@ public:
             const Schema& pkey_schema,
             const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) = 0;
 
+    virtual void set_write_amp_score(double score) = 0;
+
     size_t total_data_size() const { return _total_data_size; }
     size_t total_segments() const { return _total_segments; }
     size_t rowset_num() const { return _rowset_num; };

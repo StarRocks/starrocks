@@ -25,11 +25,24 @@
 
 namespace starrocks::lake {
 
-class MetaFileBuilder;
+class RssidFileInfoContainer;
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::vector<std::unique_ptr<Column>> write_columns;
+    void reset() {
+        src_rss_rowids.clear();
+        write_columns.clear();
+    }
+    size_t memory_usage() const {
+        size_t memory_usage = 0;
+        for (const auto& col : write_columns) {
+            if (col != nullptr) {
+                memory_usage += col->memory_usage();
+            }
+        }
+        return memory_usage;
+    }
 };
 
 struct AutoIncrementPartialUpdateState {
@@ -52,6 +65,21 @@ struct AutoIncrementPartialUpdateState {
         this->id = id;
         this->segment_id = segment_id;
     }
+    void reset() {
+        src_rss_rowids.clear();
+        write_column.reset();
+        schema.reset();
+        rowids.clear();
+    }
+    size_t memory_usage() const { return write_column ? write_column->memory_usage() : 0; }
+};
+
+struct RowsetUpdateStateParams {
+    const TxnLogPB_OpWrite& op_write;
+    const TabletSchemaPtr& tablet_schema;
+    const TabletMetadata& metadata;
+    const Tablet* tablet;
+    const RssidFileInfoContainer& container;
 };
 
 class RowsetUpdateState {
@@ -63,65 +91,89 @@ public:
 
     DISALLOW_COPY_AND_MOVE(RowsetUpdateState);
 
-    Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet,
-                const MetaFileBuilder* builder, bool need_check_conflict, bool need_lock);
+    // How to use `RowsetUpdateState` when publish:
+    //
+    // init()
+    //
+    // for each segment:
+    //      load_segment()
+    //      rewrite_segment()
+    //      ...
+    //      release_segment()
+    //
+    // for each del file:
+    //      load_delete()
+    //      ...
+    //      release_delete()
 
-    Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
+    // init params in RowsetUpdateState.
+    void init(const RowsetUpdateStateParams& params);
+
+    // Load `segment_id`-th segment file's state.
+    Status load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
+                        bool need_resolve_conflict, bool need_lock);
+
+    // Handle `segment_id`-th segment file's partial update request.
+    Status rewrite_segment(uint32_t segment_id, const RowsetUpdateStateParams& params,
                            std::map<int, FileInfo>* replace_segments, std::vector<std::string>* orphan_files);
 
-    const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
-    const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
+    // Release `segment_id`-th segment file's state.
+    void release_segment(uint32_t segment_id);
+
+    // Load `del_id`-th delete file's state.
+    Status load_delete(uint32_t del_id, const RowsetUpdateStateParams& params);
+
+    // Release `del_id`-th delete file's state.
+    void release_delete(uint32_t del_id);
+
+    const ColumnUniquePtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
+    const ColumnUniquePtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
 
     std::size_t memory_usage() const { return _memory_usage; }
 
     std::string to_string() const;
 
-    const std::vector<PartialUpdateState>& parital_update_states() { return _partial_update_states; }
+    const PartialUpdateState& parital_update_states(uint32_t segment_id) { return _partial_update_states[segment_id]; }
 
     static void plan_read_by_rssid(const std::vector<uint64_t>& rowids, size_t* num_default,
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid,
                                    std::vector<uint32_t>* idxes);
 
-    const std::vector<std::unique_ptr<Column>>& auto_increment_deletes() const;
+    const ColumnUniquePtr& auto_increment_deletes(uint32_t segment_id) const;
 
     static StatusOr<bool> file_exist(const std::string& full_path);
 
 private:
-    Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet, bool need_lock);
+    // Load segment state
+    Status _do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params);
 
-    Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
-                                    Tablet* tablet, Rowset* rowset_ptr);
+    Status _prepare_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params, bool need_lock);
 
-    Status _prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                          Tablet* tablet, const TabletSchemaCSPtr& tablet_schema, bool need_lock);
+    Status _prepare_auto_increment_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params,
+                                                         bool need_lock);
 
-    Status _resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
-                             Tablet* tablet, const MetaFileBuilder* builder);
+    // resolve conflict when publish transaction
+    Status _resolve_conflict(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version);
 
-    Status _resolve_conflict_partial_update(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                            Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
+    Status _resolve_conflict_partial_update(const RowsetUpdateStateParams& params,
+                                            const std::vector<uint64_t>& new_rss_rowids,
                                             std::vector<uint32_t>& read_column_ids, uint32_t segment_id,
-                                            size_t& total_conflicts, const TabletSchemaCSPtr& tablet_schema);
+                                            size_t& total_conflicts);
 
-    Status _resolve_conflict_auto_increment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                            Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
-                                            uint32_t segment_id, size_t& total_conflicts,
-                                            const TabletSchemaCSPtr& tablet_schema);
-
-    Status _prepare_auto_increment_partial_update_states(const TxnLogPB_OpWrite& op_write,
-                                                         const TabletMetadata& metadata, Tablet* tablet,
-                                                         const TabletSchemaCSPtr& tablet_schema, bool need_lock);
+    Status _resolve_conflict_auto_increment(const RowsetUpdateStateParams& params,
+                                            const std::vector<uint64_t>& new_rss_rowids, uint32_t segment_id,
+                                            size_t& total_conflicts);
 
     void _reset();
 
-    Status _status;
     // one for each segment file
     std::vector<ColumnUniquePtr> _upserts;
     // one for each delete file
     std::vector<ColumnUniquePtr> _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
-    int64_t _base_version = 0;
+    // Because we can load partial segments when preload, so need vector to track their version.
+    std::vector<int64_t> _base_versions;
     int64_t _schema_version = 0;
 
     // TODO: dump to disk if memory usage is too large
@@ -129,9 +181,15 @@ private:
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 
-    std::vector<std::unique_ptr<Column>> _auto_increment_delete_pks;
+    std::vector<ColumnUniquePtr> _auto_increment_delete_pks;
 
-    const MetaFileBuilder* _builder;
+    // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
+    RowsetMetadataUniquePtr _rowset_meta_ptr;
+    std::unique_ptr<Rowset> _rowset_ptr;
+
+    // to be destructed after segment iters
+    OlapReaderStatistics _stats;
+    std::vector<ChunkIteratorPtr> _segment_iters;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

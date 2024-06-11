@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -115,8 +116,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         TABLE_FUNCTION,
         @SerializedName("PAIMON")
         PAIMON,
-        @SerializedName("HIVE_VIEW")
-        HIVE_VIEW,
         @SerializedName("ODPS")
         ODPS,
         @SerializedName("BLACKHOLE")
@@ -124,7 +123,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("METADATA")
         METADATA,
         @SerializedName("KUDU")
-        KUDU;
+        KUDU,
+        @SerializedName("HIVE_VIEW")
+        HIVE_VIEW,
+        @SerializedName("ICEBERG_VIEW")
+        ICEBERG_VIEW;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -146,6 +149,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             return TableType.valueOf(serializedName);
         }
     }
+
+    public static final ImmutableSet<TableType> IS_ANALYZABLE_EXTERNAL_TABLE =
+            new ImmutableSet.Builder<TableType>()
+                    .add(TableType.HIVE)
+                    .add(TableType.ICEBERG)
+                    .add(TableType.HUDI)
+                    .add(TableType.ODPS)
+                    .add(TableType.DELTALAKE)
+                    .build();
 
     @SerializedName(value = "id")
     protected long id;
@@ -294,8 +306,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.HIVE_VIEW;
     }
 
+    public boolean isIcebergView() {
+        return type == TableType.ICEBERG_VIEW;
+    }
+
+    public boolean isAnalyzableExternalTable() {
+        return IS_ANALYZABLE_EXTERNAL_TABLE.contains(type);
+    }
+
     public boolean isView() {
-        return isOlapView() || isHiveView();
+        return isOlapView() || isConnectorView();
+    }
+
+    public boolean isConnectorView() {
+        return isHiveView() || isIcebergView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -840,6 +864,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return !type.equals(TableType.MATERIALIZED_VIEW) &&
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
                 !type.equals(TableType.VIEW) &&
-                !type.equals(TableType.HIVE_VIEW);
+                !isConnectorView();
     }
 }

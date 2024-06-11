@@ -95,7 +95,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -1242,11 +1241,10 @@ public class EditLog {
      */
     private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
         long startTimeNano = System.nanoTime();
-        // do not check whether global state mgr is leader in non shared-nothing mode,
+        // do not check whether global state mgr is leader when writing star mgr journal,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
-        Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
-                        GlobalStateMgr.getCurrentState().isLeader(),
+        Preconditions.checkState(op == OperationType.OP_STARMGR || GlobalStateMgr.getCurrentState().isLeader(),
                 "Current node is not leader, but " +
                         GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);

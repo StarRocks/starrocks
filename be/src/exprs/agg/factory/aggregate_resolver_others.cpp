@@ -34,6 +34,19 @@ struct PercentileDiscDispatcher {
     }
 };
 
+struct LowCardPercentileDispatcher {
+    template <LogicalType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_datetime<pt> || lt_is_date<pt> || lt_is_arithmetic<pt> ||
+                      lt_is_decimal_of_any_version<pt>) {
+            resolver->add_aggregate_mapping_variadic<pt, pt, LowCardPercentileState<pt>>(
+                    "percentile_disc_lc", false, AggregateFactory::MakeLowCardPercentileCntAggregateFunction<pt>());
+            resolver->add_aggregate_mapping<pt, TYPE_VARCHAR, LowCardPercentileState<pt>>(
+                    "percentile_build_lc", false, AggregateFactory::MakeLowCardPercentileBinAggregateFunction<pt>());
+        }
+    }
+};
+
 void AggregateFuncResolver::register_others() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx", false,
                                                             AggregateFactory::MakePercentileApproxAggregateFunction());
@@ -51,6 +64,10 @@ void AggregateFuncResolver::register_others() {
 
     for (auto type : sortable_types()) {
         type_dispatch_all(type, PercentileDiscDispatcher(), this);
+    }
+
+    for (auto type : sortable_types()) {
+        type_dispatch_all(type, LowCardPercentileDispatcher(), this);
     }
 
     add_aggregate_mapping_variadic<TYPE_CHAR, TYPE_VARCHAR, GroupConcatAggregateState>(

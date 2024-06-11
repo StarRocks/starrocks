@@ -154,14 +154,8 @@ PredicateAndNode PredicateTree::release_root() {
     return std::move(_root);
 }
 
-ColumnPredicateMap PredicateTree::get_immediate_column_predicate_map() const {
-    ColumnPredicateMap col_pred_map;
-    for (const auto& [cid, col_children] : _root.col_children_map()) {
-        for (const auto& col_child : col_children) {
-            col_pred_map[cid].emplace_back(col_child.col_pred());
-        }
-    }
-    return col_pred_map;
+const ColumnPredicateMap& PredicateTree::get_immediate_column_predicate_map() const {
+    return _compound_node_contexts[0].cid_to_col_preds(_root);
 }
 
 } // namespace starrocks
