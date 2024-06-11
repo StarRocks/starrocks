@@ -50,9 +50,12 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 public class StringLiteral extends LiteralExpr {
-    private String value;
+    protected String value;
+
+    protected Supplier<String> sqlStr;
 
     public StringLiteral() {
         super(NodePosition.ZERO);
@@ -67,6 +70,16 @@ public class StringLiteral extends LiteralExpr {
         super(pos);
         this.value = value;
         type = Type.VARCHAR;
+        sqlStr = () -> {
+            String sql = value;
+            if (value != null) {
+                if (value.contains("\\")) {
+                    sql = value.replace("\\", "\\\\");
+                }
+                sql = sql.replace("'", "\\'");
+            }
+            return "'" + sql + "'";
+        };
         analysisDone();
     }
 
@@ -136,14 +149,7 @@ public class StringLiteral extends LiteralExpr {
 
     @Override
     public String toSqlImpl() {
-        String sql = value;
-        if (value != null) {
-            if (value.contains("\\")) {
-                sql = value.replace("\\", "\\\\");
-            }
-            sql = sql.replace("'", "\\'");
-        }
-        return "'" + sql + "'";
+        return sqlStr.get();
     }
 
     @Override
@@ -278,5 +284,19 @@ public class StringLiteral extends LiteralExpr {
         byte[] bytes = new byte[strLen];
         data.get(bytes);
         value = new String(bytes);
+    }
+
+    public static class StringLiteralFactory {
+        private StringLiteralFactory() {
+
+        }
+
+        public static StringLiteral buildStringLiteral(String value) {
+            if (value.length() > LargeStringLiteral.LEN_LIMIT) {
+                return new LargeStringLiteral(value, NodePosition.ZERO);
+            } else {
+                return new StringLiteral(value);
+            }
+        }
     }
 }
