@@ -334,12 +334,6 @@ public class OlapTable extends Table {
 
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
-<<<<<<< HEAD
-        olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
-        olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
-=======
-        olapTable.sessionId = this.sessionId;
->>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
     }
 
     public BinlogConfig getCurBinlogConfig() {

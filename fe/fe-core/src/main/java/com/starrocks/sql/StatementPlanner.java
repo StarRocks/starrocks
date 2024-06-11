@@ -14,11 +14,6 @@
 
 package com.starrocks.sql;
 
-<<<<<<< HEAD
-import com.google.common.base.Preconditions;
-=======
-import com.google.common.base.Strings;
->>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -39,11 +34,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.MetaUtils;
->>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -206,13 +197,9 @@ public class StatementPlanner {
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
-<<<<<<< HEAD
-        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
-=======
         // the original olapTable in queryStmt had been replaced with the copied olapTable
-        Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
+        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         long planStartTime = 0;
->>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
@@ -250,31 +237,12 @@ public class StatementPlanner {
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
-<<<<<<< HEAD
-                isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
-                isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
-                        t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
-                                t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
-=======
                 final long finalPlanStartTime = planStartTime;
                 isSchemaValid = olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t,
                         finalPlanStartTime));
->>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
                 if (isSchemaValid) {
                     return plan;
                 }
-<<<<<<< HEAD
-
-                // if exists table is applying visible log, we wait 10 ms to retry
-                if (olapTables.stream().anyMatch(t -> t.lastVersionUpdateStartTime.get() > t.lastVersionUpdateEndTime.get())) {
-                    try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("PlanRetrySleepTime")) {
-                        Thread.sleep(10);
-                    } catch (InterruptedException e) {
-                        throw new StarRocksPlannerException("query had been interrupted", INTERNAL_ERROR);
-                    }
-                }
-=======
->>>>>>> 8b9170718d ([Enhancement] remove partition version check in plan validation (#46733))
             }
         }
 
