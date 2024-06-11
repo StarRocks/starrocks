@@ -854,24 +854,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  \n" +
                 "  24:EXCHANGE"));
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testTimeoutDeepJoinCostPrune() throws Exception {
-        Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "optimizer");
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
-
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/deep_join_cost"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        String ss = Tracers.printScopeTimer();
-        int start = ss.indexOf("EnforceAndCostTask[") + "EnforceAndCostTask[".length();
-        int end = ss.indexOf("]", start);
-        long count = Long.parseLong(ss.substring(start, end));
-        Assert.assertTrue(ss, count < 10000);
-    }
 
     @Test
     public void testDistinctConstantRewrite() throws Exception {
@@ -883,5 +865,4 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("9:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)"));
     }
->>>>>>> 3a2736fa4b ([BugFix] use two phase agg to process distinct constant (#46599))
 }

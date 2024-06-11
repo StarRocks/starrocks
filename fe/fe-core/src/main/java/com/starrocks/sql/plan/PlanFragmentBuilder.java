@@ -1778,7 +1778,7 @@ public class PlanFragmentBuilder {
             List<ColumnRefOperator> groupBys = node.getGroupBys();
             if (MapUtils.isEmpty(aggregations) && CollectionUtils.isEmpty(groupBys)) {
                 throw new StarRocksPlannerException(INTERNAL_ERROR, "invalid agg operator " +
-                        "without any group by key or agg function. OptExpression:\n%s", optExpr.debugString(5));
+                        "without any group by key or agg function. OptExpression:\n%s", optExpr.explain());
             }
             List<ColumnRefOperator> partitionBys = node.getPartitionByColumns();
             boolean hasRemovedDistinct = node.hasRemovedDistinctFunc();
