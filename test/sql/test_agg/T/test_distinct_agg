@@ -325,5 +325,6 @@ select count(c2), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 o
 select sum(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
 select sum(c2),  'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
 
-
 select sum(c0), count(distinct c2, c3) from skew_agg where c0 = 480816 and c1 = 2 group by c4;
+
+select count(distinct 1, 2), count(distinct 1), count(distinct null), group_concat(distinct 'a', 'b'), count(distinct c2) from skew_agg;

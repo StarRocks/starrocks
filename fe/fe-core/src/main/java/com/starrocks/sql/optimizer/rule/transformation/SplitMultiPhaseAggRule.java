@@ -99,6 +99,10 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
+        if (isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+            return Lists.newArrayList();
+        }
+
         if (aggOp.getGroupingKeys().isEmpty()) {
             return implementDistinctWithoutGroupByAgg(context.getColumnRefFactory(),
                     input, aggOp, distinctCols.get());

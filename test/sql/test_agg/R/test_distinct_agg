@@ -1006,3 +1006,7 @@ select sum(c0), count(distinct c2, c3) from skew_agg where c0 = 480816 and c1 = 
 -- result:
 480816	1
 -- !result
+select count(distinct 1, 2), count(distinct 1), count(distinct null), group_concat(distinct 'a', 'b'), count(distinct c2) from skew_agg;
+-- result:
+1	1	0	ab	1
+-- !result
