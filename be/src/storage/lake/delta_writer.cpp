@@ -411,15 +411,11 @@ Status DeltaWriterImpl::init_write_schema() {
     return Status::OK();
 }
 
-<<<<<<< HEAD
-Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
-=======
 bool DeltaWriterImpl::is_partial_update() {
     return _write_schema->num_columns() < _tablet_schema->num_columns();
 }
 
-Status DeltaWriterImpl::finish() {
->>>>>>> 5a8de8103e ([Feature] lake pk table support column mode partial update, part-1 (#46511))
+Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
@@ -505,18 +501,8 @@ Status DeltaWriterImpl::finish() {
             }
         }
     }
-<<<<<<< HEAD
     RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-=======
-    if (mode == kWriteTxnLog) {
-        RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
-    } else {
-        auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
-        _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
-    }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
->>>>>>> 5a8de8103e ([Feature] lake pk table support column mode partial update, part-1 (#46511))
         // preload update state here to minimaze the cost when publishing.
         tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
     }
