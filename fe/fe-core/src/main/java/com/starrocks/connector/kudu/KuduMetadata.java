@@ -318,7 +318,6 @@ public class KuduMetadata implements ConnectorMetadata {
             HivePartitionStats tableStatistics =
                     metastore.get().getTableStatistics(kuduTable.getDbName(), kuduTable.getTableName());
             rowCount = tableStatistics.getCommonStats().getRowNums();
-
         } else {
             try {
                 String kuduTableName = getKuduFullTableName(kuduTable);
