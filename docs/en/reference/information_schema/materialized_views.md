@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # materialized_views
 
-`materialized_views` provides information about all asynchronous materialized views.
+`materialized_views` provides information about all materialized views.
 
 The following fields are provided in `materialized_views`:
 
