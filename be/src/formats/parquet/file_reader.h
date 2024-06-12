@@ -75,8 +75,14 @@ private:
 
     Status _init_group_readers();
 
-    // filter row group by min/max conjuncts
-    StatusOr<bool> _filter_group(const tparquet::RowGroup& row_group);
+    // filter row group by conjuncts
+    bool _filter_group(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_min_max_conjuncts(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_bloom_filter_min_max_conjuncts(const tparquet::RowGroup& row_group);
+
+    bool _filter_group_with_more_filter(const tparquet::RowGroup& row_group);
 
     // get row group to read
     // if scan range conatain the first byte in the row group, will be read
@@ -100,11 +106,10 @@ private:
     // Validate the magic bytes and get the length of metadata
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
-    // decode min/max value from row group stats
-    Status _decode_min_max_column(const ParquetField& field, const std::string& timezone, const TypeDescriptor& type,
-                                  const tparquet::ColumnMetaData& column_meta,
-                                  const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
-                                  ColumnPtr* max_column) const;
+    // get min/max value from row group stats
+    Status _get_min_max_value(const SlotDescriptor* slot, const tparquet::ColumnMetaData* column_meta,
+                              const ParquetField* field, std::vector<std::string>& min_values,
+                              std::vector<std::string>& max_values) const;
 
     bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 
