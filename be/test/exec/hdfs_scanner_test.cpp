@@ -1749,7 +1749,7 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.message();
         ASSERT_EQ(0, scanner->estimated_mem_usage());
-        scanner->close();
+        scanner->close(_runtime_state);
     }
     {
         auto* range = _create_scan_range(compressed_file, 0, 0);
