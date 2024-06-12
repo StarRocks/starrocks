@@ -348,6 +348,14 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
                                 slot_desc->col_name(), java_class));
         }
         return TYPE_VARCHAR;
+    } else if (java_class == "microsoft.sql.DateTimeOffset") {
+        if (type != TYPE_VARCHAR) {
+            return Status::NotSupported(
+                    fmt::format("Type mismatches on column[{}], JDBC result type is {}, please set the "
+                                "type to varchar",
+                                slot_desc->col_name(), java_class));
+        }
+        return TYPE_VARCHAR;
     } else {
         if (type != TYPE_VARCHAR) {
             return Status::NotSupported(
