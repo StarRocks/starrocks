@@ -1268,6 +1268,47 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, allJobs.size());
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
+
+        Config.statistic_exclude_pattern_identifier = "";
+        job = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(6, allJobs.size());
+
+        Config.statistic_exclude_pattern_identifier = "test.t0_stats_partition";
+        job = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(5, allJobs.size());
+
+        Config.statistic_exclude_pattern_identifier = "(test.t0_stats_partition)|(test.t1_stats)";
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(1, allJobs.size());
+        Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
+        Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
+
+        Config.statistic_exclude_pattern_identifier = "test.t0_stats_partition";
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "test.t1_stats"),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(1, allJobs.size());
+        Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
+        Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
+
     }
 
     @Test

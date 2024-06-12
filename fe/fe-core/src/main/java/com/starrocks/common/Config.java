@@ -1894,6 +1894,15 @@ public class Config extends ConfigBase {
     public static boolean enable_collect_full_statistic = true;
 
     /**
+     * The name of the database or table that needs to be excluded,
+     * the value is standard regular expression.
+     * You can specify the database and table that do not collect statistics in the job.
+     * Note that this is a regular expression pattern, and the match content is database.table.
+     */
+    @ConfField(mutable = true)
+    public static  String statistic_exclude_pattern_identifier = "";
+
+    /**
      * Statistics collection threshold
      */
     @ConfField(mutable = true)
