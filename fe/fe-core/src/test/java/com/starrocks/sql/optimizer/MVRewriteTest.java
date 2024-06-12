@@ -41,6 +41,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
@@ -1569,7 +1570,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createMVSQL);
 
         String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "Optimizer");
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
         PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: k1 = '2024-06-12'\n" +
@@ -1599,7 +1600,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createMVSQL);
 
         String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "Optimizer");
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
         System.out.println(plan);
         PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
