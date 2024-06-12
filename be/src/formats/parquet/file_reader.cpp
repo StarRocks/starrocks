@@ -458,13 +458,12 @@ bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_gr
         for (auto ctx : kv.second) {
             if (StatisticsHelper::can_be_used_for_statistics_filter(ctx, filter_type)) {
                 const TupleDescriptor& tuple_desc = *(_scanner_ctx->tuple_desc);
-                const std::vector<SlotDescriptor*>& slots = tuple_desc.slots();
-                SlotDescriptor* slot = nullptr;
-                for (auto s : slots) {
-                    if (s->id() == kv.first) {
-                        slot = s;
-                        break;
-                    }
+                SlotDescriptor* slot = tuple_desc.get_slot_by_id(kv.first);
+                if (UNLIKELY(slot == nullptr)) {
+                    // it shouldn't be here, just some defensive code
+                    DCHECK(false) << "couldn't find slot id " << kv.first << " in tuple desc";
+                    LOG(WARNING) << "couldn't find slot id " << kv.first << " in tuple desc";
+                    continue;
                 }
                 std::unordered_map<std::string, size_t> column_name_2_pos_in_meta{};
                 std::vector<SlotDescriptor*> slot_v{slot};

@@ -342,7 +342,7 @@ public:
                 if (is_use_array()) {
                     for (size_t i = 0; i < _array_size; i++) {
                         if (_array_buffer[i]) {
-                            values->append_datum(static_cast<RunTimeCppType<Type>>(i)); //NOLINT
+                            values->append_datum(static_cast<ValueType>(i)); //NOLINT
                         }
                     }
                 }
