@@ -504,6 +504,106 @@ public class UtFrameUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static String getFragmentPlan(ConnectContext connectContext, String sql, String traceModule) {
+        try {
+            Pair<String, Pair<ExecPlan, String>> result =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+            Pair<ExecPlan, String> execPlanWithQuery = result.second;
+            String traceLog = execPlanWithQuery.second;
+            if (!Strings.isNullOrEmpty(traceLog)) {
+                System.out.println(traceLog);
+            }
+            return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+            return null;
+        }
+    }
+
+    public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
+            ConnectContext connectContext, String sql, String module) throws Exception {
+        if (Strings.isNullOrEmpty(module)) {
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
+            return Pair.create(planPair.first, planAndTrace);
+        } else {
+            Tracers.register(connectContext);
+            Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+            try {
+
+                Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+                String pr = Tracers.printLogs();
+                Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
+                return Pair.create(planPair.first, planAndTrace);
+            } catch (Exception e) {
+                String pr = Tracers.printLogs();
+                if (!Strings.isNullOrEmpty(pr)) {
+                    System.out.println(pr);
+                }
+                throw e;
+            } finally {
+                Tracers.close();
+            }
+        }
+    }
+
+    public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
+            throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()),
+                        execPlan));
+    }
+
+    public static DefaultCoordinator startScheduling(ConnectContext connectContext, String originStmt) throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> {
+                    DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+
+                    scheduler.startScheduling();
+
+                    return scheduler;
+                });
+    }
+
+    public static Pair<String, DefaultCoordinator> getPlanAndStartScheduling(ConnectContext connectContext, String originStmt)
+            throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> {
+                    DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+
+                    scheduler.startSchedulingWithoutDeploy();
+                    String plan = scheduler.getSchedulerExplain();
+
+                    return Pair.create(plan, scheduler);
+                });
+    }
+
+    public static DefaultCoordinator getScheduler(ConnectContext connectContext, String originStmt) throws Exception {
+        return buildPlan(connectContext, originStmt, UtFrameUtils::createScheduler);
+    }
+
+    private static DefaultCoordinator createScheduler(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) {
+        context.setExecutionId(new TUniqueId(1, 2));
+        DefaultCoordinator scheduler;
+        if (statementBase instanceof DmlStmt) {
+            if (statementBase instanceof InsertStmt) {
+                scheduler = new DefaultCoordinator.Factory().createInsertScheduler(context,
+                        execPlan.getFragments(), execPlan.getScanNodes(),
+                        execPlan.getDescTbl().toThrift());
+            } else {
+                throw new RuntimeException("can only handle insert DML");
+            }
+        } else {
+            scheduler = new DefaultCoordinator.Factory().createQueryScheduler(context,
+                    execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+        }
+
+        return scheduler;
+    }
+
+>>>>>>> e83853c623 ([BugFix] Fix case when rewrite bug for synchronized materialized view (#46822))
     public static String printPhysicalPlan(OptExpression execPlan) {
         return LogicalPlanPrinter.print(execPlan, isPrintPlanTableNames());
     }

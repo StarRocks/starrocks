@@ -665,6 +665,31 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (shuttleContext.isRewrittenByEquivalent()) {
             Preconditions.checkState(targetColumn instanceof CallOperator);
             return (CallOperator) targetColumn;
+<<<<<<< HEAD
+=======
+        } else {
+            if (targetColumn instanceof CallOperator) {
+                // if it's aggregate function, it should be rewritten by group by keys, return it directly.
+                CallOperator targetCall = (CallOperator) targetColumn;
+                if (targetCall.isAggregate()) {
+                    return targetCall;
+                }
+            }
+            if (!targetColumn.isColumnRef()) {
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite aggregate rollup {} failed: only column-ref is supported after rewrite",
+                        aggCall.toString());
+                return null;
+            }
+            CallOperator newAggregate = getRollupAggregateFunc(aggCall, (ColumnRefOperator) targetColumn, false);
+            if (newAggregate == null) {
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite aggregate {} failed: cannot get rollup aggregate",
+                        aggCall.toString());
+                return null;
+            }
+            return newAggregate;
+>>>>>>> e83853c623 ([BugFix] Fix case when rewrite bug for synchronized materialized view (#46822))
         }
         if (!targetColumn.isColumnRef()) {
             logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: only column-ref is supported after rewrite",

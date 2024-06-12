@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -52,6 +53,15 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         return optExpression.getOp().accept(this, optExpression, context);
     }
 
+    public static boolean isCaseWhenScalarOperator(ScalarOperator operator) {
+        if (operator instanceof CaseWhenOperator) {
+            return true;
+        }
+
+        return operator instanceof CallOperator &&
+                FunctionSet.IF.equalsIgnoreCase(((CallOperator) operator).getFnName());
+    }
+
     @Override
     public OptExpression visit(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
         for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
@@ -71,14 +81,24 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
 
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
-            if (kv.getValue().getUsedColumns().contains(context.queryColumnRef)) {
-                if (kv.getValue() instanceof ColumnRefOperator) {
+            ColumnRefOperator queryColRef = kv.getKey();
+            ScalarOperator queryScalarOperator = kv.getValue();
+            if (queryScalarOperator.getUsedColumns().contains(context.queryColumnRef)) {
+                if (queryScalarOperator instanceof ColumnRefOperator) {
                     newProjectMap.put(context.mvColumnRef, context.mvColumnRef);
+                } else if (isCaseWhenScalarOperator(queryScalarOperator)) {
+                    // rewrite query column ref into mv agg column ref,
+                    // eg: sum(case when a > 1 then b else 0 end), rewrite to sum(case when mv_column > 1 then b else 0 end)
+                    Map<ColumnRefOperator, ScalarOperator> replaceMap = new HashMap<>();
+                    replaceMap.put(context.queryColumnRef, context.mvColumnRef);
+                    ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
+                    newProjectMap.put(queryColRef, replaceColumnRefRewriter.rewrite(kv.getValue()));
                 } else {
-                    newProjectMap.put(kv.getKey(), context.mvColumnRef);
+                    // eg: bitmap_union(to_bitmap(a)), still rewrite to bitmap_union(to_bitmap(a))
+                    newProjectMap.put(queryColRef, context.mvColumnRef);
                 }
             } else {
-                newProjectMap.put(kv.getKey(), kv.getValue());
+                newProjectMap.put(queryColRef, queryScalarOperator);
             }
         }
         return OptExpression.create(new LogicalProjectOperator(newProjectMap), optExpression.getInputs());
