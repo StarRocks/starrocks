@@ -34,6 +34,18 @@ public:
     static void append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value, std::vector<TExpr>* tExprs);
     static void append_string_conjunct(TExprOpcode::type opcode, SlotId slot_id, std::string value,
                                        std::vector<TExpr>* tExprs);
+
+    static void is_null_pred(SlotId slot_id, bool null, std::vector<TExpr>* tExprs);
+
+    static void create_in_predicate_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
+                                                      std::set<int32_t>& values, std::vector<TExpr>* tExprs);
+
+    static void create_in_predicate_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
+                                                         std::set<std::string>& values, std::vector<TExpr>* tExprs);
+
+    static void create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
+                                                       TPrimitiveType::type type, std::set<std::string>& values,
+                                                       std::vector<TExpr>* tExprs);
 };
 
 } // namespace starrocks::parquet
