@@ -1089,7 +1089,7 @@ CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
 // if l0_mem_size exceeds this value, l0 need snapshot
 CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
-CONF_mBool(enable_parallel_get_and_bf, "true");
+CONF_mBool(enable_parallel_get_and_bf, "false");
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
