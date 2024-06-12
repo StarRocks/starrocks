@@ -940,7 +940,7 @@ public class DDLStmtExecutor {
                         LOG.info("drop catalog[{}] which does not exist", catalogName);
                         return;
                     } else {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_CATALOG, catalogName);
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
                     }
                 }
                 context.getGlobalStateMgr().getCatalogMgr().dropCatalog(stmt);
