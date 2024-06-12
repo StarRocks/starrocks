@@ -19,7 +19,10 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class DmlStmt extends StatementBase {
-    private long txnId;
+    public static final long INVALID_TXN_ID = -1L;
+
+    private long txnId = INVALID_TXN_ID;
+
     protected DmlStmt(NodePosition pos) {
         super(pos);
     }
