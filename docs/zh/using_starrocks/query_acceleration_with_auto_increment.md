@@ -148,8 +148,11 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 ### 使用 bitmap 函数加速计算精确去重
 
 为了进一步加速计算，在构建全局字典后，您可以将字典表 INTEGER 列值直接插入到一个 bitmap 列中。后续对该 bitmap 列使用 bitmap 函数来精确去重计数。
+**方式一**：
 
-1. 首先创建一个**聚合表**，包含两列。聚合列为 BITMAP 类型的 `order_id_bitmap`，并且指定聚合函数为 `bitmap_union()`，定义另一列为 BIGINT 类型的 `id`。该表已**不包含**原始 STRING 列了（否则每个 bitmap 中只有一个值，无法起到加速效果）。
+如果您构建了全局字典并且已经导入数据到 `dest_table` 表，则可以执行如下步骤：
+
+1. 创建聚合表 `dest_table_bitmap`。该表中包含两列，聚合列为 BITMAP 类型的 `order_id_bitmap`，并且指定聚合函数为 `bitmap_union()`，另一列为 BIGINT 类型的 `id`。该表已**不包含**原始 STRING 列（否则每个 bitmap 中只有一个值，无法起到加速效果）。
 
       ```SQL
       CREATE TABLE dest_table_bitmap (
@@ -160,15 +163,57 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
       DISTRIBUTED BY HASH(id) BUCKETS 2;
       ```
 
-2. 向聚合表 `dest_table_bitmap` 的 `id` 列插入表 `dest_table` 的列 `id` 的数据；向聚合表的 `order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 列的数据（经过函数 `to_bitmap` 处理后的值）。
+2. 向聚合表 `dest_table_bitmap` 中插入数据。 `id` 列插入表 `dest_table` 的列 `id` 的数据；`order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 的数据（经过函数 `to_bitmap` 处理后的值）。
+
+        ```SQL
+        INSERT INTO dest_table_bitmap (id, order_id_bitmap)
+        SELECT id,  to_bitmap(dict_mapping('dict', order_uuid))
+        FROM dest_table
+        WHERE dest_table.batch = 1;
+        
+        INSERT INTO dest_table_bitmap (id, order_id_bitmap)
+        SELECT id, to_bitmap(dict_mapping('dict', order_uuid))
+        FROM dest_table
+        WHERE dest_table.batch = 2;
+        ```
+
+3. 然后基于 bitmap 列使用函数 `BITMAP_UNION_COUNT()` 精确去重计数。
 
       ```SQL
-      INSERT INTO dest_table_bitmap (id, order_id_bitmap)
-      SELECT dest_table.id, to_bitmap(dict.order_id_int)
-      FROM dest_table LEFT JOIN dict
-          ON dest_table.order_uuid = dest_table.order_uuid
-      WHERE dest_table.batch = 1; -- 用来模拟导入的一批批数据，导入第二批数据时指定为 2
+      SELECT id, BITMAP_UNION_COUNT(order_id_bitmap) FROM dest_table_bitmap
+      GROUP BY id ORDER BY id;
       ```
+
+**方式二**：
+
+如果您在构建了全局字典后，不需要保留具体订单数据，只想直接一步到位导入数据到 `dest_table_bitmap` 表中，则可以执行如下步骤：
+
+1. 创建聚合表 `dest_table_bitmap`。该表中包含两列，聚合列为 BITMAP 类型的 `order_id_bitmap`，并且指定聚合函数为 `bitmap_union()`，定义另一列为 BIGINT 类型的 `id`。该表已**不包含**原始 STRING 列了（否则每个 bitmap 中只有一个值，无法起到加速效果）。
+
+      ```SQL
+      CREATE TABLE dest_table_bitmap (
+          id BIGINT,
+          order_id_bitmap BITMAP BITMAP_UNION
+      )
+      AGGREGATE KEY (id)
+      DISTRIBUTED BY HASH(id) BUCKETS 2;
+      ```
+
+2. 向聚合表中插入数据。`id` 列直接插入 CSV 文件中的`id` 列的数据；`order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 列的数据（经过函数 `to_bitmap` 处理后的值）。
+
+     ```SQL
+     curl --location-trusted -u root: \
+         -H "format: CSV" -H "column_separator:," \
+         -H "columns: id, order_uuid,  order_id_bitmap=to_bitmap(dict_mapping('dict', order_uuid))" \
+         -T batch1.csv \
+         -XPUT http://172.26.94.106:8030/api/example_db/dest_table_bitmap/_stream_load
+     
+     curl --location-trusted -u root: \
+         -H "format: CSV" -H "column_separator:," \
+         -H "columns: id, order_uuid, order_id_bitmap=to_bitmap(dict_mapping('dict', order_uuid))" \
+         -T batch2.csv \
+         -XPUT http://172.26.94.106:8030/api/example_db/dest_table_bitmap/_stream_load
+     ```
 
 3. 然后基于 bitmap 列使用函数 `BITMAP_UNION_COUNT()` 精确去重计数。
 
