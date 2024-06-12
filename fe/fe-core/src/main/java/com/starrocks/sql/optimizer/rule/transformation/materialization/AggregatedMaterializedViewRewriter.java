@@ -61,7 +61,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
-import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
 /**
@@ -721,8 +720,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (shuttleContext.isRewrittenByEquivalent()) {
             Preconditions.checkState(targetColumn instanceof CallOperator);
             return (CallOperator) targetColumn;
-<<<<<<< HEAD
-=======
         } else {
             if (targetColumn instanceof CallOperator) {
                 // if it's aggregate function, it should be rewritten by group by keys, return it directly.
@@ -745,21 +742,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 return null;
             }
             return newAggregate;
->>>>>>> e83853c623 ([BugFix] Fix case when rewrite bug for synchronized materialized view (#46822))
         }
-        if (!targetColumn.isColumnRef()) {
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: only column-ref is supported after rewrite",
-                    aggCall.toString());
-            return null;
-        }
-        // Aggregate must be CallOperator
-        CallOperator newAggregate = getRollupAggregate(aggCall, (ColumnRefOperator) targetColumn);
-        if (newAggregate == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: cannot get rollup aggregate",
-                    aggCall.toString());
-            return null;
-        }
-        return newAggregate;
     }
 
     private Map<ColumnRefOperator, CallOperator> rewriteAggregatesForUnion(
