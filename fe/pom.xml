@@ -810,6 +810,13 @@ under the License.
                 <version>19.18.0.0</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc/12.4.2.jre11 -->
+            <dependency>
+                <groupId>com.microsoft.sqlserver</groupId>
+                <artifactId>mssql-jdbc</artifactId>
+                <version>12.4.2.jre11</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
             <dependency>
                 <groupId>com.mockrunner</groupId>
