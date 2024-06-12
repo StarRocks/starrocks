@@ -34,6 +34,9 @@ public class LowCardinalityRewriteRule implements TreeRewriteRule {
         {
             DecodeCollector collector = new DecodeCollector(session);
             collector.collect(root, context);
+            if (!collector.isValidMatchChildren()) {
+                return root;
+            }
         }
         DecodeRewriter rewriter = new DecodeRewriter(factory, context);
         return rewriter.rewrite(root);
