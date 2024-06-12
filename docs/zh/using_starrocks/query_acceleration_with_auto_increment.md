@@ -32,7 +32,7 @@ displayed_sidebar: "Chinese"
 
 ## 解决方案
 
-在 v3.2.5 之前，阶段二可以通过[两种方案]实现：
+在 v3.2.5 之前，阶段二可以通过两种方案实现：
 
 - 采用外表或者内表作为中间表的方式，通过“外表或者中间表 JOIN 字典表”的方式，得到字典数据对应的字典 ID 后进行导入；
 - 要么需要使用主键表，先导入数据，然后通过带有 JOIN 操作的 UPDATE 语句来更新字典数据对应的字典 ID。但这个数据导入的过程其实比较不方便，且有不少约束。
@@ -151,7 +151,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 
 **方式一**：
 
-如果您构建了全局字典并且已经导入数据到 `dest_table` 表，则可以执行如下步骤：
+如果您构建了全局字典并且已经导入具体订单数据到 `dest_table` 表，则可以执行如下步骤：
 
 1. 创建聚合表 `dest_table_bitmap`。该表中包含两列，聚合列为 BITMAP 类型的 `order_id_bitmap`，并且指定聚合函数为 `bitmap_union()`，另一列为 BIGINT 类型的 `id`。该表已**不包含**原始 STRING 列（否则每个 bitmap 中只有一个值，无法起到加速效果）。
 
