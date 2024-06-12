@@ -368,9 +368,9 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
             *nanosecond = timestamp::to_time(timestamp) * 1000;
         } else {
             int64_t value = timestamp::to_julian(timestamp);
-            value *= SECS_PER_DAY * 1000;
-            value += timestamp::to_time(timestamp) / 1000;
-            value -= timestamp::UNIX_EPOCH_SECONDS * 1000;
+            value *= USECS_PER_DAY;
+            value += timestamp::to_time(timestamp);
+            value -= timestamp::UNIX_EPOCH_SECONDS * USECS_PER_SEC;
             values[i] = value;
         }
     }

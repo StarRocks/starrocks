@@ -513,6 +513,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetime) {
             datum.set_timestamp(TimestampValue::create(1970, 1, 1, 0, 0, 0));
             data_column->append_datum(datum);
             datum.set_timestamp(TimestampValue::create(1970, 1, 1, 1, 1, 1));
+            data_column->append_datum(datum);
         }
 
         auto null_column = UInt8Column::create();
