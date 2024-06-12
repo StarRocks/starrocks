@@ -9,7 +9,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```Haskell
-RAND();
+RAND(x);
 ```
 
 ## 参数说明
