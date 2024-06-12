@@ -5,7 +5,7 @@ unlisted: true
 
 # url_extract_host
 
-## Description
+
 
 Extracts the host section from a URL.
 

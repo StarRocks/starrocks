@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # to_date
 
-## 功能
+
 
 返回 DATETIME 类型值中的日期部分。
 

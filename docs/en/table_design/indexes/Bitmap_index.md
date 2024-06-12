@@ -94,9 +94,15 @@ You can delete a bitmap index from a table using the DROP INDEX statement. For p
 DROP INDEX index_name ON [db_name.]table_name;
 ```
 
+<<<<<<< HEAD
 ## Usage cases
 
 For example, the following table `employee` shows a portion of a company's employee information.
+=======
+:::note
+
+Creating a bitmap index is an asynchronous process. Using the above statement, you can only view indexes that have successfully finished being created.
+>>>>>>> 2f80d5ec65 ([Doc] remove redundant heading (#46834))
 
 | **ID** | **Gender** | **Position** | **Income_level** |
 | ------ | ---------- | ------------ | ---------------- |

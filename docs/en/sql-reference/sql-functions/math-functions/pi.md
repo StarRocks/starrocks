@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # pi
 
-## Description
+
 
 Returns the value of Pi.
 

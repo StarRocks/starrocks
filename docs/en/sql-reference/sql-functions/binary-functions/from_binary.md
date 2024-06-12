@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # from_binary
 
-## Description
+
 
 Converts a binary value to a VARCHAR string based on the specified binary format (`binary_type`). The following binary formats are supported: `hex`, `encode64`, and `utf8`. If no `binary_type` is specified, `hex` is the default.
 

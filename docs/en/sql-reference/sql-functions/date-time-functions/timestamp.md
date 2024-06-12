@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # timestamp
 
-## Description
+
 
 Returns the DATETIME value of a date or datetime expression.
 

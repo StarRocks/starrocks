@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # get_json_int
 
-## Description
+
 
 This function analyzes and gets the integer value from a specified path in json string.
 

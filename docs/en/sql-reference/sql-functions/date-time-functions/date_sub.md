@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # date_sub,subdate
 
-## Description
+
 
 Subtracts the specified time interval from a date.
 
