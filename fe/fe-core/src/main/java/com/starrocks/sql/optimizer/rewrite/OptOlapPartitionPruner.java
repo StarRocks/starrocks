@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
@@ -270,7 +271,7 @@ public class OptOlapPartitionPruner {
         List<Long> specifyPartitionIds = null;
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
-        List<Long> partitionIds = Lists.newArrayList();
+        Set<Long> partitionIds = Sets.newHashSet();
         if (operator.getPartitionNames() != null) {
             for (String partName : operator.getPartitionNames().getPartitionNames()) {
                 boolean isTemp = operator.getPartitionNames().isTemp();
@@ -283,9 +284,9 @@ public class OptOlapPartitionPruner {
                 }
                 partitionIds.add(part.getId());
             }
-            specifyPartitionIds = partitionIds;
+            specifyPartitionIds = Lists.newArrayList(partitionIds);;
         } else {
-            partitionIds = listPartitionInfo.getPartitionIds(false);
+            partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(false));
         }
 
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
@@ -299,8 +300,7 @@ public class OptOlapPartitionPruner {
                 if (values == null || values.isEmpty()) {
                     continue;
                 }
-                values.forEach(value ->
-                        putValueMapItem(partitionValueToIds, partitionId, value));
+                values.forEach(value -> putValueMapItem(partitionValueToIds, partitionId, value));
             }
             // single item list partition has only one column
             Column column = listPartitionInfo.getPartitionColumns().get(0);
@@ -342,7 +342,7 @@ public class OptOlapPartitionPruner {
         try {
             List<Long> prune = partitionPruner.prune();
             if (prune == null && isTemporaryPartitionPrune) {
-                return partitionIds;
+                return Lists.newArrayList(partitionIds);
             } else {
                 return prune;
             }
