@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # avg
 
-## Description
+
 
 Returns the average value of selected fields.
 

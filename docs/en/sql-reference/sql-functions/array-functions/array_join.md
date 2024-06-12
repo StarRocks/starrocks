@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_join
 
-## Description
+
 
 Concatenates the elements of an array into a string.
 

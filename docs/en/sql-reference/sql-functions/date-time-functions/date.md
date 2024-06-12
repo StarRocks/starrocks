@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # date
 
-## Description
+
 
 Extracts the date part of a date or datetime expression.
 

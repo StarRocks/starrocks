@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # multiply
 
-## Description
+
 
 Computes the product of the arguments.
 

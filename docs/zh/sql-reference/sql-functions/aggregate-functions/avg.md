@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # avg
 
-## 功能
+
 
 用于返回选中字段的平均值。
 

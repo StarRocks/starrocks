@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # ngram_search
 
-## Description
+
 
 Calculate the ngram similarity of the two strings.
 
