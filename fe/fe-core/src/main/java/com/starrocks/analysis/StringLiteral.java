@@ -34,6 +34,8 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -50,7 +52,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
-import java.util.function.Supplier;
+
 
 public class StringLiteral extends LiteralExpr {
     protected String value;
@@ -70,7 +72,7 @@ public class StringLiteral extends LiteralExpr {
         super(pos);
         this.value = value;
         type = Type.VARCHAR;
-        sqlStr = () -> {
+        sqlStr = Suppliers.memoize(() -> {
             String sql = value;
             if (value != null) {
                 if (value.contains("\\")) {
@@ -79,7 +81,7 @@ public class StringLiteral extends LiteralExpr {
                 sql = sql.replace("'", "\\'");
             }
             return "'" + sql + "'";
-        };
+        });
         analysisDone();
     }
 

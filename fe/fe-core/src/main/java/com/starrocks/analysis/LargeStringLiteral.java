@@ -15,9 +15,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.starrocks.sql.parser.NodePosition;
-
-import java.util.function.Supplier;
 
 public class LargeStringLiteral extends StringLiteral {
 
@@ -28,20 +28,12 @@ public class LargeStringLiteral extends StringLiteral {
     public LargeStringLiteral(String value, NodePosition pos) {
         super(value, pos);
         Preconditions.checkState(value.length() > LEN_LIMIT);
-        shortSqlStr = () -> {
-            String sql = value;
-            if (value != null) {
-                if (value.contains("\\")) {
-                    sql = value.replace("\\", "\\\\");
-                }
-                sql = sql.replace("'", "\\'");
-            }
-            sql = sql.substring(0, LEN_LIMIT);
-            return "'" + sql + "...'";
-        };
+        shortSqlStr = Suppliers.memoize(() -> {
+            String fullSql = sqlStr.get();
+            fullSql = fullSql.substring(0, LEN_LIMIT);
+            return "'" + fullSql + "...'";
+        });
     }
-
-
 
     public String toFullSqlImpl() {
         return sqlStr.get();
