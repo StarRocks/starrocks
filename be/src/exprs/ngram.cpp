@@ -96,7 +96,7 @@ public:
                 // haystack is const column but not constant
                 float result = haystack_const_and_needle_const(
                         ColumnHelper::get_const_value<TYPE_VARCHAR>(haystack_column), *map, context, gram_num);
-                return ColumnHelper::create_const_column<TYPE_DOUBLE>(state->result, haystack_column->size());
+                return ColumnHelper::create_const_column<TYPE_DOUBLE>(result, haystack_column->size());
             }
         } else {
             return haystack_vector_and_needle_const(haystack_column, *map, context, gram_num);
@@ -127,7 +127,7 @@ public:
         auto const& gram_num_column = context->get_constant_column(2);
         size_t gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
 
-        if (needle.get_size() >= MAX_STRING_SIZE) {
+        if (needle.get_size() > MAX_STRING_SIZE) {
             return Status::OK();
         }
 
@@ -198,7 +198,7 @@ private:
         for (size_t i = 0; i < chunk_size; i++) {
             const Slice& cur_haystack_str = haystack->get_slice(i);
             // if haystack is too large, we can say they are not similar at all
-            if (cur_haystack_str.get_size() >= MAX_STRING_SIZE) {
+            if (cur_haystack_str.get_size() > MAX_STRING_SIZE) {
                 res->get_data()[i] = 0;
                 continue;
             }
@@ -208,8 +208,7 @@ private:
             DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
 
             // now get the result
-            double row_result =
-                    1.0f - (needle_not_overlap_with_haystack) * 1.0f / std::max(needle_gram_count, (size_t)1);
+            double row_result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
 
             res->get_data()[i] = row_result;
         }
@@ -225,7 +224,7 @@ private:
                                                  FunctionContext* context, size_t gram_num) {
         std::vector<NgramHash> map_restore_helper{};
         // if haystack is too large, we can say they are not similar at all
-        if (haystack.get_size() >= MAX_STRING_SIZE) {
+        if (haystack.get_size() > MAX_STRING_SIZE) {
             return 0;
         }
 
@@ -243,7 +242,7 @@ private:
         size_t needle_gram_count = state->needle_gram_count;
         size_t needle_not_overlap_with_haystack = calculateDistanceWithHaystack<false>(
                 map, cur_haystack, map_restore_helper, needle_gram_count, gram_num);
-        float result = 1.0f - (needle_not_overlap_with_haystack) * 1.0f / std::max(needle_gram_count, (size_t)1);
+        float result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
         DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
         return result;
     }
