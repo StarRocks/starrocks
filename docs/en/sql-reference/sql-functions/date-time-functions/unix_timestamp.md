@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # unix_timestamp
 
-## Description
+
 
 Converts a DATE or DATETIME value into a UNIX timestamp.
 

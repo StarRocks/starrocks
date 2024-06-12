@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_contains
 
-## 功能
+
 
 检查数组中是否包含某个元素，是的话返回 1，否则返回 0。
 

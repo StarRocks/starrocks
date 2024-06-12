@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # substring_index
 
-## Description
+
 
 Extracts a substring that precedes or follows the `count` occurrences of the delimiter.
 

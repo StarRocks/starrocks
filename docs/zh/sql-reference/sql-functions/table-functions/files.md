@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # FILES
 
-## 功能
+
 
 定义远程存储中的数据文件。
 

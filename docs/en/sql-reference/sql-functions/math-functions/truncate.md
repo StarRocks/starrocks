@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # truncate
 
-## Description
+
 
 Rounds the input down to the nearest equal or smaller value with the specified number of places after the decimal point.
 

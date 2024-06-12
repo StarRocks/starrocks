@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # regexp_replace
 
-## 功能
+
 
 对字符串 str 进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。
 

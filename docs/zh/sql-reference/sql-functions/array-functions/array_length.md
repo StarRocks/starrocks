@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_length
 
-## 功能
+
 
 计算数组中的元素个数，返回值类型是 INT。如果输入参数是 NULL，返回值也是 NULL。数组中的 NULL 元素会计入长度。
 

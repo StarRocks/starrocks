@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # count_if
 
-## 功能
+
 
 计算满足指定条件（即条件表达试的结果为 `true`）的记录数。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # all_match
 
-## Description
+
 
 Returns whether all elements of an array match the given predicate.
 

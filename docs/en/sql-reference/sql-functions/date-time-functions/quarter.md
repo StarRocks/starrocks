@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # quarter
 
-## Description
+
 
 Returns the quarter part of a date, in the range of 1 to 4.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # dict_mapping
 
-## Description
+
 
 Returns the value mapped to the specified key in a dictionary table.
 

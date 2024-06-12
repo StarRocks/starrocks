@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # ceil, dceil
 
-## 功能
+
 
 返回大于或等于 `x` 的最小整数。
 

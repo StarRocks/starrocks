@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # minutes_add
 
-## Description
+
 
 Adds the specified minutes to the date, accurate to the minute.
 

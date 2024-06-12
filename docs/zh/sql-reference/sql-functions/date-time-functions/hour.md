@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # hour
 
-## 功能
+
 
 获得指定日期中的小时信息。
 

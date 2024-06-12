@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # percentile_cont
 
-## Description
+
 
 Computes the percentile value of `expr` with linear interpolation.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # next_day
 
-## Description
+
 
 Returns the date of the first specified day of week (DOW) that occurs after the input date (DATE or DATETIME). For example, `next_day('2023-04-06', 'Monday')` returns the date of the next Monday that occurred after '2023-04-06'.
 

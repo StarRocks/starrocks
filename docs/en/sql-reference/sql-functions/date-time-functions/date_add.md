@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # date_add,adddate
 
-## Description
+
 
 Adds a specified time interval to a date.
 

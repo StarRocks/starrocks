@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # cosh
 
-## Description
+
 
 Computes the hyperbolic cosine of the argument.
 

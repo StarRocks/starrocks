@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # length
 
-## 功能
+
 
 返回字符串的 **字节** 长度。
 

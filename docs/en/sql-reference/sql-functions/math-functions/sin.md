@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # sin
 
-## Description
+
 
 Returns the sine of `x`, where `x` is in radians.
 

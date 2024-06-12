@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # ST_X
 
-## 功能
+
 
 当 point 是一个合法的 POINT 类型时，返回对应的 X 坐标值。
 

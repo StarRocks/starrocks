@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # ceil, dceil
 
-## Description
+
 
 Returns values from the input `arg` rounded to the nearest equal or larger integer.
 

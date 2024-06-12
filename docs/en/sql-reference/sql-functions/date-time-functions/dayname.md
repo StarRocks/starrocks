@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # dayname
 
-## Description
+
 
 Returns the day corresponding to a date.
 

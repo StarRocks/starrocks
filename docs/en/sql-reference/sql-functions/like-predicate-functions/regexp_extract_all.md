@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # regexp_extract_all
 
-## Description
+
 
 Extracts all substrings from the target string (`str`) that matches a regular expression pattern (`pattern`) and corresponds to the regex group index specified by `pos`. This function returns an array.
 

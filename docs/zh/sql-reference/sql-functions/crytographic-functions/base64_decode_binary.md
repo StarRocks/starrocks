@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # base64_decode_binary
 
-## 功能
+
 
 解码某个 Base64 编码的字符串，并返回一个 VARBINARY 类型的值。
 

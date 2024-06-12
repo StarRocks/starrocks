@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # monthname
 
-## Description
+
 
 Returns the name of the month for a given date.  
 

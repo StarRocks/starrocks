@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # parse_url
 
-## 功能
+
 
 从目标 URL 中提取一部分信息。
 

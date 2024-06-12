@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # str2date
 
-## Description
+
 
 Converts a string into a DATE value according to the specified format. If the conversion fails, NULL is returned.
 

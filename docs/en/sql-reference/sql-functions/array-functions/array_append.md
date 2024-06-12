@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_append
 
-## Description
+
 
 Adds a new element to the end of the array. Returns an array.
 

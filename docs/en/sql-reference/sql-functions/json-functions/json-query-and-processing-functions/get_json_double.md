@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # get_json_double
 
-## Description
+
 
 This function analyzes and gets the floating point value from a specified path in json string. json_path must start with `$` and use `.` as the path separator.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # catalog
 
-## Description
+
 
 Returns the name of the current catalog. The catalog can be a StarRocks internal catalog or an external catalog that is mapped to an external data source. For more information about catalogs, see [Catalog overview](../../../data_source/catalog/catalog_overview.md).
 

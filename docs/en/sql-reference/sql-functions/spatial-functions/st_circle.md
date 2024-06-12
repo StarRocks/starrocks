@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # ST_Circle
 
-## Description
+
 
 Converts a WKT (WEll Known Text) to a circle on the sphere of the earth.
 

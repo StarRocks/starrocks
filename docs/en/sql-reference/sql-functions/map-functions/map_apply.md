@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # map_apply
 
-## Description
+
 
 Applies a [Lambda expression](../Lambda_expression.md) to the keys and values of the original Map and generates a new Map. This function is supported from v3.0.
 

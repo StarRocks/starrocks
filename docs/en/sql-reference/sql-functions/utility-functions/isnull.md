@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # isnull
 
-## Description
+
 
 Checks whether the value is `NULL`, returns `1` if it is `NULL`, and returns `0` if it is not `NULL`.
 

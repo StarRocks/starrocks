@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # subdivide_bitmap
 
-## 功能
+
 
 将大 bitmap 拆成多个子 bitmap。
 

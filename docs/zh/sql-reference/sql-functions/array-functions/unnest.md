@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # unnest
 
-## 功能
+
 
 UNNEST 是一种表函数 (table function)，用于将一个数组展开成多行。
 

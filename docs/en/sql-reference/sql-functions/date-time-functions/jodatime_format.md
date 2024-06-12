@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # jodatime_format
 
-## Description
+
 
 Converts the specified date into a string in the specified Joda DateTimeFormat pattern format.
 

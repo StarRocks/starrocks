@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # sign
 
-## Description
+
 
 Returns the sign of `x`. A negative number, 0, or a positive number as input corresponds to `-1`, `0`, or `1` as output, respectively.
 

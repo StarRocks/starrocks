@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # hours_sub
 
-## 功能
+
 
 从指定的日期时间中减少指定的小时数。
 

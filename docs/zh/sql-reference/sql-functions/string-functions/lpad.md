@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # lpad
 
-## 功能
+
 
 根据指定的长度在字符串前面（左侧）追加字符。
 

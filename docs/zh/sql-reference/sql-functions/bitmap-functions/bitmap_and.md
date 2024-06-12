@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # bitmap_and
 
-## 功能
+
 
 计算两个 bitmap 的交集，返回新的 bitmap。
 

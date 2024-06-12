@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # null_or_empty
 
-## 功能
+
 
 如果字符串为空字符串或者 NULL 则返回 true，否则返回 false。
 

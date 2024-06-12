@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # json_array
 
-## 功能
+
 
 接收 SQL 数组并返回一个 JSON 类型的数组（以下简称 JSON 数组）。
 

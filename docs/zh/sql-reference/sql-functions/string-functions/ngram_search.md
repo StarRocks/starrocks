@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # ngram_search
 
-## 功能
+
 
 计算两个字符串的 ngram 相似度。
 

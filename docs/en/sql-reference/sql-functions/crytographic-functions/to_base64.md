@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # to_base64
 
-## Description
+
 
 Converts a string into a Base64-encoded string. This function is an inverse of [from_base64](from_base64.md).
 

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # bit_shift_left
 
-## 功能
+
 
 将一个数值或数值表达式的二进制表示向左移动指定的位数。该函数执行**算术左移**。
 

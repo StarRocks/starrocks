@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # least
 
-## 功能
+
 
 返回多个输入参数中的最小值。
 

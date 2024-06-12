@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # json_query
 
-## Description
+
 
 Queries the value of an element that can be located by the `json_path` expression in a JSON object and returns a JSON value.
 

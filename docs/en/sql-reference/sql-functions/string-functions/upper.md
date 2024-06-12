@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # upper
 
-## Description
+
 
 Converts a string to upper-case.
 

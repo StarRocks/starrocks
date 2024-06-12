@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # radians
 
-## Description
+
 
 Converts `x` from an angle to a radian.
 

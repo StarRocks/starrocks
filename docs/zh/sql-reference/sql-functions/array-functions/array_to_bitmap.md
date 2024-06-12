@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_to_bitmap
 
-## 功能
+
 
 将 array 类型转化为 bitmap 类型。该函数从 2.3 版本开始支持。
 

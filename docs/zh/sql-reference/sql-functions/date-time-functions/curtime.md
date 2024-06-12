@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # curtime,current_time
 
-## 功能
+
 
 获取当前的时间，以 TIME 类型返回。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # multi_distinct_count
 
-## Description
+
 
 Returns the total number of rows of the `expr`, equivalent to count(distinct expr).
 

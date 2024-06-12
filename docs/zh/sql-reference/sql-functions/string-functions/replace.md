@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # replace
 
-## 功能
+
 
 将一个字符串 (`str`) 中符合指定模式的字符 (`pattern`) 全部替换成其他字符 (`repl`)。注意替换时会区分大小写。
 

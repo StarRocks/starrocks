@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # atan2
 
-## Description
+
 
 Returns the arc tangent of `x` divided by `y`, that is, the arc tangent of `x/y`. The signs of the two parameters are used to determine the quadrant of the result.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # percentile_approx
 
-## Description
+
 
 Returns the approximation of the pth percentile, where the value of p is between 0 and 1.
 

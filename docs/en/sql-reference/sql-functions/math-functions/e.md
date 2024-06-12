@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # e
 
-## Description
+
 
 Returns the constant e (the base of natural logarithms).
 

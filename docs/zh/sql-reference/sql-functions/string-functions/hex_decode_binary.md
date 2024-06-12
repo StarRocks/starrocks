@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # hex_decode_binary
 
-## 功能
+
 
 将一个十六进制编码的字符串解码为 VARBINARY 类型的值。
 

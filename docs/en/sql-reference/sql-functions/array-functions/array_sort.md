@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_sort
 
-## Description
+
 
 Sorts the elements of an array in ascending order.
 

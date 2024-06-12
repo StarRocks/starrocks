@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # weeks_add
 
-## 功能
+
 
 返回原始的日期加上指定周数后的日期。
 

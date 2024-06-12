@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_sortby
 
-## Description
+
 
 Sorts elements in an array according to the ascending order of elements in another array or array converted from a lambda expression. For more information, see [Lambda expression](../Lambda_expression.md). This function is supported from v2.5.
 

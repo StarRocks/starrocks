@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # append_trailing_char_if_absent
 
-## 功能
+
 
 如果 str 字符串非空并且末尾不包含 trailing_char 字符，则将 trailing_char 字符附加到末尾。
 

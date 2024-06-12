@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # hll_raw_agg
 
-## Description
+
 
 This function is an aggregate function that is used to aggregate HLL fields. It returns an HLL value.
 

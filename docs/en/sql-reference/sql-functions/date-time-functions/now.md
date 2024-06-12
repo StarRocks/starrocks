@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # now, current_timestamp, localtime, localtimestamp
 
-## Description
+
 
 Returns the current date and time.
 

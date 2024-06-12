@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # current_role
 
-## Description
+
 
 Queries roles that are activated for the current user.
 

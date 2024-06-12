@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # parse_json
 
-## Description
+
 
 Converts a string to a JSON value.
 

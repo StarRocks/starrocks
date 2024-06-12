@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # monthname
 
-## 功能
+
 
 返回指定日期对应的月份。参数为 DATE 或 DATETIME 类型。
 

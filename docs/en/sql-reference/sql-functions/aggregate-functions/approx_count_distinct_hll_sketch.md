@@ -1,6 +1,6 @@
 # APPROX_COUNT_DISTINCT_HLL_SKETCH
 
-## Description
+
 
 Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col). Like APPROX_COUNT_DISTINCT(expr).
 

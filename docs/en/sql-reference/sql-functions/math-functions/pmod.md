@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # pmod
 
-## Description
+
 
 Returns the positive remainder of `dividend` divided by`divisor`.
 

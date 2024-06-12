@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # subdivide_bitmap
 
-## Description
+
 
 Splits a large bitmap into multiple sub-bitmaps.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # lower
 
-## Description
+
 
 Converts all strings in an argument to lower-case.
 

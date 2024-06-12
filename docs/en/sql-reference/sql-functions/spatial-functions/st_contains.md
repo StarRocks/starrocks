@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # ST_Contains
 
-## Description
+
 
 Checks whether the geometric figure shape1 can fully contain shape2.
 

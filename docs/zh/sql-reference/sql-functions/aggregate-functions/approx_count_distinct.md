@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # approx_count_distinct
 
-## 功能
+
 
 返回类似于 `COUNT(DISTINCT col)` 结果的近似值。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # dayofyear
 
-## 功能
+
 
 计算指定日期为对应年中的哪一天。
 

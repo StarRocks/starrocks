@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # months_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差几个月（`expr1` - `expr2`），结果精确到月。
 

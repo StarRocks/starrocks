@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # percentile_hash
 
-## Description
+
 
 Constructs DOUBLE values as PERCENTILE values.
 

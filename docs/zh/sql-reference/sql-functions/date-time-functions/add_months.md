@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # add_months
 
-## 功能
+
 
 在给定的日期（DATE、DATETIME）上增加一个整数月，返回结果日期。
 

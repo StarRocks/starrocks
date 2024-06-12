@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # round, dround
 
-## 功能
+
 
 将数字四舍五入到指定的位数。
 

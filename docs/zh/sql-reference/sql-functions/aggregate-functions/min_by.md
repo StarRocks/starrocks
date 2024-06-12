@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # min_by
 
-## 功能
+
 
 返回与 `y` 的最小值关联的 `x` 值。比如 `SELECT min_by(subject, exam_result) FROM exam;` 表示返回 `exam` 表中考试得分最低的科目。
 

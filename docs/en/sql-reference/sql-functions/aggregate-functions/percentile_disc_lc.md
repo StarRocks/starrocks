@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # percentile_disc_lc
 
-## Description
+
 
 Returns a percentile value based on a discrete distribution of the input column `expr`. Same behavior as percentile_disc. However, the implementation algorithm is different. percentile_disc needs to obtain all input data, and the memory consumed by merge sorting to obtain percentile values ​​is the memory of all input data. On the other hand, percentile_disc_lc builds a hash table of key->count, so when the input cardinality is low, there is no obvious memory increase even if the input data size is large.
 

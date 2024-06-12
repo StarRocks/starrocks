@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # ifnull
 
-## Description
+
 
 If `expr1` is NULL, returns expr2. If `expr1` is not NULL, returns `expr1`.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # space
 
-## Description
+
 
 Returns a string of the specified number of spaces.
 

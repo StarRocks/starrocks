@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # datediff
 
-## 功能
+
 
 计算两个日期的差值，结果精确到天。
 

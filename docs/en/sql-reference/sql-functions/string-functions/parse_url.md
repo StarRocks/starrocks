@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # parse_url
 
-## Description
+
 
 Parses a URL and extracts a component from this URL.
 

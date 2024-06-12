@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bin
 
-## Description
+
 
 Transforms the input `arg` into a binary.
 

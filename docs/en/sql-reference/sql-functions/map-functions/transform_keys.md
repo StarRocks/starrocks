@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # transform_keys
 
-## Description
+
 
 Transforms keys in a map using a [Lambda expression](../Lambda_expression.md) and produces a new key for each entry in the map.
 

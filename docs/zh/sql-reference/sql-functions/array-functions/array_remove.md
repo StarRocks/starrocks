@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_remove
 
-## 功能
+
 
 从数组中移除指定元素。
 

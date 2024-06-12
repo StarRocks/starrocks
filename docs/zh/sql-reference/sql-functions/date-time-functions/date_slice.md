@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # date_slice
 
-## 功能
+
 
 根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # hll_empty
 
-## Description
+
 
 Generates an empty HLL column to supplement the default values when inserting or loading data.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # last_query_id
 
-## Description
+
 
 Obtains the ID of the most recently executed query in the current session.
 

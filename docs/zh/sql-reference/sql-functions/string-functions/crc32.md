@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # crc32
 
-## 功能
+
 
 返回字符串的 32 位循环冗余校验值（Cyclic Redundancy Check）。如果输入参数为 NULL，则返回 NULL。
 

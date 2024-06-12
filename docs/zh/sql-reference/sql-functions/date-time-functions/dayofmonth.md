@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # dayofmonth
 
-## 功能
+
 
 获得日期中的天信息，返回值范围 1~31。
 

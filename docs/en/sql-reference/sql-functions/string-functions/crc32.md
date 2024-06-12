@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # crc32
 
-## Description
+
 
 Returns the 32-bit cyclic redundancy check (CRC) value of a string. If the input is NULL, NULL is returned.
 

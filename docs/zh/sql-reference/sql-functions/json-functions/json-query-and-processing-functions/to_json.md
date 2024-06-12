@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # to_json
 
-## 功能
+
 
 将 Map 或 Struct 类型的数据转换成 JSON 数据。
 

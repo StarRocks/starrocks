@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # timediff
 
-## 功能
+
 
 返回两个 DATETIME 类型值之间的差值。
 

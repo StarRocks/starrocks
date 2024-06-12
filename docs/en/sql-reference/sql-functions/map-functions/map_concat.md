@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # map_concat
 
-## Description
+
 
 Returns the union of the input maps. If a key is found in multiple maps, this function keeps only the last value among these maps, called LAST WIN. For example, `SELECT map_concat(map{1:3},map{1:'4'});` returns `{1:"4"}`.
 

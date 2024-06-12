@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitmap_count
 
-## Description
+
 
 Returns the 1-bit count for the input bitmap.
 

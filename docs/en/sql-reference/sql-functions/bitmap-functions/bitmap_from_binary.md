@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitmap_from_binary
 
-## Description
+
 
 Converts a binary string with a specific format to a bitmap.
 

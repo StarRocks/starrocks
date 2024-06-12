@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # cot
 
-## Description
+
 
 Returns the cotangent of the angle in radians `x`. If the angle in radians `x` is `0` or `NULL`, `NULL` is returned.
 

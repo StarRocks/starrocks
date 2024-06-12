@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # convert_tz
 
-## 功能
+
 
 将给定的时间转化为另一个时区的时间。
 

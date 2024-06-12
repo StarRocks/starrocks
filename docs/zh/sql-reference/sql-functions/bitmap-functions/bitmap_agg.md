@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # bitmap_agg
 
-## 功能
+
 
 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。
 

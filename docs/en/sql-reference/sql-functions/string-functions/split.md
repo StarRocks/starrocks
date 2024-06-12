@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # split
 
-## Description
+
 
 This function splits a given string according to the separators, and returns the split parts in ARRAY.
 

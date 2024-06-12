@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitmap_from_string
 
-## Description
+
 
 Converts a string into a BITMAP. The string is composed of a set of UINT64 numbers separated by commas. For example, the "0, 1, 2" string will be converted into a Bitmap, in which bits 0, 1 and 2 are set. If the input field is invalid, NULL will be returned.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # hex_decode_string
 
-## Description
+
 
 This function performs the opposite operation of [hex()](hex.md).
 

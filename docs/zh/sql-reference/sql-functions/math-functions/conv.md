@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # conv
 
-## 功能
+
 
 对输入的参数 `x` 进行进制转换。
 

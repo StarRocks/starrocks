@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # date_diff
 
-## Description
+
 
 Returns the difference between two date values in the specified unit. This function returns the value of `expr1 - expr2` expressed in terms of `unit`.
 

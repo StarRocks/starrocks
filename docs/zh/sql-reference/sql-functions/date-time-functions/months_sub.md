@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # months_sub
 
-## 功能
+
 
 从日期中减去指定的月数。
 

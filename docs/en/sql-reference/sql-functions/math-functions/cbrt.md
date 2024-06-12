@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # cbrt
 
-## Description
+
 
 Computes the cube root of the argument.
 

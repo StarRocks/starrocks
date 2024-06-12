@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_sort
 
-## 功能
+
 
 对数组中的元素进行升序排列。
 

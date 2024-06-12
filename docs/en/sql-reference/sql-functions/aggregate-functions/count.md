@@ -5,7 +5,7 @@ displayed_sidebar: "English"
 
 # count
 
-## Description
+
 
 Returns the total number of rows specified by an expression.
 

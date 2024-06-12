@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # if
 
-## 功能
+
 
 若参数 `expr1` 成立，返回结果 `expr2`，否则返回结果 `expr3`。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # to_days
 
-## Description
+
 
 Returns the number of days between a date and 0000-01-01.
 

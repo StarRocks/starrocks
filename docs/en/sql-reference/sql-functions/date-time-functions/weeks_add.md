@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # weeks_add
 
-## Description
+
 
 Returns the value with the number of weeks added to date.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # element_at
 
-## 功能
+
 
 获取 Array 数组中指定位置的元素。如果输入值为 NULL 或指定的位置不存在，则返回 NULL。
 

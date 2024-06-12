@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # ln, dlog1, log
 
-## Description
+
 
 Computes the natural (base `e`) logarithm of a number.
 

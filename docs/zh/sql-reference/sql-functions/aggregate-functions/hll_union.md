@@ -5,7 +5,7 @@ displayed_sidebar: "Chinese"
 
 # hll_union
 
-## 功能
+
 
 返回一组 HLL 值的并集。
 

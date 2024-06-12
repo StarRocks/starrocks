@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # minutes_sub
 
-## 功能
+
 
 从指定的日期时间或日期中减去指定的分钟数。
 

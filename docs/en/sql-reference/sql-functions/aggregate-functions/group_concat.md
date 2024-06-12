@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # group_concat
 
-## Description
+
 
 Concatenates non-null values from a group into a single string, with a `sep` argument, which is `,` by default if not specified. This function can be used to concatenate values from multiple rows of a column into one string.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # bitxor
 
-## 功能
+
 
 返回两个数值在按位 XOR 运算后的结果。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # instr
 
-## Description
+
 
 This function returns the position where str first appeared in substr (start counting from 1 and measured in characters). If str is not found in substr, then this function will return 0.
 

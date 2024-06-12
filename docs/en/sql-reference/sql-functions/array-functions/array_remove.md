@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_remove
 
-## Description
+
 
 Removes an element from an array.
 

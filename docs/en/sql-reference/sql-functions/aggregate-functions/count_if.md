@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # count_if
 
-## Description
+
 
 Returns the number of records that meet the specified condition or `0` if no records satisfy the condition.
 

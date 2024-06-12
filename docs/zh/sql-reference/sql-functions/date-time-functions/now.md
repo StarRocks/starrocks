@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # now, current_timestamp, localtime, localtimestamp
 
-## 功能
+
 
 获取当前的时间，以 DATETIME 类型返回。
 

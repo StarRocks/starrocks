@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # to_date
 
-## Description
+
 
 Converts a DATETIME value into a date.
 
