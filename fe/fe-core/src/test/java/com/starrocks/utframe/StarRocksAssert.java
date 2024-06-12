@@ -668,8 +668,7 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assert.fail(e.getMessage());
         } finally {
             Preconditions.checkState(!Strings.isNullOrEmpty(mvName));
             try {

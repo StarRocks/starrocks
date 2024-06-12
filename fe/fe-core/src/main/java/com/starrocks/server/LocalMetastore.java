@@ -3285,7 +3285,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
         long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
         long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
-        return ThreadLocalRandom.current().nextLong(randomInterval);
+        return randomInterval > 0 ? ThreadLocalRandom.current().nextLong(randomInterval) : randomInterval;
     }
 
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
