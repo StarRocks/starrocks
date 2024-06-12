@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-toc_max_heading_level: 5
+toc_max_heading_level: 3
 ---
 
 # 导入方案
@@ -29,9 +29,9 @@ StarRocks 提供以下各种导入方案供您选择：
 
 :::
 
-### 导入方式
+## 导入方式
 
-#### [Insert](../InsertInto.md)
+### [Insert](../InsertInto.md)
 
 **适用场景：**
 
@@ -55,7 +55,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 根据内存大小的不同而不同
 
-#### [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+### [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
 
 **适用场景：** 从本地文件系统批量导入数据。
 
@@ -63,7 +63,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 10 GB 以内
 
-#### [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+### [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
 
 **适用场景：**
 
@@ -74,7 +74,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 数十到数百 GB
 
-#### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
+### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
 
 **适用场景：** 从 HDFS 或 AWS S3 批量或实时导入数据。
 
@@ -88,7 +88,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 100 GB 到 TB 级别
 
-#### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
+### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
 
 **适用场景：** 从 Kafka 实时导入数据。
 
@@ -96,7 +96,7 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 微批导入 MB 到 GB 级别
 
-#### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
+### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
 
 **适用场景：** 通过 Spark 集群从 HDFS 批量导入 Apache Hive™ 表的数据。
 
@@ -104,39 +104,39 @@ StarRocks 提供以下各种导入方案供您选择：
 
 **单次导入数据量限制：** 数十 GB 到 TB 级别
 
-### 生态工具
+## 生态工具
 
-#### [Kafka connector](../Kafka-connector-starrocks.md)
+### [Kafka connector](../Kafka-connector-starrocks.md)
 
 **适用场景：** 从 Kafka 实时导入数据。
 
-#### [Spark connector](../Spark-connector-starrocks.md)
+### [Spark connector](../Spark-connector-starrocks.md)
 
 **适用场景：** 从 Spark 批量导入数据。
 
-#### [Flink connector](../Flink-connector-starrocks.md)
+### [Flink connector](../Flink-connector-starrocks.md)
 
 **适用场景：** 从 Flink 实时导入数据。
 
-#### [SMT](../../integrations/loading_tools/SMT.md)
+### [SMT](../../integrations/loading_tools/SMT.md)
 
 **适用场景：** 通过 Flink 从 MySQL、PostgreSQL、SQL Server、Oracle、Hive、ClickHouse、TiDB 等数据源导入数据。
 
-#### [DataX](../../integrations/loading_tools/DataX-starrocks-writer.md)
+### [DataX](../../integrations/loading_tools/DataX-starrocks-writer.md)
 
 **适用场景：** 在 MySQL、Oracle 等关系型数据库、HDFS、及 Hive 等各种数据源之间同步数据。
 
-#### [CloudCanal](../../integrations/loading_tools/CloudCanal.md)
+### [CloudCanal](../../integrations/loading_tools/CloudCanal.md)
 
 **适用场景：** 从 MySQL、Oracle、PostgreSQL 等数据库往 StarRocks 迁移或同步数据。
 
-#### [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
+### [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
 
 **适用场景：** 集成 Kettle。通过 Kettle 强大的数据处理和转换功能与 StarRocks 高性能的数据存储和分析能力，实现更加灵活和高效的数据处理流程。
 
-### API
+## API
 
-#### [Stream Load transaction interface](../Stream_Load_transaction_interface.md)
+### [Stream Load transaction interface](../Stream_Load_transaction_interface.md)
 
 **适用场景：** 从 Apache Flink®、Apache Kafka® 等外部系统导入数据时，实现跨系统的两阶段（2PC）提交。该特性自 2.4 版本起支持。
 
