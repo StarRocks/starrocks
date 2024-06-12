@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # url_encode
 
-## Description
+
 
 Converts an encode url string.
 

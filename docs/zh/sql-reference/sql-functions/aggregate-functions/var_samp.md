@@ -5,7 +5,7 @@ displayed_sidebar: "Chinese"
 
 # var_samp, variance_samp
 
-## 功能
+
 
 返回 expr 表达式的样本方差。
 

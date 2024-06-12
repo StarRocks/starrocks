@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # least
 
-## Description
+
 
 Returns the smallest value from a list of one or more parameters.
 

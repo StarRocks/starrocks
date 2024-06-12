@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # substring, substr
 
-## Description
+
 
 Extracts characters from a string and returns a substring.
 

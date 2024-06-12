@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # percentile_empty
 
-## 功能
+
 
 构造一个 `percentile` 类型的数值，主要用于 INSERT 或 Stream Load 导入时填充默认值。
 

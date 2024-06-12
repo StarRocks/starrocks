@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # years_sub
 
-## Description
+
 
 Subtracts the specified number of years from the specified datetime or date.
 

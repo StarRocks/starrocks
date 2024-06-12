@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # hll_raw_agg
 
-## 功能
+
 
 此函数为聚合函数，用于聚合 HLL 类型的字段，返回的还是 HLL 类型。
 

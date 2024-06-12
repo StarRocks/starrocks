@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitmap_empty
 
-## Description
+
 
 Returns an empty bitmap. It is mainly used to fill in the default value during insert or stream load. For example:
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # multi_distinct_sum
 
-## Description
+
 
 Returns the sum of distinct values in `expr`, equivalent to sum(distinct expr).
 

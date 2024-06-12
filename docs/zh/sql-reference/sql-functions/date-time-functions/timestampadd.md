@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # timestampadd
 
-## 功能
+
 
 将整数表达式间隔添加到日期或日期时间表达式 `datetime_expr` 中。
 

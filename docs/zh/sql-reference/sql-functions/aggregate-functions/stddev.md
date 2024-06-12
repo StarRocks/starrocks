@@ -5,7 +5,7 @@ displayed_sidebar: "Chinese"
 
 # stddev, stddev_pop
 
-## 功能
+
 
 返回 `expr` 表达式的总体标准差。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # percentile_union
 
-## Description
+
 
 Aggregates PERCENTILE data.
 

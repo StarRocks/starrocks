@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # url_decode
 
-## Description
+
 
 Converts an url to a decode string.
 

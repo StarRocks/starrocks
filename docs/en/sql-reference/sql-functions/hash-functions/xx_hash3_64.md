@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # xx_hash3_64
 
-## Description
+
 
 Returns the 64-bit xxhash3 hash value of the input string.
 

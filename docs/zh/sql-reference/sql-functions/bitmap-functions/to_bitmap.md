@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # to_bitmap
 
-## 功能
+
 
 输入为取值在 0 ~ 18446744073709551615 区间的 unsigned bigint，输出为包含该元素的 bitmap。如果输入值不在该范围内，会返回 NULL。
 

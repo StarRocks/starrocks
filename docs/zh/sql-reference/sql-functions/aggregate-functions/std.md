@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # std
 
-## 功能
+
 
 返回指定列的标准差。
 

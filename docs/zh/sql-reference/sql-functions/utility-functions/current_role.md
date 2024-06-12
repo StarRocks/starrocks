@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # current_role
 
-## 功能
+
 
 获取当前用户激活的角色。该函数从 3.0 版本开始支持。
 

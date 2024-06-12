@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # seconds_add
 
-## 功能
+
 
 向 `expr1` 添加指定的时间间隔，单位为秒。
 

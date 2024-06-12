@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # add_months
 
-## 功能
+
 
 在给定的日期（DATE、DATETIME）上增加或减少一个整数月 `months`。`months` 可以是正数或负数，正数表示增加月份；负数表示减少月份。该函数与 [months_add](./months_add.md) 功能相同。
 

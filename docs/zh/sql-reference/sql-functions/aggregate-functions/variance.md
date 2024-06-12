@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # variance, var_pop, variance_pop
 
-## 功能
+
 
 返回表达式的方差。
 

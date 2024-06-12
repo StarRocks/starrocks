@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # stddev_samp
 
-## 功能
+
 
 返回 expr 表达式的样本标准差。
 

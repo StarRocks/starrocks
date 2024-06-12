@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_sum
 
-## 功能
+
 
 对数组中的所有元素求和。
 
