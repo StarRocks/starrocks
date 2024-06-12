@@ -132,14 +132,8 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
    ![service](../../assets/ranger_added_service.png)
 
-<<<<<<< HEAD
-5. 点击 **Test connection** 测试连通性，连通成功后保存。
-
-6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
-=======
 5. 点击 **Test connection** 测试连通性，连通成功后保存。需要注意，如果您没有安装 ranger-starrocks-plugin，则可以跳过测试直接保存。
-6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
->>>>>>> 336b2b6b64 ([Doc]Update ranger_plugin.md (#46365))
+6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [`ranger-starrocks-security.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
 
    - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
    - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
