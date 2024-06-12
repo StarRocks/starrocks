@@ -142,7 +142,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         if (input->only_null()) {
             return ColumnHelper::create_const_null_column(input_chunk->num_rows());
         } else {
-            auto arr_col = input->data_column()->clone();
+            auto arr_col = input->data_column()->clone_shared();
             return ConstColumn::create(std::move(arr_col), input_chunk->num_rows());
         }
     }
@@ -221,6 +221,11 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
 
     if (column->is_nullable() || has_null) {
         res = NullableColumn::create(res, null_column);
+    }
+
+    // Wrap constant column if source column is constant.
+    if (column->is_constant()) {
+        res = ConstColumn::create(res, column->size());
     }
 
     return res;
