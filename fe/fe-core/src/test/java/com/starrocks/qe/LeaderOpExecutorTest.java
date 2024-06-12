@@ -144,6 +144,9 @@ public class LeaderOpExecutorTest {
     public void testCreateTMasterOpRequest(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager warehouseManager) {
         new Expectations() {
             {
+                globalStateMgr.getServingState();
+                minTimes = 0;
+
                 globalStateMgr.getWarehouseMgr();
                 result = warehouseManager;
                 minTimes = 1;
