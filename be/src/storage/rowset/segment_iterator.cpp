@@ -1850,12 +1850,23 @@ Status SegmentIterator::_apply_bitmap_index() {
 Status SegmentIterator::_apply_del_vector() {
     RETURN_IF(_scan_range.empty(), Status::OK());
     if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && !_del_vec->empty()) {
-        Roaring row_bitmap = range2roaring(_scan_range);
-        size_t input_rows = row_bitmap.cardinality();
-        row_bitmap -= *(_del_vec->roaring());
-        _scan_range = roaring2range(row_bitmap);
-        size_t filtered_rows = row_bitmap.cardinality();
-        _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
+        size_t total_span_size = _scan_range.span_size();
+        size_t total_size = _scan_range.end() - _scan_range.begin();
+        size_t src_size = _scan_range.size();
+        size_t del_size = _del_vec->roaring()->cardinality();
+
+        // >=10%
+        if (total_size * 1.0 * 100 / (src_size + del_size) >= 10) {
+            auto del_range = roaring2range(*_del_vec->roaring());
+            _scan_range -= del_range;
+
+            _opts.stats->rows_del_vec_filtered += total_span_size - _scan_range.span_size();
+        } else {
+            Roaring row_bitmap = range2roaring(_scan_range);
+            row_bitmap -= *(_del_vec->roaring());
+            _scan_range = roaring2range(row_bitmap);
+            _opts.stats->rows_del_vec_filtered += total_span_size - _scan_range.span_size();
+        }
     }
     return Status::OK();
 }

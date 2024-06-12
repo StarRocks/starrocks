@@ -57,6 +57,8 @@ public:
     // return a new range that represent the intersection of |this| and |r|.
     Range intersection(const Range& r) const;
 
+    std::vector<Range> operator-(const Range& r) const;
+
     Range filter(const Filter* const filter) const;
 
     bool has_intersection(const Range& rhs) const { return !(_end <= rhs.begin() || rhs.end() <= _begin); }
@@ -84,6 +86,21 @@ inline Range<T> Range<T>::intersection(const Range& r) const {
         return {};
     }
     return {std::max(_begin, r._begin), std::min(_end, r._end)};
+}
+
+template <typename T>
+std::vector<Range<T>> Range<T>::operator-(const Range& r) const {
+    std::vector<Range<T>> results;
+    if (!has_intersection(r)) {
+        results.push_back(*this);
+    }
+    if (_begin <= r._begin) {
+        results.push_back({_begin, r._begin});
+    }
+    if (_end > r._end) {
+        results.push_back({r._end, _end});
+    }
+    return results;
 }
 
 template <typename T>
@@ -192,6 +209,8 @@ public:
     // this method will invalidate iterator.
     void add(const Range<T>& r);
 
+    void add_batch(const std::vector<Range<T>>& r);
+
     // this method will invalidate iterator.
     void add(const std::initializer_list<Range<T>>& ranges);
 
@@ -203,6 +222,8 @@ public:
 
     // return a new range that represent the intersection of |this| and |r|.
     SparseRange<T> intersection(const SparseRange<T>& rhs) const;
+
+    SparseRange<T> operator-=(const SparseRange<T>& rhs) const;
 
     SparseRangeIterator<T> new_iterator() const;
 
@@ -262,6 +283,13 @@ template <typename T>
 inline void SparseRange<T>::add(const std::initializer_list<Range<T>>& ranges) {
     for (const auto& r : ranges) {
         add(r);
+    }
+}
+
+template <typename T>
+void SparseRange<T>::add_batch(const std::vector<Range<T>>& r) {
+    for (const auto& v : r) {
+        add(v);
     }
 }
 
@@ -331,6 +359,20 @@ inline std::string SparseRange<T>::to_string() const {
     }
     ss << ")";
     return ss.str();
+}
+
+template <typename T>
+SparseRange<T> SparseRange<T>::operator-=(const SparseRange<T>& rhs) const {
+    SparseRange<T> result;
+    //TODO: order
+    for (const Range<T>& r1 : _ranges) {
+        for (const Range<T>& r2 : rhs._ranges) {
+            if (r1.has_intersection(r2)) {
+                result.add_batch(r1 - r2);
+            }
+        }
+    }
+    return result;
 }
 
 template <typename T>
