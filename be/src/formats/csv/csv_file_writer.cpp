@@ -42,7 +42,7 @@ CSVFileWriter::~CSVFileWriter() = default;
 
 Status CSVFileWriter::init() {
     if (_compression_type != TCompressionType::NO_COMPRESSION) {
-        return Status::NotSupported(fmt::format("not supported compression type {}", _compression_type));
+        return Status::NotSupported(fmt::format("not supported compression type {}", to_string(_compression_type)));
     }
 
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
