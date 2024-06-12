@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # date_format
 
-## 功能
+
 
 将日期类型按照 `format` 的类型转化为字符串。
 

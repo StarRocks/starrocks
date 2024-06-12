@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # log10, dlog10
 
-## Description
+
 
 Calculates the base 10 logarithm of a number.
 

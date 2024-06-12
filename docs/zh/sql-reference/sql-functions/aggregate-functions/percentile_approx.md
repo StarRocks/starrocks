@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # percentile_approx
 
-## 功能
+
 
 返回第 p 个百分位点的近似值。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # murmur_hash3_32
 
-## 功能
+
 
 返回输入字符串的 32 位 murmur3 hash 值。
 

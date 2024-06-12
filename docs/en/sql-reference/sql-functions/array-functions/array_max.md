@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_max
 
-## Description
+
 
 Obtains the maximum value of all data in an ARRAY and return this result.
 

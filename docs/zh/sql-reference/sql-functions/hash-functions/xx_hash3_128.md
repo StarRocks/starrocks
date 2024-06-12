@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # xx_hash3_128
 
-## 功能
+
 
 返回输入字符串的 128 位 xxhash3 hash 值。
 

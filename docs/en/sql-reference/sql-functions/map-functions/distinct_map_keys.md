@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # distinct_map_keys
 
-## Description
+
 
 Removes duplicate keys from a map, because keys in a map must be unique in terms of semantics. This function keeps only the last value for identical keys, called LAST WIN. This function is used when querying MAP data from external tables if there are duplicate keys in maps. StarRocks internal tables natively remove duplicate keys in maps.
 

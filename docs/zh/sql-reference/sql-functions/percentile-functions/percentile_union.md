@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # percentile_union
 
-## 功能
+
 
 用于对分组结果进行聚合。
 

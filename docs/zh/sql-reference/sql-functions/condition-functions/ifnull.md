@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # ifnull
 
-## 功能
+
 
 若 `expr1` 不为 NULL，返回 `expr1`。若 `expr1` 为 NULL，返回 `expr2`。
 

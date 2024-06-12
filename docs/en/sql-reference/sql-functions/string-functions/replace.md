@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # replace
 
-## Description
+
 
 Replaces all occurrences of characters in a string with another string. This function performs a case-sensitive match when searching for `pattern`.
 
