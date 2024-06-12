@@ -85,6 +85,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -1121,15 +1122,17 @@ public class LeaderImpl {
     private static List<TBackendMeta> getNodeMetas() {
         List<TBackendMeta> nodeMetas = new ArrayList<>();
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream().forEach(node -> {
-            TBackendMeta nodeMeta = new TBackendMeta();
-            nodeMeta.setBackend_id(node.getId());
-            nodeMeta.setHost(node.getHost());
-            nodeMeta.setBe_port(node.getBePort());
-            nodeMeta.setRpc_port(node.getBrpcPort());
-            nodeMeta.setHttp_port(node.getHttpPort());
-            nodeMeta.setAlive(node.isAlive());
-            nodeMeta.setState(node.getBackendState().ordinal());
-            nodeMetas.add(nodeMeta);
+            if (RunMode.isSharedDataMode() || node instanceof Backend) {
+                TBackendMeta nodeMeta = new TBackendMeta();
+                nodeMeta.setBackend_id(node.getId());
+                nodeMeta.setHost(node.getHost());
+                nodeMeta.setBe_port(node.getBePort());
+                nodeMeta.setRpc_port(node.getBrpcPort());
+                nodeMeta.setHttp_port(node.getHttpPort());
+                nodeMeta.setAlive(node.isAlive());
+                nodeMeta.setState(node.getBackendState().ordinal());
+                nodeMetas.add(nodeMeta);
+            }
         });
         return nodeMetas;
     }
