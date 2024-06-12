@@ -4413,9 +4413,9 @@ TEST_F(TabletUpdatesTest, test_apply_concurrent_with_on_rowset_finish) {
 TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
     _tablet = create_tablet(rand(), rand());
     _tablet2 = create_tablet(rand(), rand());
-    ASSERT_FALSE(_tablet->updates()->link_from(_tablet2.get(), 1, nullptr, _tablet2->tablet_schema(), "").ok());
-    ASSERT_FALSE(_tablet->updates()->convert_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
-    ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
+    ASSERT_FALSE(_tablet->updates()->link_from(_tablet2.get(), 1, nullptr, "").ok());
+    ASSERT_FALSE(_tablet->updates()->convert_from(_tablet2, 1, nullptr, "").ok());
+    ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, "").ok());
 }
 
 } // namespace starrocks
