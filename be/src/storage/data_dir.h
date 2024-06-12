@@ -199,7 +199,6 @@ private:
     RowsetIdGenerator* _id_generator = nullptr;
 
     std::mutex _check_path_mutex;
-    std::condition_variable _cv;
     std::set<std::string> _all_check_paths;
     std::set<std::string> _all_tablet_schemahash_paths;
     std::set<std::string> _all_check_dcg_files;
