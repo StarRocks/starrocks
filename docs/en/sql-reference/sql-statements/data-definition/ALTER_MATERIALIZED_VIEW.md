@@ -94,3 +94,13 @@ Example 5: Perform an atomic exchange between materialized views `order_mv` and 
 ```SQL
 ALTER MATERIALIZED VIEW order_mv SWAP WITH order_mv1;
 ```
+
+Example 6: Enable the materialized view's refresh process's profile.
+```
+ALTER MATERIALIZED VIEW mv1 SET ("session.enable_profile" = "true");
+```
+
+Example 7: Alter the materialized view's optimizer time if its query contains external tables or multi joins.
+```
+ALTER MATERIALIZED VIEW mv1 SET ("session.new_planner_optimize_timeout" = "10000");
+```
