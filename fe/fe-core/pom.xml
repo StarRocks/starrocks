@@ -936,6 +936,11 @@ under the License.
             <artifactId>orai18n</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
         <dependency>
             <groupId>com.mockrunner</groupId>
