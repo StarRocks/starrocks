@@ -166,7 +166,14 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         String query9 = "select sum(c3) from test_base_part";
         String plan9 = getFragmentPlan(query9);
-        PlanTestBase.assertNotContains(plan9, "partial_mv_5");
+        PlanTestBase.assertContains(plan9, "UNION");
+        PlanTestBase.assertContains(plan9, "  1:OlapScanNode\n" +
+                "     TABLE: partial_mv_5\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=5/5");
+        PlanTestBase.assertContains(plan9, "  2:AGGREGATE (update serialize)\n" +
+                "|  output: sum(10: c3)\n" +
+                "|  group by: ");
         dropMv("test", "partial_mv_5");
     }
 
