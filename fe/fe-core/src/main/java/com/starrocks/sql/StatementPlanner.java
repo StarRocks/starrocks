@@ -434,7 +434,7 @@ public class StatementPlanner {
 
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
-        long txnId = -1L;
+        long txnId = DmlStmt.INVALID_TXN_ID;
         if (targetTable instanceof ExternalOlapTable) {
             if (!(stmt instanceof InsertStmt)) {
                 throw UnsupportedException.unsupportedException("External OLAP table only supports insert statement");
@@ -486,7 +486,7 @@ public class StatementPlanner {
 
     private static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
         long txnId = stmt.getTxnId();
-        if (txnId == 0) {
+        if (txnId == DmlStmt.INVALID_TXN_ID) {
             return;
         }
 
