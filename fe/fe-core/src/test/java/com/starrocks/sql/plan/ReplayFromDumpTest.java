@@ -866,6 +866,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  output: multi_distinct_count(NULL)"));
     }
 
+    @Test
     public void testNestedViewWithCTE() throws Exception {
 
         Pair<QueryDumpInfo, String> replayPair =
