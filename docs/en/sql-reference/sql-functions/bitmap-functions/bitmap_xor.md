@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitmap_xor
 
-## Description
+
 
 Calculates the set consisting elements unique to `lhs` and `rhs`. It is logically equivalent to `bitmap_andnot(bitmap_or(lhs, rhs), bitmap_and(lhs, rhs))` (complementary set).
 

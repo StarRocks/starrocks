@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # corr
 
-## Description
+
 
 Returns the Pearson correlation coefficient between two expressions. This function is supported from v2.5.10. It can also be used as a window function.
 

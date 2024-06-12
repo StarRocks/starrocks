@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # parse_json
 
-## 功能
+
 
 将字符串类型的数据构造为 JSON 类型的数据。
 

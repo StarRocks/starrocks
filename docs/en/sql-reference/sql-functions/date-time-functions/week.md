@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # week
 
-## Description
+
 
 Returns the week number for a given date. This function works in the same way as the WEEK function in MySQL.
 

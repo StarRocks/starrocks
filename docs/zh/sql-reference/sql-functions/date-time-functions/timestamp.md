@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # timestamp
 
-## 功能
+
 
 将时间表达式 `expr` 转换为 DATETIME 值。
 

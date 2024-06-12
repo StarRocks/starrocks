@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # floor, dfloor
 
-## Description
+
 
 Returns the largest integer that is not more than `x`.
 

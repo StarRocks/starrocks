@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # substring, substr
 
-## Description
+
 
 Extracts characters staring from the specified position and returns a substring of specified length.
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # sinh
 
-## Description
+
 
 Computes the hyperbolic sine of the argument.
 

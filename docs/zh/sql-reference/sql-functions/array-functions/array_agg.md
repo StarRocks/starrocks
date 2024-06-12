@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_agg
 
-## 功能
+
 
 将一列中的值（包括空值 null）串联成一个数组（多行转一行）。在 3.0 版本之前，该函数不保证数组里元素的顺序。从 3.0 版本开始，array_agg() 支持使用 ORDER BY 对数组里的元素进行排序。
 

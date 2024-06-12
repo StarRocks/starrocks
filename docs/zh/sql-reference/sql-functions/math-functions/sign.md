@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # sign
 
-## 功能
+
 
 返回参数 `x` 的符号。
 

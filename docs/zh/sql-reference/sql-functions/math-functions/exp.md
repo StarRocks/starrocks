@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # exp, dexp
 
-## 功能
+
 
 返回 e 的 `x` 次幂，也被称为自然指数函数。
 

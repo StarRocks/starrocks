@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # any_match
 
-## Description
+
 
 Returns whether any elements of an array match the given predicate.
 

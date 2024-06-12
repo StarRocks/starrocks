@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # positive
 
-## Description
+
 
 Returns `x` as a value.
 

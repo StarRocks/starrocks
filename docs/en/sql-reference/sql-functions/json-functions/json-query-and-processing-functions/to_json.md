@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # to_json
 
-## Description
+
 
 Converts a Map or Struct value into a JSON string. If the input value is NULL, NULL is returned.
 
