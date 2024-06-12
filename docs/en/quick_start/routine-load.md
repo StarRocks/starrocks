@@ -17,7 +17,7 @@ Routine load is a method using Apache Kafka, or in this lab, Redpanda, to contin
 
 ## About shared-data
 
-In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage costs, ensures better resource isolation, and provides elasticity and scalability.
+In systems that separate storage from compute, data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and when the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage costs, ensures better resource isolation, and provides elasticity and scalability.
 
 This tutorial covers:
 
@@ -50,7 +50,7 @@ You can use the SQL client provided in the Docker environment, or use one on you
 
 ### curl
 
-`curl` is used to download the Compose file and script to generate the data. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+`curl` is used to download the Compose file and the script to generate the data. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
 
 ### Python
 
@@ -83,7 +83,7 @@ This guide does not use BEs, this information is included here so that you under
 
 ## Launch StarRocks
 
-To run StarRocks with shared-data using Object Storage we need:
+To run StarRocks with shared-data using Object Storage you need:
 
 - A frontend engine (FE)
 - A compute node (CN)
@@ -115,9 +115,9 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 docker compose up --detach --wait --wait-timeout 120
 ```
 
-Check the progress of the services. It should take around 30 seconds for the FE and CN to become healthy. The MinIO container will not show a health indicator, but you will be using the MinIO web UI and that will verify its health.
+Check the progress of the services. It should take 30 seconds or more for the containers to become healthy. The `routineload-minio_mc-1` container will not show a health indicator, and it will exit once it is done configuring MinIO with the access key that StarRocks will use. Wait for `routineload-minio_mc-1` to exit with a `0` code and the rest of the services to be `Healthy`.
 
-Run `docker compose ps` until MinIO, the FE, and the CN services show a status of `healthy`:
+Run `docker compose ps` until the services are healthy:
 
 ```bash
 docker compose ps
@@ -153,14 +153,6 @@ Browse to http://localhost:9001/access-keys The username and password are specif
 ## SQL Clients
 
 <Clients />
-
----
-
-
-
-
-
-
 ---
 
 ## StarRocks configuration for shared-data
@@ -168,16 +160,6 @@ Browse to http://localhost:9001/access-keys The username and password are specif
 At this point you have StarRocks, Redpanda, and MinIO running. A MinIO access key is used to connect StarRocks and Minio. When StarRocks started up, it established the connection with MinIO and created the default storage volume in MinIO.
 
 This is the configuration used to set the default storage volume to use MinIO (this is also in the Docker compose file). The configuration will be described in detail at the end of this guide, for now just note that the `aws_s3_access_key` is set to the string that you saw in the MinIO Console and that the `run_mode` is set to `shared_data`.
-
-```bash
-docker compose exec starrocks-fe cat fe/conf/fe.conf
-```
-
-:::tip
-
-Run all `docker compose` commands from the directory containing the `docker-compose.yml` file.
-
-:::
 
 ```plaintext
 #highlight-start
@@ -203,6 +185,18 @@ aws_s3_use_aws_sdk_default_behavior = false
 # the details provided above
 enable_load_volume_from_conf = true
 ```
+
+:::tip
+
+To see the full configuration file you can run this command:
+
+```bash
+docker compose exec starrocks-fe cat fe/conf/fe.conf
+```
+
+Run all `docker compose` commands from the directory containing the `docker-compose.yml` file.
+
+:::
 
 ### Connect to StarRocks with a SQL client
 
@@ -288,13 +282,7 @@ DISTRIBUTED BY HASH(`uid`)
 PROPERTIES("replication_num"="1");
 ```
 
-
-
 ---
-
-
-
-
 
 ### Open the Redpanda Console
 
@@ -306,15 +294,26 @@ http://localhost:8080/overview
 
 From a command shell in the `routineload/` folder run this command to generate data:
 
+```python
+python gen.py 5
+```
+
 :::tip
 
 On your system, you might need to use `python3` in place of `python` in the command.
 
-:::
+If you are missing `kafka-python` try:
 
-```python
-python gen.py 5
 ```
+pip install kafka-python
+```
+ or
+
+```
+pip3 install kafka-python
+```
+
+:::
 
 ```plaintext
 b'{ "uid": 6926, "site": "https://docs.starrocks.io/", "vtime": 1718034793 } '
@@ -326,25 +325,34 @@ b'{ "uid": 4666, "site": "https://www.starrocks.io/", "vtime": 1718034794 } '
 
 ### Verify in the Redpanda Console
 
-Navigate to http://localhost:8080/topics in the Redpanda Console, and you will see one topic named `test2`. Select that topic and you will see five messages matching the output of `gen.py`.
+Navigate to http://localhost:8080/topics in the Redpanda Console, and you will see one topic named `test2`. Select that topic and then the **Messages** tab and you will see five messages matching the output of `gen.py`.
 
-## Verify in StarRocks
+## Consume the messages
+
+In StarRocks you will create a Routine Load job to:
+
+1. Consume the messages from the Redpanda topic `test2`
+2. Load those messages into the table `site_clicks`
+
+StarRocks is configured to use MinIO for storage, so the data inserted into the `site_clicks` table will be stored in MinIO.
 
 ### Create a Routine Load job
+
+Run this command in the SQL client to create the Routine Load job, the command will be explained in detail at the end of the lab.
 
 ```SQL
 CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
 PROPERTIES
 (
-    "format" = "json",
+    "format" = "JSON",
     "jsonpaths" ="[\"$.uid\",\"$.site\",\"$.vtime\"]"
 )
 FROM KAFKA
 (     
     "kafka_broker_list" = "redpanda:29092",
     "kafka_topic" = "test2",
-    "kafka_offsets" = "OFFSET_BEGINNING",
-    "kafka_partitions" = "0" 
+    "kafka_partitions" = "0",
+    "kafka_offsets" = "OFFSET_BEGINNING"
 );
 ```
 
@@ -395,9 +403,9 @@ SHOW ROUTINE LOAD\G
 
 ```SQL
 *************************** 1. row ***************************
-                  Id: 10075
-                Name: example_tbl2_test2
-          CreateTime: 2024-06-10 15:53:30
+                  Id: 10076
+                Name: clicks
+          CreateTime: 2024-06-12 18:40:53
            PauseTime: NULL
              EndTime: NULL
               DbName: quickstart
@@ -407,20 +415,19 @@ SHOW ROUTINE LOAD\G
       CurrentTaskNum: 1
        JobProperties: {"partitions":"*","partial_update":"false","columnToColumnExpr":"*","maxBatchIntervalS":"10","partial_update_mode":"null","whereExpr":"*","dataFormat":"json","timezone":"Etc/UTC","format":"json","log_rejected_record_num":"0","taskTimeoutSecond":"60","json_root":"","maxFilterRatio":"1.0","strict_mode":"false","jsonpaths":"[\"$.uid\",\"$.site\",\"$.vtime\"]","taskConsumeSecond":"15","desireTaskConcurrentNum":"5","maxErrorNum":"0","strip_outer_array":"false","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
 DataSourceProperties: {"topic":"test2","currentKafkaPartitions":"0","brokerList":"redpanda:29092"}
-    CustomProperties: {"group.id":"example_tbl2_test2_9ce0e896-a17f-43ff-86e1-5e413c7baabf"}
-    -- highlight-next-line
-           Statistic: {"receivedBytes":392,"errorRows":0,"committedTaskNum":1,"loadedRows":5,"loadRowsRate":0,"abortedTaskNum":0,"totalRows":5,"unselectedRows":0,"receivedBytesRate":0,"taskExecuteTimeMs":535}
-            Progress: {"0":"9"}
-   TimestampProgress: {"0":"1718034896098"}
+    CustomProperties: {"group.id":"clicks_a9426fee-45bb-403a-a1a3-b3bc6c7aa685"}
+               -- highlight-next-line
+           Statistic: {"receivedBytes":372,"errorRows":0,"committedTaskNum":1,"loadedRows":5,"loadRowsRate":0,"abortedTaskNum":0,"totalRows":5,"unselectedRows":0,"receivedBytesRate":0,"taskExecuteTimeMs":519}
+            Progress: {"0":"4"}
+   TimestampProgress: {"0":"1718217035111"}
 ReasonOfStateChanged:
         ErrorLogUrls:
          TrackingSQL:
-            OtherMsg: [2024-06-10 16:08:02] [task id: cbd7a02a-1a94-4fab-b5fe-e6dffda8861a] [txn id: -1] there is no new data in kafka, wait for 10 seconds to schedule again
-LatestSourcePosition: {"0":"10"}
-1 row in set (0.01 sec)
+            OtherMsg:
+                       -- highlight-next-line
+LatestSourcePosition: {"0":"5"}
+1 row in set (0.00 sec)
 ```
-
-### Notes on the Routine Load command
 
 ---
 
@@ -430,7 +437,7 @@ Open MinIO [http://localhost:9001/browser/](http://localhost:9001/browser/) and 
 
 ---
 
-## Simple query
+## Query the data from StarRocks
 
 ```SQL
 USE quickstart;
@@ -509,7 +516,7 @@ starlet_port = 9070
 
 The FE configuration is slightly different from the default as the FE must be configured to expect that data is stored in Object Storage rather than on local disks on BE nodes.
 
-The `docker-compose.yml` file generates the FE configuration in the `command`.
+The `docker-compose.yml` file generates the FE configuration in the `command` section of the `starrocks-fe` service.
 
 ```plaintext
 # enable shared data, set storage type, set endpoint
@@ -558,11 +565,11 @@ The MinIO endpoint, including port number.
 
 The bucket name.
 
-#### `aws_s3_access_key=AA`
+#### `aws_s3_access_key=AAAAAAAAAAAAAAAAAAAA`
 
 The MinIO access key.
 
-#### `aws_s3_secret_key=BB`
+#### `aws_s3_secret_key=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`
 
 The MinIO access key secret.
 
@@ -580,6 +587,94 @@ When this is true, a StarRocks storage volume named `builtin_storage_volume` is 
 
 ---
 
+## Notes on the Routine Load command
+
+StarRocks Routine Load takes many arguments. Only the ones used in this tutorial are described here, the rest will be linked to in the more information section.
+
+```SQL
+CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
+PROPERTIES
+(
+    "format" = "JSON",
+    "jsonpaths" ="[\"$.uid\",\"$.site\",\"$.vtime\"]"
+)
+FROM KAFKA
+(     
+    "kafka_broker_list" = "redpanda:29092",
+    "kafka_topic" = "test2",
+    "kafka_partitions" = "0",
+    "kafka_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+### Parameters
+
+```
+CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
+```
+
+The parameters for `CREATE ROUTINE LOAD ON` are:
+- database_name.job_name
+- table_name
+
+`database_name` is optional. In this lab, it is `quickstart` and is specified.
+
+`job_name` is required, and is `clicks`
+
+`table_name` is required, and is `site_clicks`
+
+### Job properties
+
+#### Property `format`
+
+```
+"format" = "JSON",
+```
+
+In this case, the data is in JSON format, so the property is set to `JSON`. The other valid formats are: `CSV`, `JSON`, and `Avro`. `CSV` is the default.
+
+#### Property `jsonpaths`
+
+```
+"jsonpaths" ="[\"$.uid\",\"$.site\",\"$.vtime\"]"
+```
+
+The names of the fields that you want to load from JSON-formatted data. The value of this parameter is a valid JsonPath expression. More information is available at the end of this page.
+
+
+### Data source properties
+
+#### `kafka_broker_list`
+
+```
+"kafka_broker_list" = "redpanda:29092",
+```
+
+Kafka's broker connection information. The format is `<kafka_broker_name_or_ip>:<broker_ port>`. Multiple brokers are separated by commas.
+
+#### `kafka_topic`
+
+```
+"kafka_topic" = "test2",
+```
+
+The Kafka topic to consume from.
+
+#### `kafka_partitions` and `kafka_offsets`
+
+```
+"kafka_partitions" = "0",
+"kafka_offsets" = "OFFSET_BEGINNING"
+```
+
+These properties are presented together as there is one `kafka_offset` required for each `kafka_partitions` entry. 
+
+`kafka_partitions` is a list of one or more partitions to consume. If this property is not set, then all partitions are consumed.
+
+`kafka_offsets` is a list of offsets, one for each partition listed in `kafka_partitions`. In this case the value is `OFFSET_BEGINNING` which causes all of the data to be consumed. The default is to only consume new data.
+
+---
+
 ## Summary
 
 In this tutorial you:
@@ -592,4 +687,6 @@ In this tutorial you:
 
 [StarRocks Architecture](../introduction/Architecture.md)
 
-[Routine Load](../loading/RoutineLoad.md)
+The sample used for this lab is very simple. Routine Load has many more options and capabilities. [learn more](../loading/RoutineLoad.md).
+
+[JSONPath](https://goessner.net/articles/JsonPath/)
