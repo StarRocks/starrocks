@@ -104,7 +104,6 @@ Status DataDir::init(bool read_only) {
 
 void DataDir::stop_bg_worker() {
     _stop_bg_worker = true;
-    _cv.notify_one();
 }
 
 Status DataDir::_init_data_dir() {
@@ -479,8 +478,7 @@ Status DataDir::load() {
 // gc unused tablet schemahash dir
 void DataDir::perform_path_gc_by_tablet() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_tablet_schemahash_paths.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_tablet_schemahash_paths.empty()) {
         return;
     }
     LOG(INFO) << "start to path gc by tablet schema hash.";
@@ -565,8 +563,7 @@ static bool is_delta_column_file(const std::string& path) {
 
 void DataDir::perform_delta_column_files_gc() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_dcg_files.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_check_dcg_files.empty()) {
         return;
     }
     LOG(INFO) << "start to do delta column files gc.";
@@ -598,8 +595,7 @@ void DataDir::perform_path_gc_by_rowsetid() {
     // init the set of valid path
     // validate the path in data dir
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_paths.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_check_paths.empty()) {
         return;
     }
     LOG(INFO) << "start to path gc by rowsetid.";
@@ -697,7 +693,6 @@ void DataDir::perform_path_scan() {
         LOG(INFO) << "scan data dir path:" << _path << " finished. path size:" << _all_check_paths.size()
                   << " dcg file size: " << _all_check_dcg_files.size();
     }
-    _cv.notify_one();
 }
 
 void DataDir::_process_garbage_path(const std::string& path) {
