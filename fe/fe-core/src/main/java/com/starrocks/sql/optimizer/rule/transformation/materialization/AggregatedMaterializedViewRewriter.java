@@ -725,13 +725,19 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Preconditions.checkState(targetColumn instanceof CallOperator);
             return (CallOperator) targetColumn;
         } else {
+            if (targetColumn instanceof CallOperator) {
+                // if it's aggregate function, it should be rewritten by group by keys, return it directly.
+                CallOperator targetCall = (CallOperator) targetColumn;
+                if (targetCall.isAggregate()) {
+                    return targetCall;
+                }
+            }
             if (!targetColumn.isColumnRef()) {
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                         "Rewrite aggregate rollup {} failed: only column-ref is supported after rewrite",
                         aggCall.toString());
                 return null;
             }
-            // Aggregate must be CallOperator
             CallOperator newAggregate = getRollupAggregateFunc(aggCall, (ColumnRefOperator) targetColumn, false);
             if (newAggregate == null) {
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),

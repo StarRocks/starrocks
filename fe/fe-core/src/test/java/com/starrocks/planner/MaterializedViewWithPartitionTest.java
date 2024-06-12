@@ -524,7 +524,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "GROUP BY `test_base_part`.`c3`, `test_base_part`.`c1`;");
 
             String query = "select c1, c3, sum(c4) from test_base_part where c3 < 2000 group by c1, c3;";
-            String plan = getFragmentPlan(query, "MV");
+            String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "partial_mv_11", "TABLE: test_base_part\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/5");
