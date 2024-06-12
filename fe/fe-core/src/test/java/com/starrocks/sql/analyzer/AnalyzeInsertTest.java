@@ -23,19 +23,13 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-<<<<<<< HEAD
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
-=======
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
->>>>>>> 200d90e688 ([BugFix] Abort transaction when plan insert failed (#46829))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
