@@ -25,7 +25,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```SQL
-CREATE EXTERNAL CATALOG <catalog_name>
+CREATE EXTERNAL CATALOG [IF NOT EXISTS] <catalog_name>
 [COMMENT <comment>]
 PROPERTIES ("key"="value", ...)
 ```
