@@ -22,8 +22,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -91,7 +94,17 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         }
 
         // group by keys contain partition columns and distribution columns
-        List<String> partitionColumnNames = olapTable.getPartitionColumnNames();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        List<String> partitionColumnNames = Lists.newArrayList();
+        if (partitionInfo.isRangePartition()) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            partitionColumnNames.addAll(rangePartitionInfo.getPartitionColumns().stream()
+                    .map(column -> column.getName().toLowerCase()).collect(Collectors.toList()));
+        } else if (partitionInfo.isListPartition()) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            partitionColumnNames.addAll(listPartitionInfo.getPartitionColumns().stream()
+                    .map(column -> column.getName().toLowerCase()).collect(Collectors.toList()));
+        }
         List<String> distributionColumnNames = olapTable.getDistributionColumnNames().stream()
                 .map(String::toLowerCase).collect(Collectors.toList());
 
