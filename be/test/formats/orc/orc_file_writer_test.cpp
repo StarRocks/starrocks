@@ -716,6 +716,59 @@ TEST_F(OrcFileWriterTest, TestWriteDateNotNull) {
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+TEST_F(OrcFileWriterTest, TestAllocatedBytes) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
+    auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    std::vector<TypeDescriptor> type_descs{type_datetime};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = TimestampColumn::create();
+        {
+            Datum datum;
+            datum.set_timestamp(TimestampValue::create(1999, 9, 9, 0, 0, 0));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1999, 9, 11, 2, 2, 2));
+            data_column->append_datum(datum);
+            data_column->append_default();
+        }
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    ASSERT_TRUE(writer->get_allocated_bytes() > 0);
+    auto result = writer->commit();
+    ASSERT_TRUE(writer->get_allocated_bytes() == 0);
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
+
+    // read chunk
+    ChunkPtr read_chunk;
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
+
+    // verify correctness
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
 TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
     ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);

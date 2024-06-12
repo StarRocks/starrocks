@@ -981,6 +981,51 @@ TEST_F(ParquetFileWriterTest, TestWriteVarbinary) {
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+TEST_F(ParquetFileWriterTest, TestAllocatedBytes) {
+    auto type_varbinary = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> type_descs{type_varbinary};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs.new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<parquet::ParquetOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
+    auto writer = std::make_unique<formats::ParquetFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = BinaryColumn::create();
+        data_column->append("hello");
+        data_column->append("world");
+        data_column->append("starrocks");
+        data_column->append("lakehouse");
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_TRUE(writer->write(chunk.get()).ok());
+    ASSERT_TRUE(writer->get_allocated_bytes() > 0);
+    auto result = writer->commit();
+    ASSERT_TRUE(writer->get_allocated_bytes() == 0);
+
+    ASSERT_TRUE(result.io_status.ok());
+    ASSERT_EQ(result.file_statistics.record_count, 4);
+
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    ASSERT_EQ(read_chunk->num_rows(), 4);
+    parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
 TEST_F(ParquetFileWriterTest, TestFlushRowgroup) {
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     std::vector<TypeDescriptor> type_descs{type_bool};

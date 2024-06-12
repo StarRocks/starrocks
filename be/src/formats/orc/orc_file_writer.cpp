@@ -498,7 +498,7 @@ Status ORCFileWriterFactory::init() {
 }
 
 StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
