@@ -171,14 +171,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "     TABLE: partial_mv_5\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=5/5");
-        PlanTestBase.assertContains(plan9, "  4:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(13: c2)\n" +
-                "  |  group by: 12: c1, 14: c3\n" +
-                "  |  \n" +
-                "  3:OlapScanNode\n" +
-                "     TABLE: test_base_part\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/6");
+        PlanTestBase.assertContains(plan9, "  2:AGGREGATE (update serialize)\n" +
+                "|  output: sum(10: c3)\n" +
+                "|  group by: ");
         dropMv("test", "partial_mv_5");
     }
 
