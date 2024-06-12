@@ -84,6 +84,7 @@ public class DropCatalogTest {
         Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
 
         StatementBase dropStmtBase = AnalyzeTestUtil.analyzeSuccess(dropSql);
+        Assert.assertEquals("DROP CATALOG IF EXISTS \'hive_catalog\'", dropStmtBase.toSql());
         Assert.assertTrue(dropStmtBase instanceof DropCatalogStmt);
         DropCatalogStmt dropCatalogStmt = (DropCatalogStmt) dropStmtBase;
         DDLStmtExecutor.execute(dropCatalogStmt, connectCtx);
