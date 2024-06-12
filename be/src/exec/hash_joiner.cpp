@@ -50,6 +50,8 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
     build_keys_per_bucket = ADD_COUNTER(runtime_profile, "BuildKeysPerBucket%", TUnit::UNIT);
     hash_table_memory_usage = ADD_COUNTER(runtime_profile, "HashTableMemoryUsage", TUnit::BYTES);
+
+    partial_runtime_bloom_filter_bytes = ADD_COUNTER(runtime_profile, "PartialRuntimeBloomFilterBytes", TUnit::BYTES);
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -69,7 +71,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _build_output_slots(param._build_output_slots),
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
-          _mor_reader_mode(param._mor_reader_mode) {
+          _mor_reader_mode(param._mor_reader_mode),
+          _enable_late_materialization(param._enable_late_materialization) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -141,6 +144,7 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
     param->mor_reader_mode = _mor_reader_mode;
+    param->enable_late_materialization = _enable_late_materialization;
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {

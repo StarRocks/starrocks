@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # hour
 
-## Description
+
 
 Returns the hour for a given date. The return value ranges from 0 to 23.
 

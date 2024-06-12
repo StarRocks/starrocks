@@ -28,12 +28,15 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
@@ -53,6 +56,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -105,6 +109,7 @@ import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.util.TableScanUtil;
+import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -253,6 +258,31 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void createView(CreateViewStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String viewName = stmt.getTable();
+
+        Database db = getDb(stmt.getDbName());
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        if (getView(dbName, viewName) != null) {
+            if (stmt.isSetIfNotExists()) {
+                LOG.info("create view[{}] which already exists", viewName);
+                return;
+            } else if (stmt.isReplace()) {
+                LOG.info("view {} already exists, need to replace it", viewName);
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, viewName);
+            }
+        }
+
+        ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
+        icebergCatalog.createView(viewDefinition, stmt.isReplace());
+    }
+
+    @Override
     public void alterTable(AlterTableStmt stmt) throws UserException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
@@ -281,9 +311,16 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void dropTable(DropTableStmt stmt) {
         Table icebergTable = getTable(stmt.getDbName(), stmt.getTableName());
+
+        if (icebergTable != null && icebergTable.isIcebergView()) {
+            icebergCatalog.dropView(stmt.getDbName(), stmt.getTableName());
+            return;
+        }
+
         if (icebergTable == null) {
             return;
         }
+
         icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
@@ -298,8 +335,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         try {
-            IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
+            IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             // Hive/Glue catalog table name is case-insensitive, normalize it to lower case
             if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
                 dbName = dbName.toLowerCase();
@@ -309,8 +346,20 @@ public class IcebergMetadata implements ConnectorMetadata {
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             tables.put(identifier, table);
             return table;
-        } catch (StarRocksConnectorException | NoSuchTableException e) {
+        } catch (StarRocksConnectorException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
+            return null;
+        } catch (NoSuchTableException e) {
+            return getView(dbName, tblName);
+        }
+    }
+
+    public Table getView(String dbName, String viewName) {
+        try {
+            View icebergView = icebergCatalog.getView(dbName, viewName);
+            return IcebergApiConverter.toView(catalogName, dbName, icebergView);
+        } catch (Exception e) {
+            LOG.error("Failed to get iceberg view {}.{}", dbName, viewName, e);
             return null;
         }
     }
@@ -383,7 +432,13 @@ public class IcebergMetadata implements ConnectorMetadata {
                     CloseableIterable<StructLike> rows = task.asDataTask().rows();
                     for (StructLike row : rows) {
                         // Get the last updated time of the table according to the table schema
-                        long lastUpdated = row.get(7, Long.class);
+                        long lastUpdated = -1;
+                        try {
+                            lastUpdated = row.get(7, Long.class);
+                        } catch (NullPointerException e) {
+                            LOG.error("The table [{}] snapshot [{}] has been expired",
+                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), e);
+                        }
                         Partition partition = new Partition(lastUpdated);
                         return ImmutableList.of(partition);
                     }
@@ -457,8 +512,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // metadata collect has been triggered by other rules or process if contains
         if (!scannedTables.contains(key)) {
-            try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.prepareTablesNum")) {
-                // Only record the number of tables that need to be prepared in parallel
+            synchronized (this) {
+                try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.prepareTablesNum")) {
+                    // Only record the number of tables that need to be prepared in parallel
+                }
             }
         }
         if (connectContext == null) {
@@ -601,7 +658,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergTable icebergTable = (IcebergTable) table;
         Optional<Snapshot> snapshot = icebergTable.getSnapshot();
         // empty table
-        if (!snapshot.isPresent()) {
+        if (snapshot.isEmpty()) {
             return;
         }
 

@@ -36,7 +36,7 @@ public class Histogram {
         if (mcv != null) {
             totalRows += mcv.values().stream().reduce(Long::sum).orElse(0L);
         }
-        return totalRows;
+        return Math.max(1, totalRows);
     }
 
     public List<Bucket> getBuckets() {
@@ -51,10 +51,9 @@ public class Histogram {
         int printMcvSize = 5;
         StringBuilder sb = new StringBuilder();
         sb.append("MCV: [");
-        mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(
-                Comparator.reverseOrder())).limit(printMcvSize).forEach(entry -> {
-                    sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]");
-                });
+        mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                .limit(printMcvSize)
+                .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]"));
         sb.append("]");
         return sb.toString();
     }

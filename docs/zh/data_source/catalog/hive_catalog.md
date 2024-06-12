@@ -1188,7 +1188,7 @@ DROP TABLE <table_name> FORCE
 默认情况下，StarRocks 会缓存 Hive 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hive 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
 
 ```SQL
-REFRESH EXTERNAL TABLE <table_name>
+REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 ```
 
 以下情况适用于执行手动更新元数据：

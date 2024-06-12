@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # any_value
 
-## 功能
+
 
 在包含 `GROUP BY` 的聚合查询中，该函数用于从每个聚合分组中**随机**选择一行返回。
 

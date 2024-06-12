@@ -721,7 +721,6 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
 }
 
 Status TabletManager::generate_pk_dump() {
-    std::vector<TabletAndScore> pick_tablets;
     // 1. pick primary key tablet
     std::vector<TabletSharedPtr> tablet_ptr_list;
     for (const auto& tablets_shard : _tablets_shards) {
@@ -767,7 +766,7 @@ std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_major_com
             continue;
         }
 
-        pick_tablets.emplace_back(tablet_ptr, score);
+        pick_tablets.emplace_back(tablet_ptr->tablet_id(), score);
     }
     // 2. sort tablet by score, by ascending order.
     std::sort(pick_tablets.begin(), pick_tablets.end(), [](TabletAndScore& a, TabletAndScore& b) {

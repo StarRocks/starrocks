@@ -150,6 +150,8 @@ public abstract class ConnectorPartitionTraits {
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames);
+
     /**
      * The max of refresh ts for all partitions
      */
@@ -247,6 +249,17 @@ public abstract class ConnectorPartitionTraits {
             return partitionNameWithPartition;
         }
 
+        @Override
+        public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+            Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
+            List<PartitionInfo> partitions = getPartitions(partitionNames);
+            Preconditions.checkState(partitions.size() == partitionNames.size(), "corrupted partition meta");
+            for (int index = 0; index < partitionNames.size(); ++index) {
+                partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
+            }
+            return partitionNameWithPartition;
+        }
+
         protected List<PartitionInfo> getPartitions(List<String> names) {
             throw new NotImplementedException("Only support hive/paimon/jdbc");
         }
@@ -320,7 +333,9 @@ public abstract class ConnectorPartitionTraits {
 
         @Override
         public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
-            // TODO: check partition type
+            if (!((OlapTable) table).getPartitionInfo().isRangePartition()) {
+                throw new IllegalArgumentException("Must be range partitioned table");
+            }
             return ((OlapTable) table).getRangePartitionMap();
         }
 
@@ -343,14 +358,22 @@ public abstract class ConnectorPartitionTraits {
             Map<String, MaterializedView.BasePartitionInfo> mvBaseTableVisibleVersionMap =
                     context.getBaseTableVisibleVersionMap()
                             .computeIfAbsent(baseTable.getId(), k -> Maps.newHashMap());
-            Set<String> result = Sets.newHashSet();
+            if (LOG.isDebugEnabled()) {
+                List<String> baseTablePartitionInfos = Lists.newArrayList();
+                for (String p : baseTable.getVisiblePartitionNames()) {
+                    Partition partition = baseTable.getPartition(p);
+                    baseTablePartitionInfos.add(String.format("%s:%s:%s", p, partition.getVisibleVersion(),
+                            partition.getVisibleVersionTime()));
+                }
+                LOG.debug("baseTable: {}, baseTablePartitions:{}, mvBaseTableVisibleVersionMap: {}",
+                        baseTable.getName(), baseTablePartitionInfos, mvBaseTableVisibleVersionMap);
+            }
 
+            Set<String> result = Sets.newHashSet();
             // If there are new added partitions, add it into refresh result.
             for (String partitionName : baseTable.getVisiblePartitionNames()) {
                 if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                     Partition partition = baseTable.getPartition(partitionName);
-                    // TODO: use `mvBaseTableVisibleVersionMap` to check whether base table has been refreshed or not instead of
-                    //  checking its version, remove this later.
                     if (partition.getVisibleVersion() != 1) {
                         result.add(partitionName);
                     }
@@ -370,7 +393,7 @@ public abstract class ConnectorPartitionTraits {
                 } else {
                     // Ignore partitions if mv's partition is the same with the basic table.
                     if (mvRefreshedPartitionInfo.getId() == basePartition.getId()
-                            && basePartition.getVisibleVersion() == mvRefreshedPartitionInfo.getVersion()) {
+                            && !isBaseTableChanged(basePartition, mvRefreshedPartitionInfo)) {
                         continue;
                     }
 
@@ -384,6 +407,18 @@ public abstract class ConnectorPartitionTraits {
         public List<Column> getPartitionColumns() {
             return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
         }
+    }
+
+    /**
+     * Check whether the base table's partition has changed or not.
+     * </p>
+     * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
+     * version and modified time.
+     */
+    private static boolean isBaseTableChanged(Partition partition,
+                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
+        return partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
 
     static class HivePartitionTraits extends DefaultTraits {

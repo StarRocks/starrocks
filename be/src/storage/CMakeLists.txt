@@ -120,6 +120,7 @@ add_library(Storage STATIC
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
     rowset/horizontal_update_rowset_writer.cpp
+    rowset/bitmap_index_evaluator.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
@@ -242,6 +243,7 @@ add_library(Storage STATIC
     lake/local_pk_index_manager.cpp
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
+    lake/column_mode_partial_update_handler.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp

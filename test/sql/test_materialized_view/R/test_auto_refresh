@@ -25,18 +25,10 @@ PARTITION BY (`__time`)
 REFRESH ASYNC
 PROPERTIES (
     "auto_refresh_partitions_limit" = "3",
-    "partition_refresh_number" = "1"
+    "partition_refresh_number" = "-1"
 )
 AS select * from t1;
 -- result:
--- !result
-function: wait_async_materialized_view_finish('mv1')
--- result:
-None
--- !result
-SELECT count(*) FROM mv1;
--- result:
-5
 -- !result
 INSERT INTO t1 SELECT * FROM t1;
 -- result:

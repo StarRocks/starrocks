@@ -85,7 +85,8 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         }
         cache_options.mem_space_size = parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit);
         if (config::datacache_disk_path.value().empty()) {
-            // If the disk cache does not be configured for datacache, set default path according storage path.
+            // If the disk cache does not be configured for datacache, set default path according storage path,
+            // and turn on the automatic adjust switch.
             std::vector<std::string> datacache_paths;
             std::for_each(storage_paths.begin(), storage_paths.end(), [&](const StorePath& root_path) {
                 std::filesystem::path sp(root_path.path);
@@ -93,6 +94,7 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
                 datacache_paths.push_back(dp.string());
             });
             config::datacache_disk_path = JoinStrings(datacache_paths, ";");
+            config::datacache_auto_adjust_enable = true;
         }
         RETURN_IF_ERROR(parse_conf_datacache_disk_spaces(config::datacache_disk_path, config::datacache_disk_size,
                                                          config::ignore_broken_disk, &cache_options.disk_spaces));

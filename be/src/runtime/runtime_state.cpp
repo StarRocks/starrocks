@@ -155,6 +155,9 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
                          const TQueryGlobals& query_globals, ExecEnv* exec_env) {
     _fragment_instance_id = fragment_instance_id;
     _query_options = query_options;
+    if (_query_options.__isset.spill_options) {
+        _spill_options = _query_options.spill_options;
+    }
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
         if (query_globals.__isset.timestamp_us) {

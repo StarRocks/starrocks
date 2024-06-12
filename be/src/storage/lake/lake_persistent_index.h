@@ -114,11 +114,11 @@ public:
 
     Status minor_compact();
 
-    Status major_compact(const TabletMetadata& metadata, int64_t min_retain_version, TxnLogPB* txn_log);
+    static Status major_compact(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log);
 
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
 
-    void commit(MetaFileBuilder* builder);
+    Status commit(MetaFileBuilder* builder);
 
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
@@ -151,11 +151,11 @@ private:
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
     // get sstable's iterator that need to compact and modify txn_log
-    Status prepare_merging_iterator(const TabletMetadata& metadata, TxnLogPB* txn_log,
-                                    std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-                                    std::unique_ptr<sstable::Iterator>* merging_iter_ptr);
+    static Status prepare_merging_iterator(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log,
+                                           std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
+                                           std::unique_ptr<sstable::Iterator>* merging_iter_ptr);
 
-    Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
+    static Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;

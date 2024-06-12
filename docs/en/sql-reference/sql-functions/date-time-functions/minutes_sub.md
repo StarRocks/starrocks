@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # minutes_sub
 
-## Description
+
 
 Subtracts specified minutes from the date, accurate to the minute.
 

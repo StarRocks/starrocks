@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
@@ -30,6 +31,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -100,6 +102,36 @@ public class OptOlapPartitionPruner {
             builder.setPredicate(Utils.compoundAnd(prunePartitionPredicate.first))
                     .setPrunedPartitionPredicates(prunePartitionPredicate.second);
         }
+        return builder.build();
+    }
+
+    /**
+     * If the selected partition ids are not null, merge the selected partition ids and do further partition pruning.
+     * @param olapScanOperator the olap scan operator
+     * @return the new olap scan operator with merged partition ids and predicates
+     */
+    public static LogicalOlapScanOperator mergePartitionPrune(LogicalOlapScanOperator olapScanOperator) {
+        // already pruned partitions
+        List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
+        // new pruned partitions
+        LogicalOlapScanOperator newOlapScanOperator = OptOlapPartitionPruner.prunePartitions(olapScanOperator);
+        List<Long> newSelectedPartitionIds = newOlapScanOperator.getSelectedPartitionId();
+        // merge selected partition ids
+        List<Long> ansPartitionIds = null;
+        if (newSelectedPartitionIds != null && selectedPartitionIds != null) {
+            ansPartitionIds = Lists.newArrayList(selectedPartitionIds);
+            // use hash set to accelerate the intersection operation
+            ansPartitionIds.retainAll(new HashSet<>(newSelectedPartitionIds));
+        } else {
+            ansPartitionIds = (selectedPartitionIds == null) ? newSelectedPartitionIds : selectedPartitionIds;
+        }
+        final LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        builder.withOperator(newOlapScanOperator)
+                .setSelectedPartitionId(ansPartitionIds)
+                // new predicate should cover the old one
+                .setPredicate(newOlapScanOperator.getPredicate())
+                // use the new pruned partition predicates
+                .setPrunedPartitionPredicates(newOlapScanOperator.getPrunedPartitionPredicates());
         return builder.build();
     }
 
@@ -206,7 +238,7 @@ public class OptOlapPartitionPruner {
 
         scanPredicates.removeAll(prunedPartitionPredicates);
 
-        if (column.isAllowNull() && containsNullValue(column, minRange)
+        if (column.isAllowNull() && containsNullValue(minRange)
                 && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
             return null;
         }
@@ -374,12 +406,15 @@ public class OptOlapPartitionPruner {
         return false;
     }
 
-    private static boolean containsNullValue(Column column, PartitionKey minRange) {
+    private static boolean containsNullValue(PartitionKey minRange) {
         PartitionKey nullValue = new PartitionKey();
         try {
-            //nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
-            nullValue.pushColumn(LiteralExpr.createInfinity(minRange.getKeys().get(0).getType(), false),
-                    minRange.getTypes().get(0));
+            for (int i = 0; i < minRange.getKeys().size(); ++i) {
+                LiteralExpr rangeKey = minRange.getKeys().get(i);
+                PrimitiveType type = minRange.getTypes().get(i);
+                nullValue.pushColumn(LiteralExpr.createInfinity(rangeKey.getType(), false), type);
+            }
+
             return minRange.compareTo(nullValue) <= 0;
         } catch (AnalysisException e) {
             return false;

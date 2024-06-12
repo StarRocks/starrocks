@@ -10,13 +10,12 @@
     <artifactId>hive-reader</artifactId>
     <packaging>jar</packaging>
 
-
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <slf4j.version>1.7.36</slf4j.version>
         <guava.version>32.0.1-jre</guava.version>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <hadoop.version>3.3.6</hadoop.version>
+        <hadoop.version>3.4.0</hadoop.version>
         <avro.version>1.11.3</avro.version>
         <junit.version>4.13.1</junit.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>
@@ -28,7 +27,6 @@
             <artifactId>avro</artifactId>
             <version>${avro.version}</version>
         </dependency>
-
 
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -61,7 +59,6 @@
             <artifactId>log4j-core</artifactId>
             <version>${log4j.version}</version>
         </dependency>
-
 
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -100,6 +97,12 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
             <version>${hadoop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>bundle</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
     </dependencies>

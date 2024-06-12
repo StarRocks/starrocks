@@ -46,6 +46,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class PseudoClusterTest {
@@ -125,10 +127,20 @@ public class PseudoClusterTest {
             stmt.execute("execute stmt1 using @i");
             stmt.execute("execute stmt3");
             stmt.execute("select * from test where pk = ?", 1);
-            try {
-                stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
-                Assert.fail("expected exception was not occured.");
-            } catch (SQLException e) {
+
+            {
+                SQLException e = Assert.assertThrows(SQLException.class,
+                        () -> stmt.execute("prepare stmt2 from insert overwrite test values (1,2)"));
+                Assert.assertEquals("(conn=1) Getting analyzing error. Detail message: This command is not " +
+                        "supported in the prepared statement protocol yet.", e.getMessage());
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
+            }
+            {
+                SQLException e = Assert.assertThrows(SQLException.class,
+                        () -> stmt.execute("prepare stmt2 from ALTER USER 'root'@'%' IDENTIFIED BY 'XXXXX' "));
+                Assert.assertEquals("(conn=1) Getting analyzing error. Detail message: This command is not " +
+                        "supported in the prepared statement protocol yet.", e.getMessage());
                 Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
                 Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
@@ -245,6 +257,12 @@ public class PseudoClusterTest {
             @Mock
             public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
                 return pathInfo;
+            }
+
+            @Mock
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+                // the worker id is a random number
+                return new ArrayList<>(Arrays.asList(10001L));
             }
         };
 

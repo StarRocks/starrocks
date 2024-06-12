@@ -171,6 +171,8 @@ public:
         return true;
     }
 
+    virtual bool support_bitmap_filter() const { return false; }
+
     [[nodiscard]] virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");
     }

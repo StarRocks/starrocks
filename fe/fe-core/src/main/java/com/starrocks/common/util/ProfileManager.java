@@ -176,6 +176,7 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         element.plan = plan;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
+        String queryType = element.infoStrings.get(ProfileManager.QUERY_TYPE);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
         if (Strings.isNullOrEmpty(queryId)) {
@@ -185,9 +186,16 @@ public class ProfileManager implements MemoryTrackable {
 
         writeLock.lock();
         try {
-            profileMap.put(queryId, element);
-            if (profileMap.size() >= Config.profile_info_reserved_num) {
-                profileMap.remove(profileMap.keySet().iterator().next());
+            if (queryType != null && queryType.equals("Load")) {
+                loadProfileMap.put(queryId, element);
+                if (loadProfileMap.size() > Config.load_profile_info_reserved_num) {
+                    loadProfileMap.remove(loadProfileMap.keySet().iterator().next());
+                }
+            } else {
+                profileMap.put(queryId, element);
+                if (profileMap.size() > Config.profile_info_reserved_num) {
+                    profileMap.remove(profileMap.keySet().iterator().next());
+                }
             }
         } finally {
             writeLock.unlock();
@@ -196,26 +204,12 @@ public class ProfileManager implements MemoryTrackable {
         return profileString;
     }
 
-    public void pushLoadProfile(RuntimeProfile profile) {
-        String profileString = generateProfileString(profile);
-
-        ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
-        String loadId = element.infoStrings.get(ProfileManager.QUERY_ID);
-        // check when push in, which can ensure every element in the list has QUERY_ID column,
-        // so there is no need to check when remove element from list.
-        if (Strings.isNullOrEmpty(loadId)) {
-            LOG.warn("the key or value of Map is null, "
-                    + "may be forget to insert 'QUERY_ID' column into infoStrings");
-        }
-
-        writeLock.lock();
+    public boolean hasProfile(String queryId) {
+        readLock.lock();
         try {
-            loadProfileMap.put(loadId, element);
-            if (loadProfileMap.size() >= Config.load_profile_info_reserved_num) {
-                loadProfileMap.remove(loadProfileMap.keySet().iterator().next());
-            }
+            return profileMap.containsKey(queryId) || loadProfileMap.containsKey(queryId);
         } finally {
-            writeLock.unlock();
+            readLock.unlock();
         }
     }
 
@@ -224,6 +218,14 @@ public class ProfileManager implements MemoryTrackable {
         readLock.lock();
         try {
             for (ProfileElement element : profileMap.values()) {
+                Map<String, String> infoStrings = element.infoStrings;
+                List<String> row = Lists.newArrayList();
+                for (String str : PROFILE_HEADERS) {
+                    row.add(infoStrings.get(str));
+                }
+                result.add(0, row);
+            }
+            for (ProfileElement element : loadProfileMap.values()) {
                 Map<String, String> infoStrings = element.infoStrings;
                 List<String> row = Lists.newArrayList();
                 for (String str : PROFILE_HEADERS) {
@@ -242,6 +244,16 @@ public class ProfileManager implements MemoryTrackable {
         try {
             loadProfileMap.remove(queryId);
             profileMap.remove(queryId);
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public void clearProfiles() {
+        writeLock.lock();
+        try {
+            loadProfileMap.clear();
+            profileMap.clear();
         } finally {
             writeLock.unlock();
         }
@@ -269,7 +281,7 @@ public class ProfileManager implements MemoryTrackable {
     public ProfileElement getProfileElement(String queryId) {
         readLock.lock();
         try {
-            return profileMap.get(queryId);
+            return profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
         } finally {
             readLock.unlock();
         }
@@ -280,6 +292,7 @@ public class ProfileManager implements MemoryTrackable {
         readLock.lock();
         try {
             result.addAll(profileMap.values());
+            result.addAll(loadProfileMap.values());
         } finally {
             readLock.unlock();
         }

@@ -132,6 +132,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
     private Expr generatedColumnExpr;
 
+    // Only for persist
     public Column() {
         this.name = "";
         this.type = Type.NULL;
@@ -379,6 +380,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public boolean isGeneratedColumn() {
         return generatedColumnExpr != null;
+    }
+
+    public boolean isShadowColumn() {
+        return this.name.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX);
     }
 
     public int getOlapColumnIndexSize() {

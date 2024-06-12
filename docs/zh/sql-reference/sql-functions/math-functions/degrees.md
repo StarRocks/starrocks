@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # degrees
 
-## 功能
+
 
 将参数 `x` 转成角度，`x` 是弧度。
 

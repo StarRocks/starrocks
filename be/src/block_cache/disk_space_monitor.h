@@ -41,7 +41,7 @@ public:
     public:
         virtual StatusOr<SpaceInfo> space(const std::string& path) { return FileSystem::Default()->space(path); }
 
-        virtual StatusOr<size_t> directory_capacity(const std::string& dir);
+        virtual StatusOr<size_t> directory_size(const std::string& dir);
 
         virtual int disk_id(const std::string& path) { return DiskInfo::disk_id(path.c_str()); }
 

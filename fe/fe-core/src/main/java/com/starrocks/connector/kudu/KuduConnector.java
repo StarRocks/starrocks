@@ -38,12 +38,14 @@ import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class KuduConnector implements Connector {
     private static final String HIVE = "hive";
+    private static final String GLUE = "glue";
     private static final String KUDU = "kudu";
-    private static final Set<String> SUPPORTED_METASTORE_TYPE = Sets.newHashSet(HIVE, KUDU);
-    private static final String KUDU_MASTER = "kudu.master";
-    private static final String KUDU_CATALOG_TYPE = "kudu.catalog.type";
-    private static final String KUDU_SCHEMA_EMULATION_ENABLED = "kudu.schema-emulation.enabled";
-    private static final String KUDU_SCHEMA_EMULATION_PREFIX = "kudu.schema-emulation.prefix";
+    private static final Set<String> SUPPORTED_METASTORE_TYPE = Sets.newHashSet(HIVE, GLUE, KUDU);
+    public static final String KUDU_MASTER = "kudu.master";
+    public static final String KUDU_CATALOG_TYPE = "kudu.catalog.type";
+    public static final String KUDU_SCHEMA_EMULATION_ENABLED = "kudu.schema-emulation.enabled";
+    public static final String KUDU_SCHEMA_EMULATION_PREFIX = "kudu.schema-emulation.prefix";
+    public static final String DEFAULT_KUDU_MASTER = "localhost:7051";
     private final String catalogName;
     private final String kuduMaster;
     private final String catalogType;
@@ -58,7 +60,7 @@ public class KuduConnector implements Connector {
         this.catalogName = context.getCatalogName();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
-        this.kuduMaster = getPropertyOrThrow(KUDU_MASTER);
+        this.kuduMaster = properties.getOrDefault(KUDU_MASTER, DEFAULT_KUDU_MASTER);
         this.catalogType = getPropertyOrThrow(KUDU_CATALOG_TYPE).toLowerCase();
         this.metastoreUris = properties.get(HIVE_METASTORE_URIS);
         this.schemaEmulationEnabled = Boolean.parseBoolean(properties.get(KUDU_SCHEMA_EMULATION_ENABLED));
@@ -92,13 +94,21 @@ public class KuduConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         Optional<IHiveMetastore> hiveMetastore = Optional.empty();
-        if (HIVE.equals(catalogType)) {
-            Util.validateMetastoreUris(metastoreUris);
+        if (isHiveOrGlueCatalogType()) {
+            MetastoreType metastoreType = MetastoreType.get(catalogType);
             HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(this.hdfsEnvironment, properties);
-            hiveMetastore = Optional.of(new HiveMetastore(metaClient, catalogName, MetastoreType.HMS));
+            hiveMetastore = Optional.of(new HiveMetastore(metaClient, catalogName, metastoreType));
             // TODO caching hiveMetastore support
         }
         return new KuduMetadata(catalogName, hdfsEnvironment, kuduMaster, schemaEmulationEnabled, schemaEmulationPrefix,
                 hiveMetastore);
+    }
+
+    private boolean isHiveOrGlueCatalogType() {
+        if (HIVE.equals(catalogType)) {
+            Util.validateMetastoreUris(metastoreUris);
+            return true;
+        }
+        return GLUE.equals(catalogType);
     }
 }

@@ -33,6 +33,10 @@ Status RowsMapperBuilder::_init() {
 }
 
 Status RowsMapperBuilder::append(const std::vector<uint64_t>& rssid_rowids) {
+    if (rssid_rowids.empty()) {
+        // skip create rows mapper file when output rowset is empty.
+        return Status::OK();
+    }
     if (_wfile == nullptr) {
         RETURN_IF_ERROR(_init());
     }

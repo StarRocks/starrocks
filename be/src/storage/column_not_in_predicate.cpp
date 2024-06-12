@@ -91,6 +91,8 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+    bool support_bitmap_filter() const override { return false; }
+
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
@@ -153,6 +155,20 @@ public:
         }
         *output = obj_pool->add(new_column_not_in_predicate(target_type_info, _column_id, strs));
         return Status::OK();
+    }
+
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << "((columnId=" << _column_id << ")NOT IN(";
+        int i = 0;
+        for (auto& item : _values) {
+            if (i++ != 0) {
+                ss << ",";
+            }
+            ss << this->type_info()->to_string(&item);
+        }
+        ss << "))";
+        return ss.str();
     }
 
 private:
@@ -243,6 +259,8 @@ public:
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+
+    bool support_bitmap_filter() const override { return false; }
 
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");

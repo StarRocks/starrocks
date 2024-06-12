@@ -279,7 +279,6 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-                context.setExecutionId(loadId);
 
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
@@ -305,6 +304,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
+                        .setWarehouseId(warehouseId)
                         .build();
 
                 task.prepare();

@@ -22,10 +22,10 @@
 #####################################################
 
 # HADOOP
-HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz"
-HADOOP_NAME="hadoop-3.3.6.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.6"
-HADOOP_MD5SUM="1cbe1214299cd3bd282d33d3934b5cbd"
+HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz"
+HADOOP_NAME="hadoop-3.4.0.tar.gz"
+HADOOP_SOURCE="hadoop-3.4.0"
+HADOOP_MD5SUM="2f9244ab73169cf7bc0811d932067f6b"
 
 # OPEN JDK
 JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"
@@ -52,7 +52,7 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux"
 JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.3.0/starcache-centos7_amd64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.3.1/starcache-centos7_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="d2176508003f4462f896fc186f44342d"
+STARCACHE_MD5SUM="305a4b8a8b3c1674279676fb6ace10c6"

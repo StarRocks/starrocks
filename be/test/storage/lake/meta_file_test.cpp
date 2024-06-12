@@ -23,6 +23,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
@@ -124,7 +125,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     // 3. read delvec
     DelVector after_delvec;
     ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, &after_delvec).ok());
+    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata2, segment_id, true, &after_delvec).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
 
     // 4. read meta
@@ -225,7 +226,7 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
         // 3. read delvec
         DelVector after_delvec;
         ASSIGN_OR_ABORT(auto meta, _tablet_manager->get_tablet_metadata(tablet_id, version));
-        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, &after_delvec).ok());
+        EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *meta, segment_id, false, &after_delvec).ok());
         EXPECT_EQ(before_delvec, after_delvec.save());
     };
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {
@@ -234,6 +235,175 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
     // test twice
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {
         test_delvec(segment_id);
+    }
+}
+
+TEST_F(MetaFileTest, test_dcg) {
+    // 1. generate metadata
+    const int64_t tablet_id = 10001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+
+    // 2. write first rowset
+    {
+        metadata->set_version(11);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("aaa.dat");
+        TxnLogPB_OpWrite op_write;
+        std::map<int, FileInfo> replace_segments;
+        std::vector<std::string> orphan_files;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        builder.apply_opwrite(op_write, replace_segments, orphan_files);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+    // 3. write dcg
+    {
+        metadata->set_version(12);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("bbb.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        std::vector<std::string> filenames;
+        filenames.push_back("aaa.cols");
+        filenames.push_back("bbb.cols");
+        std::vector<std::vector<ColumnUID>> unique_column_id_list;
+        unique_column_id_list.push_back({3, 4, 5});
+        unique_column_id_list.push_back({6, 7, 8});
+        builder.append_dcg(110, filenames, unique_column_id_list);
+        builder.apply_column_mode_partial_update(op_write);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+        // <3, 4, 5> -> aaa.cols
+        // <6, 7, 8> -> bbb.cols
+    }
+    {
+        metadata->set_version(13);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("ccc.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        std::vector<std::string> filenames;
+        filenames.push_back("ccc.cols");
+        std::vector<std::vector<ColumnUID>> unique_column_id_list;
+        unique_column_id_list.push_back({4, 7});
+        builder.append_dcg(110, filenames, unique_column_id_list);
+        builder.apply_column_mode_partial_update(op_write);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+        // <3, 5> -> aaa.cols
+        // <6, 8> -> bbb.cols
+        // <4, 7> -> ccc.cols
+    }
+    {
+        metadata->set_version(14);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("ddd.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        std::vector<std::string> filenames;
+        filenames.push_back("ddd.cols");
+        std::vector<std::vector<ColumnUID>> unique_column_id_list;
+        unique_column_id_list.push_back({3, 5});
+        builder.append_dcg(110, filenames, unique_column_id_list);
+        builder.apply_column_mode_partial_update(op_write);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+        auto dcg_ver_iter = metadata->dcg_meta().dcgs().find(110);
+        EXPECT_TRUE(dcg_ver_iter != metadata->dcg_meta().dcgs().end());
+        EXPECT_TRUE(dcg_ver_iter->second.versions_size() == 3);
+        EXPECT_TRUE(dcg_ver_iter->second.column_files_size() == 3);
+        EXPECT_TRUE(dcg_ver_iter->second.unique_column_ids_size() == 3);
+        // <3, 5> -> ddd.cols
+        // <6, 8> -> bbb.cols
+        // <4, 7> -> ccc.cols
+    }
+    {
+        auto loader = std::make_unique<LakeDeltaColumnGroupLoader>(metadata);
+        TabletSegmentId tsid;
+        tsid.tablet_id = tablet_id;
+        tsid.segment_id = 110;
+        DeltaColumnGroupList pdcgs;
+        EXPECT_TRUE(loader->load(tsid, 1, &pdcgs).ok());
+        EXPECT_TRUE(pdcgs.size() == 1);
+        auto idx = pdcgs[0]->get_column_idx(3);
+        EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        idx = pdcgs[0]->get_column_idx(4);
+        EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        idx = pdcgs[0]->get_column_idx(5);
+        EXPECT_TRUE("tmp/ddd.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        idx = pdcgs[0]->get_column_idx(6);
+        EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        idx = pdcgs[0]->get_column_idx(7);
+        EXPECT_TRUE("tmp/ccc.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+        idx = pdcgs[0]->get_column_idx(8);
+        EXPECT_TRUE("tmp/bbb.cols" == pdcgs[0]->column_files("tmp")[idx.first]);
+    }
+    // 4. compact (conflict)
+    {
+        metadata->set_version(15);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(110);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("eee.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
+        op_compaction.set_compact_version(13);
+        EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+    // 5. compact
+    {
+        metadata->set_version(16);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(110);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("fff.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
+        op_compaction.set_compact_version(14);
+        EXPECT_FALSE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
+        builder.apply_opcompaction(op_compaction, 1);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+    {
+        auto loader = std::make_unique<LakeDeltaColumnGroupLoader>(metadata);
+        TabletSegmentId tsid;
+        tsid.tablet_id = tablet_id;
+        tsid.segment_id = 110;
+        DeltaColumnGroupList pdcgs;
+        EXPECT_TRUE(loader->load(tsid, 1, &pdcgs).ok());
+        EXPECT_TRUE(pdcgs.empty());
+    }
+    // 6. check orphan files
+    {
+        std::set<std::string> to_check_filenames;
+        to_check_filenames.insert("aaa.cols");
+        to_check_filenames.insert("bbb.cols");
+        to_check_filenames.insert("ccc.cols");
+        to_check_filenames.insert("ddd.cols");
+        to_check_filenames.insert("bbb.dat");
+        to_check_filenames.insert("ccc.dat");
+        to_check_filenames.insert("ddd.dat");
+        to_check_filenames.insert("eee.dat");
+        EXPECT_TRUE(metadata->orphan_files_size() == to_check_filenames.size());
+        for (const auto& orphan_file : metadata->orphan_files()) {
+            EXPECT_TRUE(to_check_filenames.count(orphan_file.name()) > 0);
+        }
     }
 }
 

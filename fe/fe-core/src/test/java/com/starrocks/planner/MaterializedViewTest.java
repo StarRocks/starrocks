@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.api.client.util.Lists;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
@@ -27,7 +28,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.apache.parquet.Strings;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -755,9 +755,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteFail(mv, "select empid, deptno,\n" +
                 " sum(salary) as total, count(1)  as cnt\n" +
                 " from emps group by empid, deptno");
-        testRewriteFail(mv, "select empid,\n" +
+        testRewriteOK(mv, "select empid,\n" +
                 " sum(salary) as total, count(1)  as cnt\n" +
-                " from emps group by empid");
+                " from emps group by empid")
+                .contains("  1:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(11: total), count(1)\n" +
+                        "  |  group by: 9: empid");
     }
 
     @Test

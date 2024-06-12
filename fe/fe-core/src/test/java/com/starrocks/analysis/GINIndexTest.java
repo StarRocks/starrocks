@@ -28,6 +28,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
@@ -48,6 +49,7 @@ public class GINIndexTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.enable_experimental_gin = true;
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE `test_index_tbl` (\n" +
                 "  `f1` int NOT NULL COMMENT \"\",\n" +

@@ -309,7 +309,7 @@ public:
 
     const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
 
-    TabletSchemaCSPtr update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
+    void update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
 
     int64_t data_size();
 

@@ -141,6 +141,11 @@ select * from repeated_value where c0 = 1;
 1	50000	[1,50000]
 1	50000	[1,50000]
 -- !result
+select * from read_range_test where c0 in (1, 4000);
+-- result:
+1	20000	1	[1,null,0]
+4000	16001	None	None
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0

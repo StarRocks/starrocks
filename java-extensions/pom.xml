@@ -21,6 +21,7 @@
         <module>odps-reader</module>
         <module>iceberg-metadata-reader</module>
         <module>kudu-reader</module>
+        <module>common-runtime</module>
     </modules>
     <name>starrocks-java-extensions</name>
 
@@ -32,6 +33,7 @@
         <log4j.version>2.19.0</log4j.version>
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
+        <aws-v2-sdk.version>2.23.19</aws-v2-sdk.version>
     </properties>
     <build>
         <plugins>

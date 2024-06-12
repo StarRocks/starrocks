@@ -1092,7 +1092,7 @@ public class LeaderImpl {
                 }
             }
 
-            List<TBackendMeta> backends = getBackendMetas();
+            List<TBackendMeta> backends = getNodeMetas();
             response.setStatus(new TStatus(TStatusCode.OK));
             response.setTable_meta(tableMeta);
             response.setBackends(backends);
@@ -1119,20 +1119,22 @@ public class LeaderImpl {
     }
 
     @NotNull
-    private static List<TBackendMeta> getBackendMetas() {
-        List<TBackendMeta> backends = new ArrayList<>();
-        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
-            TBackendMeta backendMeta = new TBackendMeta();
-            backendMeta.setBackend_id(backend.getId());
-            backendMeta.setHost(backend.getHost());
-            backendMeta.setBe_port(backend.getBePort());
-            backendMeta.setRpc_port(backend.getBrpcPort());
-            backendMeta.setHttp_port(backend.getHttpPort());
-            backendMeta.setAlive(backend.isAlive());
-            backendMeta.setState(backend.getBackendState().ordinal());
-            backends.add(backendMeta);
-        }
-        return backends;
+    private static List<TBackendMeta> getNodeMetas() {
+        List<TBackendMeta> nodeMetas = new ArrayList<>();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream().forEach(node -> {
+            if (RunMode.isSharedDataMode() || node instanceof Backend) {
+                TBackendMeta nodeMeta = new TBackendMeta();
+                nodeMeta.setBackend_id(node.getId());
+                nodeMeta.setHost(node.getHost());
+                nodeMeta.setBe_port(node.getBePort());
+                nodeMeta.setRpc_port(node.getBrpcPort());
+                nodeMeta.setHttp_port(node.getHttpPort());
+                nodeMeta.setAlive(node.isAlive());
+                nodeMeta.setState(node.getBackendState().ordinal());
+                nodeMetas.add(nodeMeta);
+            }
+        });
+        return nodeMetas;
     }
 
     @NotNull

@@ -135,10 +135,9 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("External table %s don't support SAMPLE analyze",
                             statement.getTableName().toString());
                 }
-                if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
-                        !analyzeTable.isOdpsTable()) {
+                if (!analyzeTable.isAnalyzableExternalTable()) {
                     throw new SemanticException(
-                            "Analyze external table only support hive, iceberg and odps table",
+                            "Analyze external table only support hive, iceberg, deltalake and odps table",
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
@@ -172,9 +171,8 @@ public class AnalyzeStmtAnalyzer {
                             session.getDatabase() : tbl.getDb();
                     tbl.setDb(dbName);
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
-                    if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable() && !analyzeTable.isHudiTable() &&
-                            !analyzeTable.isOdpsTable()) {
-                        throw new SemanticException("Analyze external table only support hive, iceberg and odps table",
+                    if (!analyzeTable.isAnalyzableExternalTable()) {
+                        throw new SemanticException("Analyze external table only support hive, iceberg, deltalake and odps table",
                                 statement.getTableName().toString());
                     }
                 }
@@ -315,12 +313,12 @@ public class AnalyzeStmtAnalyzer {
 
                     Statistics tableStats = session.getGlobalStateMgr().getMetadataMgr().
                             getTableStatistics(new OptimizerContext(new Memo(), new ColumnRefFactory(), session,
-                                    OptimizerConfig.defaultConfig()),
+                                            OptimizerConfig.defaultConfig()),
                                     tableName.getCatalog(), analyzeTable, Maps.newHashMap(), keys, null);
                     totalRows = tableStats.getOutputRowCount();
 
                 }
-                double sampleRows =  totalRows *
+                double sampleRows = totalRows *
                         Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
                 if (sampleRows < Config.statistic_sample_collect_rows && totalRows != 0) {
                     if (Config.statistic_sample_collect_rows > totalRows) {

@@ -579,7 +579,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 
     // TODO
     // we don't need to rebuil all partial update state but just resolve the conflict rows and columns
-    if (_partial_update_states[segment_id].schema_version < tablet_schema->schema_version()) {
+    if (_partial_update_states[segment_id].schema_version != tablet_schema->schema_version()) {
         Status st = _rebuild_partial_update_states(tablet, rowset, rowset_id, segment_id, tablet_schema);
         LOG(INFO) << "tablet schema version change from " << _partial_update_states[segment_id].schema_version << " to "
                   << tablet_schema->schema_version() << " before partial state apply finished, rebuild"

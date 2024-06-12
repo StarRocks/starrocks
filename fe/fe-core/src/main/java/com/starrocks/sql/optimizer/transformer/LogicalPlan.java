@@ -18,10 +18,12 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
+import javax.validation.constraints.NotNull;
 
 public class LogicalPlan {
     private final OptExprBuilder root;
     private final List<ColumnRefOperator> outputColumn;
+    @NotNull
     private final List<ColumnRefOperator> correlation;
 
     public LogicalPlan(OptExprBuilder root, List<ColumnRefOperator> outputColumns,

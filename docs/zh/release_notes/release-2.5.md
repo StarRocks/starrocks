@@ -4,6 +4,25 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.5
 
+## 2.5.21
+
+发布日期：2024 年 5 月 15 日
+
+### 功能优化
+
+- 优化物化视图刷新时对于 db 锁的使用，避免死锁。[#42801](https://github.com/StarRocks/starrocks/pull/42801)
+- 访问 S3 时，可以使用 `s3a://`，也可以使用 `s3://`。[#42460](https://github.com/StarRocks/starrocks/pull/42460)
+
+### 问题修复
+
+修复了如下问题：
+
+- 表进行 Schema Change 时，可能会导致前缀索引排序有问题，从而导致基于前缀索引的查询结果不对。[#44941](https://github.com/StarRocks/starrocks/pull/44941)
+- Routine Load 任务因 Kafka 集群异常而暂停后，后台还是会不停尝试连接该异常 Kafka，从而导致 StarRocks 集群上的其他消费正常 Kafka 消息的 Routine Load 任务无法消费。[#45029](https://github.com/StarRocks/starrocks/pull/45029)
+- 查询 `information_schema` 中的视图时，持有 db 锁的时间太长，导致查询时间整体变长。[#45392](https://github.com/StarRocks/starrocks/pull/45392)
+- 开启 Query Cache 后，SQL 有 Having 子句时可能会导致 BE 节点 crash。（可以先通过 `set enable_query_cache=false` 关闭 Query Cache。）[#43823](https://github.com/StarRocks/starrocks/pull/43823)
+- Query Cache 开启时，一些查询可能会返回 `All slotIds should be remapped` 的错误信息。[#42861](https://github.com/StarRocks/starrocks/pull/42861)
+
 ## 2.5.20
 
 发布日期：2024 年 3 月 22 日
@@ -35,7 +54,6 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- 新增模糊/正则匹配函数：[regexp_extract_all](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/)。
 - 新增 Bitmap 取值的处理函数：serialize、deserialize、serializeToString。 [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
 
 ### 功能优化

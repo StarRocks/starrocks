@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # cbrt
 
-## 功能
+
 
 计算参数的立方根。
 

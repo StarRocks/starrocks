@@ -93,17 +93,40 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### 设置变量在单个查询语句中生效
 
-在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (hint) 在查询中设置仅在单个语句内生效的会话变量。举例：
+在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (Hint) 在查询中设置仅在单个语句内生效的会话变量。
+
+当前，StarRocks 支持在以下语句中使用 `SET_VAR` Hint：
+
+- SELECT
+- INSERT（自 v3.1.12 和 v3.2.0 起支持）
+- UPDATE（自 v3.1.12 和 v3.2.0 起支持）
+- DELETE（自 v3.1.12 和 v3.2.0 起支持）
+
+`SET_VAR` 只能跟在以上关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
+
+举例：
 
 ```sql
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
-```
 
-> **注意**
->
-> `SET_VAR` 只能跟在 SELECT 关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
+UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+
+DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
+FROM my_table PARTITION p1
+WHERE k1 = 3;
+
+INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
+```
 
 StarRocks 同时支持在单个语句中设置多个变量，参考如下示例：
 
@@ -190,7 +213,7 @@ SELECT /*+ SET_VAR
 
 ### cbo_prune_subfield
 
-* 含义：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
+* 描述：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
 * 默认值：false
 * 引入版本：v3.3.0
 
@@ -199,6 +222,12 @@ SELECT /*+ SET_VAR
 * 描述：是否启用基于同步物化视图的查询改写。
 * 默认值：true
 * 引入版本：v3.1.11，v3.2.5
+
+### enable_datacache_async_populate_mode
+
+* 描述：是否使用异步方式进行 Data Cache 填充。系统默认使用同步方式进行填充，即在查询数据时同步填充进行缓存填充。
+* 默认值：false
+* 引入版本：v3.2.7
 
 ### query_including_mv_names
 
@@ -250,6 +279,12 @@ SELECT /*+ SET_VAR
 * 描述：是否启用物化视图 UNION 改写。如果此项设置为 true，则系统在物化视图的谓词不能满足查询的谓词时，会尝试使用 UNION ALL 来补偿谓词。
 * 默认值：true
 * 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
+
+### enable_materialized_view_plan_cache
+
+* 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是 `true`，即开启物化视图查询计划缓存。
+* 默认值：true
+* 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
 
 ### follower_query_forward_mode
 
@@ -338,6 +373,12 @@ SELECT /*+ SET_VAR
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
+### enable_gin_filter
+
+* 描述：查询时是否使用[全文倒排索引](../table_design/indexes/inverted_index.md)。
+* 默认值：true
+* 引入版本：v3.3.0
+
 ### enable_group_level_query_queue (global)
 
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
@@ -369,8 +410,7 @@ SELECT /*+ SET_VAR
 
 ### enable_short_circuit
 
-* 描述：是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当表为[行列混存表](../table_design/hybrid_table.md)，并且[查询满足条件](../table_design/hybrid_table.md#查询数据)
-（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径，直接查询按行存储的数据。
+* 描述：是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当[查询满足条件](../table_design/hybrid_table.md#查询数据)（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径。
 * 默认值：false
 * 引入版本：v3.2.3
 

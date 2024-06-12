@@ -65,6 +65,7 @@ import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
+import com.starrocks.thrift.TSpillOptions;
 import com.starrocks.thrift.TSpillToRemoteStorageOptions;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TTimeUnit;
@@ -86,6 +87,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
+import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -99,6 +101,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String USE_COMPUTE_NODES = "use_compute_nodes";
     public static final String PREFER_COMPUTE_NODE = "prefer_compute_node";
+    // The schedule policy of backend and compute nodes.
+    // The optional values are "compute_nodes_only" and "all_nodes".
+    public static final String COMPUTATION_FRAGMENT_SCHEDULING_POLICY = "computation_fragment_scheduling_policy";
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
 
     /**
@@ -165,7 +170,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_TYPE = "query_cache_type";
     public static final String INTERACTIVE_TIMEOUT = "interactive_timeout";
     public static final String WAIT_TIMEOUT = "wait_timeout";
-    public static final String WAREHOUSE = "warehouse";
 
     public static final String CATALOG = "catalog";
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
@@ -190,6 +194,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     public static final String ENABLE_AGG_SPILL_PREAGGREGATION = "enable_agg_spill_preaggregation";
+    public static final String ENABLE_SPILL_BUFFER_READ = "enable_spill_buffer_read";
+    public static final String MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER = "max_spill_read_buffer_bytes_per_driver";
     // enable table pruning(RBO) in cardinality-preserving joins
     public static final String ENABLE_RBO_TABLE_PRUNE = "enable_rbo_table_prune";
 
@@ -284,8 +290,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
             "enable_filter_unused_columns_in_scan_stage";
 
+    public static final String JOIN_LATE_MATERIALIZATION = "join_late_materialization";
+
     public static final String ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER =
             "enable_prune_column_after_index_filter";
+    
+    public static final String ENABLE_GIN_FILTER = "enable_gin_filter";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
     // transfer from COMMITTED to VISIBLE.
@@ -524,6 +534,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // their ordinal position in the Hive table definition.
     public static final String ORC_USE_COLUMN_NAMES = "orc_use_column_names";
 
+    public static final String ENABLE_EXECUTION_ONLY = "enable_execution_only";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -614,6 +626,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
     public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
     public static final String SPILL_ENABLE_DIRECT_IO = "spill_enable_direct_io";
+    public static final String SPILL_ENABLE_COMPACTION = "spill_enable_compaction";
     // only used in test. spill_mode="RANDOM"
     public static final String SPILL_RAND_RATIO = "spill_rand_ratio";
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
@@ -695,6 +708,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ALLOW_HIVE_WITHOUT_PARTITION_FILTER = "allow_hive_without_partition_filter";
 
     public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
+
+    public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
+
+    public static final String ENABLE_NESTED_LOOP_JOIN = "enable_nested_loop_join";
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
@@ -798,6 +815,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
     private boolean preferComputeNode = false;
+
+    @VariableMgr.VarAttr(name = COMPUTATION_FRAGMENT_SCHEDULING_POLICY)
+    private String computationFragmentSchedulingPolicy = COMPUTE_NODES_ONLY.name();
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
@@ -1027,6 +1047,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
 
+    // execute sql don't return result, for performance test
+    @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
+    private boolean enableExecutionOnly = false;
+
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
      * This limitation is to avoid the negative overhead caused by scheduling on super multi-core scenarios.
@@ -1111,8 +1135,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_RAND_RATIO, flag = VariableMgr.INVISIBLE)
     private double spillRandRatio = 0.1;
 
+    @VarAttr(name = SPILL_ENABLE_COMPACTION, flag = VariableMgr.INVISIBLE)
+    private boolean spillEnableCompaction = true;
+
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
+
+    @VarAttr(name = ENABLE_SPILL_BUFFER_READ, flag = VariableMgr.INVISIBLE)
+    public boolean enableSpillBufferRead = true;
+
+    @VarAttr(name = MAX_SPILL_READ_BUFFER_BYTES_PER_DRIVER, flag = VariableMgr.INVISIBLE)
+    public long maxSpillReadBufferBytesPerDriver = 1024 * 1024 * 16;
 
     @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
     private boolean enableRboTablePrune = false;
@@ -1164,8 +1197,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = true;
 
+    @VariableMgr.VarAttr(name = JOIN_LATE_MATERIALIZATION)
+    private boolean joinLateMaterialization = false;
+
     @VariableMgr.VarAttr(name = ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER, flag = VariableMgr.INVISIBLE)
     private boolean enablePruneColumnAfterIndexFilter = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_GIN_FILTER)
+    private boolean enableGinFilter = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -1431,6 +1470,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
 
+    public boolean isEnableExecutionOnly() {
+        return enableExecutionOnly;
+    }
+
     public boolean isCboPruneJsonSubfield() {
         return cboPruneJsonSubfield;
     }
@@ -1549,7 +1592,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
-    private boolean enableScanDataCache = false;
+    private boolean enableScanDataCache = true;
 
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateDataCache = true;
@@ -1566,10 +1609,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_ASYNC_POPULATE_MODE)
-    private boolean enableDataCacheAsyncPopulateMode = false;
+    private boolean enableDataCacheAsyncPopulateMode = true;
 
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_IO_ADAPTOR)
-    private boolean enableDataCacheIOAdaptor = false;
+    private boolean enableDataCacheIOAdaptor = true;
 
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
@@ -1875,6 +1918,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
     @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
     private int scanHivePartitionNumLimit = 0;
+
+    @VarAttr(name = ENABLE_CROSS_JOIN)
+    private boolean enableCrossJoin = true;
+
+    @VarAttr(name = ENABLE_NESTED_LOOP_JOIN)
+    private boolean enableNestedLoopJoin = true;
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
@@ -2238,6 +2287,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.preferComputeNode = preferComputeNode;
     }
 
+    public void setComputationFragmentSchedulingPolicy(String computationFragmentSchedulingPolicy) {
+        SessionVariableConstants.ComputationFragmentSchedulingPolicy result =
+                Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                                   StringUtils.upperCase(computationFragmentSchedulingPolicy)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ComputationFragmentSchedulingPolicy.values());
+            throw new IllegalArgumentException("Legal values of computation_fragment_scheduling_policy are " + legalValues);
+        }
+        this.computationFragmentSchedulingPolicy = StringUtils.upperCase(computationFragmentSchedulingPolicy);
+    }
+
+    public SessionVariableConstants.ComputationFragmentSchedulingPolicy getComputationFragmentSchedulingPolicy() {
+        return Enums.getIfPresent(SessionVariableConstants.ComputationFragmentSchedulingPolicy.class,
+                StringUtils.upperCase(computationFragmentSchedulingPolicy))
+                .or(SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
+    }
+
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
     }
@@ -2570,10 +2636,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.spillOperatorMinBytes;
     }
 
-    public long getSpillOperatorMaxBytes() {
-        return this.spillOperatorMaxBytes;
-    }
-
     public int getSpillEncodeLevel() {
         return this.spillEncodeLevel;
     }
@@ -2628,6 +2690,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePruneColumnAfterIndexFilter() {
         return enablePruneColumnAfterIndexFilter;
+    }
+
+    public boolean isEnableGinFilter() {
+        return enableGinFilter;
+    }
+
+    public boolean isJoinLateMaterialization() {
+        return joinLateMaterialization;
     }
 
     public void disableTrimOnlyFilteredColumnsInScanStage() {
@@ -3645,6 +3715,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
     }
 
+    public boolean isEnableCrossJoin() {
+        return enableCrossJoin;
+    }
+
+    public void setEnableCrossJoin(boolean enableCrossJoin) {
+        this.enableCrossJoin = enableCrossJoin;
+    }
+
+    public boolean isEnableNestedLoopJoin() {
+        return enableNestedLoopJoin;
+    }
+
+    public void setEnableNestedLoopJoin(boolean enableNestedLoopJoin) {
+        this.enableNestedLoopJoin = enableNestedLoopJoin;
+    }
+
     public boolean enableCboDeriveRangeJoinPredicate() {
         return cboDeriveRangeJoinPredicate;
     }
@@ -3832,33 +3918,39 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setEnable_spill(enableSpill);
         if (enableSpill) {
-            tResult.setSpill_mem_table_size(spillMemTableSize);
-            tResult.setSpill_mem_table_num(spillMemTableNum);
-            tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
-            tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
-            tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
-            tResult.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
-            tResult.setSpill_encode_level(spillEncodeLevel);
-            tResult.setSpillable_operator_mask(spillableOperatorMask);
-            tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
-            tResult.setSpill_enable_direct_io(spillEnableDirectIO);
-            tResult.setSpill_rand_ratio(spillRandRatio);
+            TSpillOptions spillOptions = new TSpillOptions();
+            spillOptions.setSpill_mem_table_size(spillMemTableSize);
+            spillOptions.setSpill_mem_table_num(spillMemTableNum);
+            spillOptions.setSpill_mem_limit_threshold(spillMemLimitThreshold);
+            spillOptions.setSpill_operator_min_bytes(spillOperatorMinBytes);
+            spillOptions.setSpill_operator_max_bytes(spillOperatorMaxBytes);
+            spillOptions.setSpill_revocable_max_bytes(spillRevocableMaxBytes);
+            spillOptions.setSpill_encode_level(spillEncodeLevel);
+            spillOptions.setSpillable_operator_mask(spillableOperatorMask);
+            spillOptions.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
+            spillOptions.setSpill_enable_direct_io(spillEnableDirectIO);
+            spillOptions.setSpill_rand_ratio(spillRandRatio);
+            spillOptions.setSpill_enable_compaction(spillEnableCompaction);
+            spillOptions.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
+            spillOptions.setEnable_spill_buffer_read(enableSpillBufferRead);
+            spillOptions.setMax_spill_read_buffer_bytes_per_driver(maxSpillReadBufferBytesPerDriver);
             if (enableSpillToRemoteStorage && !spillStorageVolume.isEmpty()) {
                 // find storage volume config
                 GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
                 StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
                 StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(spillStorageVolume);
                 if (sv != null) {
-                    tResult.setEnable_spill_to_remote_storage(true);
+                    spillOptions.setEnable_spill_to_remote_storage(true);
                     TSpillToRemoteStorageOptions options = new TSpillToRemoteStorageOptions();
                     options.setRemote_storage_paths(sv.getLocations());
                     TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
                     sv.getCloudConfiguration().toThrift(tCloudConfiguration);
                     options.setRemote_storage_conf(tCloudConfiguration);
                     options.setDisable_spill_to_local_disk(disableSpillToLocalDisk);
-                    tResult.setSpill_to_remote_storage_options(options);
+                    spillOptions.setSpill_to_remote_storage_options(options);
                 }
             }
+            tResult.setSpill_options(spillOptions);
         }
 
         // Compression Type
@@ -3899,7 +3991,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));
-        tResult.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(true);
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);

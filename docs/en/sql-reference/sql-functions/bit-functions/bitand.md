@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # bitand
 
-## Description
+
 
 Returns the bitwise AND of two numeric expressions.
 

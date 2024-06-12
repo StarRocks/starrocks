@@ -121,10 +121,10 @@ public class HiveViewTest extends PlanTestBase {
 
     @Test
     public void testRefreshHiveView(@Mocked CachingHiveMetastore hiveMetastore) throws Exception {
-        CacheUpdateProcessor cacheUpdateProcessor = new CacheUpdateProcessor("hive0", hiveMetastore,
+        HiveCacheUpdateProcessor hiveCacheUpdateProcessor = new HiveCacheUpdateProcessor("hive0", hiveMetastore,
                 null, null, true, false);
         HiveMetadata hiveMetadata = new HiveMetadata("hive0", null, null, null, null,
-                Optional.of(cacheUpdateProcessor), null, null);
+                Optional.of(hiveCacheUpdateProcessor), null, null);
 
         Table hiveView = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "customer_view");
         new Expectations() {

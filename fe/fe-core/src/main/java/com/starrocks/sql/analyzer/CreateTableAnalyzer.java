@@ -457,6 +457,7 @@ public class CreateTableAnalyzer {
             if (partitionDesc != null) {
                 if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
                     try {
+                        PartitionDescAnalyzer.analyze(partitionDesc);
                         partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
@@ -464,6 +465,7 @@ public class CreateTableAnalyzer {
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
+                        PartitionDescAnalyzer.analyze(partitionDesc);
                         expressionPartitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
@@ -499,17 +501,25 @@ public class CreateTableAnalyzer {
 
             // analyze distribution
             if (distributionDesc == null) {
-                if (keysDesc.getKeysType() != KeysType.DUP_KEYS) {
-                    throw new SemanticException("Currently only support default distribution in DUP_KEYS");
+                if (properties != null && properties.containsKey("colocate_with")) {
+                    throw new SemanticException("Colocate table must specify distribution column");
                 }
-                if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
-                    if (properties == null) {
-                        properties = Maps.newHashMap();
-                        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+
+                if (keysDesc != null && keysDesc.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    distributionDesc = new HashDistributionDesc(0, keysDesc.getKeysColumnNames());
+                } else if (keysDesc.getKeysType() == KeysType.DUP_KEYS) {
+                    // no specified distribution, use random distribution
+                    if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
+                        if (properties == null) {
+                            properties = Maps.newHashMap();
+                            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+                        }
+                        distributionDesc = new HashDistributionDesc(0, Lists.newArrayList(columnDefs.get(0).getName()));
+                    } else {
+                        distributionDesc = new RandomDistributionDesc();
                     }
-                    distributionDesc = new HashDistributionDesc(0, Lists.newArrayList(columnDefs.get(0).getName()));
                 } else {
-                    distributionDesc = new RandomDistributionDesc();
+                    throw new SemanticException("Currently not support default distribution in " + keysDesc.getKeysType());
                 }
             }
             if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS

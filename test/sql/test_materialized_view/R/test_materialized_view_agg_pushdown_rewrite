@@ -192,6 +192,9 @@ select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_u
 1993-01-01	180	90	90	1	1	90.0	90.0	90	1
 1994-01-01	175	175	175	1	1	175.0	175.0	175	1
 -- !result
+drop materialized view mv0;
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS
 select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1), min(LO_REVENUE + 1), bitmap_union(to_bitmap(LO_REVENUE + 1)), hll_union(hll_hash(LO_REVENUE + 1)), percentile_union(percentile_hash(LO_REVENUE + 1)), any_value(LO_REVENUE + 1), bitmap_agg(LO_REVENUE + 1), array_agg_distinct(LO_REVENUE + 1) 
 from lineorder l group by LO_ORDERDATE;
@@ -243,6 +246,9 @@ select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1), min(LO_REVENUE + 
 1993-01-01	182	91	91	1	1	91.0	91.0	91	1
 1994-01-01	176	176	176	1	1	176.0	176.0	176	1
 -- !result
+drop materialized view mv1;
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv2 REFRESH MANUAL AS
 select LO_ORDERDATE, lo_custkey, lo_partkey, lo_suppkey, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union(to_bitmap(LO_REVENUE)), hll_union(hll_hash(LO_REVENUE)), percentile_union(percentile_hash(LO_REVENUE)), any_value(LO_REVENUE), bitmap_agg(LO_REVENUE), array_agg_distinct(LO_REVENUE) 
 from lineorder l GROUP BY LO_ORDERDATE, lo_custkey, lo_partkey, lo_suppkey;
@@ -264,4 +270,234 @@ select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE) FROM line
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE)  FROM lineorder AS l INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY INNER JOIN dates AS d ON l.lo_orderdate = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 -- result:
 1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+-- !result
+drop materialized view mv2;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL 
+PARTITION BY (LO_ORDERDATE)
+AS
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union(to_bitmap(LO_REVENUE)), hll_union(hll_hash(LO_REVENUE)), percentile_union(percentile_hash(LO_REVENUE)), any_value(LO_REVENUE), bitmap_agg(LO_REVENUE), array_agg_distinct(LO_REVENUE) 
+from lineorder l group by LO_ORDERDATE;
+-- result:
+-- !result
+refresh materialized view mv0 with sync mode;
+function: check_no_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1;", "mv0")
+-- result:
+None
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	182	91
+1994-01-01	176	176
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90
+1994-01-01	175	175
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	180	90	180	90	1	1
+1994-01-01	175	175	175	175	175	175	1	1
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+1994-01-01	175	175	175	1	1	175.0	175.0	175	1
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1 order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+1994-01-01	175	175	175	1	1	175.0	175.0	175	1
+-- !result
+function: check_no_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1 order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	182	91
+1994-01-01	176	176
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90
+1994-01-01	175	175
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	180	90	180	90	1	1
+1994-01-01	175	175	175	175	175	175	1	1
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+1994-01-01	175	175	175	1	1	175.0	175.0	175	1
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1 order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+1994-01-01	175	175	175	1	1	175.0	175.0	175	1
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+select LO_ORDERDATE from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01
+1994-01-01
+-- !result
+function: check_hit_materialized_view("select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE, d_year order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+-- result:
+None
+-- !result
+select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE, d_year order by LO_ORDERDATE;
+-- result:
+2023	1993-01-01	180	90
+2023	1994-01-01	175	175
+-- !result
+select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+2023	1993-01-01	180	90	180	90	180	90	1	1
+2023	1994-01-01	175	175	175	175	175	175	1	1
+-- !result
+select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+2023	1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+2023	1994-01-01	175	175	175	1	1	175.0	175.0	175	1
+-- !result
+INSERT INTO lineorder (lo_orderkey, lo_linenumber, lo_custkey, lo_partkey, lo_suppkey
+                      , lo_orderdate, lo_orderpriority, lo_shippriority, lo_quantity, lo_extendedprice
+                      , lo_ordtotalprice, lo_discount, lo_revenue, lo_supplycost, lo_tax
+                      , lo_commitdate, lo_shipmode)
+VALUES
+    (3, 3, 3, 3, 2, '1995-01-01', 'MEDIUM', 2, 20, 200, 180, 5, 175, 75, 7, 19940116, 'SHIP')
+;
+-- result:
+-- !result
+function: check_no_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1 order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	182	91
+1994-01-01	176	176
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90
+1994-01-01	175	175
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	180	90	180	90	1	1
+1994-01-01	175	175	175	175	175	175	1	1
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+1994-01-01	175	175	175	1	1	175.0	175.0	175	1
+-- !result
+select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1 order by LO_ORDERDATE;
+-- result:
+1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+1994-01-01	175	175	175	1	1	175.0	175.0	175	1
+-- !result
+function: check_hit_materialized_view("select LO_ORDERDATE from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+select LO_ORDERDATE from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+1993-01-01
+1994-01-01
+-- !result
+function: check_hit_materialized_view("select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE, d_year order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+-- result:
+None
+-- !result
+select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE, d_year order by LO_ORDERDATE;
+-- result:
+2023	1993-01-01	180	90
+2023	1994-01-01	175	175
+-- !result
+select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+2023	1993-01-01	180	90	180	90	180	90	1	1
+2023	1994-01-01	175	175	175	175	175	175	1	1
+-- !result
+select d_year, LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by d_year, LO_ORDERDATE order by LO_ORDERDATE;
+-- result:
+2023	1993-01-01	180	90	90	1	1	90.0	90.0	90	1
+2023	1994-01-01	175	175	175	1	1	175.0	175.0	175	1
+-- !result
+drop materialized view mv0;
+-- result:
 -- !result

@@ -22,7 +22,7 @@
 #include "column/column_viewer.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "gen_cpp/InternalService_constants.h"
+#include "gen_cpp/InternalService_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"

@@ -31,6 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "formats/parquet/utils.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
@@ -275,7 +276,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     case TYPE_DECIMAL128: {
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
-                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 16, file_column_id.field_id);
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY, decimal_precision_to_byte_count(type_desc.precision),
+                file_column_id.field_id);
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());
@@ -357,7 +359,8 @@ void FileWriterBase::_generate_chunk_writer() {
     DCHECK(_writer != nullptr);
     if (_chunk_writer == nullptr) {
         auto rg_writer = _writer->AppendBufferedRowGroup();
-        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func);
+        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func,
+                                                      TimezoneUtils::default_time_zone);
     }
 }
 

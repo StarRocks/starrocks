@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 
@@ -59,7 +60,10 @@ public:
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
-    StatusOr<TxnLogPtr> finish(DeltaWriterFinishMode mode = kWriteTxnLog);
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
 
     // Manual flush, mainly used in UT
     // NOTE: Do NOT invoke this method in a bthread.
@@ -173,6 +177,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -188,6 +197,7 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
 };
 
 } // namespace starrocks::lake

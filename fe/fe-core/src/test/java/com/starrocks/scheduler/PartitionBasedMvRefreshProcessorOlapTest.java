@@ -47,6 +47,7 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TUniqueId;
@@ -284,7 +285,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertFalse(plan.contains("partitions=5/5"));
+            // TODO(fixme): for self join, forbid pushing down filter, but there are some cases to optimize.
+            PlanTestBase.assertContains(plan, "partitions=5/5");
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail(e.getMessage());

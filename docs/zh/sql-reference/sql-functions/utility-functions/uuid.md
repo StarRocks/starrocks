@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # uuid
 
-## 功能
+
 
 以 VARCHAR 形式返回一个随机的 UUID 值。长度为36个字符，包含32个十六进制字符，由4个连字符进行连接，形式为8-4-4-4-12。
 

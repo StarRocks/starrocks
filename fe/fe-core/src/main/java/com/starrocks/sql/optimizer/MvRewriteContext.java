@@ -72,6 +72,10 @@ public class MvRewriteContext {
         this.joinDeriveContexts = Lists.newArrayList();
     }
 
+    public String getMVName() {
+        return materializationContext.getMv().getName();
+    }
+
     public MaterializationContext getMaterializationContext() {
         return materializationContext;
     }

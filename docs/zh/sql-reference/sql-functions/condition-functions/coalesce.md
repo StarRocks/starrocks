@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # coalesce
 
-## 功能
+
 
 从左向右返回参数中的第一个非 NULL 表达式。
 

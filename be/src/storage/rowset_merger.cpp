@@ -58,6 +58,8 @@ struct MergeEntry {
     const Schema* encode_schema = nullptr;
     uint16_t order;
     std::vector<RowSourceMask>* source_masks = nullptr;
+    // rssid_rowids will be empty, when `need_rssid_rowids` is false.
+    bool need_rssid_rowids = false;
     std::vector<uint64_t> rssid_rowids;
 
     MergeEntry() = default;
@@ -84,6 +86,7 @@ struct MergeEntry {
     void close() {
         chunk_pk_column.reset();
         chunk.reset();
+        rssid_rowids.clear();
         if (segment_itr != nullptr) {
             segment_itr->close();
             segment_itr.reset();
@@ -102,7 +105,12 @@ struct MergeEntry {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
         chunk->reset();
         rssid_rowids.clear();
-        auto st = segment_itr->get_next(chunk.get(), source_masks, &rssid_rowids);
+        auto st = Status::OK();
+        if (need_rssid_rowids) {
+            st = segment_itr->get_next(chunk.get(), source_masks, &rssid_rowids);
+        } else {
+            st = segment_itr->get_next(chunk.get(), source_masks);
+        }
         if (st.ok()) {
             // 1. setup chunk_pk_column
             if (encode_schema != nullptr) {
@@ -194,7 +202,7 @@ public:
                     if (source_masks) {
                         source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{top.order, false});
                     }
-                    if (rssid_rowids) {
+                    if (rssid_rowids && !top.rssid_rowids.empty()) {
                         rssid_rowids->insert(rssid_rowids->end(), top.rssid_rowids.begin(), top.rssid_rowids.end());
                     }
                     top.pk_cur = top.pk_last + 1;
@@ -207,7 +215,7 @@ public:
                     if (source_masks) {
                         source_masks->insert(source_masks->end(), nappend, RowSourceMask{top.order, false});
                     }
-                    if (rssid_rowids) {
+                    if (rssid_rowids && !top.rssid_rowids.empty()) {
                         rssid_rowids->insert(rssid_rowids->end(), top.rssid_rowids.begin() + start_offset,
                                              top.rssid_rowids.begin() + start_offset + nappend);
                     }
@@ -234,7 +242,7 @@ public:
                     auto start_offset = top.offset(start);
                     auto end_offset = top.offset(top.pk_cur);
                     chunk->append(*top.chunk, start_offset, end_offset - start_offset);
-                    if (rssid_rowids) {
+                    if (rssid_rowids && !top.rssid_rowids.empty()) {
                         rssid_rowids->insert(rssid_rowids->end(), top.rssid_rowids.begin() + start_offset,
                                              top.rssid_rowids.begin() + end_offset);
                     }
@@ -246,7 +254,7 @@ public:
                     auto start_offset = top.offset(start);
                     auto end_offset = top.offset(top.pk_cur);
                     chunk->append(*top.chunk, start_offset, end_offset - start_offset);
-                    if (rssid_rowids) {
+                    if (rssid_rowids && !top.rssid_rowids.empty()) {
                         rssid_rowids->insert(rssid_rowids->end(), top.rssid_rowids.begin() + start_offset,
                                              top.rssid_rowids.begin() + end_offset);
                     }
@@ -353,12 +361,12 @@ private:
             }
             entry.rowset_seg_id = rowset->rowset_meta()->get_rowset_seg_id();
             entry.chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+            entry.need_rssid_rowids = config::enable_light_pk_compaction_publish;
             if (res.value().empty()) {
                 entry.segment_itr = new_empty_iterator(schema, _chunk_size);
             } else {
                 if (rowset->rowset_meta()->is_segments_overlapping()) {
-                    entry.segment_itr = std::move(new_heap_merge_iterator(
-                            res.value(), StorageEngine::instance()->enable_light_pk_compaction_publish()));
+                    entry.segment_itr = std::move(new_heap_merge_iterator(res.value(), entry.need_rssid_rowids));
                 } else {
                     entry.segment_itr = std::move(new_union_iterator(res.value()));
                 }

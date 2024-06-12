@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # array_filter
 
-## Description
+
 
 Returns values from an array that matches the given filter.
 

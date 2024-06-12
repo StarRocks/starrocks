@@ -290,4 +290,13 @@ public class RemoteFileOperations {
             throw new StarRocksConnectorException("Failed to list path %s. msg: %s", path.toString(), e.getMessage());
         }
     }
+
+    public FileStatus[] getFileStatus(Path... paths) {
+        try {
+            return remoteFileIO.getFileStatus(paths);
+        } catch (Exception e) {
+            LOG.error("Failed to get file status for paths: {}", paths, e);
+            throw new StarRocksConnectorException("Failed to get file status for paths: %s. msg: %s", paths, e.getMessage());
+        }
+    }
 }

@@ -21,6 +21,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
@@ -33,6 +34,7 @@ import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hudi.HudiMetadata;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.kudu.KuduMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -48,6 +50,7 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Table.TableType.KUDU;
 import static com.starrocks.connector.unified.UnifiedMetadata.DELTA_LAKE_PROVIDER;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_NAME;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_VALUE;
@@ -60,6 +63,7 @@ public class UnifiedMetadataTest {
     @Mocked private IcebergMetadata icebergMetadata;
     @Mocked private HudiMetadata hudiMetadata;
     @Mocked private DeltaLakeMetadata deltaLakeMetadata;
+    @Mocked private KuduMetadata kuduMetadata;
     private final CreateTableStmt createTableStmt = new CreateTableStmt(false, true,
             new TableName("test_db", "test_tbl"), ImmutableList.of(), "hive",
             null, null, null, null, null, null);
@@ -72,7 +76,8 @@ public class UnifiedMetadataTest {
             HIVE, hiveMetadata,
             ICEBERG, icebergMetadata,
             HUDI, hudiMetadata,
-            DELTALAKE, deltaLakeMetadata
+            DELTALAKE, deltaLakeMetadata,
+            KUDU, kuduMetadata
         )
         );
     }
@@ -414,6 +419,56 @@ public class UnifiedMetadataTest {
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
         createTableStmt.setEngineName("deltalake");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
+    }
+
+    @Test
+    public void testRouteToKuduConnector() throws DdlException {
+        Table kuduTable = new KuduTable();
+
+        new Expectations() {
+            {
+                hiveMetadata.getTable("test_db", "test_tbl");
+                result = kuduTable;
+                minTimes = 1;
+            }
+            {
+                kuduMetadata.getTable("test_db", "test_tbl");
+                result = kuduTable;
+                minTimes = 1;
+            }
+            {
+                kuduMetadata.listPartitionNames("test_db", "test_tbl", -1);
+                result = ImmutableList.of("test_part1", "test_part2");
+                times = 1;
+            }
+            {
+                kuduMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
+                result = ImmutableList.of("test_part1", "test_part2");
+                times = 1;
+            }
+            {
+                kuduMetadata.getRemoteFileInfos(kuduTable, ImmutableList.of(), -1, null, null, -1);
+                result = ImmutableList.of();
+                times = 1;
+            }
+            {
+                kuduMetadata.getPartitions(kuduTable, ImmutableList.of());
+                result = ImmutableList.of();
+                times = 1;
+            }
+        };
+
+        Table table = unifiedMetadata.getTable("test_db", "test_tbl");
+        assertTrue(table instanceof KuduTable);
+        List<String> partitionNames = unifiedMetadata.listPartitionNames("test_db", "test_tbl", -1);
+        assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
+        partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
+        assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
+        List<RemoteFileInfo> remoteFileInfos = unifiedMetadata.getRemoteFileInfos(kuduTable, ImmutableList.of(),
+                -1, null, null, -1);
+        assertEquals(ImmutableList.of(), remoteFileInfos);
+        List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(kuduTable, ImmutableList.of());
+        assertEquals(ImmutableList.of(), partitionInfos);
     }
 
     @Test

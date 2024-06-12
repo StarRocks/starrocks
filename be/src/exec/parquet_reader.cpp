@@ -248,7 +248,7 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
             }
         } else {
             std::stringstream str_error;
-            str_error << "Invalid Column Name:" << slot_desc->col_name();
+            str_error << "Column: " << slot_desc->col_name() << " is not found in file: " << _filename;
             LOG(WARNING) << str_error.str();
             return Status::InvalidArgument(str_error.str());
         }

@@ -39,10 +39,15 @@ public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
+    // append delta column group to builder
+    void append_dcg(uint32_t rssid, const std::vector<std::string>& filenames,
+                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<std::string>& orphan_files);
+    void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id);
+    void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
     // the garbage collection module relies on this value to check if a delvec file can be safely
@@ -79,13 +84,10 @@ private:
     RecoverFlag _recover_flag = RecoverFlag::OK;
 };
 
-Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
+                   DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
-
-// TODO(yixin): cache rowset_rssid_to_path
-void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite* op_write,
-                          std::unordered_map<uint32_t, FileInfo>& rssid_to_path);
 
 } // namespace lake
 } // namespace starrocks

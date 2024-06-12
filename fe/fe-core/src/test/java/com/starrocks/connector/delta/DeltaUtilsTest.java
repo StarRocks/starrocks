@@ -18,9 +18,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
+import io.delta.kernel.Operation;
+import io.delta.kernel.Snapshot;
 import io.delta.kernel.Table;
-import io.delta.kernel.TableNotFoundException;
-import io.delta.kernel.client.TableClient;
+import io.delta.kernel.TransactionBuilder;
+import io.delta.kernel.engine.Engine;
+import io.delta.kernel.exceptions.CheckpointAlreadyExistsException;
+import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.TableImpl;
 import io.delta.kernel.internal.actions.Metadata;
@@ -33,6 +37,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import java.io.IOException;
 
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_KEY;
 import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NAME;
@@ -94,7 +100,7 @@ public class DeltaUtilsTest {
 
         new MockUp<Table>() {
             @mockit.Mock
-            public Table forPath(TableClient tableClient, String path) throws TableNotFoundException {
+            public Table forPath(Engine deltaEngine, String path) throws TableNotFoundException {
                 throw new TableNotFoundException("Table not found");
             }
         };
@@ -108,18 +114,45 @@ public class DeltaUtilsTest {
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Failed to get latest snapshot for catalog.db.tbl");
         Table table = new Table() {
-            public Table forPath(TableClient tableClient, String path) {
+            public Table forPath(Engine engine, String path) {
                 return this;
             }
+
             @Override
-            public SnapshotImpl getLatestSnapshot(TableClient tableClient) {
+            public String getPath(Engine engine) {
+                return null;
+            }
+
+            @Override
+            public SnapshotImpl getLatestSnapshot(Engine engine) {
                 throw new RuntimeException("Failed to get latest snapshot");
+            }
+
+            @Override
+            public Snapshot getSnapshotAsOfVersion(Engine engine, long versionId) throws TableNotFoundException {
+                return null;
+            }
+
+            @Override
+            public Snapshot getSnapshotAsOfTimestamp(Engine engine, long millisSinceEpochUTC)
+                    throws TableNotFoundException {
+                return null;
+            }
+
+            @Override
+            public TransactionBuilder createTransactionBuilder(Engine engine, String engineInfo, Operation operation) {
+                return null;
+            }
+
+            @Override
+            public void checkpoint(Engine engine, long version)
+                    throws TableNotFoundException, CheckpointAlreadyExistsException, IOException {
             }
         };
 
         new MockUp<TableImpl>() {
             @Mock
-            public Table forPath(TableClient tableClient, String path) {
+            public Table forPath(Engine engine, String path) {
                 return table;
             }
         };

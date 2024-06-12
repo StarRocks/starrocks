@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -64,6 +65,8 @@ public class ColocatedBackendSelector implements BackendSelector {
 
     @Override
     public void computeScanRangeAssignment() throws UserException {
+        colocatedAssignment.recordAssignedScanNode(scanNode);
+
         Map<Integer, Long> bucketSeqToWorkerId = colocatedAssignment.seqToWorkerId;
         ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange = colocatedAssignment.seqToScanRange;
 
@@ -82,9 +85,10 @@ public class ColocatedBackendSelector implements BackendSelector {
                     .map(location -> new TScanRangeParams(location.scan_range))
                     .forEach(scanRangeParamsList::add);
         }
-        // Because of the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
-        // So if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate.
-        if (isRightOrFullBucketShuffleFragment) {
+        // Because the right table will not send data to the bucket which has been pruned, the right join or full join will get wrong result.
+        // Therefore, if this bucket shuffle is right join or full join, we need to add empty bucket scan range which is pruned by predicate,
+        // after the last scan node of this fragment is assigned.
+        if (isRightOrFullBucketShuffleFragment && colocatedAssignment.isAllScanNodesAssigned()) {
             int bucketNum = colocatedAssignment.bucketNum;
 
             for (int bucketSeq = 0; bucketSeq < bucketNum; ++bucketSeq) {
@@ -170,14 +174,18 @@ public class ColocatedBackendSelector implements BackendSelector {
         private final Map<Long, Integer> backendIdToBucketCount = Maps.newHashMap();
         private final int bucketNum;
 
-        public Assignment(OlapScanNode scanNode) {
+        private final int numOlapScanNodes;
+        private final Set<PlanNodeId> assignedScanNodeIds = Sets.newHashSet();
+
+        public Assignment(OlapScanNode scanNode, int numOlapScanNodes) {
+            this.numOlapScanNodes = numOlapScanNodes;
+
             int curBucketNum = scanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum();
             if (scanNode.getSelectedPartitionIds().size() <= 1) {
                 for (Long pid : scanNode.getSelectedPartitionIds()) {
                     curBucketNum = scanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum();
                 }
             }
-
             this.bucketNum = curBucketNum;
         }
 
@@ -191,6 +199,14 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         public int getBucketNum() {
             return bucketNum;
+        }
+
+        public void recordAssignedScanNode(OlapScanNode scanNode) {
+            assignedScanNodeIds.add(scanNode.getId());
+        }
+
+        public boolean isAllScanNodesAssigned() {
+            return assignedScanNodeIds.size() == numOlapScanNodes;
         }
     }
 

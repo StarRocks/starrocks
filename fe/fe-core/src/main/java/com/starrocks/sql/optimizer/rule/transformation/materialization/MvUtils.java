@@ -27,6 +27,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
@@ -34,6 +35,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
@@ -1242,28 +1244,7 @@ public class MvUtils {
      * @return : true if opt expression or its children have applied mv union rewrite, false otherwise.
      */
     public static boolean isAppliedMVUnionRewrite(OptExpression optExpression) {
-        return isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
-    }
-
-    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
-        // TODO: support cte inline
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & ruleMask) != 0;
-    }
-
-    public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
-        if (optExpression == null) {
-            return false;
-        }
-        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
-            return true;
-        }
-        for (OptExpression child : optExpression.getInputs()) {
-            if (isOptHasAppliedRule(child, ruleMask)) {
-                return true;
-            }
-        }
-        return false;
+        return Utils.isOptHasAppliedRule(optExpression, Operator.OP_UNION_ALL_BIT);
     }
 
     /**
@@ -1371,11 +1352,29 @@ public class MvUtils {
         return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
     }
 
+    public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
+    }
+
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
         return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
         return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
+    }
+
+    public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
+        List<Expr> matches = Lists.newArrayList();
+        partitionExpr.collect(expr -> isStr2Date(expr), matches);
+        if (matches.size() != 1) {
+            return Optional.empty();
+        }
+        return Optional.of(matches.get(0).cast());
+    }
+
+    public static boolean isStr2Date(Expr expr) {
+        return expr instanceof FunctionCallExpr
+                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
 }

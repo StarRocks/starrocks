@@ -78,7 +78,7 @@ public class AccessTestUtil {
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
         Partition partition = new Partition(20000L, "testTbl", baseIndex, distributionInfo);
         List<Column> baseSchema = new LinkedList<Column>();
-        Column column = new Column();
+        Column column = new Column("k1", Type.INT);
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
                 KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, null);

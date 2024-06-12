@@ -34,6 +34,7 @@ import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.connector.trino.TrinoViewColumnTypeConverter;
 import com.starrocks.connector.trino.TrinoViewDefinition;
 import com.starrocks.credential.CloudConfiguration;
@@ -135,11 +136,11 @@ public class HiveMetastoreApiConverter {
         return "";
     }
 
-    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
+    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database, String dbName) {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), database.getName(),
+        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName.toLowerCase(),
                 database.getLocationUri());
     }
 
@@ -183,11 +184,16 @@ public class HiveMetastoreApiConverter {
         return tableBuilder.build();
     }
 
+    public static MetastoreTable toMetastoreTable(Table table) {
+        String tableLocation = toTableLocation(table.getSd(), table.getParameters());
+        return new MetastoreTable(table.getDbName(), table.getTableName(), tableLocation, table.getCreateTime());
+    }
+
     public static Table toMetastoreApiTable(HiveTable table) {
         Table apiTable = new Table();
         apiTable.setDbName(table.getDbName());
         apiTable.setTableName(table.getTableName());
-        apiTable.setTableType("MANAGED_TABLE");
+        apiTable.setTableType(table.getHiveTableType().name());
         apiTable.setOwner(System.getenv("HADOOP_USER_NAME"));
         apiTable.setParameters(toApiTableProperties(table));
         apiTable.setPartitionKeys(table.getPartitionColumns().stream()
@@ -260,6 +266,9 @@ public class HiveMetastoreApiConverter {
         tableProperties.put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
         if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
             tableProperties.put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString());
+        }
+        if (table.getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+            tableProperties.put("EXTERNAL", "TRUE");
         }
 
         return tableProperties.build();

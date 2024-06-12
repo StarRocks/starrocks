@@ -38,6 +38,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -167,6 +168,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
             materializedView.setWarehouseId(warehouse.getId());
+        }
+
+        // labels.location
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            if (!materializedView.isCloudNativeMaterializedView()) {
+                PropertyAnalyzer.analyzeLocation(materializedView, properties);
+            }
         }
 
         if (!properties.isEmpty()) {
@@ -330,7 +338,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             // for event triggered type, run task
             if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
-                taskManager.executeTask(task.getName());
+                taskManager.executeTask(task.getName(), ExecuteOption.makeMergeRedundantOption());
             }
 
             final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();

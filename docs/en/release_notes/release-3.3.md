@@ -4,6 +4,38 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.3
 
+## 3.3.0-RC02
+
+Release date: June 4, 2024
+
+### Improvement
+
+- Shared-data clusters support Cache Warmup, proactively fetching the desired data from remote storage in advance. For more details, see [Data Cache Warmup](https://docs.starrocks.io/docs/3.3/data_source/data_cache_warmup/).
+- Optimized Paimon Catalog 
+  - Materialized views created based on the Paimon external tables now support automatic query rewriting.
+  - Optimized Scan Range scheduling for queries against the Paimon Catalog, improving I/O concurrency.
+  - Support for querying Paimon system tables.
+
+### Behavior Change
+
+Originally, database consistency checker was scheduled based on GMT+8 time zone. Database consistency checker is scheduled based on the local time zone now. [#45748](https://github.com/StarRocks/starrocks/issues/45748)
+
+### Parameter Change
+
+Support dynamically modifying FE parameter `sys_log_level`. [#45062](https://github.com/StarRocks/starrocks/issues/45062)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Query results are incorrect when queries are rewritten to materialized views created by using UNION ALL. [#42949](https://github.com/StarRocks/starrocks/issues/42949)
+- Extra columns are read when queries with predicates are rewritten to materialized views during query execution. [#45272](https://github.com/StarRocks/starrocks/issues/45272)
+- The results of functions `next_day` and `previous_day` are incorrect. [#45343](https://github.com/StarRocks/starrocks/issues/45343)
+- Schema change fails because of replica migration. [#45384](https://github.com/StarRocks/starrocks/issues/45384)
+- Restoring a table with full-text inverted index cause BEs to crash. [#45010](https://github.com/StarRocks/starrocks/issues/45010)
+- Duplicate data rows are returned when an Iceberg catalog is used to query data. [#44753](https://github.com/StarRocks/starrocks/issues/44753)
+- Low cardinality dictionary optimization does not take effect on `ARRAY<VARCHAR>`-type columns in Aggregate tables. [#44702](https://github.com/StarRocks/starrocks/issues/44702)
+
 ## 3.3.0-RC01
 
 Release date: May 10, 2024

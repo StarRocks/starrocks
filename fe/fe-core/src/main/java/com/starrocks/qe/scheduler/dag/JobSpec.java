@@ -480,6 +480,10 @@ public class JobSpec {
         return queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD;
     }
 
+    public boolean isBrokerLoad() {
+        return queryOptions.getLoad_job_type() == TLoadJobType.BROKER;
+    }
+
     public String getPlanProtocol() {
         return planProtocol;
     }

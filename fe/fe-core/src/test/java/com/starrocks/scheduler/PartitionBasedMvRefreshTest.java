@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.util.UUIDUtil;
@@ -132,14 +133,13 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
     private static void initAndExecuteTaskRun(TaskRun taskRun,
                                               String startPartition,
                                               String endPartition) throws Exception {
-        Task task = taskRun.getTask();
-        Map<String, String> testProperties = task.getProperties();
+        Map<String, String> testProperties = taskRun.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");
         if (startPartition != null) {
-            task.getProperties().put(TaskRun.PARTITION_START, startPartition);
+            testProperties.put(TaskRun.PARTITION_START, startPartition);
         }
         if (endPartition != null) {
-            task.getProperties().put(TaskRun.PARTITION_END, endPartition);
+            testProperties.put(TaskRun.PARTITION_END, endPartition);
         }
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
@@ -312,5 +312,66 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                         }
                     }
                 });
+    }
+
+    @Test
+    public void testJoinMV_SlotRef() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE join_base_t1 (dt1 date, int1 int)\n" +
+                "                    PARTITION BY RANGE(dt1)\n" +
+                "                    (\n" +
+                "                    PARTITION p1 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "                    PARTITION p2 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "                    PARTITION p3 VALUES LESS THAN (\"2020-09-01\")\n" +
+                "                    );");
+        starRocksAssert.withTable("CREATE TABLE join_base_t2 (dt2 date, int2 int)\n" +
+                "                    PARTITION BY RANGE(dt2)\n" +
+                "                    (\n" +
+                "                    PARTITION p4 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "                    PARTITION p5 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "                    PARTITION p6 VALUES LESS THAN (\"2020-09-01\")\n" +
+                "                    );");
+        starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW join_mv1 " +
+                "PARTITION BY dt1 " +
+                "REFRESH MANUAL " +
+                "PROPERTIES (\"partition_refresh_number\"=\"3\") AS " +
+                "SELECT dt1,dt2,sum(int1) " +
+                "FROM join_base_t1 t1 " +
+                "JOIN join_base_t2 t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2;");
+
+        MaterializedView mv = starRocksAssert.getMv("test", "join_mv1");
+        Assert.assertEquals(Sets.newHashSet("p1", "p2", "p3"), mv.getPartitionNames());
+        starRocksAssert.dropTable("join_base_t1");
+        starRocksAssert.dropTable("join_base_t2");
+        starRocksAssert.dropMaterializedView("join_mv1");
+    }
+
+    @Test
+    public void testJoinMV_ListPartition() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE join_base_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY RANGE(dt1)\n" +
+                "(\n" +
+                "    PARTITION p202006 VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "    PARTITION p202007 VALUES LESS THAN (\"2020-08-01\"),\n" +
+                "    PARTITION p202008 VALUES LESS THAN (\"2020-09-01\")\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE join_base_t2 (dt2 date not null, int2 int)\n" +
+                "PARTITION BY LIST(dt2)\n" +
+                "(\n" +
+                "    PARTITION p202006 VALUES in (\"2020-06-23\"),\n" +
+                "    PARTITION p202007 VALUES in (\"2020-07-23\"),\n" +
+                "    PARTITION p202008 VALUES in (\"2020-08-23\")\n" +
+                ");");
+        Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW join_mv1 " +
+                        "PARTITION BY dt1 REFRESH MANUAL PROPERTIES (\"partition_refresh_number\"=\"3\") AS \n" +
+                        "SELECT dt1,dt2,sum(int1) " +
+                        "FROM join_base_t1 t1 " +
+                        "JOIN join_base_t2 t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2")
+        );
+        Assert.assertEquals("Must be range partitioned table", e.getMessage());
+
+        starRocksAssert.dropTable("join_base_t1");
+        starRocksAssert.dropTable("join_base_t2");
+        starRocksAssert.dropMaterializedView("join_mv1");
     }
 }

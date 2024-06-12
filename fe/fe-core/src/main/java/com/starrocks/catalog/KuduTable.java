@@ -24,7 +24,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -36,11 +38,16 @@ public class KuduTable extends Table {
     public static final Set<String> KUDU_INPUT_FORMATS = Sets.newHashSet(
             "org.apache.hadoop.hive.kudu.KuduInputFormat", "org.apache.kudu.mapreduce.KuduTableInputFormat");
     public static final String PARTITION_NULL_VALUE = "null";
-    private final String masterAddresses;
-    private final String catalogName;
-    private final String databaseName;
-    private final String tableName;
-    private final List<String> partColNames;
+    private String masterAddresses;
+    private String catalogName;
+    private String databaseName;
+    private String tableName;
+    private List<String> partColNames;
+    private Map<String, String> properties;
+
+    public KuduTable() {
+        super(TableType.KUDU);
+    }
 
     public KuduTable(String masterAddresses, String catalogName, String dbName, String tblName, List<Column> schema,
                      List<String> partColNames) {
@@ -82,6 +89,14 @@ public class KuduTable extends Table {
                     .collect(Collectors.toList());
         }
         return partitionColumns;
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        if (properties == null) {
+            this.properties = new HashMap<>();
+        }
+        return properties;
     }
 
     @Override

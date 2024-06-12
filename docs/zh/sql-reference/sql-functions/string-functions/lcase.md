@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # lcase
 
-## 功能
+
 
 该函数与 `lower` 一致，将字符串转换为小写形式。
 

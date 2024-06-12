@@ -44,7 +44,7 @@ Status SysFeMemoryUsage::start(RuntimeState* state) {
     TFeMemoryReq request;
     request.__set_auth_info(auth);
 
-    return (SchemaHelper::list_fe_memory_usage(_ss_state, request, &_result));
+    return SchemaHelper::list_fe_memory_usage(_ss_state, request, &_result);
 }
 
 Status SysFeMemoryUsage::_fill_chunk(ChunkPtr* chunk) {

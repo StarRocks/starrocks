@@ -18,6 +18,8 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
+#include "common/utils.h"
+#include "config.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
@@ -543,6 +545,16 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
     return Status::OK();
 }
 
+template <typename T>
+void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf) {
+    butil::IOBuf tmp_iobuf;
+    butil::IOBufAsZeroCopyOutputStream wrapper(&tmp_iobuf);
+    proto_obj.SerializeToZeroCopyStream(&wrapper);
+    size_t request_size = tmp_iobuf.size();
+    iobuf->append(&request_size, sizeof(request_size));
+    iobuf->append(tmp_iobuf);
+}
+
 Status NodeChannel::_send_request(bool eos, bool finished) {
     if (eos || finished) {
         if (_request_queue.empty()) {
@@ -626,9 +638,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             if (!res.ok()) {
                 return res.status();
             }
-            res.value()->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                                  &_add_batch_closures[_current_request_index]->result,
-                                                  _add_batch_closures[_current_request_index]);
+            auto closure = _add_batch_closures[_current_request_index];
+            serialize_to_iobuf<PTabletWriterAddChunksRequest>(request, &closure->cntl.request_attachment());
+            res.value()->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
@@ -646,9 +658,9 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             if (!res.ok()) {
                 return res.status();
             }
-            res.value()->tablet_writer_add_chunk(
-                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
-                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+            auto closure = _add_batch_closures[_current_request_index];
+            serialize_to_iobuf<PTabletWriterAddChunkRequest>(request.requests(0), &closure->cntl.request_attachment());
+            res.value()->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunk(

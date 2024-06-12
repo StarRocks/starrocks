@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # curdate,current_date
 
-## Description
+
 
 Obtains the current date and returns a value of the DATE type.
 

@@ -142,7 +142,7 @@ insert into partition_str2date values('2021-01-05','1',1.1,1);
 insert into partition_str2date values('2021-01-06','1',1.1,1);
 -- result:
 -- !result
-select * from partition_str2date;
+select * from partition_str2date order by create_time;
 -- result:
 2021-01-04	1	1	1
 2021-01-05	1	1	1
@@ -161,4 +161,15 @@ select * from partition_str2date where create_time>='2021-01-05';
 -- result:
 2021-01-05	1	1	1
 2021-01-06	1	1	1
+-- !result
+create table t1 (dt varchar(20), id int) partition by range(str2date(dt, "%Y-%m-%d")) (start ("2021-01-01") end ("2021-01-10") every (interval 1 day));
+-- result:
+-- !result
+create table t2 (dt varchar(20), id int) partition by range(str2date(dt, "%Y-%m")) (start ("2021-01-01") end ("2021-01-10") every (interval 1 day));
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: partition function check fail, only supports the result of the function str2date(VARCHAR str, VARCHAR format) as a strict DATE type.')
+-- !result
+create table t3 (dt varchar(20), id int) partition by str2date(dt, "%Y-%m-%d");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Only support date_trunc and time_slice as partition expression.')
 -- !result

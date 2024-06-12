@@ -132,6 +132,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
+    op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {

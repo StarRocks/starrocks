@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # rpad
 
-## 功能
+
 
 根据指定的长度在字符串后面（右侧）追加字符。
 

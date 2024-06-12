@@ -42,7 +42,7 @@ public:
         return info->space_info;
     }
 
-    StatusOr<size_t> directory_capacity(const std::string& dir) override { return _dir_capacity; }
+    StatusOr<size_t> directory_size(const std::string& dir) override { return _dir_capacity; }
 
     int disk_id(const std::string& path) override {
         auto info = _disk_space_info(path);
@@ -104,7 +104,6 @@ const size_t DiskSpaceMonitorTest::kBlockSize = 256 * KB;
 
 TEST_F(DiskSpaceMonitorTest, adjust_for_empty_cache_dir) {
     SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, true);
-    SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
 
     auto space_monitor = std::make_unique<DiskSpaceMonitor>(nullptr);
@@ -119,40 +118,43 @@ TEST_F(DiskSpaceMonitorTest, adjust_for_empty_cache_dir) {
                                         {.path = "disk1/dir2", .size = 500 * GB},
                                         {.path = "disk2/dir2", .size = 500 * GB}};
 
-    ASSERT_TRUE(space_monitor->adjust_spaces(&dir_spaces));
+    // We only adjust the cache quota if the real disk usage exceed the threshold.
+    ASSERT_FALSE(space_monitor->adjust_spaces(&dir_spaces));
     for (auto& dir : dir_spaces) {
-        ASSERT_EQ(dir.size, 100 * GB);
+        ASSERT_EQ(dir.size, 500 * GB);
     }
 }
 
 TEST_F(DiskSpaceMonitorTest, adjust_for_dirty_cache_dir) {
     SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, true);
-    SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
 
     auto space_monitor = std::make_unique<DiskSpaceMonitor>(nullptr);
     MockFileSystem* mock_fs = new MockFileSystem;
     space_monitor->_fs.reset(mock_fs);
 
-    SpaceInfo space_info = {.capacity = 1000 * GB, .free = 800 * GB, .available = 500 * GB};
+    SpaceInfo space_info = {.capacity = 1000 * GB, .free = 800 * GB, .available = 180 * GB};
     mock_fs->set_space(1, "disk1", space_info);
     mock_fs->set_space(2, "disk2", space_info);
-    mock_fs->set_global_directory_capacity(100 * GB);
+    mock_fs->set_global_directory_capacity(200 * GB);
 
     std::vector<DirSpace> dir_spaces = {{.path = "disk1/dir1", .size = 500 * GB},
                                         {.path = "disk1/dir2", .size = 500 * GB},
                                         {.path = "disk2/dir2", .size = 500 * GB}};
 
+    // disk2 usage: (1000G - 180G) / 1000G = 82%
+    // disk2 safe usage: 70%
+    // delta bytes: (70% - 82%) * 1000G = -120G
+    // quota for each cache dir: 200G - 120G = 80G
     ASSERT_TRUE(space_monitor->adjust_spaces(&dir_spaces));
     for (auto& dir : dir_spaces) {
-        ASSERT_EQ(dir.size, 200 * GB);
+        ASSERT_EQ(dir.size, 80 * GB);
     }
 }
 
-TEST_F(DiskSpaceMonitorTest, auto_increate_cache_quota) {
+TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
     SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
-    SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
@@ -208,10 +210,9 @@ TEST_F(DiskSpaceMonitorTest, auto_increate_cache_quota) {
     cache->shutdown();
 }
 
-TEST_F(DiskSpaceMonitorTest, auto_decreate_cache_quota) {
+TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
     SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
-    SCOPED_UPDATE(int64_t, config::datacache_disk_safe_level, 70);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 3);
     SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
@@ -290,7 +291,7 @@ TEST_F(DiskSpaceMonitorTest, get_directory_capacity) {
         auto& space_monitor = cache->_disk_space_monitor;
         size_t capacity = 0;
         for (auto& space : disk_spaces) {
-            auto ret = space_monitor->_fs->directory_capacity(space.path);
+            auto ret = space_monitor->_fs->directory_size(space.path);
             ASSERT_TRUE(ret.ok());
             capacity += ret.value();
         }

@@ -15,6 +15,7 @@
 #include "storage/lake/persistent_index_memtable.h"
 
 #include "storage/lake/persistent_index_sstable.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -35,6 +36,7 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
         index_value_vers.emplace_front(version, value);
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
             not_founds->insert(i);
+            _keys_size += key.capacity() + sizeof(std::string);
         } else {
             auto& old_index_value_vers = it->second;
             auto old_value = old_index_value_vers.front().second;
@@ -44,10 +46,12 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
         }
     }
     *num_found = nfound;
+    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
 Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("persistent_index_memtable_insert_us");
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
         auto size = keys[i].get_size();
@@ -60,7 +64,9 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
             LOG(WARNING) << msg;
             return Status::AlreadyExist(msg);
         }
+        _keys_size += key.capacity() + sizeof(std::string);
     }
+    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
@@ -74,6 +80,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
             old_values[i] = NullIndexValue;
             not_founds->insert(i);
+            _keys_size += key.capacity() + sizeof(std::string);
         } else {
             auto& old_index_value_vers = it->second;
             auto old_index_value = old_index_value_vers.front().second;
@@ -83,6 +90,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
         }
     }
     *num_found = nfound;
+    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
@@ -95,8 +103,11 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
         index_value_vers.emplace_front(version, value);
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); !inserted) {
             update_index_value(&it->second, version, value);
+        } else {
+            _keys_size += key.capacity() + sizeof(std::string);
         }
     }
+    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
@@ -135,12 +146,7 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
 }
 
 size_t PersistentIndexMemtable::memory_usage() const {
-    size_t mem_usage = 0;
-    for (auto const& it : _map) {
-        mem_usage += it.first.size() + sizeof(std::string);
-        mem_usage += it.second.size() * sizeof(IndexValueWithVer);
-    }
-    return mem_usage;
+    return _keys_size + _map.size() * sizeof(IndexValueWithVer);
 }
 
 Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize) {

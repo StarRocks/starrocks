@@ -171,7 +171,7 @@ Status SegmentRewriter::rewrite(FileInfo* dest_path, const TabletSchemaCSPtr& ts
                                 starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                 const std::vector<ColumnId>& unmodified_column_ids,
                                 std::vector<std::unique_ptr<Column>>* unmodified_column_data,
-                                const starrocks::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
+                                const starrocks::TxnLogPB_OpWrite& op_write, const starrocks::lake::Tablet* tablet) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }

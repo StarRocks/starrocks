@@ -174,19 +174,21 @@ public class SubmitTaskStmtTest {
         };
         new MockUp<WarehouseManager>() {
             @Mock
-            Warehouse getWarehouse(String name) {
+            public Warehouse getWarehouse(String name) {
                 return new DefaultWarehouse(123, name);
+            }
+            @Mock
+            public Warehouse getWarehouse(long id) {
+                return new DefaultWarehouse(123, "w1");
             }
         };
 
         starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
                 "insert into tbl1 select * from tbl1");
         Task task = tm.getTask("t_warehouse");
-        Assert.assertFalse(task.getProperties().toString(),
-                task.getProperties().containsKey(SessionVariable.WAREHOUSE));
         Assert.assertTrue(task.getProperties().toString(),
-                task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID));
-        Assert.assertEquals("('warehouse_id'='123')", task.getPropertiesString());
+                task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+        Assert.assertEquals("('warehouse'='w1')", task.getPropertiesString());
     }
 
     @Test

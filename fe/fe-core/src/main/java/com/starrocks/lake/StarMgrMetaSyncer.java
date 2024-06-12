@@ -14,9 +14,9 @@
 
 package com.starrocks.lake;
 
-import autovalue.shaded.com.google.common.common.collect.Lists;
-import autovalue.shaded.com.google.common.common.collect.Sets;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -99,7 +99,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             try {
                 WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 Warehouse warehouse = manager.getBackgroundWarehouse();
-                long workerGroupId = Utils.selectWorkerGroupByWarehouseId(manager, warehouse.getId())
+                long workerGroupId = manager.selectWorkerGroupByWarehouseId(warehouse.getId())
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
@@ -214,7 +214,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         try {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
-            long workerGroupId = Utils.selectWorkerGroupByWarehouseId(warehouseManager, warehouse.getId())
+            long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouse.getId())
                     .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             List<String> workerAddresses = GlobalStateMgr.getCurrentState().getStarOSAgent().listWorkerGroupIpPort(workerGroupId);
 

@@ -253,7 +253,7 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## Limits
 
-- Since v3.1.0, StarRocks's [shared-data mode](../deployment/shared_data/shared_data.mdx) supports the [time function expression](#partitioning-based-on-a-time-function-expression). And since v3.1.1, StarRocks's [shared-data mode](../deployment/shared_data/shared_data.mdx) further supports the [column expression](#partitioning-based-on-the-column-expression-since-v31).
+- Since v3.1.0, StarRocks's shared-data mode supports the [time function expression](#partitioning-based-on-a-time-function-expression). And since v3.1.1, StarRocks's shared-data mode further supports the [column expression](#partitioning-based-on-the-column-expression-since-v31).
 - Currently, using CTAS to create tables configured expression partitioning is not supported.
 - Currently, using Spark Load to load data to tables that use expression partitioning is not supported.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and cannot be recovered.

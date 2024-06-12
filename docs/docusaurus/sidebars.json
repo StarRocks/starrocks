@@ -348,6 +348,7 @@
                 "using_starrocks/Colocate_join",
                 "using_starrocks/Lateral_join",
                 "using_starrocks/query_cache",
+                "using_starrocks/block_cache",
                 {
                     "type": "category",
                     "label": "Computing the number of distinct values",
@@ -533,7 +534,9 @@
                                 "id": "administration/management/monitoring/Monitor_and_Alert"
                             },
                             "items": [
-                                "administration/management/monitoring/metrics"
+                                "administration/management/monitoring/metrics",
+                                "administration/management/monitoring/metrics-materialized_view",
+                                "administration/management/monitoring/metrics-shared-data"
                             ]
                         },
                         "administration/management/audit_loader",
@@ -563,6 +566,7 @@
                     ]
                 },
                 "administration/Data_recovery",
+                "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 {
                     "type": "category",
@@ -1795,6 +1799,7 @@
                 "using_starrocks/Colocate_join",
                 "using_starrocks/Lateral_join",
                 "using_starrocks/query_cache",
+                "using_starrocks/block_cache",
                 {
                     "type": "category",
                     "label": "数据去重",
@@ -1980,7 +1985,9 @@
                                 "id": "administration/management/monitoring/Monitor_and_Alert"
                             },
                             "items": [
-                                "administration/management/monitoring/metrics"
+                                "administration/management/monitoring/metrics",
+                                "administration/management/monitoring/metrics-materialized_view",
+                                "administration/management/monitoring/metrics-shared-data"
                             ]
                         },
                         "administration/management/audit_loader",
@@ -2010,6 +2017,7 @@
                     ]
                 },
                 "administration/Data_recovery",
+                "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 {
                     "type": "category",

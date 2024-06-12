@@ -345,6 +345,10 @@ public class PushDownDistinctAggregateRewriter {
                 Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
                 Function newFunc = Expr.getBuiltinFunction(funcName, argTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                if (FunctionSet.SUM.equals(funcName) && argTypes[0].isDecimalOfAnyVersion()) {
+                    newFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) newFunc,
+                            argTypes[0], rewriteCallOp.getType());
+                }
                 CallOperator newWindowCall = new CallOperator(funcName, newFunc.getReturnType(), newArgs, newFunc);
                 newWindowCalls.put(entry.getKey(), newWindowCall);
             }

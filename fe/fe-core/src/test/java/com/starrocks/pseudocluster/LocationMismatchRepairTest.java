@@ -283,4 +283,103 @@ public class LocationMismatchRepairTest {
             Assert.assertEquals(3, racks.size());
         }
     }
+
+
+    @Test
+    public void testMVRepairAfterChangeTableLocation() throws Exception {
+        setBackendLocationProp();
+
+        PseudoCluster cluster = PseudoCluster.getInstance();
+        // create base table
+        String sql = "CREATE TABLE test.`test_base_table` (\n" +
+                "    k1 int,\n" +
+                "    k2 VARCHAR NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"3\",\n" +
+                "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:*\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");";
+        cluster.runSql("test", sql);
+
+        // create mv
+        sql = "CREATE MATERIALIZED VIEW test_mv01\n" +
+                "DISTRIBUTED BY HASH(`k1`)\n" +
+                "buckets 15\n" +
+                "REFRESH MANUAL\n" +
+                "properties(\n" +
+                "    \"replication_num\" = \"3\"" +
+                ")\n" +
+                "AS SELECT test_base_table.k1 FROM test_base_table;";
+        cluster.runSql("test", sql);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_mv01");
+        Assert.assertNotNull(table.getLocation());
+        Assert.assertTrue(table.getLocation().keySet().contains("*"));
+
+        printTabletReplicaInfo(table);
+
+        // check: replica of table `test_mv01` will move tablet to rack r1, r2 and r3
+        Set<Long> backendIds = getBackendIdsWithLocProp("rack", "r0");
+        backendIds.addAll(getBackendIdsWithLocProp("rack", "r4"));
+        System.out.println("move from backends: " + backendIds);
+        List<Long> tabletIds = cluster.listTablets("test", "test_mv01");
+        int locationMismatchFullCloneNeeded = 0;
+        for (long tabletId : tabletIds) {
+            Set<Long> replicaBackendIds = getTabletReplicasBackendIds(tabletId);
+            Set<Long> intersection = Sets.intersection(backendIds, replicaBackendIds);
+            if (!intersection.isEmpty()) {
+                locationMismatchFullCloneNeeded += intersection.size();
+            }
+        }
+
+        TabletSchedulerStat stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat();
+        long oldCloneFinishedCnt = stat.counterCloneTaskSucceeded.get();
+        long oldLocationMismatchErr = stat.counterReplicaLocMismatchErr.get();
+        System.out.println("old clone finished: " + oldCloneFinishedCnt + ", old location mismatch: " +
+                oldLocationMismatchErr);
+        sql = "ALTER MATERIALIZED VIEW test.`test_mv01` SET ('" +
+                PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:r1,rack:r2,rack:r3');";
+        cluster.runSql("test", sql);
+        System.out.println("=========================");
+        long start = System.currentTimeMillis();
+        while (true) {
+            if (stat.counterCloneTaskSucceeded.get() - oldCloneFinishedCnt >= locationMismatchFullCloneNeeded
+                    && stat.counterReplicaLocMismatchErr.get() - oldLocationMismatchErr >=
+                    locationMismatchFullCloneNeeded) {
+                break;
+            }
+            System.out.println("wait for enough clone tasks for LOCATION_MISMATCH finished, " +
+                    "current clone finished: " + stat.counterCloneTaskSucceeded.get() +
+                    ", current location mismatch: " + stat.counterReplicaLocMismatchErr.get() +
+                    ", expected clone finished: " + locationMismatchFullCloneNeeded);
+            Thread.sleep(1000);
+            if (System.currentTimeMillis() - start > 180000) {
+                Assert.fail("wait for enough clone tasks for LOCATION_MISMATCH finished timeout");
+            }
+        }
+
+        // sleep to wait for redundant replicas cleaned
+        Thread.sleep(5000);
+        printTabletReplicaInfo(table);
+        Set<Long> stayedBackendIds = getBackendIdsWithLocProp("rack", "r1");
+        stayedBackendIds.addAll(getBackendIdsWithLocProp("rack", "r2"));
+        stayedBackendIds.addAll(getBackendIdsWithLocProp("rack", "r3"));
+        for (long tabletId : tabletIds) {
+            Set<Long> replicaBackendIds = getTabletReplicasBackendIds(tabletId);
+            Set<Long> intersection = Sets.intersection(stayedBackendIds, replicaBackendIds);
+            // check replicas scattered on 3 different racks after repair
+            Set<Pair<String, String>> racks = new HashSet<>();
+            for (long backendId : intersection) {
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                        .getClusterInfo().getBackend(backendId);
+                racks.add(backend.getSingleLevelLocationKV());
+            }
+            Assert.assertEquals(3, racks.size());
+        }
+    }
 }
