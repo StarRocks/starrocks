@@ -1110,22 +1110,6 @@ public class LeaderImpl {
     }
 
     @NotNull
-<<<<<<< HEAD
-    private static List<TBackendMeta> getBackendMetas() {
-        List<TBackendMeta> backends = new ArrayList<>();
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
-            TBackendMeta backendMeta = new TBackendMeta();
-            backendMeta.setBackend_id(backend.getId());
-            backendMeta.setHost(backend.getHost());
-            backendMeta.setBe_port(backend.getBePort());
-            backendMeta.setRpc_port(backend.getBrpcPort());
-            backendMeta.setHttp_port(backend.getHttpPort());
-            backendMeta.setAlive(backend.isAlive());
-            backendMeta.setState(backend.getBackendState().ordinal());
-            backends.add(backendMeta);
-        }
-        return backends;
-=======
     private static List<TBackendMeta> getNodeMetas() {
         List<TBackendMeta> nodeMetas = new ArrayList<>();
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream().forEach(node -> {
@@ -1142,7 +1126,6 @@ public class LeaderImpl {
             }
         });
         return nodeMetas;
->>>>>>> a266b651c0 ([BugFix] Fix the issue that external olap table does not support cn (#46827))
     }
 
     @NotNull
