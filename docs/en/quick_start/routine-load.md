@@ -12,26 +12,28 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
 
+## About Routine Load
+
+Routine load is a method using Apache Kafka, or in this lab, Redpanda, to continuously stream data into StarRocks. The data is streamed into a Kafka topic, and a Routine Load job consumes the data into StarRocks. More details on Routine Load are provided at the end of the lab.
+
+## About shared-data
+
 In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage costs, ensures better resource isolation, and provides elasticity and scalability.
 
 This tutorial covers:
 
-- Running StarRocks in Docker containers
-- Using MinIO for Object Storage
+- Running StarRocks, Redpanda, and MinIO with Docker Compose
+- Using MinIO as the StarRocks storage layer
 - Configuring StarRocks for shared-data
-- Loading two public datasets
-- Analyzing the data with SELECT and JOIN
-- Basic data transformation (the **T** in ETL)
+- Adding a Routine Load job to consume data from Redpanda
 
-The data used is provided by NYC OpenData and the National Centers for Environmental Information at NOAA.
-
-Both of these datasets are very large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run the Docker image and load this data on a machine with 4 GB RAM assigned to Docker. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
+The data used is synthetic.
 
 There is a lot of information in this document, and it is presented with step-by-step content at the beginning, and the technical details at the end. This is done to serve these purposes in this order:
 
-1. Allow the reader to load data in a shared-data deployment and analyze that data.
-2. Provide the configuration details for shared-data deployments.
-3. Explain the basics of data transformation during loading.
+1. Configure Routine Load.
+2. Allow the reader to load data in a shared-data deployment and analyze that data.
+3. Provide the configuration details for shared-data deployments.
 
 ---
 
@@ -45,11 +47,18 @@ There is a lot of information in this document, and it is presented with step-by
 
 ### SQL client
 
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL-compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
 
 ### curl
 
-`curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+`curl` is used to download the Compose file and script to generate the data. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+
+### Python
+
+Python 3 and the Python client for Apache Kafka, `kafka-python`, are required.
+
+- [Python](https://www.python.org/)
+- [`kafka-python`](https://pypi.org/project/kafka-python/)
 
 ---
 
@@ -81,18 +90,30 @@ To run StarRocks with shared-data using Object Storage we need:
 - A compute node (CN)
 - Object Storage
 
-This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
+This guide uses MinIO, which is S3 compatible Object Storage provider. MinIO is provided under the GNU Affero General Public License.
 
-In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file.
+### Download the lab files
+
+#### `docker-compose.yml`
 
 ```bash
-mkdir quickstart
-cd quickstart
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
+mkdir routineload
+cd routineload
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/routine-load-shared-data/docker-compose.yml
 ```
 
+#### `gen.py`
+
+`gen.py` is a script that uses the Python client for Apache Kafka to publish (produce) data to a Kafka topic. The script has been written with the address and port of the Redpanda container.
+
 ```bash
-docker compose up -d
+curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/routine-load-shared-data/gen.py
+```
+
+## Start StarRocks, MinIO, and Redpanda
+
+```bash
+docker compose up --detach --wait --wait-timeout 120
 ```
 
 Check the progress of the services. It should take around 30 seconds for the FE and CN to become healthy. The MinIO container will not show a health indicator, but you will be using the MinIO web UI and that will verify its health.
@@ -104,10 +125,16 @@ docker compose ps
 ```
 
 ```plaintext
-SERVICE        CREATED          STATUS                    PORTS
-minio          32 seconds ago   Up 32 seconds (healthy)   0.0.0.0:9000-9001->9000-9001/tcp
-starrocks-cn   32 seconds ago   Up 31 seconds (healthy)   0.0.0.0:8040->8040/tcp
-starrocks-fe   32 seconds ago   Up 31 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
+WARN[0000] /Users/droscign/routineload/docker-compose.yml: `version` is obsolete
+[+] Running 6/7
+ ✔ Network routineload_default       Crea...          0.0s
+ ✔ Container minio                   Healthy          5.6s
+ ✔ Container redpanda                Healthy          3.6s
+ ✔ Container redpanda-console        Healt...         1.1s
+ ⠧ Container routineload-minio_mc-1  Waiting          23.1s
+ ✔ Container starrocks-fe            Healthy          11.1s
+ ✔ Container starrocks-cn            Healthy          23.0s
+container routineload-minio_mc-1 exited (0)
 ```
 
 ---
@@ -130,40 +157,16 @@ Browse to http://localhost:9001/access-keys The username and password are specif
 
 ---
 
-## Download the data
 
-Download these two datasets to your FE container.
 
-### Open a shell on the FE container
 
-Open a shell and create a directory for the downloaded files:
 
-```bash
-docker compose exec starrocks-fe bash
-```
-
-```bash
-mkdir quickstart
-cd quickstart
-```
-
-### New York City crash data
-
-```bash
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
-```
-
-### Weather data
-
-```bash
-curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
-```
 
 ---
 
 ## StarRocks configuration for shared-data
 
-At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio. When StarRocks started up it established the connection with MinIO and created the default storage volume in MinIO.
+At this point you have StarRocks, Redpanda, and MinIO running. A MinIO access key is used to connect StarRocks and Minio. When StarRocks started up, it established the connection with MinIO and created the default storage volume in MinIO.
 
 This is the configuration used to set the default storage volume to use MinIO (this is also in the Docker compose file). The configuration will be described in detail at the end of this guide, for now just note that the `aws_s3_access_key` is set to the string that you saw in the MinIO Console and that the `run_mode` is set to `shared_data`:
 
@@ -260,98 +263,14 @@ The folder `builtin_storage_volume` will not be visible in the MinIO object list
 
 ---
 
-## Load two datasets
+## Publish data to Redpanda
 
-There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
+### Open the Redpanda Console
 
-:::tip
+### Publish data to a Redpanda topic
 
-Run these curl commands from the FE shell in the directory where you downloaded the dataset.
+## Consume the data with Routine Load
 
-You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
-
-:::
-
-The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now, we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
-
-### New York City collision data - Crashes
-
-```bash
-curl --location-trusted -u root             \
-    -T ./NYPD_Crash_Data.csv                \
-    -H "label:crashdata-0"                  \
-    -H "column_separator:,"                 \
-    -H "skip_header:1"                      \
-    -H "enclose:\""                         \
-    -H "max_filter_ratio:1"                 \
-    -H "columns:tmp_CRASH_DATE, tmp_CRASH_TIME, CRASH_DATE=str_to_date(concat_ws(' ', tmp_CRASH_DATE, tmp_CRASH_TIME), '%m/%d/%Y %H:%i'),BOROUGH,ZIP_CODE,LATITUDE,LONGITUDE,LOCATION,ON_STREET_NAME,CROSS_STREET_NAME,OFF_STREET_NAME,NUMBER_OF_PERSONS_INJURED,NUMBER_OF_PERSONS_KILLED,NUMBER_OF_PEDESTRIANS_INJURED,NUMBER_OF_PEDESTRIANS_KILLED,NUMBER_OF_CYCLIST_INJURED,NUMBER_OF_CYCLIST_KILLED,NUMBER_OF_MOTORIST_INJURED,NUMBER_OF_MOTORIST_KILLED,CONTRIBUTING_FACTOR_VEHICLE_1,CONTRIBUTING_FACTOR_VEHICLE_2,CONTRIBUTING_FACTOR_VEHICLE_3,CONTRIBUTING_FACTOR_VEHICLE_4,CONTRIBUTING_FACTOR_VEHICLE_5,COLLISION_ID,VEHICLE_TYPE_CODE_1,VEHICLE_TYPE_CODE_2,VEHICLE_TYPE_CODE_3,VEHICLE_TYPE_CODE_4,VEHICLE_TYPE_CODE_5" \
-    -XPUT http://localhost:8030/api/quickstart/crashdata/_stream_load
-```
-
-Here is the output of the above command. The first highlighted section shown what you should expect to see (OK and all but one row inserted). One row was filtered out because it does not contain the correct number of columns.
-
-```bash
-Enter host password for user 'root':
-{
-    "TxnId": 2,
-    "Label": "crashdata-0",
-    "Status": "Success",
-    # highlight-start
-    "Message": "OK",
-    "NumberTotalRows": 423726,
-    "NumberLoadedRows": 423725,
-    # highlight-end
-    "NumberFilteredRows": 1,
-    "NumberUnselectedRows": 0,
-    "LoadBytes": 96227746,
-    "LoadTimeMs": 1013,
-    "BeginTxnTimeMs": 21,
-    "StreamLoadPlanTimeMs": 63,
-    "ReadDataTimeMs": 563,
-    "WriteDataTimeMs": 870,
-    "CommitAndPublishTimeMs": 57,
-    # highlight-start
-    "ErrorURL": "http://10.5.0.3:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
-    # highlight-end
-}%
-```
-
-If there was an error the output provides a URL to see the error messages. Because the container has a private IP address you will have to view it by running curl from the container.
-
-```bash
-curl http://10.5.0.3:8040/api/_load_error_log<details from ErrorURL>
-```
-
-Expand the summary for the content seen while developing this tutorial:
-
-<details>
-
-<summary>Reading error messages in the browser</summary>
-
-```bash
-Error: Value count does not match column count. Expect 29, but got 32.
-
-Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.0110059,"(40.6722269, -74.0110059)",,,"R/O 1 BEARD ST. ( IKEA'S 
-09/14/2015,5:30,BRONX,10473,40.814551,-73.8490955,"(40.814551, -73.8490955)",TORRY AVENUE                    ,NORTON AVENUE                   ,,0,0,0,0,0,0,0,0,Driver Inattention/Distraction,Unspecified,,,,3297457,PASSENGER VEHICLE,PASSENGER VEHICLE,,,
-```
-
-</details>
-
-### Weather data
-
-Load the weather dataset in the same manner as you loaded the crash data.
-
-```bash
-curl --location-trusted -u root             \
-    -T ./72505394728.csv                    \
-    -H "label:weather-0"                    \
-    -H "column_separator:,"                 \
-    -H "skip_header:1"                      \
-    -H "enclose:\""                         \
-    -H "max_filter_ratio:1"                 \
-    -H "columns: STATION, DATE, LATITUDE, LONGITUDE, ELEVATION, NAME, REPORT_TYPE, SOURCE, HourlyAltimeterSetting, HourlyDewPointTemperature, HourlyDryBulbTemperature, HourlyPrecipitation, HourlyPresentWeatherType, HourlyPressureChange, HourlyPressureTendency, HourlyRelativeHumidity, HourlySkyConditions, HourlySeaLevelPressure, HourlyStationPressure, HourlyVisibility, HourlyWetBulbTemperature, HourlyWindDirection, HourlyWindGustSpeed, HourlyWindSpeed, Sunrise, Sunset, DailyAverageDewPointTemperature, DailyAverageDryBulbTemperature, DailyAverageRelativeHumidity, DailyAverageSeaLevelPressure, DailyAverageStationPressure, DailyAverageWetBulbTemperature, DailyAverageWindSpeed, DailyCoolingDegreeDays, DailyDepartureFromNormalAverageTemperature, DailyHeatingDegreeDays, DailyMaximumDryBulbTemperature, DailyMinimumDryBulbTemperature, DailyPeakWindDirection, DailyPeakWindSpeed, DailyPrecipitation, DailySnowDepth, DailySnowfall, DailySustainedWindDirection, DailySustainedWindSpeed, DailyWeather, MonthlyAverageRH, MonthlyDaysWithGT001Precip, MonthlyDaysWithGT010Precip, MonthlyDaysWithGT32Temp, MonthlyDaysWithGT90Temp, MonthlyDaysWithLT0Temp, MonthlyDaysWithLT32Temp, MonthlyDepartureFromNormalAverageTemperature, MonthlyDepartureFromNormalCoolingDegreeDays, MonthlyDepartureFromNormalHeatingDegreeDays, MonthlyDepartureFromNormalMaximumTemperature, MonthlyDepartureFromNormalMinimumTemperature, MonthlyDepartureFromNormalPrecipitation, MonthlyDewpointTemperature, MonthlyGreatestPrecip, MonthlyGreatestPrecipDate, MonthlyGreatestSnowDepth, MonthlyGreatestSnowDepthDate, MonthlyGreatestSnowfall, MonthlyGreatestSnowfallDate, MonthlyMaxSeaLevelPressureValue, MonthlyMaxSeaLevelPressureValueDate, MonthlyMaxSeaLevelPressureValueTime, MonthlyMaximumTemperature, MonthlyMeanTemperature, MonthlyMinSeaLevelPressureValue, MonthlyMinSeaLevelPressureValueDate, MonthlyMinSeaLevelPressureValueTime, MonthlyMinimumTemperature, MonthlySeaLevelPressure, MonthlyStationPressure, MonthlyTotalLiquidPrecipitation, MonthlyTotalSnowfall, MonthlyWetBulb, AWND, CDSD, CLDD, DSNW, HDSD, HTDD, NormalsCoolingDegreeDay, NormalsHeatingDegreeDay, ShortDurationEndDate005, ShortDurationEndDate010, ShortDurationEndDate015, ShortDurationEndDate020, ShortDurationEndDate030, ShortDurationEndDate045, ShortDurationEndDate060, ShortDurationEndDate080, ShortDurationEndDate100, ShortDurationEndDate120, ShortDurationEndDate150, ShortDurationEndDate180, ShortDurationPrecipitationValue005, ShortDurationPrecipitationValue010, ShortDurationPrecipitationValue015, ShortDurationPrecipitationValue020, ShortDurationPrecipitationValue030, ShortDurationPrecipitationValue045, ShortDurationPrecipitationValue060, ShortDurationPrecipitationValue080, ShortDurationPrecipitationValue100, ShortDurationPrecipitationValue120, ShortDurationPrecipitationValue150, ShortDurationPrecipitationValue180, REM, BackupDirection, BackupDistance, BackupDistanceUnit, BackupElements, BackupElevation, BackupEquipment, BackupLatitude, BackupLongitude, BackupName, WindEquipmentChangeDate" \
-    -XPUT http://localhost:8030/api/quickstart/weatherdata/_stream_load
-```
 
 ---
 
@@ -367,9 +286,11 @@ The folder names below `starrocks/shared/` are generated when you load the data.
 
 ---
 
-## Answer some questions
+## Simple query
 
-<SQL />
+## Publish additional data
+
+## Verify that data is added
 
 ---
 
