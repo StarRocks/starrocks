@@ -197,6 +197,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.events.StmtEventProcessor;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -850,6 +851,11 @@ public class GlobalStateMgr {
         this.tabletCollector = new TabletCollector();
 
         this.jwkMgr = new JwkMgr();
+        // add stmtEventProcessor postprocessing stmt events
+        // skip when checkpoint
+        if (!isCkptGlobalState) {
+            StmtEventProcessor.startProcessor();
+        }
     }
 
     public static void destroyCheckpoint() {

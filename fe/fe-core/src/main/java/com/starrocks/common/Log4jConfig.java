@@ -103,6 +103,19 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+            "    <RollingFile name=\"Lineagefile\" fileName=\"${lineage_log_dir}/fe.lineage.log\" filePattern=\"${lineage_log_dir}/fe.lineage.log.${lineage_file_pattern}-%i\">\n" +
+            "      ${syslog_lineage_layout}\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${lineage_roll_maxsize}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${lineage_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.lineage.log.*\" />\n" +
+            "          <IfLastModified age=\"${lineage_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
             "    <RollingFile name=\"dumpFile\" fileName=\"${dump_log_dir}/fe.dump.log\" filePattern=\"${dump_log_dir}/fe.dump.log.${dump_file_pattern}-%i\">\n" +
             "      ${syslog_dump_layout}\n" +
             "      <Policies>\n" +
@@ -183,6 +196,9 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Logger name=\"audit\" level=\"ERROR\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"Auditfile\"/>\n" +
             "    </Logger>\n" +
+            "    <Logger name=\"lineage\" level=\"INFO\" additivity=\"false\">\n" +
+            "      <AppenderRef ref=\"Lineagefile\"/>\n" +
+            "    </Logger>\n" +
             "    <Logger name=\"dump\" level=\"ERROR\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"dumpFile\"/>\n" +
             "    </Logger>\n" +
@@ -247,6 +263,14 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("audit_log_delete_age", String.valueOf(Config.audit_log_delete_age));
         properties.put("audit_file_pattern",
                 getIntervalPattern("audit_log_roll_interval", Config.audit_log_roll_interval));
+
+        // lineage log config
+        properties.put("lineage_log_dir", Config.lineage_log_dir);
+        properties.put("lineage_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
+        properties.put("lineage_roll_num", String.valueOf(Config.lineage_log_roll_num));
+        properties.put("lineage_log_delete_age", String.valueOf(Config.lineage_log_delete_age));
+        properties.put("lineage_file_pattern",
+                getIntervalPattern("lineage_log_roll_interval", Config.lineage_log_roll_interval));
 
         // dump log config
         properties.put("dump_log_dir", Config.dump_log_dir);
@@ -313,6 +337,7 @@ public class Log4jConfig extends XmlConfiguration {
             properties.put("syslog_dump_layout", jsonLayoutDefault);
             properties.put("syslog_bigquery_layout", jsonLayoutDefault);
             properties.put("syslog_profile_layout", jsonLayoutProfile);
+            properties.put("syslog_lineage_layout", jsonLayoutProfile);
         } else {
             // fallback to plaintext logging
             properties.put("syslog_default_layout",
@@ -327,6 +352,8 @@ public class Log4jConfig extends XmlConfiguration {
                     "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
             properties.put("syslog_profile_layout",
                     "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+            properties.put("syslog_lineage_layout",
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%m%n\"/>");
         }
 
         String xmlConfTemplate = generateXmlConfTemplate();
