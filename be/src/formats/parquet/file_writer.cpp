@@ -257,8 +257,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     }
     case TYPE_DATETIME: {
         return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type,
-                ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
+                name, rep_type, ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
     case TYPE_DECIMAL32: {
