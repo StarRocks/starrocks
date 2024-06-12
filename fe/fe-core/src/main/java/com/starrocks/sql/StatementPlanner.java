@@ -534,15 +534,16 @@ public class StatementPlanner {
         MetaUtils.normalizationTableName(session, stmt.getTableName());
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
+        String tableName = stmt.getTableName().getTbl();
         Database db = MetaUtils.getDatabase(catalogName, dbName);
-        Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
+        Table targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         try {
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable tbl = (ExternalOlapTable) targetTable;
-                RemoteTransactionMgr.abortRemoteTransaction(tbl.getSourceTableDbId(), txnId, tbl.getSourceTableHost(),
+                transactionMgr.abortRemoteTransaction(tbl.getSourceTableDbId(), txnId, tbl.getSourceTableHost(),
                         tbl.getSourceTablePort(), errMsg, Collections.emptyList(), Collections.emptyList());
             } else if (targetTable instanceof OlapTable) {
-                GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 transactionMgr.abortTransaction(
                         db.getId(),
                         txnId,
