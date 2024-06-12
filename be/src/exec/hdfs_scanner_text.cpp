@@ -463,6 +463,11 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
 int64_t HdfsTextScanner::estimated_mem_usage() const {
     int64_t value = HdfsScanner::estimated_mem_usage();
     if (value != 0) return value;
+    // for compressed text file, if _no_data=true, means _reader is nullptr
+    if (_no_data) {
+        return 0;
+    }
+    DCHECK(_reader != nullptr);
     return _reader->buff_capacity() * 3 / 2;
 }
 
