@@ -754,6 +754,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_CONSTANT_EXECUTE_IN_FE = "enable_constant_execute_in_fe";
 
+    // A group of like predicates with the same column and concatenated by OR, can be consolidated into
+    // regexp predicate, only the number of like predicates is not less that `like_predicate_consolidate_min`
+    // would be consolidated, since when the number of like predicates is too small, its corresponding
+    // regexp predicate is less efficient than like predicates.
+    public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2147,6 +2153,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
     private boolean enableConstantExecuteInFE = true;
 
+    @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
+    private int likePredicateConsolidateMin = 2;
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -3884,6 +3892,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableConstantExecuteInFE(boolean enableConstantExecuteInFE) {
         this.enableConstantExecuteInFE = enableConstantExecuteInFE;
+    }
+
+    public int getLikePredicateConsolidateMin() {
+        return likePredicateConsolidateMin;
+    }
+
+    public void setLikePredicateConsolidateMin(int value) {
+        this.likePredicateConsolidateMin = value;
     }
 
     // Serialize to thrift object
