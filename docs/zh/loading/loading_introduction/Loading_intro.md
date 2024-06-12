@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: "Chinese"
+<<<<<<< HEAD
+=======
+toc_max_heading_level: 3
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 ---
 
 # 导入总览
@@ -30,9 +34,15 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 ### 同步导入
 
+<<<<<<< HEAD
 同步导入是指您创建导入作业以后，StarRocks 同步执行作业，并在作业执行完成以后返回导入结果。您可以通过返回的导入结果判断导入作业是否成功。
 
 支持同步模式的导入方式有 Stream Load 和 INSERT。
+=======
+## 导入方式
+
+### [Insert](../InsertInto.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 用户操作过程如下：
 
@@ -51,7 +61,11 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 支持异步模式的导入方式有 Broker Load、Routine Load 和 Spark Load。
 
+<<<<<<< HEAD
 用户操作过程如下：
+=======
+### [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 1. 创建导入作业。
 
@@ -60,7 +74,11 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
    - 如果作业创建成功，进入步骤 3。
    - 如果作业创建失败，可以回到步骤 1，尝试重试导入作业。
 
+<<<<<<< HEAD
 3. 轮询查看导入作业的状态，直到状态变为 **FINISHED** 或 **CANCELLED**。
+=======
+### [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
@@ -70,7 +88,11 @@ Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段�
 
 1. **PENDING**
 
+<<<<<<< HEAD
    该阶段是指提交导入作业后，等待 FE 调度执行。
+=======
+### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 2. **ETL**
 
@@ -86,7 +108,11 @@ Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段�
 
 4. **FINISHED**
 
+<<<<<<< HEAD
    在导入作业涉及的所有数据均生效后，作业的状态变成 **FINISHED**，此时，导入的数据均可查询。**FINISHED** 是导入作业的最终状态。
+=======
+### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 5. **CANCELLED**
 
@@ -94,7 +120,11 @@ Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段�
 
 Routine Load 导入作业的执行流程描述如下：
 
+<<<<<<< HEAD
 1. 用户通过支持 MySQL 协议的客户端向 FE 提交一个导入作业。
+=======
+### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 2. FE 将该导入作业拆分成若干个任务，每个任务负责导入若干个分区的数据。
 
@@ -102,12 +132,19 @@ Routine Load 导入作业的执行流程描述如下：
 
 4. BE 完成分配的任务后，向 FE 汇报。
 
+<<<<<<< HEAD
 5. FE 根据汇报结果，继续生成后续新的任务，或者对失败的任务进行重试，或者暂停任务的调度。
 
 ## 导入方式
+=======
+## 生态工具
+
+### [Kafka connector](../Kafka-connector-starrocks.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、 [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)、[Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
 
+<<<<<<< HEAD
 | 导入方式            | 数据源                                                                                          | 业务场景                                                                                                     | 数据量（单作业）      | 数据格式                                            | 同步模式    | 协议   |
 | ------------------ | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------- | ---------- | ------ |
 | Stream Load        |<ul><li>本地文件</li><li>流式数据</li></ul>                                                        | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。                                                                 | 10 GB 以内          |<ul><li>CSV</li><li>JSON</li></ul>                 | 同步       | HTTP  |
@@ -116,34 +153,63 @@ StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/data-manipulat
 | Spark Load         | <ul><li>HDFS</li><li>Hive</li></ul>                                                            | <ul><li>通过 Apache Spark™ 集群初次从 HDFS 或 Hive 迁移导入大量数据。</li><li>需要做全局数据字典来精确去重。</li></ul> | 数十 GB 到 TB级别    |<ul><li>CSV</li><li>ORC（2.0 版本之后支持）</li><li>Parquet（2.0 版本之后支持）</li></ul>       | 异步     | MySQL |
 | INSERT INTO SELECT |<ul><li>StarRocks 表</li><li>外部表</li><li>AWS S3</li><li>HDFS</li></ul>**注意**<br />从 AWS S3 或 HDFS 导入数据时，只支持导入 Parquet 和 ORC 格式的数据。                                                    |<ul><li>外表导入。</li><li>StarRocks 数据表之间的数据导入。</li></ul>                                              | 跟内存相关           | StarRocks 表                                     | 同步        | MySQL |
 | INSERT INTO VALUES |<ul><li>程序</li><li>ETL 工具</li></ul>                                                          |<ul><li>单条批量小数据量插入。</li><li>通过 JDBC 等接口导入。</li></ul>                                             | 简单测试用           | SQL                                              | 同步        | MySQL |
+=======
+### [Spark connector](../Spark-connector-starrocks.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 您可以根据业务场景、数据量、数据源、数据格式和导入频次等来选择合适的导入方式。另外，在选择导入方式时，可以注意以下几点：
 
+<<<<<<< HEAD
 - 从 Kafka 导入数据时，推荐使用 [Routine Load](../../loading/RoutineLoad.md) 实现导入。但是，如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](../../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
+=======
+### [Flink connector](../Flink-connector-starrocks.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 - 从 Hive、Iceberg、Hudi、Delta Lake 导入数据时，推荐创建 [Hive catalog](../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../data_source/catalog/iceberg_catalog.md)、[Hudi Catalog](../../data_source/catalog/hudi_catalog.md)、[Delta Lake Catalog](../../data_source/catalog/deltalake_catalog.md)，然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。
 
+<<<<<<< HEAD
 - 从另外一个 StarRocks 集群或从 Elasticsearch 导入数据时，推荐创建 [StarRocks 外部表](../../data_source/External_table.md#starrocks-外部表)或 [Elasticsearch 外部表](../../data_source/External_table.md#deprecated-elasticsearch-外部表)，然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。
+=======
+### [SMT](../../integrations/loading_tools/SMT.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
   > **注意**
   >
   > StarRocks 外表只支持数据写入，不支持数据读取。
 
+<<<<<<< HEAD
 - 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../../data_source/External_table.md#deprecated-mysql-外部表)、然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../../loading/Flink_cdc_load.md) 实现导入。
+=======
+### [DataX](../../integrations/loading_tools/DataX-starrocks-writer.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 - 从 Oracle、PostgreSQL 或 SQL Server 等数据源导入数据时，推荐创建 [JDBC 外部表](../../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。
 
+<<<<<<< HEAD
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
+=======
+### [CloudCanal](../../integrations/loading_tools/CloudCanal.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 ![数据源与导入方式关系图](../../assets/4.1-3.png)
 
+<<<<<<< HEAD
 ## 内存限制
+=======
+### [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
+<<<<<<< HEAD
 不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../../loading/StreamLoad.md)、[Broker Load](../../loading/hdfs_load.md)、[Routine Load](../../loading/RoutineLoad.md)、[Spark Load](../../loading/SparkLoad.md) 和 [INSERT](../../loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
 
 您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“[系统配置](#系统配置)”章节。
+=======
+## API
+
+### [Stream Load transaction interface](../Stream_Load_transaction_interface.md)
+>>>>>>> 2dd4adde08 ([Doc] Update Loading_intro.md (#46837))
 
 ## 使用说明
 
