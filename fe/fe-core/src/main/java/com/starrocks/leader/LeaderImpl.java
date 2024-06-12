@@ -1052,7 +1052,7 @@ public class LeaderImpl {
                 }
             }
 
-            List<TBackendMeta> backends = getBackendMetas();
+            List<TBackendMeta> backends = getNodeMetas();
             response.setStatus(new TStatus(TStatusCode.OK));
             response.setTable_meta(tableMeta);
             response.setBackends(backends);
@@ -1079,6 +1079,7 @@ public class LeaderImpl {
     }
 
     @NotNull
+<<<<<<< HEAD
     private static List<TBackendMeta> getBackendMetas() {
         List<TBackendMeta> backends = new ArrayList<>();
         for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
@@ -1093,6 +1094,24 @@ public class LeaderImpl {
             backends.add(backendMeta);
         }
         return backends;
+=======
+    private static List<TBackendMeta> getNodeMetas() {
+        List<TBackendMeta> nodeMetas = new ArrayList<>();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream().forEach(node -> {
+            if (RunMode.isSharedDataMode() || node instanceof Backend) {
+                TBackendMeta nodeMeta = new TBackendMeta();
+                nodeMeta.setBackend_id(node.getId());
+                nodeMeta.setHost(node.getHost());
+                nodeMeta.setBe_port(node.getBePort());
+                nodeMeta.setRpc_port(node.getBrpcPort());
+                nodeMeta.setHttp_port(node.getHttpPort());
+                nodeMeta.setAlive(node.isAlive());
+                nodeMeta.setState(node.getBackendState().ordinal());
+                nodeMetas.add(nodeMeta);
+            }
+        });
+        return nodeMetas;
+>>>>>>> a266b651c0 ([BugFix] Fix the issue that external olap table does not support cn (#46827))
     }
 
     @NotNull
