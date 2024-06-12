@@ -195,7 +195,7 @@ void translate_to_string_value(ColumnPtr col, size_t i, std::string& value) {
 Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                                    const std::vector<std::string>& max_values, ExprContext* ctx,
                                                    const ParquetField* field, const std::string& timezone,
-                                                   std::vector<bool>& selected) {
+                                                   Filter& selected) {
     const Expr* root_expr = ctx->root();
     DCHECK(root_expr->node_type() == TExprNodeType::IN_PRED && root_expr->op() == TExprOpcode::FILTER_IN);
     const Expr* c = root_expr->get_child(0);
@@ -258,12 +258,12 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
         ColumnPredicate* pred_ge = pool.add(new_column_ge_predicate(get_type_info(ltype), 0, min_value));
         RETURN_IF_ERROR(pred_ge->evaluate_and(values.get(), filter.data()));
         if (!SIMD::contain_nonzero(filter)) {
-            selected[i] = false;
+            selected[i] = 0;
             continue;
         }
         ColumnPredicate* pred_le = pool.add(new_column_le_predicate(get_type_info(ltype), 0, max_value));
         RETURN_IF_ERROR(pred_le->evaluate_and(values.get(), filter.data()));
-        selected[i] = SIMD::contain_nonzero(filter);
+        selected[i] = SIMD::contain_nonzero(filter) ? selected[i] : 0;
     }
 
     return Status::OK();
