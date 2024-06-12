@@ -71,9 +71,12 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +85,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class StatementPlanner {
+    private static final Logger LOG = LogManager.getLogger(StatementPlanner.class);
 
     public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
         if (session instanceof HttpConnectContext) {
@@ -141,6 +145,11 @@ public class StatementPlanner {
             } else if (stmt instanceof DeleteStmt) {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
             }
+        } catch (Throwable e) {
+            if (stmt instanceof DmlStmt) {
+                abortTransaction((DmlStmt) stmt, session, e.getMessage());
+            }
+            throw e;
         } finally {
             if (needWholePhaseLock) {
                 unLock(dbs);
@@ -473,7 +482,7 @@ public class StatementPlanner {
 
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
-        long txnId = -1L;
+        long txnId = DmlStmt.INVALID_TXN_ID;
         if (targetTable instanceof ExternalOlapTable) {
             if (!(stmt instanceof InsertStmt)) {
                 throw UnsupportedException.unsupportedException("External OLAP table only supports insert statement");
@@ -514,5 +523,38 @@ public class StatementPlanner {
         }
 
         stmt.setTxnId(txnId);
+    }
+
+    private static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
+        long txnId = stmt.getTxnId();
+        if (txnId == DmlStmt.INVALID_TXN_ID) {
+            return;
+        }
+
+        MetaUtils.normalizationTableName(session, stmt.getTableName());
+        String catalogName = stmt.getTableName().getCatalog();
+        String dbName = stmt.getTableName().getDb();
+        String tableName = stmt.getTableName().getTbl();
+        Database db = MetaUtils.getDatabase(catalogName, dbName);
+        Table targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        try {
+            if (targetTable instanceof ExternalOlapTable) {
+                ExternalOlapTable tbl = (ExternalOlapTable) targetTable;
+                transactionMgr.abortRemoteTransaction(tbl.getSourceTableDbId(), txnId, tbl.getSourceTableHost(),
+                        tbl.getSourceTablePort(), errMsg, Collections.emptyList(), Collections.emptyList());
+            } else if (targetTable instanceof OlapTable) {
+                transactionMgr.abortTransaction(
+                        db.getId(),
+                        txnId,
+                        errMsg,
+                        Collections.emptyList(),
+                        Collections.emptyList(),
+                        null);
+            }
+        } catch (Throwable e) {
+            // Just print a log if abort txn failed, this failure do not need to pass to user.
+            LOG.warn("errors when abort txn", e);
+        }
     }
 }
