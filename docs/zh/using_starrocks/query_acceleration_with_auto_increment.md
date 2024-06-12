@@ -148,6 +148,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 ### 使用 bitmap 函数加速计算精确去重
 
 为了进一步加速计算，在构建全局字典后，您可以将字典表 INTEGER 列值直接插入到一个 bitmap 列中。后续对该 bitmap 列使用 bitmap 函数来精确去重计数。
+
 **方式一**：
 
 如果您构建了全局字典并且已经导入数据到 `dest_table` 表，则可以执行如下步骤：
@@ -165,17 +166,17 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 
 2. 向聚合表 `dest_table_bitmap` 中插入数据。 `id` 列插入表 `dest_table` 的列 `id` 的数据；`order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 的数据（经过函数 `to_bitmap` 处理后的值）。
 
-        ```SQL
-        INSERT INTO dest_table_bitmap (id, order_id_bitmap)
-        SELECT id,  to_bitmap(dict_mapping('dict', order_uuid))
-        FROM dest_table
-        WHERE dest_table.batch = 1;
+    ```SQL
+    INSERT INTO dest_table_bitmap (id, order_id_bitmap)
+    SELECT id,  to_bitmap(dict_mapping('dict', order_uuid))
+    FROM dest_table
+    WHERE dest_table.batch = 1;
         
-        INSERT INTO dest_table_bitmap (id, order_id_bitmap)
-        SELECT id, to_bitmap(dict_mapping('dict', order_uuid))
-        FROM dest_table
-        WHERE dest_table.batch = 2;
-        ```
+    INSERT INTO dest_table_bitmap (id, order_id_bitmap)
+    SELECT id, to_bitmap(dict_mapping('dict', order_uuid))
+    FROM dest_table
+    WHERE dest_table.batch = 2;
+    ```
 
 3. 然后基于 bitmap 列使用函数 `BITMAP_UNION_COUNT()` 精确去重计数。
 
@@ -201,18 +202,18 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 
 2. 向聚合表中插入数据。`id` 列直接插入 CSV 文件中的`id` 列的数据；`order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 列的数据（经过函数 `to_bitmap` 处理后的值）。
 
-     ```SQL
+     ```bash
      curl --location-trusted -u root: \
          -H "format: CSV" -H "column_separator:," \
          -H "columns: id, order_uuid,  order_id_bitmap=to_bitmap(dict_mapping('dict', order_uuid))" \
          -T batch1.csv \
-         -XPUT http://172.26.94.106:8030/api/example_db/dest_table_bitmap/_stream_load
+         -XPUT http:///<fe_host>:<fe_http_port>/api/example_db/dest_table_bitmap/_stream_load
      
      curl --location-trusted -u root: \
          -H "format: CSV" -H "column_separator:," \
          -H "columns: id, order_uuid, order_id_bitmap=to_bitmap(dict_mapping('dict', order_uuid))" \
          -T batch2.csv \
-         -XPUT http://172.26.94.106:8030/api/example_db/dest_table_bitmap/_stream_load
+         -XPUT http:///<fe_host>:<fe_http_port>/api/example_db/dest_table_bitmap/_stream_load
      ```
 
 3. 然后基于 bitmap 列使用函数 `BITMAP_UNION_COUNT()` 精确去重计数。
