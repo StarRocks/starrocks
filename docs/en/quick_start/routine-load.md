@@ -300,7 +300,7 @@ PROPERTIES("replication_num"="1");
 
 There will be no topics yet, a topic will be created in the next step.
 
-`http://localhost:8080/overview`
+http://localhost:8080/overview
 
 ### Publish data to a Redpanda topic
 
@@ -326,7 +326,7 @@ b'{ "uid": 4666, "site": "https://www.starrocks.io/", "vtime": 1718034794 } '
 
 ### Verify in the Redpanda Console
 
-Navigate to `http://localhost:8080/topics` in the Redpanda Console, and you will see one topic named `test2`. Select that topic and you will see five messages matching the output of `gen.py`.
+Navigate to http://localhost:8080/topics in the Redpanda Console, and you will see one topic named `test2`. Select that topic and you will see five messages matching the output of `gen.py`.
 
 ## Verify in StarRocks
 
