@@ -97,7 +97,7 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean sys_log_to_console = ((System.getenv("SYS_LOG_TO_CONSOLE") != null)
-        ? System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1") : false);
+            ? System.getenv("SYS_LOG_TO_CONSOLE").trim().equals("1") : false);
 
     /**
      * audit_log_dir:
