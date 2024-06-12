@@ -7,10 +7,8 @@ keywords: ['Kafka', 'Redpanda', 'shared-data', 'MinIO']
 
 # Loading with Redpanda to StarRocks using shared-data storage
 
-import DDL from '../assets/quick-start/_DDL.mdx'
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
-import Curl from '../assets/quick-start/_curl.mdx'
 
 ## About Routine Load
 
@@ -257,20 +255,141 @@ The folder `builtin_storage_volume` will not be visible in the MinIO object list
 
 ---
 
-## Create some tables
+## Create a table
 
-<DDL />
+```SQL
+CREATE DATABASE quickstart;
+```
+
+```SQL
+USE quickstart;
+```
+
+```SQL
+CREATE TABLE site_clicks (
+    `uid` bigint NOT NULL COMMENT "uid",
+    `site` string NOT NULL COMMENT "site url",
+    `vtime` bigint NOT NULL COMMENT "vtime"
+)
+DISTRIBUTED BY HASH(`uid`)
+PROPERTIES("replication_num"="1");
+```
+
+## Create a Routine Load job
+
+```SQL
+CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
+PROPERTIES
+(
+    "format" = "json",
+    "jsonpaths" ="[\"$.uid\",\"$.site\",\"$.vtime\"]"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "redpanda:29092",
+    "kafka_topic" = "test2"
+);
+```
+
+### Verify the Routine Load job
+
+```SQL
+SHOW ROUTINE LOAD\G
+```
+
+```SQL
+*************************** 1. row ***************************
+                  Id: 10075
+                Name: quickstart.clicks
+          CreateTime: 2024-06-10 15:53:30
+           PauseTime: NULL
+             EndTime: NULL
+              DbName: quickstart
+           TableName: site_clicks
+               State: RUNNING
+      DataSourceType: KAFKA
+      CurrentTaskNum: 1
+       JobProperties: {"partitions":"*","partial_update":"false","columnToColumnExpr":"*","maxBatchIntervalS":"10","partial_update_mode":"null","whereExpr":"*","dataFormat":"json","timezone":"Etc/UTC","format":"json","log_rejected_record_num":"0","taskTimeoutSecond":"60","json_root":"","maxFilterRatio":"1.0","strict_mode":"false","jsonpaths":"[\"$.uid\",\"$.site\",\"$.vtime\"]","taskConsumeSecond":"15","desireTaskConcurrentNum":"5","maxErrorNum":"0","strip_outer_array":"false","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
+DataSourceProperties: {"topic":"test2","currentKafkaPartitions":"0","brokerList":"redpanda:29092"}
+    CustomProperties: {"group.id":"example_tbl2_test2_9ce0e896-a17f-43ff-86e1-5e413c7baabf"}
+           Statistic: {"receivedBytes":0,"errorRows":0,"committedTaskNum":0,"loadedRows":0,"loadRowsRate":0,"abortedTaskNum":0,"totalRows":0,"unselectedRows":0,"receivedBytesRate":0,"taskExecuteTimeMs":1}
+            Progress: {"0":"4"}
+   TimestampProgress: {}
+ReasonOfStateChanged:
+        ErrorLogUrls:
+         TrackingSQL:
+            OtherMsg:
+LatestSourcePosition: {}
+1 row in set (0.03 sec)
+```
 
 ---
 
-## Publish data to Redpanda
+
+
+
 
 ### Open the Redpanda Console
 
+
 ### Publish data to a Redpanda topic
 
-## Consume the data with Routine Load
+From a command shell in the `routineload/` folder run this command to generate data:
 
+:::tip
+
+On your system, you might need to use `python3` in place of `python` in the command.
+
+:::
+
+```python
+python gen.py 5
+```
+
+```plaintext
+b'{ "uid": 6926, "site": "https://docs.starrocks.io/", "vtime": 1718034793 } '
+b'{ "uid": 3303, "site": "https://www.starrocks.io/product/community", "vtime": 1718034793 } '
+b'{ "uid": 227, "site": "https://docs.starrocks.io/", "vtime": 1718034243 } '
+b'{ "uid": 7273, "site": "https://docs.starrocks.io/", "vtime": 1718034794 } '
+b'{ "uid": 4666, "site": "https://www.starrocks.io/", "vtime": 1718034794 } '
+```
+
+### Verify in the Redpanda Console
+
+### Verify in StarRocks
+
+```SQL
+SHOW ROUTINE LOAD\G
+```
+
+```SQL
+*************************** 1. row ***************************
+                  Id: 10075
+                Name: example_tbl2_test2
+          CreateTime: 2024-06-10 15:53:30
+           PauseTime: NULL
+             EndTime: NULL
+              DbName: quickstart
+           TableName: site_clicks
+               State: RUNNING
+      DataSourceType: KAFKA
+      CurrentTaskNum: 1
+       JobProperties: {"partitions":"*","partial_update":"false","columnToColumnExpr":"*","maxBatchIntervalS":"10","partial_update_mode":"null","whereExpr":"*","dataFormat":"json","timezone":"Etc/UTC","format":"json","log_rejected_record_num":"0","taskTimeoutSecond":"60","json_root":"","maxFilterRatio":"1.0","strict_mode":"false","jsonpaths":"[\"$.uid\",\"$.site\",\"$.vtime\"]","taskConsumeSecond":"15","desireTaskConcurrentNum":"5","maxErrorNum":"0","strip_outer_array":"false","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
+DataSourceProperties: {"topic":"test2","currentKafkaPartitions":"0","brokerList":"redpanda:29092"}
+    CustomProperties: {"group.id":"example_tbl2_test2_9ce0e896-a17f-43ff-86e1-5e413c7baabf"}
+    -- highlight-next-line
+           Statistic: {"receivedBytes":392,"errorRows":0,"committedTaskNum":1,"loadedRows":5,"loadRowsRate":0,"abortedTaskNum":0,"totalRows":5,"unselectedRows":0,"receivedBytesRate":0,"taskExecuteTimeMs":535}
+            Progress: {"0":"9"}
+   TimestampProgress: {"0":"1718034896098"}
+ReasonOfStateChanged:
+        ErrorLogUrls:
+         TrackingSQL:
+            OtherMsg: [2024-06-10 16:08:02] [task id: cbd7a02a-1a94-4fab-b5fe-e6dffda8861a] [txn id: -1] there is no new data in kafka, wait for 10 seconds to schedule again
+LatestSourcePosition: {"0":"10"}
+1 row in set (0.01 sec)
+```
+
+### Notes on the Routine Load command
 
 ---
 
@@ -287,6 +406,24 @@ The folder names below `starrocks/shared/` are generated when you load the data.
 ---
 
 ## Simple query
+
+```SQL
+USE quickstart;
+SELECT * FROM site_clicks;
+```
+
+```SQL
++------+--------------------------------------------+------------+
+| uid  | site                                       | vtime      |
++------+--------------------------------------------+------------+
+| 4607 | https://www.starrocks.io/blog              | 1718031441 |
+| 1575 | https://www.starrocks.io/                  | 1718031523 |
+| 2398 | https://docs.starrocks.io/                 | 1718033630 |
+| 3741 | https://www.starrocks.io/product/community | 1718030845 |
+| 4792 | https://www.starrocks.io/                  | 1718033413 |
++------+--------------------------------------------+------------+
+5 rows in set (0.07 sec)
+```
 
 ## Publish additional data
 
@@ -392,26 +529,12 @@ When this is true, a StarRocks storage volume named `builtin_storage_volume` is 
 
 In this tutorial you:
 
-- Deployed StarRocks and Minio in Docker
-- Created a MinIO access key
-- Configured a StarRocks Storage Volume that uses MinIO
-- Loaded crash data provided by New York City and weather data provided by NOAA
-- Analyzed the data using SQL JOINs to find out that driving in low visibility or icy streets is a bad idea
-
-There is more to learn; we intentionally glossed over the data transform done during the Stream Load. The details on that are in the notes on the curl commands below.
-
-## Notes on the curl commands
-
-<Curl />
+- Deployed StarRocks, Reedpanda, and Minio in Docker
+- Created a Routine Load job to consume data from a Kafka topic
+- Learned how to configure a StarRocks Storage Volume that uses MinIO
 
 ## More information
 
-[StarRocks table design](../table_design/StarRocks_table_design.md)
+[StarRocks Architecture](../introduction/Architecture.md)
 
-[Materialized views](../cover_pages/mv_use_cases.mdx)
-
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
-
-The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
-
-The [Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) is provided by NOAA with this [disclaimer](https://www.noaa.gov/disclaimer) and this [privacy policy](https://www.noaa.gov/protecting-your-privacy).
+[Routine Load](../loading/RoutineLoad.md)
