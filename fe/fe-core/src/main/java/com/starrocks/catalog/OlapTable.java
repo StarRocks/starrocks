@@ -66,6 +66,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -2025,6 +2026,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 renamePartition(tempPartitionNames.get(i), partitionNames.get(i));
             }
         }
+
+        for (Column column : getColumns()) {
+            IDictManager.getInstance().removeGlobalDict(this.getId(), column.getName());
+        }
     }
 
     // used for unpartitioned table in insert overwrite
@@ -2050,6 +2055,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
         // rename partition
         renamePartition(tempPartitionName, sourcePartitionName);
+
+        for (Column column : getColumns()) {
+            IDictManager.getInstance().removeGlobalDict(this.getId(), column.getName());
+        }
     }
 
     public void addTempPartition(Partition partition) {
