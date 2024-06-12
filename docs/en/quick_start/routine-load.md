@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "English"
 sidebar_position: 2
+toc_max_heading_level: 2
 description: Redpanda with shared-data storage
 keywords: ['Kafka', 'Redpanda', 'shared-data', 'MinIO']
 ---
@@ -166,7 +167,17 @@ Browse to http://localhost:9001/access-keys The username and password are specif
 
 At this point you have StarRocks, Redpanda, and MinIO running. A MinIO access key is used to connect StarRocks and Minio. When StarRocks started up, it established the connection with MinIO and created the default storage volume in MinIO.
 
-This is the configuration used to set the default storage volume to use MinIO (this is also in the Docker compose file). The configuration will be described in detail at the end of this guide, for now just note that the `aws_s3_access_key` is set to the string that you saw in the MinIO Console and that the `run_mode` is set to `shared_data`:
+This is the configuration used to set the default storage volume to use MinIO (this is also in the Docker compose file). The configuration will be described in detail at the end of this guide, for now just note that the `aws_s3_access_key` is set to the string that you saw in the MinIO Console and that the `run_mode` is set to `shared_data`.
+
+```bash
+docker compose exec starrocks-fe cat fe/conf/fe.conf
+```
+
+:::tip
+
+Run all `docker compose` commands from the directory containing the `docker-compose.yml` file.
+
+:::
 
 ```plaintext
 #highlight-start
@@ -257,6 +268,8 @@ The folder `builtin_storage_volume` will not be visible in the MinIO object list
 
 ## Create a table
 
+These SQL commands are run in your SQL client.
+
 ```SQL
 CREATE DATABASE quickstart;
 ```
@@ -275,53 +288,7 @@ DISTRIBUTED BY HASH(`uid`)
 PROPERTIES("replication_num"="1");
 ```
 
-## Create a Routine Load job
 
-```SQL
-CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
-PROPERTIES
-(
-    "format" = "json",
-    "jsonpaths" ="[\"$.uid\",\"$.site\",\"$.vtime\"]"
-)
-FROM KAFKA
-(
-    "kafka_broker_list" = "redpanda:29092",
-    "kafka_topic" = "test2"
-);
-```
-
-### Verify the Routine Load job
-
-```SQL
-SHOW ROUTINE LOAD\G
-```
-
-```SQL
-*************************** 1. row ***************************
-                  Id: 10075
-                Name: quickstart.clicks
-          CreateTime: 2024-06-10 15:53:30
-           PauseTime: NULL
-             EndTime: NULL
-              DbName: quickstart
-           TableName: site_clicks
-               State: RUNNING
-      DataSourceType: KAFKA
-      CurrentTaskNum: 1
-       JobProperties: {"partitions":"*","partial_update":"false","columnToColumnExpr":"*","maxBatchIntervalS":"10","partial_update_mode":"null","whereExpr":"*","dataFormat":"json","timezone":"Etc/UTC","format":"json","log_rejected_record_num":"0","taskTimeoutSecond":"60","json_root":"","maxFilterRatio":"1.0","strict_mode":"false","jsonpaths":"[\"$.uid\",\"$.site\",\"$.vtime\"]","taskConsumeSecond":"15","desireTaskConcurrentNum":"5","maxErrorNum":"0","strip_outer_array":"false","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
-DataSourceProperties: {"topic":"test2","currentKafkaPartitions":"0","brokerList":"redpanda:29092"}
-    CustomProperties: {"group.id":"example_tbl2_test2_9ce0e896-a17f-43ff-86e1-5e413c7baabf"}
-           Statistic: {"receivedBytes":0,"errorRows":0,"committedTaskNum":0,"loadedRows":0,"loadRowsRate":0,"abortedTaskNum":0,"totalRows":0,"unselectedRows":0,"receivedBytesRate":0,"taskExecuteTimeMs":1}
-            Progress: {"0":"4"}
-   TimestampProgress: {}
-ReasonOfStateChanged:
-        ErrorLogUrls:
-         TrackingSQL:
-            OtherMsg:
-LatestSourcePosition: {}
-1 row in set (0.03 sec)
-```
 
 ---
 
@@ -331,6 +298,9 @@ LatestSourcePosition: {}
 
 ### Open the Redpanda Console
 
+There will be no topics yet, a topic will be created in the next step.
+
+`http://localhost:8080/overview`
 
 ### Publish data to a Redpanda topic
 
@@ -356,7 +326,68 @@ b'{ "uid": 4666, "site": "https://www.starrocks.io/", "vtime": 1718034794 } '
 
 ### Verify in the Redpanda Console
 
-### Verify in StarRocks
+Navigate to `http://localhost:8080/topics` in the Redpanda Console, and you will see one topic named `test2`. Select that topic and you will see five messages matching the output of `gen.py`.
+
+## Verify in StarRocks
+
+### Create a Routine Load job
+
+```SQL
+CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
+PROPERTIES
+(
+    "format" = "json",
+    "jsonpaths" ="[\"$.uid\",\"$.site\",\"$.vtime\"]"
+)
+FROM KAFKA
+(     
+    "kafka_broker_list" = "redpanda:29092",
+    "kafka_topic" = "test2",
+    "kafka_offsets" = "OFFSET_BEGINNING",
+    "kafka_partitions" = "0" 
+);
+```
+
+### Verify the Routine Load job
+
+```SQL
+SHOW ROUTINE LOAD\G
+```
+
+Verify the three highlighted lines:
+
+1. The state should be `RUNNING`
+2. The topic should be `test2` and the broker should be `redpanda:2092`
+3. The statistics should show either 0 or 5 loaded rows depending on how soon you ran the `SHOW ROUTINE LOAD` command. If there are 0 loaded rows run it again.
+
+```SQL
+*************************** 1. row ***************************
+                  Id: 10078
+                Name: clicks
+          CreateTime: 2024-06-12 15:51:12
+           PauseTime: NULL
+             EndTime: NULL
+              DbName: quickstart
+           TableName: site_clicks
+           -- highlight-next-line
+               State: RUNNING
+      DataSourceType: KAFKA
+      CurrentTaskNum: 1
+       JobProperties: {"partitions":"*","partial_update":"false","columnToColumnExpr":"*","maxBatchIntervalS":"10","partial_update_mode":"null","whereExpr":"*","dataFormat":"json","timezone":"Etc/UTC","format":"json","log_rejected_record_num":"0","taskTimeoutSecond":"60","json_root":"","maxFilterRatio":"1.0","strict_mode":"false","jsonpaths":"[\"$.uid\",\"$.site\",\"$.vtime\"]","taskConsumeSecond":"15","desireTaskConcurrentNum":"5","maxErrorNum":"0","strip_outer_array":"false","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
+       -- highlight-next-line
+DataSourceProperties: {"topic":"test2","currentKafkaPartitions":"0","brokerList":"redpanda:29092"}
+    CustomProperties: {"group.id":"clicks_ea38a713-5a0f-4abe-9b11-ff4a241ccbbd"}
+    -- highlight-next-line
+           Statistic: {"receivedBytes":0,"errorRows":0,"committedTaskNum":0,"loadedRows":0,"loadRowsRate":0,"abortedTaskNum":0,"totalRows":0,"unselectedRows":0,"receivedBytesRate":0,"taskExecuteTimeMs":1}
+            Progress: {"0":"OFFSET_ZERO"}
+   TimestampProgress: {}
+ReasonOfStateChanged:
+        ErrorLogUrls:
+         TrackingSQL:
+            OtherMsg:
+LatestSourcePosition: {}
+1 row in set (0.00 sec)
+```
 
 ```SQL
 SHOW ROUTINE LOAD\G
@@ -395,13 +426,7 @@ LatestSourcePosition: {"0":"10"}
 
 ## Verify that data is stored in MinIO
 
-Open MinIO [http://localhost:9001/browser/starrocks/](http://localhost:9001/browser/starrocks/) and verify that you have `data`, `metadata`, and `schema` entries in each of the directories under `starrocks/shared/`
-
-:::tip
-The folder names below `starrocks/shared/` are generated when you load the data. You should see a single directory below `shared`, and then two more below that. Inside each of those directories you will find the data, metadata, and schema entries.
-
-![MinIO object browser](../assets/quick-start/MinIO-data.png)
-:::
+Open MinIO [http://localhost:9001/browser/](http://localhost:9001/browser/) and verify that there are objects stored under `starrocks`.
 
 ---
 
@@ -427,11 +452,41 @@ SELECT * FROM site_clicks;
 
 ## Publish additional data
 
-## Verify that data is added
+Running `gen.py` again will publish another five records to Redpanda.
+
+```bash
+python gen.py 5
+```
+
+### Verify that data is added
+
+Since the Routine Load job runs on a schedule (every 10 seconds by default), the data will be loaded within a few seconds.
+
+```SQL
+SELECT * FROM site_clicks;
+````
+
+```
++------+--------------------------------------------+------------+
+| uid  | site                                       | vtime      |
++------+--------------------------------------------+------------+
+| 6648 | https://www.starrocks.io/blog              | 1718205970 |
+| 7914 | https://www.starrocks.io/                  | 1718206760 |
+| 9854 | https://www.starrocks.io/blog              | 1718205676 |
+| 1186 | https://www.starrocks.io/                  | 1718209083 |
+| 3305 | https://docs.starrocks.io/                 | 1718209083 |
+| 2288 | https://www.starrocks.io/blog              | 1718206759 |
+| 7879 | https://www.starrocks.io/product/community | 1718204280 |
+| 2666 | https://www.starrocks.io/                  | 1718208842 |
+| 5801 | https://www.starrocks.io/                  | 1718208783 |
+| 8409 | https://www.starrocks.io/                  | 1718206889 |
++------+--------------------------------------------+------------+
+10 rows in set (0.02 sec)
+```
 
 ---
 
-## Configuring StarRocks for shared-data
+## Configuration details
 
 Now that you have experienced using StarRocks with shared-data it is important to understand the configuration. 
 
