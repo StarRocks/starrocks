@@ -23,7 +23,14 @@
             },
             "items": [
                 "quick_start/shared-nothing",
+<<<<<<< HEAD
                 "quick_start/shared-data"
+=======
+                "quick_start/shared-data",
+                "quick_start/iceberg",
+                "quick_start/hudi",
+                "quick_start/routine-load"
+>>>>>>> 4562a7dfe5 ([Doc] Routine load to shared-data quickstart (#46921))
             ]
         },
         {
