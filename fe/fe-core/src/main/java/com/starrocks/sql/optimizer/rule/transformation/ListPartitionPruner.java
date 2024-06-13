@@ -335,7 +335,21 @@ public class ListPartitionPruner implements PartitionPruner {
                 matches.removeAll(nullPartitions);
                 // remove partition matches literal
                 if (partitionValueMap.containsKey(literal)) {
+<<<<<<< HEAD
                     matches.removeAll(partitionValueMap.get(literal));
+=======
+                    if (listPartitionInfo == null) {
+                        // external table
+                        matches.removeAll(partitionValueMap.get(literal));
+                    } else {
+                        Set<Long> partitionIds = partitionValueMap.get(literal);
+                        for (Long id : partitionIds) {
+                            if (listPartitionInfo.pruneById(id)) {
+                                matches.remove(id);
+                            }
+                        }
+                    }
+>>>>>>> 716fd3c956 ([BugFix] fix list partition pruning for NE expression (#46922))
                 }
                 return matches;
             case LE:
