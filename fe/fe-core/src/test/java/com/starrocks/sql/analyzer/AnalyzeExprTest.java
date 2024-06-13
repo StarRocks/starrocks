@@ -526,4 +526,11 @@ public class AnalyzeExprTest {
         analyzeFail("select map(parse_json('{\"a\": 1}'), map(1,2))");
     }
 
+    @Test
+    public void testNgramSearch() {
+        analyzeFail("select ngram_search('abc', 'a')");
+        analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
+        analyzeFail("select ngram_search(th,th,4) from tall;");
+    }
+
 }
