@@ -35,7 +35,7 @@ const int32_t MAX_FIELD_LEN = 0x7FFFFFFFL;
 const int32_t MAX_BUFFER_DOCS = 100000000;
 const int32_t MERGE_FACTOR = 100000000;
 const float RAMBufferSizeMB = 512;
-const std::string empty_value;
+const std::wstring empty_value;
 
 class CLuceneInvertedWriter : public InvertedWriter {
 public:
