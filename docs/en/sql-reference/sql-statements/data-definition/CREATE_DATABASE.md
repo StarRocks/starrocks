@@ -21,8 +21,6 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 [PROPERTIES ("key"="value", ...)]
 ```
 
-<<<<<<< HEAD
-=======
 ## Parameters
 
 `db_name`: the name of the database to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
@@ -31,7 +29,6 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 `storage_volume`: Specifies the name of the storage volume that is used to store the database in a shared-data cluster.
 
->>>>>>> 0b27c57d98 ([Doc] Update CREATE DATABASE with new property (#46932))
 ## Examples
 
 1. Create the database `db_test`.
