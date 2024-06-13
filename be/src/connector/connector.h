@@ -101,7 +101,11 @@ protected:
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
 
-    virtual void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
+    virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        return Status::OK();
+    }
+
     pipeline::ScanMorsel* _morsel = nullptr;
 };
 

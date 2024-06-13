@@ -96,7 +96,7 @@ void JDBCDataSource::close(RuntimeState* state) {
 
 Status JDBCDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     bool eos = false;
-    _init_chunk(chunk, 0);
+    RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk, &eos));
     } while (!eos && (*chunk)->num_rows() == 0);
