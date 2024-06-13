@@ -502,7 +502,7 @@ PROPERTIES
 (
     "trim_space"="true",
     "enclose"="\"",
-    "escape"="\\",
+    "escape"="\\"
 )
 FROM KAFKA
 (
