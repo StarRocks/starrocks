@@ -660,8 +660,9 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_no_data) {
         return Status::EndOfFile("no data");
     }
-    _init_chunk(chunk, _runtime_state->chunk_size());
+
     do {
+        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, _runtime_state->chunk_size()));
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));
     } while ((*chunk)->num_rows() == 0);
 
@@ -673,7 +674,11 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
-void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
+Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+    if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
+        return Status::OK();
+    }
+
     *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
 
     if (!_equality_delete_slots.empty()) {
@@ -690,6 +695,7 @@ void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
             }
         }
     }
+    return Status::OK();
 }
 
 const std::string HiveDataSource::get_custom_coredump_msg() const {
