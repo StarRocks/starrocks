@@ -578,11 +578,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     if (_is_replicated_storage) {
         std::stringstream ss;
         ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open "
-           << _delta_writers.size() << " delta writer: ";
-        for (auto& [tablet_id, delta_writer] : _delta_writers) {
-            ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
-        }
-        ss << " " << failed_tablet_ids.size() << " failed_tablets: ";
+           << _delta_writers.size() << " delta writers, " << failed_tablet_ids.size() << " failed_tablets: ";
         for (auto& tablet_id : failed_tablet_ids) {
             ss << tablet_id << ",";
         }
