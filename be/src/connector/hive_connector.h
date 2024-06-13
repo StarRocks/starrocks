@@ -65,7 +65,7 @@ public:
     int64_t io_time_spent() const override;
     int64_t estimated_mem_usage() const override;
 
-    void _init_chunk(ChunkPtr* chunk, size_t n) override;
+    Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) override;
 
 private:
     const HiveDataSourceProvider* _provider;
