@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # materialized_views
 
-`materialized_views` provides information about all asynchronous materialized views.
+`materialized_views` provides information about all materialized views.
 
 The following fields are provided in `materialized_views`:
 
@@ -13,7 +13,7 @@ The following fields are provided in `materialized_views`:
 | MATERIALIZED_VIEW_ID                 | ID of the materialized view.                                 |
 | TABLE_SCHEMA                         | Database in which the materialized view resides.             |
 | TABLE_NAME                           | Name of the materialized view.                               |
-| REFRESH_TYPE                         | Refresh type of the materialized view. Valid values: `ROLLUP`, `ASYNC`, and `MANUAL`. |
+| REFRESH_TYPE                         | Refresh type of the materialized view. Valid values: `ROLLUP` (synchronous materialized view), `ASYNC` (asynchronous refresh materialized view), and `MANUAL` (manual refresh materialized view). When the value is `ROLLUP`, all fields related to activation status and refresh are empry.  |
 | IS_ACTIVE                            | Indicates whether the materialized view is active. Inactive materialized views cannot be refreshed or queried. |
 | INACTIVE_REASON                      | The reason that the materialized view is inactive.           |
 | PARTITION_TYPE                       | Type of partitioning strategy for the materialized view.     |
