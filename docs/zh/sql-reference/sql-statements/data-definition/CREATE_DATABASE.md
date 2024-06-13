@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```sql
-CREATE DATABASE [IF NOT EXISTS] db_name
+CREATE DATABASE [IF NOT EXISTS] <db_name>
 [PROPERTIES ("key"="value", ...)]
 ```
 
