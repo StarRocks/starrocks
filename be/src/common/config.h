@@ -1333,5 +1333,6 @@ CONF_Strings(python_envs, "");
 CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
+CONF_mBool(enable_pk_strict_memcheck, "true");
 
 } // namespace starrocks::config
