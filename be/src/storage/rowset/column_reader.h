@@ -96,7 +96,7 @@ public:
     //
     // The primary purpose of the |column| currently is to obtain the name and unique ID of the sub_column
     // to support the add/drop field functionality of the struct column.
-    // It is importantthat the |column| needs to be consistent with the tablet schema corresponding to the segment.
+    // It is important that the |column| needs to be consistent with the tablet schema corresponding to the segment.
     // If you can ensure that this column does not involve a struct column, the |column| can be set to nullptr.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
