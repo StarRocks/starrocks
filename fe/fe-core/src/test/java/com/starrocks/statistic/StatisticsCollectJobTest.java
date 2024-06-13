@@ -1285,7 +1285,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 ImmutableMap.of(),
                 StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
         allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
-        Assert.assertEquals(5, allJobs.size());
+        Assert.assertEquals(6, allJobs.size());
 
         Config.statistic_exclude_pattern_identifier = "(test.t0_stats_partition)|(test.t1_stats)";
         job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
