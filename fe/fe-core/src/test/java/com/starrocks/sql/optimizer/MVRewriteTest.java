@@ -1606,7 +1606,8 @@ public class MVRewriteTest {
                 "     PREDICATES: 1: k1 = '2024-06-12'\n" +
                 "     partitions=1/1\n" +
                 "     rollup: test_mv1");
-        PlanTestBase.assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+        PlanTestBase.assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: sum(5: mv_sum_k3)\n" +
                 "  |  group by: 1: k1");
         starRocksAssert.dropTable("t1");
