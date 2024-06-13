@@ -90,8 +90,12 @@ protected:
     const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
-    virtual void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
     pipeline::ScanSplitContext* _split_context = nullptr;
+
+    virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        return Status::OK();
+    }
 };
 
 class StreamDataSource : public DataSource {

@@ -606,7 +606,29 @@ void HiveDataSource::close(RuntimeState* state) {
     }
 }
 
-void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
+Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+    if (_no_data) {
+        return Status::EndOfFile("no data");
+    }
+
+    do {
+        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, _runtime_state->chunk_size()));
+        RETURN_IF_ERROR(_scanner->get_next(state, chunk));
+    } while ((*chunk)->num_rows() == 0);
+
+    // The column order of chunk is required to be invariable. In order to simplify the logic of each scanner,
+    // we force to reorder the columns of chunk, so scanner doesn't have to care about the column order anymore.
+    // The overhead of reorder is negligible because we only swap columns.
+    ChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
+
+    return Status::OK();
+}
+
+Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+    if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
+        return Status::OK();
+    }
+
     *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
 
     if (!_equality_delete_slots.empty()) {
@@ -623,22 +645,6 @@ void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
             }
         }
     }
-}
-
-Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    if (_no_data) {
-        return Status::EndOfFile("no data");
-    }
-    _init_chunk(chunk, _runtime_state->chunk_size());
-    do {
-        RETURN_IF_ERROR(_scanner->get_next(state, chunk));
-    } while ((*chunk)->num_rows() == 0);
-
-    // The column order of chunk is required to be invariable. In order to simplify the logic of each scanner,
-    // we force to reorder the columns of chunk, so scanner doesn't have to care about the column order anymore.
-    // The overhead of reorder is negligible because we only swap columns.
-    ChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
-
     return Status::OK();
 }
 
