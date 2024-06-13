@@ -81,7 +81,18 @@ protected:
     const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
+<<<<<<< HEAD
     virtual void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
+=======
+    pipeline::ScanSplitContext* _split_context = nullptr;
+
+    virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        return Status::OK();
+    }
+
+    pipeline::ScanMorsel* _morsel = nullptr;
+>>>>>>> 6b46d564c3 ([UT] fix be crash when iceberg v2 read empty chuck after probe (#46833))
 };
 
 class StreamDataSource : public DataSource {

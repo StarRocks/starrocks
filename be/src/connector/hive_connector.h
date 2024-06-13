@@ -65,7 +65,12 @@ public:
     int64_t io_time_spent() const override;
     int64_t estimated_mem_usage() const override;
 
+<<<<<<< HEAD
     void _init_chunk(ChunkPtr* chunk, size_t n) override;
+=======
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
+    Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) override;
+>>>>>>> 6b46d564c3 ([UT] fix be crash when iceberg v2 read empty chuck after probe (#46833))
 
 private:
     const HiveDataSourceProvider* _provider;
