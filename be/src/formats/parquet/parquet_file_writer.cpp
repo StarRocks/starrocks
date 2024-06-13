@@ -492,6 +492,8 @@ Status ParquetFileWriter::init() {
 
     ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
     _properties = std::make_unique<::parquet::WriterProperties::Builder>()
+                          ->version(::parquet::ParquetVersion::PARQUET_2_6)
+                          ->enable_write_page_index()
                           ->data_pagesize(_writer_options->page_size)
                           ->write_batch_size(_writer_options->write_batch_size)
                           ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
