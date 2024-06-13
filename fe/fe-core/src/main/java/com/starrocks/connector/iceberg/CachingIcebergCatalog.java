@@ -199,7 +199,34 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         partitionNames.remove(icebergTableName);
     }
 
+<<<<<<< HEAD
     static class IcebergTableName {
+=======
+    @Override
+    public StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext scanContext) {
+        scanContext.setLocalParallelism(icebergProperties.getIcebergJobPlanningThreadNum());
+        scanContext.setLocalPlanningMaxSlotSize(icebergProperties.getLocalPlanningMaxSlotBytes());
+        scanContext.setDataFileCache(dataFileCache);
+        scanContext.setDeleteFileCache(deleteFileCache);
+        scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
+        scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
+                icebergProperties.enableCacheDataFileIdentifierColumnStatistics());
+
+        return delegate.getTableScan(table, scanContext);
+    }
+
+    private CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long maximumSize) {
+        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
+        if (expiresAfterWriteSec >= 0) {
+            cacheBuilder.expireAfterWrite(expiresAfterWriteSec, SECONDS);
+        }
+
+        cacheBuilder.maximumSize(maximumSize);
+        return cacheBuilder;
+    }
+
+    public static class IcebergTableName {
+>>>>>>> 6b46d564c3 ([UT] fix be crash when iceberg v2 read empty chuck after probe (#46833))
         private final String dbName;
         private final String tableName;
 

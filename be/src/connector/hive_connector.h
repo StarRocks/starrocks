@@ -79,6 +79,10 @@ public:
     void _init_chunk(ChunkPtr* chunk, size_t n) override;
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
+<<<<<<< HEAD
+=======
+    Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) override;
+>>>>>>> 6b46d564c3 ([UT] fix be crash when iceberg v2 read empty chuck after probe (#46833))
 
 private:
     const HiveDataSourceProvider* _provider;

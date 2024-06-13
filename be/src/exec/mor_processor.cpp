@@ -74,8 +74,15 @@ Status IcebergMORProcessor::get_next(RuntimeState* state, ChunkPtr* chunk) {
         _prepared_probe.store(true);
     }
 
+<<<<<<< HEAD
     _hash_joiner->push_chunk(state, std::move(*chunk));
     *chunk = std::move(_hash_joiner->pull_chunk(state)).value();
+=======
+    ChunkPtr tmp = *chunk;
+    RETURN_IF_ERROR(_hash_joiner->push_chunk(state, std::move(tmp)));
+    ASSIGN_OR_RETURN(*chunk, _hash_joiner->pull_chunk(state));
+
+>>>>>>> 6b46d564c3 ([UT] fix be crash when iceberg v2 read empty chuck after probe (#46833))
     return Status::OK();
 }
 

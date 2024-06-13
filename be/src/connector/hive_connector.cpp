@@ -629,8 +629,9 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_no_data) {
         return Status::EndOfFile("no data");
     }
-    _init_chunk(chunk, _runtime_state->chunk_size());
+
     do {
+        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, _runtime_state->chunk_size()));
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));
     } while ((*chunk)->num_rows() == 0);
 
@@ -642,6 +643,32 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+    if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
+        return Status::OK();
+    }
+
+    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+
+    if (!_equality_delete_slots.empty()) {
+        std::map<SlotId, SlotDescriptor*> id_to_slots;
+        for (const auto& slot : _tuple_desc->slots()) {
+            id_to_slots.emplace(slot->id(), slot);
+        }
+
+        for (const auto& slot : _equality_delete_slots) {
+            if (!id_to_slots.contains(slot->id())) {
+                const auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+                (*chunk)->append_column(column, slot->id());
+            }
+        }
+    }
+    return Status::OK();
+}
+
+>>>>>>> 6b46d564c3 ([UT] fix be crash when iceberg v2 read empty chuck after probe (#46833))
 const std::string HiveDataSource::get_custom_coredump_msg() const {
     const std::string path = !_scan_range.relative_path.empty() ? _scan_range.relative_path : _scan_range.full_path;
     return strings::Substitute("Hive file path: $0, partition id: $1, length: $2, offset: $3", path,
