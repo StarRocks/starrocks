@@ -67,7 +67,7 @@ public:
     virtual Status remove(const std::string& key) = 0;
 
     // Update the datacache memory quota.
-    virtual Status update_mem_quota(size_t quota_bytes) = 0;
+    virtual Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) = 0;
 
     // Update the datacache disk space infomation, such as disk quota or disk path.
     virtual Status update_disk_spaces(const std::vector<DirSpace>& spaces) = 0;

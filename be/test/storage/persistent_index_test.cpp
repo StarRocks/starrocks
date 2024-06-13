@@ -3020,6 +3020,7 @@ TEST_P(PersistentIndexTest, pindex_compaction_disk_limit) {
 }
 
 TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
+    config::pindex_major_compaction_schedule_interval_seconds = 0;
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     ASSERT_OK(tablet->init());
     TabletSharedPtr tablet2 = create_tablet(rand(), rand());
@@ -3035,6 +3036,22 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
         ret.emplace_back(tablet3->tablet_id(), 3.0);
         return ret;
     });
+}
+
+TEST_P(PersistentIndexTest, pindex_compaction_schedule_with_migration) {
+    config::pindex_major_compaction_schedule_interval_seconds = 0;
+    TabletSharedPtr tablet = create_tablet(rand(), rand());
+    ASSERT_OK(tablet->init());
+    tablet->set_is_migrating(true);
+    PersistentIndexCompactionManager mgr;
+    ASSERT_OK(mgr.init());
+    mgr.schedule([&]() {
+        std::vector<TabletAndScore> ret;
+        ret.emplace_back(tablet->tablet_id(), 1.0);
+        return ret;
+    });
+    sleep(2);
+    ASSERT_FALSE(mgr.is_running(tablet->tablet_id()));
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
@@ -3091,7 +3108,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
         auto update_key = [&](int step) {
             for (int i = 0; i < M; i++) {
                 keys[i] = "test_varlen_" + std::to_string(i + step * M);
-                values[i] = i + step * M + (i % 2 == 0) ? 111 : 222;
+                values[i] = i + step * M + ((i % 2 == 0) ? 111 : 222);
                 key_slices[i] = keys[i];
             }
         };
@@ -3127,7 +3144,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
         for (int i = 0; i < N; i++) {
             keys[i] = "test_varlen_" + std::to_string(i);
             if (i < N - M * 2) {
-                values.emplace_back(i + (i % 2 == 0) ? 111 : 222);
+                values.emplace_back(i + ((i % 2 == 0) ? 111 : 222));
             } else {
                 values.emplace_back(i);
             }

@@ -70,6 +70,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -162,8 +163,10 @@ public class MetadataMgr {
         return getOptionalMetadata(queryId, catalogName);
     }
 
-    /** get ConnectorMetadata by catalog name
+    /**
+     * get ConnectorMetadata by catalog name
      * if catalog is null or empty will return localMetastore
+     *
      * @param catalogName catalog's name
      * @return ConnectorMetadata
      */
@@ -299,7 +302,7 @@ public class MetadataMgr {
             }
             return connectorMetadata.get().createTable(stmt);
         } else {
-            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
     }
 
@@ -384,7 +387,7 @@ public class MetadataMgr {
 
             connectorMetadata.get().alterTable(stmt);
         } else {
-            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
     }
 
@@ -563,7 +566,7 @@ public class MetadataMgr {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
     }
-        
+
     /**
      * getTableLocally avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
      * In this case, only basic information of namespace and table type (derived from the type of its connector) is returned.
@@ -613,7 +616,6 @@ public class MetadataMgr {
      * SQL ： select dt,hh,mm from tbl where hh = '12' and mm = '30';
      * the partition columns are [dt,hh,mm]
      * the partition values should be [empty,'12','30']
-     *
      */
     public List<String> listPartitionNamesByValue(String catalogName, String dbName, String tableName,
                                                   List<Optional<String>> partitionValues) {
@@ -688,11 +690,17 @@ public class MetadataMgr {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
         Statistics statistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
+        if (statistics == null ||
+                statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
             session.setObtainedFromInternalStatistics(false);
-            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-            return connectorMetadata.map(metadata -> metadata.getTableStatistics(
-                    session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+            // Avoid `analyze table` to collect table statistics from metadata.
+            if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+                return statistics;
+            } else {
+                Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+                return connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                        session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+            }
         } else {
             session.setObtainedFromInternalStatistics(true);
             return statistics;

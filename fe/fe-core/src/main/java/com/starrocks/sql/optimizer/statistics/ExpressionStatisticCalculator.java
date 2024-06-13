@@ -51,6 +51,10 @@ public class ExpressionStatisticCalculator {
     }
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input, double rowCount) {
+        if (Double.isNaN(rowCount)) {
+            LOG.debug("found a NaN row count when calculating column statistic for expr: {}", operator);
+            return ColumnStatistic.unknown();
+        }
         return operator.accept(new ExpressionStatisticVisitor(input, rowCount), null);
     }
 

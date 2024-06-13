@@ -2313,7 +2313,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             // creating partition names is ordered
             for (String partitionName : creatingPartitionNames) {
-                txnState.lockCreatePartition(partitionName);
+                olapTable.lockCreatePartition(partitionName);
             }
 
             // ingestion is top priority, if schema change or rollup is running, cancel it
@@ -2339,7 +2339,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
 
-            state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
+            // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
+            ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            }
+            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to cancel alter operation", e);
             errorStatus.setError_msgs(Lists.newArrayList(
@@ -2348,7 +2353,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         } finally {
             for (String partitionName : creatingPartitionNames) {
-                txnState.unlockCreatePartition(partitionName);
+                olapTable.unlockCreatePartition(partitionName);
             }
         }
 

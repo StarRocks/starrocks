@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # bitmap_remove
 
-## 功能
+
 
 从 Bitmap 中删除指定的数值。
 

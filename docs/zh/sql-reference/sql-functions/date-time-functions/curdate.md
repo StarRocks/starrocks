@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # curdate,current_date
 
-## 功能
+
 
 获取当前的日期，以 DATE 类型返回。
 

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # element_at
 
-## 功能
+
 
 获取 Map 中指定键 (Key) 对应的值 (Value)。如果输入值为 NULL 或指定的 Key 不存在，则返回 NULL。
 

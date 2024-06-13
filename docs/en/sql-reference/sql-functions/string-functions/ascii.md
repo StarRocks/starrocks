@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # ascii
 
-## Description
+
 
 This function returns the ascii value of the leftmost character of a given string.
 

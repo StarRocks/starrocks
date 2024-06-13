@@ -486,6 +486,7 @@ fi
 if [ ${BUILD_BE} -eq 1 ]; then
     rm -rf ${STARROCKS_OUTPUT}/be/lib/*
     mkdir -p ${STARROCKS_OUTPUT}/be/lib/jni-packages
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/py-packages
 
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
@@ -559,6 +560,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
+    
+    cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
 
     if [ "${USE_AVX2KI}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/avx2ki

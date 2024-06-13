@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # years_diff
 
-## Description
+
 
 Returns the year difference between two date expressions (`expr1` − `expr2`), accurate to the year.
 

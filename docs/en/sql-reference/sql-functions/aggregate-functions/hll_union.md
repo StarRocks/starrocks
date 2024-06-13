@@ -5,7 +5,7 @@ displayed_sidebar: "English"
 
 # hll_union
 
-## Description
+
 
 Returns the concatenation of a set of HLL values.
 

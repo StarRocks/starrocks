@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # greatest
 
-## Description
+
 
 Returns the largest value from a list of one or more parameters.
 

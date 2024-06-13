@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # days_sub
 
-## 功能
+
 
 从给定日期或者日期时间中减去指定的天数，获得新的 DATETIME 结果。
 

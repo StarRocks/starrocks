@@ -24,17 +24,21 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
 
 public class DeltaLakeMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetadata.class);
     private final String catalogName;
     private final DeltaMetastoreOperations deltaOps;
     private final HdfsEnvironment hdfsEnvironment;
+    private final Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor;
 
-    public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps) {
+    public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
+                             Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor) {
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
         this.deltaOps = deltaOps;
+        this.cacheUpdateProcessor = cacheUpdateProcessor;
     }
 
     public String getCatalogName() {
@@ -88,5 +92,15 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     public MetastoreType getMetastoreType() {
         return deltaOps.getMetastoreType();
+    }
+
+    @Override
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+        cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table, onlyCachedPartitions));
+    }
+
+    @Override
+    public void clear() {
+        deltaOps.invalidateAll();
     }
 }

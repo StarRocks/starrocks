@@ -191,6 +191,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -865,7 +866,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
+    public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
@@ -887,15 +888,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 || partitionDesc instanceof MultiItemListPartitionDesc
                 || partitionDesc instanceof SingleRangePartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
-            addPartitions(db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
+            addPartitions(ctx, db, tableName, ImmutableList.of(partitionDesc), addPartitionClause);
         } else if (partitionDesc instanceof RangePartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
-            addPartitions(db, tableName,
+            addPartitions(ctx, db, tableName,
                     Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()),
                     addPartitionClause);
         } else if (partitionDesc instanceof ListPartitionDesc) {
             checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
-            addPartitions(db, tableName,
+            addPartitions(ctx, db, tableName,
                     Lists.newArrayList(((ListPartitionDesc) partitionDesc).getPartitionDescs()),
                     addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
@@ -910,14 +911,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Alter batch build partition only support single range column.");
             }
             Map<String, String> properties = addPartitionClause.getProperties();
-            boolean isTempPartition = addPartitionClause.isTempPartition();
             List<SingleRangePartitionDesc> singleRangePartitionDescs =
-                    convertMultiRangePartitionDescToSingleRangePartitionDescs(partitionInfo, tableProperties, isTempPartition,
+                    convertMultiRangePartitionDescToSingleRangePartitionDescs(
+                            partitionInfo.isAutomaticPartition(),
+                            tableProperties, addPartitionClause.isTempPartition(),
                             (MultiRangePartitionDesc) partitionDesc,
-                            partitionColumns, properties);
+                            partitionInfo.getPartitionColumns(), properties);
             List<PartitionDesc> partitionDescs = singleRangePartitionDescs.stream()
                     .map(item -> (PartitionDesc) item).collect(Collectors.toList());
-            addPartitions(db, tableName, partitionDescs, addPartitionClause);
+            addPartitions(ctx, db, tableName, partitionDescs, addPartitionClause);
         }
     }
 
@@ -930,11 +932,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (!partitionInfo.isAutomaticPartition()) {
             return;
-        }
-
-        if (partitionInfo.isRangePartition()) {
-            throw new DdlException("Automatically partitioned tables only support the syntax " +
-                    "for adding partitions in batches.");
         }
 
         if (partitionInfo.getType() == PartitionType.LIST) {
@@ -951,26 +948,6 @@ public class LocalMetastore implements ConnectorMetadata {
                             "multiple values in the same partition");
                 }
             }
-        }
-    }
-
-    private void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr,
-                                              MultiRangePartitionDesc multiRangePartitionDesc) throws DdlException {
-        String descGranularity = multiRangePartitionDesc.getTimeUnit();
-        String functionName = functionCallExpr.getFnName().getFunction();
-        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
-            Expr expr = functionCallExpr.getParams().exprs().get(0);
-            String functionGranularity = ((StringLiteral) expr).getStringValue();
-            if (!descGranularity.equalsIgnoreCase(functionGranularity)) {
-                throw new DdlException("The granularity of the auto-partitioned table granularity(" +
-                        functionGranularity + ") should be consistent with the increased partition granularity(" +
-                        descGranularity + ").");
-            }
-        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
-            throw new DdlException("time_slice does not support pre-created partitions");
-        }
-        if (multiRangePartitionDesc.getStep() > 1) {
-            throw new DdlException("The step of the auto-partitioned table should be 1");
         }
     }
 
@@ -1043,6 +1020,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 List<ColumnDef> columnDefList = partitionInfo.getPartitionColumns().stream()
                         .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
                         .collect(Collectors.toList());
+                PartitionDescAnalyzer.analyze(partitionDesc);
                 partitionDesc.analyze(columnDefList, cloneProperties);
                 if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
                     CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
@@ -1355,7 +1333,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void addPartitions(Database db, String tableName, List<PartitionDesc> partitionDescs,
+    private void addPartitions(ConnectContext ctx, Database db, String tableName, List<PartitionDesc> partitionDescs,
                                AddPartitionClause addPartitionClause) throws DdlException {
         DistributionInfo distributionInfo;
         OlapTable olapTable;
@@ -1402,20 +1380,15 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSetForAll = Sets.newHashSet();
         HashMap<String, Set<Long>> partitionNameToTabletSet = Maps.newHashMap();
         try {
-            long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-            if (ConnectContext.get() != null) {
-                warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            }
-
             // create partition list
             List<Pair<Partition, PartitionDesc>> newPartitions =
                     createPartitionMap(db, copiedTable, partitionDescs, partitionNameToTabletSet, tabletIdSetForAll,
-                            checkExistPartitionName, warehouseId);
+                            checkExistPartitionName, ctx.getCurrentWarehouseId());
 
             // build partitions
             List<Partition> partitionList = newPartitions.stream().map(x -> x.first).collect(Collectors.toList());
             buildPartitions(db, copiedTable, partitionList.stream().map(Partition::getSubPartitions)
-                    .flatMap(p -> p.stream()).collect(Collectors.toList()), warehouseId);
+                    .flatMap(p -> p.stream()).collect(Collectors.toList()), ctx.getCurrentWarehouseId());
 
             // check again
             if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
@@ -1586,26 +1559,14 @@ public class LocalMetastore implements ConnectorMetadata {
         List<String> partitionNames = Lists.newArrayList();
         boolean isTempPartition = clause.isTempPartition();
 
-        if (clause.hasMultiPartitions()) {
-            PartitionDesc partitionDesc = clause.getPartitionDesc();
-            if (partitionDesc instanceof MultiRangePartitionDesc) {
-                if (!(partitionInfo instanceof RangePartitionInfo)) {
-                    ErrorReportException.report(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO);
-                }
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                if (partitionColumns.size() != 1) {
-                    ErrorReportException.report(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS,
-                            partitionColumns.size());
-                }
-                Map<String, String> properties = clause.getProperties();
-                List<SingleRangePartitionDesc> singleRangePartitionDescs =
-                        convertMultiRangePartitionDescToSingleRangePartitionDescs(partitionInfo, tableProperties, isTempPartition,
-                                (MultiRangePartitionDesc) partitionDesc,
-                                partitionColumns, properties);
-                partitionNames.addAll(singleRangePartitionDescs.stream()
-                        .map(SingleRangePartitionDesc::getPartitionName).collect(Collectors.toList()));
-            }
+        if (clause.getMultiRangePartitionDesc() != null) {
+            List<SingleRangePartitionDesc> singleRangePartitionDescs =
+                    convertMultiRangePartitionDescToSingleRangePartitionDescs(
+                            partitionInfo.isAutomaticPartition(), tableProperties, isTempPartition,
+                            clause.getMultiRangePartitionDesc(),
+                            partitionInfo.getPartitionColumns(), clause.getProperties());
+            partitionNames.addAll(singleRangePartitionDescs.stream()
+                    .map(SingleRangePartitionDesc::getPartitionName).collect(Collectors.toList()));
         } else if (clause.getPartitionName() != null) {
             partitionNames.add(clause.getPartitionName());
         } else if (clause.getPartitionNames() != null) {
@@ -1697,24 +1658,14 @@ public class LocalMetastore implements ConnectorMetadata {
 
     }
 
-    private List<SingleRangePartitionDesc> convertMultiRangePartitionDescToSingleRangePartitionDescs(PartitionInfo partitionInfo,
-                                                                        Map<String, String> tableProperties,
-                                                                        boolean isTempPartition,
-                                                                        MultiRangePartitionDesc partitionDesc,
-                                                                        List<Column> partitionColumns,
-                                                                        Map<String, String> properties) throws DdlException {
+    private List<SingleRangePartitionDesc> convertMultiRangePartitionDescToSingleRangePartitionDescs(
+            boolean isAutoPartitionTable,
+            Map<String, String> tableProperties,
+            boolean isTempPartition,
+            MultiRangePartitionDesc partitionDesc,
+            List<Column> partitionColumns,
+            Map<String, String> properties) {
         Column firstPartitionColumn = partitionColumns.get(0);
-        MultiRangePartitionDesc multiRangePartitionDesc = partitionDesc;
-        boolean isAutoPartitionTable = false;
-        if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
-            isAutoPartitionTable = true;
-            ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
-            if (expr instanceof FunctionCallExpr) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
-            }
-        }
 
         if (properties == null) {
             properties = Maps.newHashMap();
@@ -1730,7 +1681,7 @@ public class LocalMetastore implements ConnectorMetadata {
         context.setTempPartition(isTempPartition);
         List<SingleRangePartitionDesc> singleRangePartitionDescs;
         try {
-            singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
+            singleRangePartitionDescs = partitionDesc.convertToSingle(context);
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
         }
@@ -1796,7 +1747,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable,
-            Partition partition, long warehouseId) throws DdlException {
+                                                      Partition partition, long warehouseId) throws DdlException {
         long partitionId = partition.getId();
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
         olapTable.inferDistribution(distributionInfo);
@@ -3326,7 +3277,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         throw new DdlException(String.format("Refresh schedule interval %s is too small which may cost " +
                                         "a lot of memory/cpu resources to refresh the asynchronous materialized view, " +
                                         "please config an interval larger than " +
-                                        "Config.min_allowed_materialized_view_schedule_time(%ss).",
+                                        "Config.materialized_view_min_refresh_interval(%ss).",
                                 periodSeconds,
                                 Config.materialized_view_min_refresh_interval));
                     }
@@ -3498,7 +3449,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
         long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
         long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
-        return ThreadLocalRandom.current().nextLong(randomInterval);
+        return randomInterval > 0 ? ThreadLocalRandom.current().nextLong(randomInterval) : randomInterval;
     }
 
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
@@ -4702,7 +4653,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet,
-                        ConnectContext.get().getCurrentWarehouseId());
+                                ConnectContext.get().getCurrentWarehouseId());
                 newPartitions.add(newPartition);
             }
             buildPartitions(db, copiedTbl, newPartitions.stream().map(Partition::getSubPartitions)

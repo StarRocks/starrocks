@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # weeks_diff
 
-## Description
+
 
 Returns the week difference between two date expressions (*`expr1`* − *`expr2`*), accurate to the week.
 

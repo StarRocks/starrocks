@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # covar_pop
 
-## 功能
+
 
 返回两个随机变量的总体协方差。该函数从 2.5.10 版本开始支持，也可用作窗口函数。
 

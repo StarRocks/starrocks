@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
@@ -25,6 +24,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -212,6 +212,7 @@ public class ListPartitionDesc extends PartitionDesc {
             if (!multiListPartitionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
+            PartitionDescAnalyzer.analyze(desc);
             desc.analyze(columnDefList, tableProperties);
             allMultiLiteralExprValues.addAll(desc.getMultiLiteralExprValues());
         }
@@ -226,6 +227,7 @@ public class ListPartitionDesc extends PartitionDesc {
             if (!singListPartitionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
+            PartitionDescAnalyzer.analyze(desc);
             desc.analyze(columnDefList, tableProperties);
             allLiteralExprValues.addAll(desc.getLiteralExprValues());
         }

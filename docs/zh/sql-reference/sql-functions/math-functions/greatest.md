@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # greatest
 
-## 功能
+
 
 返回多个输入参数中的最大值。
 

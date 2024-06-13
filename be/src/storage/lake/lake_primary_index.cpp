@@ -237,30 +237,6 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
     return Status::OK();
 }
 
-Status LakePrimaryIndex::major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log) {
-    if (!_enable_persistent_index) {
-        return Status::OK();
-    }
-
-    switch (metadata.persistent_index_type()) {
-    case PersistentIndexTypePB::LOCAL: {
-        return Status::OK();
-    }
-    case PersistentIndexTypePB::CLOUD_NATIVE: {
-        auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-        if (lake_persistent_index != nullptr) {
-            return lake_persistent_index->major_compact(metadata, 0 /** min_retain_version **/, txn_log);
-        } else {
-            return Status::InternalError("Persistent index is not a LakePersistentIndex.");
-        }
-    }
-    default:
-        return Status::InternalError("Unsupported lake_persistent_index_type " +
-                                     PersistentIndexTypePB_Name(metadata.persistent_index_type()));
-    }
-    return Status::OK();
-}
-
 double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
     if (!_enable_persistent_index) {
         return 0.0;
