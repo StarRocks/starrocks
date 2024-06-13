@@ -32,6 +32,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
@@ -203,14 +204,14 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
      *
      * @return
      */
-    private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() {
+    private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() throws NonRecoverableException {
         SetMultimap<TNetworkAddress, TabletWithVersion> backend2Tablets = HashMultimap.create();
         ImmutableMap<Long, Backend> idToBackends =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         Map<Long, Backend> aliveIdToBackends = idToBackends.entrySet().stream()
                 .filter(be -> isWorkerAvailable(be.getValue()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        scanRangeLocations.forEach(range -> {
+        for (TScanRangeLocations range : scanRangeLocations) {
             TInternalScanRange internalScanRange = range.getScan_range().getInternal_scan_range();
             Set<Long> scanBackendIds =
                     range.getLocations().stream().map(TScanRangeLocation::getBackend_id).collect(Collectors.toSet());
@@ -218,8 +219,11 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                     internalScanRange.getVersion());
 
             Optional<Backend> be = pick(scanBackendIds, aliveIdToBackends);
+            if (be.isEmpty()) {
+                workerProvider.reportWorkerNotFoundException();
+            }
             be.ifPresent(backend -> backend2Tablets.put(be.get().getBrpcAddress(), tabletWithVersion));
-        });
+        }
         return backend2Tablets;
     }
 
@@ -242,10 +246,6 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
         // fill tablet id and version , then bind be network
         SetMultimap<TNetworkAddress, TabletWithVersion> be2Tablets = assignTablet2Backends();
-
-        if (be2Tablets.size() == 0) {
-            workerProvider.reportWorkerNotFoundException();
-        }
 
         olapScanNode.clearScanNodeForThriftBuild();
         be2Tablets.forEach((be, tableVersion) -> {
