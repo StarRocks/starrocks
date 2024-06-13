@@ -27,7 +27,7 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 **PROPERTIES (Optional)**
 
-`storage_volume`: Specifies the name of the storage volume that is used to store database in a shared-data cluster.
+`storage_volume`: Specifies the name of the storage volume that is used to store the database in a shared-data cluster.
 
 ## Examples
 
