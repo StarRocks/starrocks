@@ -68,6 +68,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
 
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
@@ -75,27 +77,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
-
-        new MockUp<MvRefreshArbiter>() {
-            /**
-             * {@link MvRefreshArbiter#getPartitionNamesToRefreshForMv(MaterializedView, boolean)}
-             */
-            @Mock
-            public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
-                                                                boolean isQueryRewrite) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            /**
-             * {@link UtFrameUtils#isPrintPlanTableNames()}
-             */
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);

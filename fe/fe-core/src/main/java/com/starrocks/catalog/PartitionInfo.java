@@ -118,6 +118,20 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         return type != PartitionType.UNPARTITIONED;
     }
 
+    /**
+     * Whether it is expr range partitioned which is used in materialized view.
+     * TODO: type may not be compatible with PartitionType.EXPR_RANGE!!!
+     // return type == PartitionType.EXPR_RANGE;
+     * @return ture if it is expr range partitioned
+     */
+    public boolean isExprRangePartitioned() {
+        return this instanceof ExpressionRangePartitionInfo;
+    }
+
+    public boolean isUnPartitioned() {
+        return type == PartitionType.UNPARTITIONED;
+    }
+
     public DataProperty getDataProperty(long partitionId) {
         return idToDataProperty.get(partitionId);
     }

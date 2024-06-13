@@ -108,6 +108,10 @@ public class MvRewriteTestBase {
     }
 
     public String getFragmentPlan(String sql, String traceModule) throws Exception {
+        return getFragmentPlan(sql, TExplainLevel.NORMAL, traceModule);
+    }
+
+    public String getFragmentPlan(String sql, TExplainLevel level, String traceModule) throws Exception {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
@@ -115,7 +119,7 @@ public class MvRewriteTestBase {
         if (!Strings.isNullOrEmpty(traceLog)) {
             System.out.println(traceLog);
         }
-        return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+        return execPlanWithQuery.first.getExplainString(level);
     }
 
     public static Table getTable(String dbName, String mvName) {
@@ -225,11 +229,11 @@ public class MvRewriteTestBase {
     }
 
     public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
-        return MvRefreshArbiter.getPartitionNamesToRefreshForMv(mv, true);
+        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
     }
 
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
-        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getPartitionNamesToRefreshForMv(mv, true);
+        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
         Preconditions.checkState(mvUpdateInfo != null);
         return mvUpdateInfo.getMvToRefreshPartitionNames();
     }
@@ -238,5 +242,42 @@ public class MvRewriteTestBase {
         connectContext.setQueryId(UUIDUtil.genUUID());
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
         new StmtExecutor(connectContext, statement).execute();
+    }
+
+    /**
+     * Add list partition with one value
+     * @param tbl table name
+     * @param pName partition name
+     * @param pVal partition value
+     */
+    protected void addListPartition(String tbl, String pName, String pVal) {
+        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN ('%s')", tbl, pName, pVal);
+        System.out.println(addPartitionSql);
+
+        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
+        try {
+            new StmtExecutor(connectContext, stmt).execute();
+        } catch (Exception e) {
+            Assert.fail("add partition failed:" + e);
+        }
+    }
+
+    /**
+     * Add list partition with two values
+     * @param tbl table name
+     * @param pName partition name
+     * @param pVal1 the first partition value
+     * @param pVal2 the second partition value
+     */
+    protected void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
+        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN (('%s', '%s'))", tbl, pName, pVal1,
+                pVal2);
+        System.out.println(addPartitionSql);
+        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
+        try {
+            new StmtExecutor(connectContext, stmt).execute();
+        } catch (Exception e) {
+            Assert.fail("add partition failed:" + e);
+        }
     }
 }
