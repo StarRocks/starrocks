@@ -35,6 +35,7 @@
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks::pipeline {
 
@@ -118,7 +119,7 @@ private:
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
-    PInternalService_Stub* _brpc_stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub = nullptr;
 
     // If pipeline level shuffle is enable, the size of the _chunks
     // equals with dop of dest pipeline
