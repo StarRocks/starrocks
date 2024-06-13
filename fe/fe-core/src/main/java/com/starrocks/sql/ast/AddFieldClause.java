@@ -33,8 +33,8 @@ public class AddFieldClause extends AlterTableColumnClause {
         return fieldDesc;
     }
 
-    public AddFieldClause(String colName, StructFieldDesc fieldDesc, String rollupName, Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE, rollupName, properties, NodePosition.ZERO);
+    public AddFieldClause(String colName, StructFieldDesc fieldDesc, Map<String, String> properties) {
+        super(AlterOpType.SCHEMA_CHANGE, null, properties, NodePosition.ZERO);
         this.colName = colName;
         this.fieldDesc = fieldDesc;
     }

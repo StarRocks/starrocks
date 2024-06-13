@@ -4107,13 +4107,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException("add field clause name is null");
         }
         StructFieldDesc fieldDesc = new StructFieldDesc(fieldName, parts, typeDef, fieldPosition);
-        return new AddFieldClause(columnName, fieldDesc, null, getProperties(context.properties()));
+        return new AddFieldClause(columnName, fieldDesc, getProperties(context.properties()));
     }
 
     @Override
     public ParseNode visitDropFieldClause(StarRocksParser.DropFieldClauseContext context) {
         String columnName = getIdentifierName(context.identifier());
-        String rollupName = null;
         List<String> parts = getFieldName(context.nestedFieldName());
         String fieldName = null;
         if (parts != null && !parts.isEmpty()) {
@@ -4123,7 +4122,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (fieldName == null) {
             throw new ParsingException("drop field clause name is null");
         }
-        return new DropFieldClause(columnName, fieldName, parts, rollupName, getProperties(context.properties()));
+        return new DropFieldClause(columnName, fieldName, parts, getProperties(context.properties()));
     }
 
     @Override

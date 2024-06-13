@@ -39,8 +39,8 @@ public class DropFieldClause extends AlterTableColumnClause {
     }
 
     public DropFieldClause(String colName, String fieldName, List<String> nestedFieldName, 
-                           String rollupName, Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE, rollupName, properties, NodePosition.ZERO);
+                          Map<String, String> properties) {
+        super(AlterOpType.SCHEMA_CHANGE, null, properties, NodePosition.ZERO);
         this.colName = colName;
         this.fieldName = fieldName;
         this.nestedFieldName = nestedFieldName;
