@@ -497,6 +497,7 @@ StatusOr<int64_t> Segment::get_data_size() const {
     if (_segment_file_info.size.has_value()) {
         return _segment_file_info.size.value();
     }
+    LOG(INFO) << "get file size for: " << _segment_file_info.path;
     return _fs->get_file_size(_segment_file_info.path);
 }
 
