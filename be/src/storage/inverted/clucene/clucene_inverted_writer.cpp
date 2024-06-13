@@ -128,7 +128,7 @@ public:
                 // which write the result into a given memory area does not fit in this case.
                 // So we still use boost::locale::conv::utf_to_utf<TCHAR> to construct a new
                 // wstring in every loop for the correctness.
-                std::wstring tchar = std::move(boost::locale::conv::utf_to_utf<TCHAR>(s, s + size));
+                std::wstring tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + size);
 
                 if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
                     _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
