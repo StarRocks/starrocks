@@ -316,7 +316,7 @@ StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_t
         break;
     }
     default: {
-        return Status::NotSupported(fmt::format("not supported compression type {}", type));
+        return Status::NotSupported(fmt::format("not supported compression type {}", to_string(type)));
     }
     }
 
