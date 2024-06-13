@@ -492,6 +492,21 @@ TEST_F(CSVFileWriterTest, TestWriteWithExecutors) {
     ASSERT_EQ(content, expect);
 }
 
+TEST_F(CSVFileWriterTest, TestUnknownCompression) {
+    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    std::vector<TypeDescriptor> type_descs{type_bool};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs.new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::CSVWriterOptions>();
+    auto writer = std::make_unique<formats::CSVFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            TCompressionType::UNKNOWN_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    ASSERT_ERROR(writer->init());
+}
+
 TEST_F(CSVFileWriterTest, TestFactory) {
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     std::vector<TypeDescriptor> type_descs{type_bool};
