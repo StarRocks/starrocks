@@ -36,7 +36,7 @@ package com.starrocks.mysql.nio;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
-import com.starrocks.mysql.MysqlProto.NegotiateState;
+import com.starrocks.mysql.NegotiateState;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.ConnectScheduler;

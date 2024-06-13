@@ -42,7 +42,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlProto;
-import com.starrocks.mysql.MysqlProto.NegotiateState;
+import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
