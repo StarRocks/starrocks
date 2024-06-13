@@ -21,8 +21,6 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 [PROPERTIES ("key"="value", ...)]
 ```
 
-<<<<<<< HEAD
-=======
 ## 参数说明
 
 `db_name`：数据库名称。有关数据库的命名要求，参见[系统限制](../../../reference/System_limit.md)。
@@ -31,7 +29,6 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 `storage_volume`: 存算分离集群中，用于存储当前数据库中数据的存储卷。如未指定，则使用默认存储卷。
 
->>>>>>> 0b27c57d98 ([Doc] Update CREATE DATABASE with new property (#46932))
 ## 示例
 
 1. 新建数据库 `db_test`。
