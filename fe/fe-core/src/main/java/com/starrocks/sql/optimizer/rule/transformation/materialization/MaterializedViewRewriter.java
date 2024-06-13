@@ -1682,6 +1682,14 @@ public class MaterializedViewRewriter {
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot get compensation from view to query");
             return null;
         }
+        // Disable union rewrite for sync mv:
+        // - sync mv should be always consistent(synchronized), no needs to compensate.
+        // - sync mv union rewrite may introduce extra overhead since original mv definition should be always simple.
+        // - sync mv union rewrite may be not right since current rewriter only considers selectIndexIds of query and mv's
+        // definition are the same.
+        if (materializationContext.getMv().getRefreshScheme().isSync()) {
+            return null;
+        }
         Preconditions.checkState(mvCompensationToQuery.getPredicates()
                 .stream().anyMatch(predicate -> !ConstantOperator.TRUE.equals(predicate)));
 
