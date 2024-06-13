@@ -267,9 +267,14 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                     entry -> {
                         Set<DataFile> dataFiles = dataFileCache.getIfPresent(file.location());
                         if (dataFiles != null && entry.isLive()) {
+                            Set<Integer> requestedColumnIds = null;
+                            if (identifierFieldIds != null && !identifierFieldIds.isEmpty()) {
+                                requestedColumnIds = identifierFieldIds;
+                            }
+
                             DataFile dataFile = (DataFile) entry.file();
                             DataFile copiedDataFile = dataFileCacheWithMetrics ?
-                                    dataFile.copyWithStats(identifierFieldIds.isEmpty() ? null : identifierFieldIds) :
+                                    dataFile.copyWithStats(requestedColumnIds) :
                                     dataFile.copyWithoutStats();
                             dataFiles.add(DataFileWrapper.wrap(copiedDataFile));
                         }

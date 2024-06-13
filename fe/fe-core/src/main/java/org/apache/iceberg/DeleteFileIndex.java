@@ -88,6 +88,10 @@ class DeleteFileIndex {
         return isEmpty;
     }
 
+    public boolean noEqDeletes() {
+        return globalDeletes == null && eqDeletesByPartition == null;
+    }
+
     public Iterable<DeleteFile> referencedDeleteFiles() {
         Iterable<DeleteFile> deleteFiles = Collections.emptyList();
 
