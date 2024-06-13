@@ -275,7 +275,7 @@ public class CatalogUtils {
             throws DdlException {
         try {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
-            List<Long> partitionIds = listPartitionInfo.getPartitionIds(isTemp);
+            Set<Long> partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(isTemp));
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
                 listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
