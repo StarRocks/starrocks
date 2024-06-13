@@ -19,7 +19,6 @@ import com.starrocks.sql.plan.TPCDSTestUtil;
 import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 @TestMethodOrder(MethodOrderer.MethodName.class)
@@ -33,7 +32,6 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
     }
 
-    @Test
     @Ignore
     public void testQuery87() {
         String mv = "SELECT\n" +

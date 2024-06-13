@@ -665,20 +665,21 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (shuttleContext.isRewrittenByEquivalent()) {
             Preconditions.checkState(targetColumn instanceof CallOperator);
             return (CallOperator) targetColumn;
+        } else {
+            if (!targetColumn.isColumnRef()) {
+                logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: only column-ref is supported after rewrite",
+                        aggCall.toString());
+                return null;
+            }
+            // Aggregate must be CallOperator
+            CallOperator newAggregate = getRollupAggregate(aggCall, (ColumnRefOperator) targetColumn);
+            if (newAggregate == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: cannot get rollup aggregate",
+                        aggCall.toString());
+                return null;
+            }
+            return newAggregate;
         }
-        if (!targetColumn.isColumnRef()) {
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: only column-ref is supported after rewrite",
-                    aggCall.toString());
-            return null;
-        }
-        // Aggregate must be CallOperator
-        CallOperator newAggregate = getRollupAggregate(aggCall, (ColumnRefOperator) targetColumn);
-        if (newAggregate == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: cannot get rollup aggregate",
-                    aggCall.toString());
-            return null;
-        }
-        return newAggregate;
     }
 
     private Map<ColumnRefOperator, CallOperator> rewriteAggregatesForUnion(

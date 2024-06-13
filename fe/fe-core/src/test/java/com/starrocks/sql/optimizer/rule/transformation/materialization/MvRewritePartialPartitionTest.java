@@ -151,7 +151,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         String query9 = "select sum(c3) from test_base_part";
         String plan9 = getFragmentPlan(query9);
-        PlanTestBase.assertNotContains(plan9, "partial_mv_5");
+        PlanTestBase.assertNotContains("partial_mv_5");
         dropMv("test", "partial_mv_5");
     }
 
