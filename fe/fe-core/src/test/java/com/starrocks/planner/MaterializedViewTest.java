@@ -749,7 +749,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteFail(mv, "select empid, deptno,\n" +
                 " sum(salary) as total, count(1)  as cnt\n" +
                 " from emps group by empid, deptno");
-        testRewriteOK(mv, "select empid,\n" +
+        testRewriteFail(mv, "select empid,\n" +
                 " sum(salary) as total, count(1)  as cnt\n" +
                 " from emps group by empid");
     }

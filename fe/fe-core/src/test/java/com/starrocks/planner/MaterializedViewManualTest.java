@@ -305,7 +305,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         }
     }
 
-    @Test
     @Ignore
     public void testRewriteWithCaseWhen() {
         starRocksAssert.withMaterializedView("create materialized view mv0" +
