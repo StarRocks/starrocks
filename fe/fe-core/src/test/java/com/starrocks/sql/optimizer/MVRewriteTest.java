@@ -1287,7 +1287,6 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query = "select bitmap_union_count(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
         String plan = starRocksAssert.query(query).explainQuery();
-        System.out.println(plan);
         PlanTestBase.assertContains(plan, USER_TAG_MV_NAME);
         PlanTestBase.assertContains(plan, "  |  <slot 2> : 2: user_id\n" +
                 "  |  <slot 6> : 5: mv_bitmap_union_tag_id");
@@ -1652,6 +1651,28 @@ public class MVRewriteTest {
 
         query = "select ndv(tag_id % 10) from " + USER_TAG_TABLE_NAME + ";";
         starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+    }
+
+    @Test
+    public void testSyncMVWithUnionRewrite() throws Exception {
+        String t1 = "CREATE TABLE `t1` (\n" +
+                "  `k1` tinyint(4) NULL,\n" +
+                "  `k2` varchar(64) NULL,\n" +
+                "  `k3` bigint NULL,\n" +
+                "  `k4` varchar(64) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3 \n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n";
+        starRocksAssert.withTable(t1);
+        String mv1 = "CREATE MATERIALIZED VIEW test_mv1\n" +
+                "as select k1, k3 from t1 where k3 > 1;";
+        starRocksAssert.withMaterializedView(mv1);
+
+        String query = "select k1, k3 from t1 ;";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+        PlanTestBase.assertNotContains(plan, "test_mv1");
+        starRocksAssert.dropTable("t1");
     }
 
     @Test
