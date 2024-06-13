@@ -198,6 +198,25 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     /**
+     * If the list partition just has one value, we can prune it
+     * otherwise we can not prune it because the partition has other values
+     *
+     * @param id
+     * @return true if the partition can be pruned
+     */
+    public boolean pruneById(long id) {
+        List<String> values = getIdToValues().get(id);
+        if (values != null && values.size() == 1) {
+            return true;
+        }
+        List<List<String>> multiValues = getIdToMultiValues().get(id);
+        if (multiValues != null && multiValues.size() == 1) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * serialize data to log
      *
      * @param out
