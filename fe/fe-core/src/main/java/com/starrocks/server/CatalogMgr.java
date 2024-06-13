@@ -44,6 +44,7 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -532,15 +533,15 @@ public class CatalogMgr {
         }
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         Map<String, Catalog> serializedCatalogs = catalogs.entrySet().stream()
                 .filter(entry -> !isResourceMappingCatalog(entry.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         int numJson = 1 + serializedCatalogs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_MGR, numJson);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.CATALOG_MGR, numJson);
 
-        writer.writeJson(serializedCatalogs.size());
+        writer.writeInt(serializedCatalogs.size());
         for (Catalog catalog : serializedCatalogs.values()) {
             writer.writeJson(catalog);
         }

@@ -12,17 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist.metablock;
 
-import java.io.IOException;
+import com.google.gson.annotations.SerializedName;
 
-public interface SRMetaBlockWriter {
-    void writeJson(Object object) throws IOException, SRMetaBlockException;
+public class IntObject {
 
-    void writeInt(int value) throws IOException, SRMetaBlockException;
+    @SerializedName("v")
+    private int value;
 
-    void writeLong(long value) throws IOException, SRMetaBlockException;
+    public IntObject(int value) {
+        this.value = value;
+    }
 
-    void close() throws IOException, SRMetaBlockException;
+    public int getValue() {
+        return value;
+    }
+
+    public void setValue(int value) {
+        this.value = value;
+    }
 }

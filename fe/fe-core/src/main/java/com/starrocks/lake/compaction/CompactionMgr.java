@@ -19,6 +19,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -30,6 +32,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutputStream;
+import java.io.DataInput;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
@@ -193,7 +196,7 @@ public class CompactionMgr implements MemoryTrackable {
         return compactionScheduler.existCompaction(txnId);
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         // partitions are added into map after loading, but they are never removed in checkpoint thread.
         // drop partition, drop table, truncate table, drop database, ...
         // all of above will cause partition info change, and it is difficult to call
@@ -201,10 +204,10 @@ public class CompactionMgr implements MemoryTrackable {
         getAllPartitions()
                 .stream()
                 .filter(p -> !MetaUtils.isPartitionExist(
-                             GlobalStateMgr.getCurrentState(), p.getDbId(), p.getTableId(), p.getPartitionId()))
+                        GlobalStateMgr.getCurrentState(), p.getDbId(), p.getTableId(), p.getPartitionId()))
                 .forEach(this::removePartition);
 
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COMPACTION_MGR, 1);
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.COMPACTION_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }

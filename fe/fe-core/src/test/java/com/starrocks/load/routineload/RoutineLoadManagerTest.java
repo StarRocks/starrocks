@@ -51,6 +51,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -1039,9 +1040,9 @@ public class RoutineLoadManagerTest {
         leaderLoadManager.addRoutineLoadJob(pulsarRoutineLoadJob, db);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
-        leaderLoadManager.saveRoutineLoadJobsV2(pseudoImage.getDataOutputStream());
+        leaderLoadManager.saveRoutineLoadJobsV2(pseudoImage.getImageWriter());
         RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(pseudoImage.getJsonReader());
         restartedRoutineLoadManager.loadRoutineLoadJobsV2(reader);
         reader.close();
 
