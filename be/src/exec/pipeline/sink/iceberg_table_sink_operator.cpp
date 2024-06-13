@@ -55,6 +55,12 @@ bool IcebergTableSinkOperator::is_finished() const {
         if (!writer.second->closed()) {
             return false;
         }
+
+        auto st = writer.second->get_io_status();
+        if (!st.ok()) {
+            LOG(WARNING) << "cancel fragment: " << st.message();
+            _fragment_ctx->cancel(st);
+        }
     }
 
     return true;
