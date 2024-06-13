@@ -1273,7 +1273,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createMVSQL);
 
         String query = "select k1, sum(case when(k2=0) then k3 else 0 end) from t1 group by k1";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "MV");
+        String plan = starRocksAssert.query(query).explainQuery();
         // TODO: support this for amv
         PlanTestBase.assertNotContains(plan, "test_mv1)\n");
         starRocksAssert.dropTable("t1");
@@ -1286,7 +1286,7 @@ public class MVRewriteTest {
                 "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id, time;";
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query = "select bitmap_union_count(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "MV");
+        String plan = starRocksAssert.query(query).explainQuery();
         System.out.println(plan);
         PlanTestBase.assertContains(plan, USER_TAG_MV_NAME);
         PlanTestBase.assertContains(plan, "  |  <slot 2> : 2: user_id\n" +

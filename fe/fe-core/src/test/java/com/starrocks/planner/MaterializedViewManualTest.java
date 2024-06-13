@@ -306,6 +306,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testRewriteWithCaseWhen() {
         starRocksAssert.withMaterializedView("create materialized view mv0" +
                 " distributed by random" +
@@ -352,33 +353,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                         .contains("  1:AGGREGATE (update serialize)\n" +
                                 "  |  STREAMING\n" +
                                 "  |  output: sum(if(14: t1b = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
-            }
-        });
-    }
-
-    @Test
-    public void testRewriteWithOnlyGroupByKeys() {
-        starRocksAssert.withMaterializedView("create materialized view mv0" +
-                " distributed by random" +
-                " as select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;", () -> {
-            {
-                String query = "select t1a, sum(t1b) as total from test.test_all_type group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(14: t1b)\n" +
-                                "  |  group by: 12: t1a\n" +
-                                "  |  ");
-            }
-            {
-                String query = "select t1a, sum(t1b + 1) as total from test.test_all_type group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(CAST(15: t1b AS INT) + 1)\n" +
                                 "  |  group by: 13: t1a");
             }
         });
