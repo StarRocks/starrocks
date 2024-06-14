@@ -19,8 +19,8 @@
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
-#include "util/compression/stream_compression.h"
 #include "util/compression/compression_utils.h"
+#include "util/compression/stream_compression.h"
 
 namespace starrocks {
 
