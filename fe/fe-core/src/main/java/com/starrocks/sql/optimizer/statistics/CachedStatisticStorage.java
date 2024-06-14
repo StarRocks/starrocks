@@ -106,10 +106,10 @@ public class CachedStatisticStorage implements StatisticStorage {
                         k -> data.getOrDefault(k, Optional.empty()).orElse(TableStatistic.unknown())));
             }
         } catch (InterruptedException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute tableStatsCache.getAll", e);
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Faied to execute tableStatsCache.getAll", e);
         }
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> TableStatistic.unknown()));
     }
@@ -128,10 +128,10 @@ public class CachedStatisticStorage implements StatisticStorage {
                 completableFuture.get();
             }
         } catch (InterruptedException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute refreshTableStatistic", e);
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute refreshTableStatistic", e);
         }
     }
 
@@ -184,7 +184,7 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return getDefaultConnectorTableStatistics(columns);
             }
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute connectorTableCachedStatistics.getAll", e);
             return getDefaultConnectorTableStatistics(columns);
         }
     }
@@ -218,7 +218,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             }
             return columnStatistics;
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute getConnectorTableStatisticsSync", e);
             return getDefaultConnectorTableStatistics(columns);
         }
     }
@@ -259,7 +259,7 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return ColumnStatistic.unknown();
             }
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute getColumnStatistic", e);
             return ColumnStatistic.unknown();
         }
     }
@@ -304,7 +304,7 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return getDefaultColumnStatisticList(columns);
             }
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute getColumnStatistics", e);
             return getDefaultColumnStatisticList(columns);
         }
     }
@@ -407,7 +407,7 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return Maps.newHashMap();
             }
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute getHistogramStatistics", e);
             return Maps.newHashMap();
         }
     }
@@ -438,7 +438,7 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return Maps.newHashMap();
             }
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute getConnectorHistogramStatistics", e);
             return Maps.newHashMap();
         }
     }
