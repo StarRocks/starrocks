@@ -39,6 +39,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -155,10 +156,18 @@ public class HiveMetaClient {
         StarRocksConnectorException connectionException = null;
 
         try {
+            if (methodName.equalsIgnoreCase("createDatabase")) {
+                throw new InvocationTargetException(
+                        new org.apache.hadoop.hive.metastore.api.MetaException("test message"));
+            }
             client = getClient();
             argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
             Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
             return (T) method.invoke(client.hiveClient, args);
+        } catch (InvocationTargetException e) {
+            LOG.error(messageIfError, e);
+            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e.getCause());
+            throw connectionException;
         } catch (Throwable e) {
             LOG.error(messageIfError, e);
             connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
