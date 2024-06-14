@@ -71,6 +71,8 @@ public:
 
     void set_enable_cache_io_adaptor(bool v) { _enable_cache_io_adaptor = v; }
 
+    void set_datacache_evict_probability(int32_t v) { _datacache_evict_probability = v; }
+
     int64_t get_align_size() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
@@ -94,6 +96,7 @@ private:
     Status _populate_to_cache(const int64_t offset, const int64_t size, char* src);
     void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count, const SharedBufferPtr& sb);
     void _deduplicate_shared_buffer(const SharedBufferPtr& sb);
+    bool _can_ignore_populate_error(const Status& status) const;
 
     std::string _cache_key;
     std::string _filename;
@@ -107,6 +110,7 @@ private:
     bool _enable_async_populate_mode = false;
     bool _enable_block_buffer = false;
     bool _enable_cache_io_adaptor = false;
+    int32_t _datacache_evict_probability = 100;
     BlockCache* _cache = nullptr;
     int64_t _block_size = 0;
     std::unordered_map<int64_t, BlockBuffer> _block_map;
