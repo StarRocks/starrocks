@@ -318,7 +318,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         try {
             metastore.addPartitions(dbName, tableName, partitions);
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute metastore.addPartitions", e);
             throw e;
         } finally {
             if (!(metastore instanceof CachingHiveMetastore)) {

@@ -239,7 +239,7 @@ public class ListPartitionPruner implements PartitionPruner {
         try {
             result = LiteralExpr.create(value, type);
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute LiteralExpr.create", e);
             throw new StarRocksConnectorException("can not cast literal value " + literalExpr.getStringValue() +
                     " to target type " + type.prettyPrint());
         }

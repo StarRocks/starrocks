@@ -334,7 +334,7 @@ public class TabletScheduler extends FrontendDaemon {
                 }
             } while (true);
         } catch (InterruptedException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute blockingAddTabletCtxToScheduler", e);
             locker.lockDatabase(db, LockType.READ);
         }
 
