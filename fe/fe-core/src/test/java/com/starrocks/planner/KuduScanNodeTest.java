@@ -117,7 +117,7 @@ public class KuduScanNodeTest {
     }
 
     private KuduTable createTestKuduTable(List<Column> columns) {
-        return new KuduTable(KUDU_MASTER, KUDU_CATALOG, "db1", "tb1", columns, new ArrayList<>());
+        return new KuduTable(KUDU_MASTER, KUDU_CATALOG, "db1", "tb1", null, columns, new ArrayList<>());
     }
 
     private TupleDescriptor setupDescriptorTable(KuduTable kuduTable, List<Column> columns) {
