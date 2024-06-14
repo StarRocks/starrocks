@@ -2088,7 +2088,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     table.getName(), System.currentTimeMillis() - startTime);
 
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute buildPartitionsConcurrently", e);
             countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
             throw new DdlException(e.getMessage());
         } finally {
@@ -2254,7 +2254,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException(userErrorMsg);
             }
         } catch (InterruptedException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute waitForFinished", e);
             countDownLatch.countDownToZero(new Status(TStatusCode.CANCELLED, "cancelled"));
         }
     }

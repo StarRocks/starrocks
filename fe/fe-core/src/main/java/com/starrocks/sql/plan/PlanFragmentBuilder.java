@@ -1088,8 +1088,7 @@ public class PlanFragmentBuilder {
                 prepareMinMaxExpr(scanNodePredicates, predicates, context);
 
             } catch (Exception e) {
-                LOG.warn("Hudi scan node get scan range locations failed : " + e);
-                LOG.warn(e);
+                LOG.warn("Hudi scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 

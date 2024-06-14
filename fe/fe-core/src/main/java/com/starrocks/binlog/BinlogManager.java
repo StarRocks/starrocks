@@ -183,7 +183,7 @@ public class BinlogManager {
                         tableIdToPartitions.remove(table.getId());
                     }
                 } catch (AnalysisException e) {
-                    LOG.warn(e);
+                    LOG.warn("Failed to execute", e);
                 } finally {
                     locker.unLockDatabase(db, LockType.WRITE);
                 }

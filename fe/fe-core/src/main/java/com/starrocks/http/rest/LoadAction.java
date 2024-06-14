@@ -81,7 +81,7 @@ public class LoadAction extends RestBaseAction {
             TransactionResult resp = new TransactionResult();
             resp.status = ActionStatus.FAILED;
             resp.msg = e.getClass() + ": " + e.getMessage();
-            LOG.warn(e);
+            LOG.warn("Failed to execute executeWithoutPasswordInternal", e);
 
             sendResult(request, response, resp);
         }

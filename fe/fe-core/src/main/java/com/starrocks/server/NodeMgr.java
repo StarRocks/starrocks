@@ -346,7 +346,7 @@ public class NodeMgr {
                         Thread.sleep(5000);
                         continue;
                     } catch (InterruptedException e) {
-                        LOG.warn(e);
+                        LOG.warn("Failed to execute sleep", e);
                         System.exit(-1);
                     }
                 }

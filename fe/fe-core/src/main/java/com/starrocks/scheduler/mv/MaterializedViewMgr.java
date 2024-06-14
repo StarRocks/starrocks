@@ -111,7 +111,7 @@ public class MaterializedViewMgr {
             LOG.info("Replay MV maintenance jobs: {}", job);
         } catch (Exception e) {
             LOG.warn("Replay MV maintenance job failed: {}", job);
-            LOG.warn(e);
+            LOG.warn("Failed to replay MV maintenance job", e);
         }
     }
 
@@ -128,7 +128,7 @@ public class MaterializedViewMgr {
             LOG.info("Replay MV epoch: {}", job);
         } catch (Exception e) {
             LOG.warn("Replay MV epoch failed: {}", epoch);
-            LOG.warn(e);
+            LOG.warn("Failed to replay MV epoch", e);
         }
     }
 

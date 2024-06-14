@@ -2440,7 +2440,7 @@ public class StmtExecutor {
                 }
             } while (!batch.isEos());
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
