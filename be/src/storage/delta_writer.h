@@ -67,7 +67,7 @@ struct DeltaWriterOptions {
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
     // `ptable_schema_param` is valid during initialization.
     // And it may become invalid after initialization, so please do not access it afterward.
-    const POlapTableSchemaParam* ptable_schema_param;
+    const POlapTableSchemaParam* ptable_schema_param = nullptr;
     int64_t immutable_tablet_size = 0;
 };
 

@@ -618,25 +618,27 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
     // new tablet schema if new table
     // find the right index id
     int i = 0;
-    for (; i < ptable_schema_param->indexes_size(); i++) {
-        LOG(INFO) << "1111111";
-        if (ptable_schema_param->indexes(i).id() == index_id) break;
-    }
-    if (i < ptable_schema_param->indexes_size()) {
-        if (ptable_schema_param->indexes_size() > 0 && ptable_schema_param->indexes(i).has_column_param() &&
-            ptable_schema_param->indexes(i).column_param().columns_desc_size() != 0 &&
-            ptable_schema_param->indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
-            ptable_schema_param->version() != ori_tablet_schema->schema_version()) {
-            LOG(INFO) << "22222222";
-            ASSIGN_OR_RETURN(
-                    _tablet_schema,
-                    TabletSchema::create(*ori_tablet_schema, ptable_schema_param->indexes(i).schema_id(),
-                                         ptable_schema_param->version(), ptable_schema_param->indexes(i).column_param()));
-            LOG(INFO) << "3333333";
-            if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
-                _tablet->update_max_version_schema(_tablet_schema);
+    if (ptable_schema_param != nullptr) {
+        for (; i < ptable_schema_param->indexes_size(); i++) {
+            LOG(INFO) << "1111111";
+            if (ptable_schema_param->indexes(i).id() == index_id) break;
+        }
+        if (i < ptable_schema_param->indexes_size()) {
+            if (ptable_schema_param->indexes_size() > 0 && ptable_schema_param->indexes(i).has_column_param() &&
+                ptable_schema_param->indexes(i).column_param().columns_desc_size() != 0 &&
+                ptable_schema_param->indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
+                ptable_schema_param->version() != ori_tablet_schema->schema_version()) {
+                LOG(INFO) << "22222222";
+                ASSIGN_OR_RETURN(
+                        _tablet_schema,
+                        TabletSchema::create(*ori_tablet_schema, ptable_schema_param->indexes(i).schema_id(),
+                                             ptable_schema_param->version(), ptable_schema_param->indexes(i).column_param()));
+                LOG(INFO) << "3333333";
+                if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
+                    _tablet->update_max_version_schema(_tablet_schema);
+                }
+                return Status::OK();
             }
-            return Status::OK();
         }
     }
     _tablet_schema = ori_tablet_schema;
