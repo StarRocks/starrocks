@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
@@ -44,6 +43,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -72,6 +72,38 @@ public class ListPartitionInfo extends PartitionInfo {
     @SerializedName(value = "automaticPartition")
     private Boolean automaticPartition = false;
 
+    private List<Map<String, Set<Long>>> valueToIdIndex;
+
+    void buildValueToIndex(long partitionId, int partitionIdx, List<String> multiValues) {
+        Map<String, Set<Long>> v2i = valueToIdIndex.get(partitionIdx);
+        for (String value : multiValues) {
+            if (v2i.containsKey(value)) {
+                v2i.get(value).add(partitionId);
+            } else {
+                Set<Long> s = new HashSet<>();
+                s.add(partitionId);
+                v2i.put(value, s);
+            }
+        }
+    }
+
+    boolean isValid(List<String> values) {
+        Set<Long> vvv = new HashSet<>(getPartitionIds(false));
+
+        for (int i = 0; i < values.size(); ++i) {
+            Map<String, Set<Long>> m = valueToIdIndex.get(i);
+
+            Set<Long> v = m.get(values.get(i));
+            vvv.retainAll(v);
+
+            if (vvv.isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
         super(partitionType);
@@ -83,6 +115,10 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiValues = new HashMap<>();
         this.idToMultiLiteralExprValues = new HashMap<>();
         this.idToIsTempPartition = new HashMap<>();
+        this.valueToIdIndex = new ArrayList<>();
+        for (int i = 0; i < partitionColumns.size(); ++i) {
+            valueToIdIndex.add(new HashMap<>());
+        }
     }
 
     public ListPartitionInfo() {
@@ -93,10 +129,12 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiLiteralExprValues = new HashMap<>();
         this.partitionColumns = new ArrayList<>();
         this.idToIsTempPartition = new HashMap<>();
+        this.valueToIdIndex = new ArrayList<>();
     }
 
     public void setValues(long partitionId, List<String> values) {
         this.idToValues.put(partitionId, values);
+        buildValueToIndex(partitionId, 0, values);
     }
 
     public void setIdToIsTempPartition(long partitionId, boolean isTemp) {
@@ -142,6 +180,10 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public void setMultiValues(long partitionId, List<List<String>> multiValues) {
         this.idToMultiValues.put(partitionId, multiValues);
+
+        for (int i = 0; i < multiValues.size(); ++i) {
+            buildValueToIndex(partitionId, i, multiValues.get(i));
+        }
     }
 
     @Override
@@ -230,6 +272,16 @@ public class ListPartitionInfo extends PartitionInfo {
             Map<Long, List<List<String>>> idToMultiValuesMap = this.getIdToMultiValues();
             for (Map.Entry<Long, List<List<String>>> entry : idToMultiValuesMap.entrySet()) {
                 this.setMultiLiteralExprValues(entry.getKey(), entry.getValue());
+            }
+
+            for (Map.Entry<Long, List<String>> entry : idToValuesMap.entrySet()) {
+                buildValueToIndex(entry.getKey(), 0, entry.getValue());
+            }
+
+            for (Map.Entry<Long, List<List<String>>> entry : idToMultiValuesMap.entrySet()) {
+                for (int i = 0; i < entry.getValue().size(); ++i) {
+                    buildValueToIndex(entry.getKey(), i, entry.getValue().get(i));
+                }
             }
         } catch (AnalysisException e) {
             LOG.error("deserialize PartitionInfo error", e);
@@ -368,11 +420,16 @@ public class ListPartitionInfo extends PartitionInfo {
                                 (MultiItemListPartitionDesc) partitionDesc;
                         this.idToMultiValues.put(partitionId, multiItemListPartitionDesc.getMultiValues());
                         this.setMultiLiteralExprValues(partitionId, multiItemListPartitionDesc.getMultiValues());
+                        for (int i = 0; i < multiItemListPartitionDesc.getMultiValues().size(); ++i) {
+                            buildValueToIndex(partitionId, i, multiItemListPartitionDesc.getMultiValues().get(i));
+                        }
+
                     } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
                         SingleItemListPartitionDesc singleItemListPartitionDesc =
                                 (SingleItemListPartitionDesc) partitionDesc;
                         this.idToValues.put(partitionId, singleItemListPartitionDesc.getValues());
                         this.setLiteralExprValues(partitionId, singleItemListPartitionDesc.getValues());
+                        buildValueToIndex(partitionId, 0, singleItemListPartitionDesc.getValues());
                     } else {
                         throw new DdlException(
                                 "add list partition only support single item or multi item list partition now");
@@ -400,12 +457,16 @@ public class ListPartitionInfo extends PartitionInfo {
         if (multiValues != null && multiValues.size() > 0) {
             this.idToMultiValues.put(partitionId, multiValues);
             this.setMultiLiteralExprValues(partitionId, multiValues);
+            for (int i = 0; i < multiValues.size(); ++i) {
+                buildValueToIndex(partitionId, i, multiValues.get(i));
+            }
         }
 
         List<String> values = partitionPersistInfo.getValues();
         if (values != null && values.size() > 0) {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
+            buildValueToIndex(partitionId, 0, values);
         }
     }
 
@@ -433,10 +494,14 @@ public class ListPartitionInfo extends PartitionInfo {
         if (multiValues != null && multiValues.size() > 0) {
             this.idToMultiValues.put(partitionId, multiValues);
             this.setMultiLiteralExprValues(partitionId, multiValues);
+            for (int i = 0; i < multiValues.size(); ++i) {
+                buildValueToIndex(partitionId, i, multiValues.get(i));
+            }
         }
         if (values != null && values.size() > 0) {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
+            buildValueToIndex(partitionId, 0, values);
         }
         this.idToStorageCacheInfo.put(partitionId, dataCacheInfo);
         idToIsTempPartition.put(partitionId, false);
@@ -479,6 +544,17 @@ public class ListPartitionInfo extends PartitionInfo {
         info.idToLiteralExprValues = Maps.newHashMap(this.idToLiteralExprValues);
         info.idToIsTempPartition = Maps.newHashMap(this.idToIsTempPartition);
         info.automaticPartition = this.automaticPartition;
+
+        List<Map<String, Set<Long>>> valueToIdIndexCopy = new ArrayList<>();
+        for (Map<String, Set<Long>> v2i : valueToIdIndex) {
+            Map<String, Set<Long>> v2iCopy = new HashMap<>();
+            for (Map.Entry<String, Set<Long>> entry : v2i.entrySet()) {
+                v2iCopy.put(entry.getKey(), new HashSet<>(entry.getValue()));
+            }
+            valueToIdIndexCopy.add(v2iCopy);
+        }
+        info.valueToIdIndex = valueToIdIndexCopy;
+
         return info;
     }
 }

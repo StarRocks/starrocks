@@ -320,6 +320,7 @@ public class OlapTable extends Table {
     public void copyOnlyForQuery(OlapTable olapTable) {
         olapTable.id = this.id;
         olapTable.name = this.name;
+        olapTable.type = this.type;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         nameToColumn.putAll(this.nameToColumn);
@@ -346,7 +347,7 @@ public class OlapTable extends Table {
         if (this.partitionInfo != null) {
             olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
         }
-        olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
+        olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
@@ -369,6 +370,12 @@ public class OlapTable extends Table {
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.sessionId = this.sessionId;
+
+        if (this.bfColumns != null) {
+            olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
+        }
+        olapTable.bfFpp = this.bfFpp;
+        olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
     }
 
     public BinlogConfig getCurBinlogConfig() {
