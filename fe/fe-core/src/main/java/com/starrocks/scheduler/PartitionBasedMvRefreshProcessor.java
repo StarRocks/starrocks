@@ -1130,7 +1130,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Pair<String, String> partitionRange = Pair.create(
                 context == null ? null : context.getProperties().get(TaskRun.PARTITION_START),
                 context == null ? null : context.getProperties().get(TaskRun.PARTITION_END));
-        MvPartitionDiffResult result = PartitionDiffer.computePartitionRangeDiff(db, materializedView, partitionRange);
+        MvPartitionDiffResult result = PartitionDiffer.computePartitionRangeDiff(materializedView, partitionRange);
         if (result == null) {
             return;
         }

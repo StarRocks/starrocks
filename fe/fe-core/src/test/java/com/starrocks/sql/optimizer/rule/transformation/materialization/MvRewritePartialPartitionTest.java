@@ -965,9 +965,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "test_mv1");
             // partition p2 has already been updated, so the mv should not be used anymore
             PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 8: ds >= '2020-02-11 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
-                    "     partitions=0/3");
+                            "     PREAGGREGATION: ON\n" +
+                            "     PREDICATES: 8: ds >= '2020-02-11 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
+                            "     partitions=0/61");
             PlanTestBase.assertContains(plan, "     TABLE: base_tbl1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: time_slice(10: k1, 1, 'hour', 'floor') >= '2020-02-11 00:00:00', " +
