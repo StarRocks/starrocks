@@ -331,8 +331,10 @@ public:
     ColumnPtr get_all_values() const {
         ColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
         if constexpr (isSliceLT<Type>) {
-            for (auto c : _string_values) {
-                values->append_datum(c->get(0));
+            for (auto v : _hash_set) {
+                // v -> SliceWithHash
+                Slice s{v.data, v.size};
+                values->append_datum(s);
             }
         } else {
             for (auto v : _hash_set) {
