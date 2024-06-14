@@ -50,7 +50,7 @@ private:
     Status _create_csv_reader();
     Status _setup_compression_type(const TTextFileDesc& text_file_desc);
     Status _setup_delimiter(const TTextFileDesc& text_file_desc);
-    StatusOr<bool> _has_uft8_bom() const;
+    StatusOr<bool> _has_utf8_bom() const;
     Status _build_hive_column_name_2_index();
     Status _parse_csv(int chunk_size, ChunkPtr* chunk);
 

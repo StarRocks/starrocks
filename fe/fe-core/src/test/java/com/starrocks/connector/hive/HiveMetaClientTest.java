@@ -196,6 +196,9 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
         Assert.assertEquals(2, customDesc.getSkipHeaderLineCount());
+        parameters.put("skip.header.line.count", "-10");
+        customDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(parameters);
+        Assert.assertEquals(0, customDesc.getSkipHeaderLineCount());
     }
 
     @Test

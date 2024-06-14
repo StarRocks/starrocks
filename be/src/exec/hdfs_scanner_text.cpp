@@ -420,7 +420,7 @@ Status HdfsTextScanner::_create_csv_reader() {
     // (TODO) only support uncompressed file to skip utf-8 bom, because compressed input stream didn't support seek() function
     if (_compression_type == NO_COMPRESSION) {
         // if reading start of file, try to skipping UTF-8 BOM
-        ASSIGN_OR_RETURN(const bool has_utf8_bom, _has_uft8_bom());
+        ASSIGN_OR_RETURN(const bool has_utf8_bom, _has_utf8_bom());
         if (has_utf8_bom) {
             RETURN_IF_ERROR(reader->reset(scan_range->offset + 3, scan_range->length - 3));
         } else {
@@ -446,7 +446,7 @@ Status HdfsTextScanner::_create_csv_reader() {
     return Status::OK();
 }
 
-StatusOr<bool> HdfsTextScanner::_has_uft8_bom() const {
+StatusOr<bool> HdfsTextScanner::_has_utf8_bom() const {
     // if reading start of file, skipping UTF-8 BOM
     if (_scanner_ctx.scan_range->offset == 0) {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());

@@ -605,6 +605,9 @@ public class HiveMetastoreApiConverter {
         String lineDelim = parameters.getOrDefault(serdeConstants.LINE_DELIM, "");
         String mapkeyDelim = parameters.getOrDefault(serdeConstants.MAPKEY_DELIM, "");
         int skipHeaderLineCount = Integer.parseInt(parameters.getOrDefault(serdeConstants.HEADER_COUNT, "0"));
+        if (skipHeaderLineCount < 0) {
+            skipHeaderLineCount = 0;
+        }
 
         // check delim is empty, if it's empty, we convert it to null
         fieldDelim = fieldDelim.isEmpty() ? null : fieldDelim;
