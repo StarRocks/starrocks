@@ -118,6 +118,10 @@ select * from read_range_big_page_test where c0 in (8193, 12289);
 8193	91808	93	[193,null,808]
 12289	87712	89	[289,null,712]
 -- !result
+select count(*) from read_range_test a join[broadcast] read_range_big_page_test b on a.c2 = b.c2 where b.c0 < 5;
+-- result:
+800
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_file/test_parquet_read_range/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0
