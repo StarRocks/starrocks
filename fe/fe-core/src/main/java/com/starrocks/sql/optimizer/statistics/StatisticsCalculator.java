@@ -421,23 +421,23 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalDeltaLakeScan(LogicalDeltaLakeScanOperator node, ExpressionContext context) {
-        return computeDeltaLakeScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeDeltaLakeScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalDeltaLakeScan(PhysicalDeltaLakeScanOperator node, ExpressionContext context) {
-        return computeDeltaLakeScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeDeltaLakeScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    private Void computeDeltaLakeScanNode(Operator node, ExpressionContext context,
-                                          Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        // Use default statistics for now.
-        Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+    private Void computeDeltaLakeScanNode(Operator node, ExpressionContext context, Table table,
+                                          Map<ColumnRefOperator, Column> colRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = table.getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, colRefOperatorColumnMap, null,
+                    node.getPredicate(), node.getLimit());
+            context.setStatistics(stats);
         }
-        builder.setOutputRowCount(1);
-        context.setStatistics(builder.build());
 
         return visitOperator(node, context);
     }
