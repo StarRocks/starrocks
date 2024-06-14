@@ -43,6 +43,7 @@ public:
               _file_format(std::move(file_format)),
               _compression_codec(std::move(compression_codec)),
               _cloud_conf(cloud_conf),
+              _fragment_ctx(fragment_ctx),
               _parquet_file_schema(std::move(schema)),
               _output_expr(output_expr_ctxs),
               _partition_expr(partition_output_expr),
@@ -81,6 +82,7 @@ private:
     std::string _file_format;
     TCompressionType::type _compression_codec;
     TCloudConfiguration _cloud_conf;
+    FragmentContext* _fragment_ctx;
 
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
     std::vector<ExprContext*> _output_expr;
