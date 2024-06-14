@@ -59,18 +59,18 @@ public class AstToSqlTest extends PlanTestBase {
         StringBuilder largeString = new StringBuilder();
         largeString.append("'");
         for (int i = 0; i < 50; i++) {
-            largeString.append("测");
+            largeString.append("^");
         }
-        largeString.append("试");
+        largeString.append("&");
         largeString.append("'");
         String sql = "select upper(" + largeString + ") from t0";
         StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
         Analyzer.analyze(stmt, connectContext);
         String afterSql = AstToSQLBuilder.toSQL(stmt);
-        Assert.assertTrue(afterSql, afterSql.contains("测试"));
+        Assert.assertTrue(afterSql, afterSql.contains("^&"));
 
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("测..."));
+        Assert.assertTrue(plan, plan.contains("^..."));
     }
 
 

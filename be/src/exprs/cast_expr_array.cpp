@@ -137,7 +137,7 @@ Status CastStringToArray::prepare(RuntimeState* state, ExprContext* context) {
 
 // Cast string to array<ANY>
 StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
-    if (_constant_res != nullptr && _constant_res->is_constant()) {
+    if (input_chunk != nullptr && _constant_res != nullptr && _constant_res->is_constant()) {
         auto* input = down_cast<ConstColumn*>(_constant_res.get());
         if (input->only_null()) {
             return ColumnHelper::create_const_null_column(input_chunk->num_rows());
