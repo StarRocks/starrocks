@@ -355,7 +355,8 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     }
 
     public List<MaterializedIndex> getMaterializedIndices(IndexExtState extState) {
-        List<MaterializedIndex> indices = Lists.newArrayList();
+        int expectedSize = 1 + idToVisibleRollupIndex.size() + idToShadowIndex.size();
+        List<MaterializedIndex> indices = Lists.newArrayListWithExpectedSize(expectedSize);
         switch (extState) {
             case ALL:
                 indices.add(baseIndex);
@@ -430,9 +431,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public long getRowCount() {
         long rowCount = 0;
-        for (PhysicalPartition subPartition : getSubPartitions()) {
+        for (PhysicalPartition subPartition : idToSubPartition.values()) {
             rowCount += subPartition.storageRowCount();
         }
+        rowCount += this.storageRowCount();
         return rowCount;
     }
 

@@ -321,12 +321,8 @@ public class OlapTable extends Table {
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
-        Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        nameToColumn.putAll(this.nameToColumn);
-        olapTable.nameToColumn = nameToColumn;
-        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
-        idToColumn.putAll(this.idToColumn);
-        olapTable.idToColumn = idToColumn;
+        olapTable.nameToColumn = Maps.newLinkedHashMap(this.nameToColumn);
+        olapTable.idToColumn = Maps.newLinkedHashMap(this.idToColumn);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
@@ -348,7 +344,7 @@ public class OlapTable extends Table {
         }
         olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
-        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<String, Partition> nameToPartitions = Maps.newLinkedHashMap();
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
