@@ -153,7 +153,7 @@ public class TabletSchedulerStat {
                 ((AtomicLong) field.get(lastSnapshot)).set(((AtomicLong) field.get(this)).get());
             }
         } catch (ClassNotFoundException | IllegalArgumentException | IllegalAccessException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute snapshot", e);
             lastSnapshot = null;
         }
     }
@@ -178,7 +178,7 @@ public class TabletSchedulerStat {
                 result.add(info);
             }
         } catch (ClassNotFoundException | IllegalArgumentException | IllegalAccessException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute getBrief", e);
             return Lists.newArrayList();
         }
         return result;
@@ -204,7 +204,7 @@ public class TabletSchedulerStat {
                 sb.append(current).append(" (+").append(current - last).append(")\n");
             }
         } catch (ClassNotFoundException | IllegalArgumentException | IllegalAccessException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute incrementalBrief", e);
             return "";
         }
 

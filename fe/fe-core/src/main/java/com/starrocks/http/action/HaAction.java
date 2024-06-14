@@ -147,7 +147,7 @@ public class HaAction extends WebBaseAction {
             buffer.append("<p>last checkpoint time: " + date + "</p>");
             buffer.append("</pre>");
         } catch (IOException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute appendImageInfo", e);
         }
     }
 
