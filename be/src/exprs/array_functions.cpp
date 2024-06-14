@@ -47,7 +47,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
             p[i] = offsets[i + 1] - offsets[i];
         }
 
-        if (col_array->has_null()) {
+        if (arg0->has_null()) {
             // Copy null flags.
             return NullableColumn::create(std::move(col_result), down_cast<NullableColumn*>(arg0)->null_column());
         } else {
