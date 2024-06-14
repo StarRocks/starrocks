@@ -71,6 +71,7 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
 
 #if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
     if (config::datacache_enable) {
+        LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
         config::datacache_enable = false;
     }
 #endif
@@ -184,7 +185,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(ERROR) << "Fail to init datacache";
         exit(1);
     }
-    LOG(INFO) << "BE start step " << start_step++ << ": datacache init successfully";
+    if (config::datacache_enable) {
+        LOG(INFO) << process_name << " start step " << start_step++ << ": datacache init successfully";
+    } else {
+        LOG(INFO) << process_name << " starts by skipping the datacache initialization";
+    }
 
     // Start thrift server
     int thrift_port = config::be_port;

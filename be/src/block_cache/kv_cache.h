@@ -14,16 +14,32 @@
 
 #pragma once
 
-#include "block_cache/cache_handle.h"
 #include "block_cache/cache_options.h"
+#include "block_cache/dummy_types.h"
 #include "block_cache/io_buffer.h"
 #include "common/status.h"
+
+#ifdef WITH_STARCACHE
 #include "starcache/star_cache.h"
+#endif
 
 namespace starrocks {
 
+// We use the `starcache::ObjectHandle` directly because implementing a new one seems unnecessary.
+// Importing the starcache headers here is not graceful, but the `cachelib` doesn't support
+// object cache and we'll deprecate it for some performance reasons. Now there is no need to
+// pay too much attention to the compatibility and upper-level abstraction of the cachelib interface.
+#ifdef WITH_STARCACHE
+using DataCacheHandle = starcache::ObjectHandle;
 using DataCacheMetrics = starcache::CacheMetrics;
 using DataCacheStatus = starcache::CacheStatus;
+#else
+using DataCacheHandle = DummyCacheHandle;
+using DataCacheMetrics = DummyCacheMetrics;
+using DataCacheStatus = DummyCacheStatus;
+#endif
+
+enum class DataCacheEngine { STARCACHE, CACHELIB };
 
 enum class DataCacheEngineType { STARCACHE, CACHELIB };
 
@@ -38,14 +54,14 @@ public:
     virtual Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
 
     virtual Status write_object(const std::string& key, const void* ptr, size_t size, std::function<void()> deleter,
-                                CacheHandle* handle, WriteCacheOptions* options) = 0;
+                                DataCacheHandle* handle, WriteCacheOptions* options) = 0;
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned.
     virtual Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
                                ReadCacheOptions* options) = 0;
 
-    virtual Status read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) = 0;
+    virtual Status read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) = 0;
 
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove(const std::string& key) = 0;
