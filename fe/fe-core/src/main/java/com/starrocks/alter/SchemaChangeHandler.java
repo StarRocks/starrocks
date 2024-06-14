@@ -2031,7 +2031,7 @@ public class SchemaChangeHandler extends AlterHandler {
                             TTabletMetaType.BINLOG_CONFIG);
                 }
             } catch (DdlException e) {
-                LOG.warn(e);
+                LOG.warn("Failed to execute updateBinlogPartitionTabletMeta", e);
                 return isModifiedSuccess;
             }
 

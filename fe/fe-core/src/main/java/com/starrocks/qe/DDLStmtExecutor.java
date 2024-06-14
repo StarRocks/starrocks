@@ -1077,7 +1077,7 @@ public class DDLStmtExecutor {
             try {
                 metrics = DataCacheSelectExecutor.cacheSelect(statement, context);
             } catch (Exception e) {
-                LOG.warn(e);
+                LOG.warn("Failed to execute cacheSelect", e);
                 throw new RuntimeException(e.getMessage());
             }
 
