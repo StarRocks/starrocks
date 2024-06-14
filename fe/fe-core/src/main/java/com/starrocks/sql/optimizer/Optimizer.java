@@ -595,11 +595,11 @@ public class Optimizer {
     }
 
     private void rewriteGroupingSets(OptExpression tree, TaskContext rootTaskContext, SessionVariable sessionVariable) {
-        if (sessionVariable.isCboPushDownGroupingSet()) {
-            ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggregateGroupingSetsRule());
-        }
         if (sessionVariable.isEnableRewriteGroupingsetsToUnionAll()) {
             ruleRewriteIterative(tree, rootTaskContext, new RewriteGroupingSetsByCTERule());
+        }
+        if (sessionVariable.isCboPushDownGroupingSet()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggregateGroupingSetsRule());
         }
     }
 
