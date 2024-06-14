@@ -74,6 +74,8 @@ inline Status to_status(const butil::Status& st) {
         return Status::IOError(st.error_str());
     case ENOMEM:
         return Status::MemoryLimitExceeded(st.error_str());
+    case ENOSPC:
+        return Status::CapacityLimitExceed(st.error_str());
     case EBUSY:
         return Status::ResourceBusy(st.error_str());
     default:
