@@ -61,7 +61,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
-            " FROM `$dbName`.`$tableName` partition `$partitionName`";
+            " FROM (select $quoteColumnName from `$dbName`.`$tableName` partition `$partitionName`) tt";
 
     private final List<Long> partitionIdList;
 
@@ -261,6 +261,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("partitionName", partition.getName());
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
+        context.put("quoteColumnName", quoteColumnName);
 
         if (!columnType.canStatistic()) {
             context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
