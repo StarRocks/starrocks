@@ -41,7 +41,9 @@ public class StructField implements GsonPostProcessable {
     private int position;  // in struct
 
     @SerializedName(value = "fieldId")
-    private int fieldId;
+    private int fieldId = -1;
+
+    public StructField() {}
 
     public StructField(String name, int fieldId, Type type, String comment) {
         this.name = name;
