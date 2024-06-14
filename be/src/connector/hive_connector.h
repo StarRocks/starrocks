@@ -108,6 +108,11 @@ private:
     bool _enable_populate_datacache = false;
     bool _enable_datacache_aync_populate_mode = false;
     bool _enable_datacache_io_adaptor = false;
+<<<<<<< HEAD
+=======
+    int32_t _datacache_evict_probability = 0;
+    bool _enable_dynamic_prune_scan_range = true;
+>>>>>>> 8d0976c00c ([Feature] Support evicting old cache items with a given probability option to avoid frequent cache replacement. (#44810))
     bool _use_file_metacache = false;
     bool _enable_split_tasks = false;
 

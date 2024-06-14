@@ -264,6 +264,13 @@ struct TQueryOptions {
 
   132: optional bool enable_datacache_async_populate_mode;
   133: optional bool enable_datacache_io_adaptor;
+<<<<<<< HEAD
+=======
+
+  140: optional string catalog;
+
+  141: optional i32 datacache_evict_probability;
+>>>>>>> 8d0976c00c ([Feature] Support evicting old cache items with a given probability option to avoid frequent cache replacement. (#44810))
 }
 
 

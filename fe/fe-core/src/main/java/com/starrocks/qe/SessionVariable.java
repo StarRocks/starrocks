@@ -430,6 +430,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
     public static final String ENABLE_DATACACHE_ASYNC_POPULATE_MODE = "enable_datacache_async_populate_mode";
     public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
+    public static final String DATACACHE_EVICT_PROBABILITY = "datacache_evict_probability";
 
     // The following configurations will be deprecated, and we use the `datacache` suffix instead.
     // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -1419,7 +1420,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableDataCacheAsyncPopulateMode = false;
 
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_IO_ADAPTOR)
+<<<<<<< HEAD
     private boolean enableDataCacheIOAdaptor = false;
+=======
+    private boolean enableDataCacheIOAdaptor = true;
+
+    @VariableMgr.VarAttr(name = DATACACHE_EVICT_PROBABILITY, flag = VariableMgr.INVISIBLE)
+    private int datacacheEvictProbability = 100;
+
+    @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
+    private boolean enableDynamicPruneScanRange = true;
+>>>>>>> 8d0976c00c ([Feature] Support evicting old cache items with a given probability option to avoid frequent cache replacement. (#44810))
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -1966,6 +1977,33 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableScanDataCache() {
+        return enableScanDataCache;
+    }
+
+    public void setEnableScanDataCache(boolean enableScanDataCache) {
+        this.enableScanDataCache = enableScanDataCache;
+    }
+
+    public void setEnablePopulateDataCache(boolean enablePopulateDataCache) {
+        this.enablePopulateDataCache = enablePopulateDataCache;
+    }
+
+    public void setEnableDataCacheAsyncPopulateMode(boolean enableDataCacheAsyncPopulateMode) {
+        this.enableDataCacheAsyncPopulateMode = enableDataCacheAsyncPopulateMode;
+    }
+
+    public void setEnableDataCacheIOAdaptor(boolean enableDataCacheIOAdaptor) {
+        this.enableDataCacheIOAdaptor = enableDataCacheIOAdaptor;
+    }
+
+    public void setDataCacheEvictProbability(int datacacheEvictProbability) {
+        this.datacacheEvictProbability = datacacheEvictProbability;
+    }
+
+>>>>>>> 8d0976c00c ([Feature] Support evicting old cache items with a given probability option to avoid frequent cache replacement. (#44810))
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
     }
@@ -3546,6 +3584,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_populate_datacache(enablePopulateDataCache);
         tResult.setEnable_datacache_async_populate_mode(enableDataCacheAsyncPopulateMode);
         tResult.setEnable_datacache_io_adaptor(enableDataCacheIOAdaptor);
+        tResult.setDatacache_evict_probability(datacacheEvictProbability);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
