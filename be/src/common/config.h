@@ -1064,7 +1064,7 @@ CONF_mInt32(max_bf_read_bytes_percent, "10");
 // control the local persistent index in shared_data gc/evict interval
 CONF_mInt64(pindex_shared_data_gc_evict_interval_seconds, "18000"); // 5 hour
 // enable persistent index compression
-CONF_mBool(enable_pindex_compression, "false");
+CONF_mBool(enable_pindex_compression, "true");
 
 // If primary compaction pick all rowsets, we could rebuild pindex directly and skip read from index.
 CONF_mBool(enable_pindex_rebuild_in_compaction, "false");
