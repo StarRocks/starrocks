@@ -137,12 +137,13 @@ Status CastStringToArray::prepare(RuntimeState* state, ExprContext* context) {
 
 // Cast string to array<ANY>
 StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
-    if (input_chunk != nullptr && _constant_res != nullptr && _constant_res->is_constant()) {
+    if (_constant_res != nullptr && _constant_res->is_constant()) {
         auto* input = down_cast<ConstColumn*>(_constant_res.get());
+        size_t rows = input_chunk == nullptr ? 1 : input_chunk->num_rows();
         if (input->only_null()) {
-            return ColumnHelper::create_const_null_column(input_chunk->num_rows());
+            return ColumnHelper::create_const_null_column(rows);
         } else {
-            return ConstColumn::create(input->data_column(), input_chunk->num_rows());;
+            return ConstColumn::create(input->data_column(), rows);;
         }
     }
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
