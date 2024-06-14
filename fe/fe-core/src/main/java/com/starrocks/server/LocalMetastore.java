@@ -1384,7 +1384,9 @@ public class LocalMetastore implements ConnectorMetadata {
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
 
-            copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
+            //copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTable = new OlapTable();
+            olapTable.copyOnlyForQuery(copiedTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
             checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         } catch (AnalysisException | NotImplementedException e) {
@@ -2434,8 +2436,6 @@ public class LocalMetastore implements ConnectorMetadata {
         } else {
             chooseBackendsArbitrary = true;
         }
-
-
 
         try {
             if (chooseBackendsArbitrary) {

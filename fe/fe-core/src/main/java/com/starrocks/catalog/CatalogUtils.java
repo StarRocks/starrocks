@@ -43,7 +43,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
@@ -201,8 +200,8 @@ public class CatalogUtils {
     }
 
     public static void checkTempPartitionConflict(List<Partition> partitionList,
-                                               List<Partition> tempPartitionList,
-                                               ListPartitionInfo listPartitionInfo) throws DdlException {
+                                                  List<Partition> tempPartitionList,
+                                                  ListPartitionInfo listPartitionInfo) throws DdlException {
         Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
         Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
         Map<Long, List<LiteralExpr>> newListMap = new HashMap<>(listMap);
@@ -303,6 +302,15 @@ public class CatalogUtils {
                     }
                 });
 
+                MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
+                for (List<String> itemExpr : multiItemListPartitionDesc.getMultiValues()) {
+                    if (!listPartitionInfo.isValid(itemExpr)) {
+                        throw new DdlException("Duplicate values " +
+                                "(" + String.join(",", itemExpr) + ") ");
+                    }
+                }
+
+                /*
                 int partitionColSize = listPartitionInfo.getPartitionColumns().size();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
                 for (List<LiteralExpr> itemExpr : multiItemListPartitionDesc.getMultiLiteralExprValues()) {
@@ -324,6 +332,7 @@ public class CatalogUtils {
                         }
                     }
                 }
+                 */
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
