@@ -156,10 +156,6 @@ public class HiveMetaClient {
         StarRocksConnectorException connectionException = null;
 
         try {
-            if (methodName.equalsIgnoreCase("createDatabase")) {
-                throw new InvocationTargetException(
-                        new org.apache.hadoop.hive.metastore.api.MetaException("test message"));
-            }
             client = getClient();
             argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
             Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
