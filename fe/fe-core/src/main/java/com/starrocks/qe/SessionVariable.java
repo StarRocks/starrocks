@@ -440,6 +440,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
+    public static final String ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS = "enable_analyze_phase_prune_columns";
+
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
@@ -1386,6 +1388,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticCollectParallelism = 1;
 
+    @VarAttr(name = ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS, flag = VariableMgr.INVISIBLE)
+    private boolean enableAnalyzePhasePruneColumns = false;
+
     @VarAttr(name = ENABLE_SHOW_ALL_VARIABLES, flag = VariableMgr.INVISIBLE)
     private boolean enableShowAllVariables = false;
 
@@ -2269,6 +2274,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setStatisticCollectParallelism(int parallelism) {
         this.statisticCollectParallelism = parallelism;
+    }
+
+    public boolean isEnableAnalyzePhasePruneColumns() {
+        return enableAnalyzePhasePruneColumns;
+    }
+
+    public void setEnableAnalyzePhasePruneColumns(boolean enableAnalyzePhasePruneColumns) {
+        this.enableAnalyzePhasePruneColumns = enableAnalyzePhasePruneColumns;
     }
 
     public int getUseComputeNodes() {

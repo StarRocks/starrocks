@@ -253,24 +253,23 @@ public class QueryAnalyzer {
 
         // for reduce meta initialization, only support simple query relation, like: select x1, x2 from t;
         private void guessScanColumns(SelectRelation selectRelation, Relation fromRelation) {
-            if (!(fromRelation instanceof TableRelation)) {
-                return;
-            }
-
-            if (!Objects.isNull(selectRelation.getGroupByClause()) ||
+            if (!session.getSessionVariable().isEnableAnalyzePhasePruneColumns() ||
+                    !(fromRelation instanceof TableRelation) ||
+                    !Objects.isNull(selectRelation.getGroupByClause()) ||
                     !Objects.isNull(selectRelation.getHavingClause()) ||
                     !Objects.isNull(selectRelation.getWhereClause()) ||
                     (!Objects.isNull(selectRelation.getOrderBy()) && !selectRelation.getOrderBy().isEmpty())) {
                 return;
             }
 
-            if (selectRelation.getSelectList().isDistinct()) {
-                return;
-            }
-
             List<String> scanColumns = new ArrayList<>();
             for (SelectListItem item : selectRelation.getSelectList().getItems()) {
                 if (item.isStar() || !(item.getExpr() instanceof SlotRef)) {
+                    return;
+                }
+
+                if (((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed() != null) {
+                    // avoid struct column pruned
                     return;
                 }
                 scanColumns.add(((SlotRef) item.getExpr()).getColumnName().toLowerCase());
@@ -442,25 +441,21 @@ public class QueryAnalyzer {
                     fields.add(field);
                 }
             } else {
-                if (node.isBinlogQuery()) {
-                    for (Column column : getBinlogMetaColumns()) {
-                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
-                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
-                                column.isAllowNull());
-                        columns.put(field, column);
-                        fields.add(field);
-                    }
-                }
-
                 List<Column> fullSchema = table.getFullSchema();
                 Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
 
                 List<String> guessScanColumns = node.getGuessScanColumns();
                 boolean needGuessScanColumns = guessScanColumns != null && !guessScanColumns.isEmpty();
                 if (needGuessScanColumns) {
-                    Set<String> fullColumnNames =
-                            fullSchema.stream().map(c -> c.getName().toLowerCase()).collect(Collectors.toSet());
-                    needGuessScanColumns = fullColumnNames.containsAll(guessScanColumns);
+                    Set<String> fullColumnNames = new HashSet<>(fullSchema.size());
+                    for (Column column : fullSchema) {
+                        if (column.isGeneratedColumn()) {
+                            needGuessScanColumns = false;
+                            break;
+                        }
+                        fullColumnNames.add(column.getName().toLowerCase());
+                    }
+                    needGuessScanColumns &= fullColumnNames.containsAll(guessScanColumns);
                 }
 
                 Set<String> bucketColumns = table.getDistributionColumnNames();
@@ -480,6 +475,16 @@ public class QueryAnalyzer {
                             column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
+                }
+
+                if (node.isBinlogQuery()) {
+                    for (Column column : getBinlogMetaColumns()) {
+                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                                column.isAllowNull());
+                        columns.put(field, column);
+                        fields.add(field);
+                    }
                 }
             }
 
