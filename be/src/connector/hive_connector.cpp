@@ -108,6 +108,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_datacache_io_adaptor) {
         _enable_datacache_io_adaptor = state->query_options().enable_datacache_io_adaptor;
     }
+    if (state->query_options().__isset.datacache_evict_probability) {
+        _datacache_evict_probability = state->query_options().datacache_evict_probability;
+    }
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
     }
@@ -563,6 +566,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
     scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;
     scanner_params.enable_datacache_io_adaptor = _enable_datacache_io_adaptor;
+    scanner_params.datacache_evict_probability = _datacache_evict_probability;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.use_file_metacache = _use_file_metacache;

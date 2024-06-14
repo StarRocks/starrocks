@@ -66,6 +66,7 @@ struct HdfsScanStats {
     int64_t footer_cache_read_count = 0;
     int64_t footer_cache_write_count = 0;
     int64_t footer_cache_write_bytes = 0;
+    int64_t footer_cache_write_fail_count = 0;
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
@@ -214,6 +215,7 @@ struct HdfsScannerParams {
     bool enable_populate_datacache = false;
     bool enable_datacache_async_populate_mode = false;
     bool enable_datacache_io_adaptor = false;
+    int32_t datacache_evict_probability = 0;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
@@ -285,6 +287,8 @@ struct HdfsScannerContext {
     bool return_count_column = false;
 
     bool use_file_metacache = false;
+
+    int32_t datacache_evict_probability = 0;
 
     std::string timezone;
 
