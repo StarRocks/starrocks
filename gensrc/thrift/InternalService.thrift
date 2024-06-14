@@ -314,6 +314,8 @@ struct TQueryOptions {
   133: optional bool enable_datacache_io_adaptor;
 
   140: optional string catalog;
+
+  141: optional i32 datacache_evict_probability;
 }
 
 
