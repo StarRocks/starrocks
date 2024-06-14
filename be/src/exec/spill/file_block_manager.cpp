@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
 #include "fmt/format.h"
 #include "gen_cpp/Types_types.h"
@@ -141,19 +142,13 @@ StatusOr<FileBlockContainerPtr> FileBlockContainer::create(DirPtr dir, TUniqueId
 
 class FileBlockReader final : public BlockReader {
 public:
-    FileBlockReader(const Block* block) : BlockReader(block), _length(block->size()) {}
-    ~FileBlockReader() override = default;
+    FileBlockReader(const Block* block, const BlockReaderOptions& options = {}) : BlockReader(block, options) {}
 
-    Status read_fully(void* data, int64_t count) override;
+    ~FileBlockReader() override = default;
 
     std::string debug_string() override { return _block->debug_string(); }
 
     const Block* block() const override { return _block; }
-
-private:
-    std::unique_ptr<io::InputStreamWrapper> _readable;
-    size_t _length = 0;
-    size_t _offset = 0;
 };
 
 class FileBlock : public Block {
@@ -174,9 +169,13 @@ public:
 
     Status flush() override { return _container->flush(); }
 
-    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const { return _container->get_readable(); }
+    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const override {
+        return _container->get_readable();
+    }
 
-    std::shared_ptr<BlockReader> get_reader() override { return std::make_shared<FileBlockReader>(this); }
+    std::shared_ptr<BlockReader> get_reader(const BlockReaderOptions& options) override {
+        return std::make_shared<FileBlockReader>(this, options);
+    }
 
     std::string debug_string() const override {
 #ifndef BE_TEST
@@ -191,24 +190,6 @@ public:
 private:
     FileBlockContainerPtr _container;
 };
-
-Status FileBlockReader::read_fully(void* data, int64_t count) {
-    if (_readable == nullptr) {
-        auto file_block = down_cast<const FileBlock*>(_block);
-        ASSIGN_OR_RETURN(_readable, file_block->get_readable());
-    }
-
-    if (_offset + count > _length) {
-        return Status::EndOfFile("no more data in this block");
-    }
-
-    ASSIGN_OR_RETURN(auto read_len, _readable->read(data, count));
-    RETURN_IF(read_len == 0, Status::EndOfFile("no more data in this block"));
-    RETURN_IF(read_len != count, Status::InternalError(fmt::format(
-                                         "block's length is mismatched, expected: {}, actual: {}", count, read_len)));
-    _offset += count;
-    return Status::OK();
-}
 
 FileBlockManager::FileBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
         : _query_id(query_id), _dir_mgr(dir_mgr) {}
