@@ -1000,6 +1000,21 @@ TEST_F(OrcFileWriterTest, TestWriteWithExecutors) {
     ASSERT_EQ(result.file_statistics.record_count, 8);
 }
 
+TEST_F(OrcFileWriterTest, TestUnknownCompression) {
+    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    std::vector<TypeDescriptor> type_descs{type_bool};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            TCompressionType::UNKNOWN_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    ASSERT_ERROR(writer->init());
+}
+
 TEST_F(OrcFileWriterTest, TestFactory) {
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     std::vector<TypeDescriptor> type_descs{type_bool};

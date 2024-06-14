@@ -707,7 +707,7 @@ showComputeNodesStatement
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
 
 createExternalCatalogStatement
-    : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
+    : CREATE EXTERNAL CATALOG (IF NOT EXISTS)? catalogName=identifierOrString comment? properties
     ;
 
 showCreateExternalCatalogStatement
@@ -715,7 +715,7 @@ showCreateExternalCatalogStatement
     ;
 
 dropExternalCatalogStatement
-    : DROP CATALOG catalogName=identifierOrString
+    : DROP CATALOG (IF EXISTS)? catalogName=identifierOrString
     ;
 
 showCatalogsStatement
@@ -1253,7 +1253,10 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    ;
+inlineFunction
+    : AS ATTACHMENT
     ;
 
 typeList
@@ -2452,6 +2455,14 @@ userPropertyList
 
 property
     : key=string '=' value=string
+    ;
+
+inlineProperties
+    : inlineProperty ( inlineProperty)*
+    ;
+
+inlineProperty
+    : key=identifier '=' value=string
     ;
 
 varType

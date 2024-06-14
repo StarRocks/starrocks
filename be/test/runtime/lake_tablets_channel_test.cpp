@@ -851,6 +851,7 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
         add_chunk_request.set_sender_id(sender_id);
         add_chunk_request.set_eos(false);
         add_chunk_request.set_packet_seq(0);
+        add_chunk_request.set_timeout_ms(30 * 1000);
 
         for (int i = 0; i < kChunkSize; i++) {
             int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -873,6 +874,7 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
         finish_request.set_packet_seq(1);
         finish_request.add_partition_ids(10);
         finish_request.add_partition_ids(11);
+        finish_request.set_timeout_ms(30 * 1000);
 
         _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
 

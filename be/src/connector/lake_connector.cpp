@@ -636,20 +636,20 @@ DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNo
 StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
-        size_t num_total_scan_ranges) {
-    auto morsel_queue = DataSourceProvider::convert_scan_range_to_morsel_queue(
-            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-            num_total_scan_ranges);
-    if (enable_tablet_internal_parallel) {
-        int64_t scan_dop;
+        size_t num_total_scan_ranges, size_t scan_dop) {
+    int64_t lake_scan_dop = 0;
+    if (!scan_ranges.empty() && enable_tablet_internal_parallel) {
         ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
-                                                                       tablet_internal_parallel_mode, &scan_dop,
+                                                                       tablet_internal_parallel_mode, &lake_scan_dop,
                                                                        &splitted_scan_rows));
         if (_could_split) {
             ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(scan_ranges));
         }
     }
-    return morsel_queue;
+
+    return DataSourceProvider::convert_scan_range_to_morsel_queue(
+            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+            num_total_scan_ranges, (size_t)lake_scan_dop);
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
@@ -659,6 +659,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     //if (_t_lake_scan_node.use_pk_index) {
     //    return false;
     //}
+
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
     if (!force_split && num_total_scan_ranges >= pipeline_dop) {

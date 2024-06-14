@@ -227,11 +227,17 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: 0<br/>
 **Description**: The maximum error tolerance of the Stream Load. It's the maximum percentage of data records that can be filtered out due to inadequate data quality. Valid values: `0` to `1`. Default value: `0`. See [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) for details.
 
-### sink.parallelism
+### sink.properties.partial_update
 
-**Required**: No<br/>
-**Default value**: NONE<br/>
-**Description**: The parallelism of the connector. Only available for Flink SQL. If not set, Flink planner will decide the parallelism. In the scenario of multi-parallelism, users need to guarantee data is written in the correct order.
+**Required**: NO<br/>
+**Default value**: `FALSE`<br/>
+**Description**: Whether to use partial updates. Valid values: `TRUE` and `FALSE`. Default value: `FALSE`, indicating to disable this feature.
+
+### sink.properties.partial_update_mode
+
+**Required**:  NO<br/>
+**Default value**: `row`<br/>
+**Description**: Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul>
 
 ### sink.properties.strict_mode
 

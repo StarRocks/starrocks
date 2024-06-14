@@ -19,12 +19,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -37,6 +40,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -100,7 +104,19 @@ public class OptExpressionDuplicator {
     }
 
     public OptExpression duplicate(OptExpression source) {
-        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(optimizerContext, columnMapping, rewriter);
+        return duplicate(source, false, false);
+    }
+
+    public OptExpression duplicate(OptExpression source,
+                                   boolean isResetSelectedPartitions) {
+        return duplicate(source, isResetSelectedPartitions, false);
+    }
+
+    public OptExpression duplicate(OptExpression source,
+                                   boolean isResetSelectedPartitions,
+                                   boolean isRefreshExternalTable) {
+        OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(optimizerContext, columnMapping, rewriter,
+                isResetSelectedPartitions, isRefreshExternalTable);
         return source.getOp().accept(visitor, source, null);
     }
 
@@ -128,13 +144,19 @@ public class OptExpressionDuplicator {
         private final Map<Integer, Integer> cteIdMapping = Maps.newHashMap();
         private final Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
         private final ReplaceColumnRefRewriter rewriter;
+        private final boolean isResetSelectedPartitions;
+        private final boolean isRefreshExternalTable;
 
         OptExpressionDuplicatorVisitor(OptimizerContext optimizerContext,
                                        Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
-                                       ReplaceColumnRefRewriter rewriter) {
+                                       ReplaceColumnRefRewriter rewriter,
+                                       boolean isResetSelectedPartitions,
+                                       boolean isRefreshExternalTable) {
             this.optimizerContext = optimizerContext;
             this.columnMapping = columnMapping;
             this.rewriter = rewriter;
+            this.isResetSelectedPartitions = isResetSelectedPartitions;
+            this.isRefreshExternalTable = isRefreshExternalTable;
         }
 
         private List<OptExpression> processChildren(OptExpression optExpression) {
@@ -192,19 +214,44 @@ public class OptExpressionDuplicator {
                             columnRefFactory, columnMapping);
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
                 }
-                List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
-                if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
-                    List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
-                    for (ScalarOperator predicate : prunedPartitionPredicates) {
-                        ScalarOperator newPredicate = rewriter.rewrite(predicate);
-                        newPrunedPartitionPredicates.add(newPredicate);
+
+                if (isResetSelectedPartitions) {
+                    olapScanBuilder.setSelectedPartitionId(null)
+                            .setPrunedPartitionPredicates(Lists.newArrayList())
+                            .setSelectedTabletId(Lists.newArrayList());
+                } else {
+                    List<ScalarOperator> prunedPartitionPredicates = olapScan.getPrunedPartitionPredicates();
+                    if (prunedPartitionPredicates != null && !prunedPartitionPredicates.isEmpty()) {
+                        List<ScalarOperator> newPrunedPartitionPredicates = Lists.newArrayList();
+                        for (ScalarOperator predicate : prunedPartitionPredicates) {
+                            ScalarOperator newPredicate = rewriter.rewrite(predicate);
+                            newPrunedPartitionPredicates.add(newPredicate);
+                        }
+                        olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
                     }
-                    olapScanBuilder.setPrunedPartitionPredicates(newPrunedPartitionPredicates);
                 }
             } else {
                 try {
+                    if (isRefreshExternalTable && scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
+                        // refresh iceberg table's metadata
+                        Table refBaseTable = scanOperator.getTable();
+                        IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
+                        String catalogName = cachedIcebergTable.getCatalogName();
+                        String dbName = cachedIcebergTable.getRemoteDbName();
+                        TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
+                        Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
+                        if (currentTable == null) {
+                            return null;
+                        }
+                        // Iceberg table's snapshot is cached in the mv's plan cache, need to reset it to get the latest snapshot
+                        scanBuilder.setTable(currentTable);
+                    }
                     ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
-                    scanOperatorPredicates.duplicate(rewriter);
+                    if (isResetSelectedPartitions) {
+                        scanOperatorPredicates.clear();
+                    } else {
+                        scanOperatorPredicates.duplicate(rewriter);
+                    }
                 } catch (AnalysisException e) {
                     // ignore exception
                 }

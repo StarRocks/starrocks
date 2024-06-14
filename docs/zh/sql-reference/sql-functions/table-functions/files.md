@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # FILES
 
-## 功能
+
 
 定义远程存储中的数据文件。
 
@@ -248,7 +248,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 unload_data_param::=
     "compression" = "<compression_method>",
     "partition_by" = "<column_name> [, ...]",
-    "single" = { "true" | "false" } 
+    "single" = { "true" | "false" } ,
+    "target_max_file_size" = "<int>"
 ```
 
 | **参数**          | **必填** | **说明**                                                          |
@@ -256,6 +257,7 @@ unload_data_param::=
 | compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
 | partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例五。 |
 | single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
+| target_max_file_size | 否           | 分批导出时，单个文件的大致上限。单位：Byte。默认值：1073741824（1 GB）。当要导出的数据大小超过该值时，数据将被分成多个文件，每个文件的大小不会大幅超过该值。自 v3.2.7 起引入。|
 
 ## 注意事项
 

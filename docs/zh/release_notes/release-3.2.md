@@ -4,13 +4,29 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+## 3.2.8
+
+发布日期：2024 年 6 月 7 日
+
+### 新增特性
+
+- **[使用标签管理 BE](https://docs.starrocks.io/zh/docs/3.3/administration/management/resource_management/be_label/)**：支持基于 BE 节点所在机架、数据中心等信息，使用标签对 BE 节点进行分组，以保证数据在机架或数据中心等之间均匀分布，应对某些机架断电或数据中心故障情况下的灾备需求。[#38833](https://github.com/StarRocks/starrocks/pull/38833)
+
+### 问题修复
+
+修复了如下问题：
+
+- 基于 str2date 函数的表达式分区表使用 DELETE 语句删除数据报错。[#45939](https://github.com/StarRocks/starrocks/pull/45939)
+- 跨集群迁移工具因获取不到源集群 Schema 信息而导致目标集群 BE Crash。[#46068](https://github.com/StarRocks/starrocks/pull/46068)
+- 查询使用非确定性函数时报错 `Multiple entries with same key`。[#46602](https://github.com/StarRocks/starrocks/pull/46602)
+
 ## 3.2.7
 
 发布日期：2024 年 5 月 24 日
 
 ### 新增特性
 
-- Stream Load 支持在传输过程中对数据进行压缩，减少网络带宽开销。可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、DEFLATE、ZSTD 压缩算法。[#43732](https://github.com/StarRocks/starrocks/pull/43732)
+- Stream Load 支持在传输过程中对数据进行压缩，减少网络带宽开销。可以通过 `compression` 或 `Content-Encoding` 参数指定不同的压缩方式，支持 GZIP、BZIP2、LZ4_FRAME、ZSTD 压缩算法。[#43732](https://github.com/StarRocks/starrocks/pull/43732)
 - 优化了存算分离集群的垃圾回收机制，支持手动对表或分区进行 Compaction 操作，可以更高效的回收对象存储上的数据。[#39532](https://github.com/StarRocks/starrocks/issues/39532)
 - 支持从 StarRocks 读取 ARRAY、MAP 和 STRUCT 等复杂类型的数据，并以 Arrow 格式可提供给 Flink connector 读取使用。[#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
 - 支持查询时异步填充 Data Cache，从而减少缓存填充对首次查询性能影响。[#40489](https://github.com/StarRocks/starrocks/pull/40489)

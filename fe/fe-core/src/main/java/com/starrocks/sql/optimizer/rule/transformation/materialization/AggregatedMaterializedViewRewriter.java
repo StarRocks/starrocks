@@ -427,9 +427,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         List<ColumnRefOperator> originalOutputColumns = new ArrayList<>(queryColumnRefMap.keySet());
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-        OptExpression newQueryInput = duplicator.duplicate(queryInput);
         // reset original partition predicates to prune partitions/tablets again
-        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput, false);
+        OptExpression newQueryInput = duplicator.duplicate(queryInput, true);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         Projection projection = getMvOptExprProjection(viewInput);
@@ -726,13 +725,19 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Preconditions.checkState(targetColumn instanceof CallOperator);
             return (CallOperator) targetColumn;
         } else {
+            if (targetColumn instanceof CallOperator) {
+                // if it's aggregate function, it should be rewritten by group by keys, return it directly.
+                CallOperator targetCall = (CallOperator) targetColumn;
+                if (targetCall.isAggregate()) {
+                    return targetCall;
+                }
+            }
             if (!targetColumn.isColumnRef()) {
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                         "Rewrite aggregate rollup {} failed: only column-ref is supported after rewrite",
                         aggCall.toString());
                 return null;
             }
-            // Aggregate must be CallOperator
             CallOperator newAggregate = getRollupAggregateFunc(aggCall, (ColumnRefOperator) targetColumn, false);
             if (newAggregate == null) {
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),

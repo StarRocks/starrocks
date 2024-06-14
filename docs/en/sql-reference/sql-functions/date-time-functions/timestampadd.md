@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # timestampadd
 
-## Description
+
 
 Adds an integer expression interval to the date or datetime expression `datetime_expr`.
 

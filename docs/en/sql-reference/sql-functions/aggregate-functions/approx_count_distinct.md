@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # approx_count_distinct
 
-## Description
+
 
 Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col).
 

@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # current_timestamp
 
-## Description
+
 
 Obtains the current date and returns a value if the DATETIME type.
 

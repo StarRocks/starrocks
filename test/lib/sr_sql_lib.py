@@ -1187,25 +1187,62 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
 
-    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
+    def wait_async_materialized_view_finish(self, mv_name, check_count=None):
         """
         wait async materialized view job finish and return status
         """
-        status = ""
-        show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
+        current_db_sql = "select database();"
+        res = self.execute_sql(current_db_sql, True)
+        if not res["status"]:
+            tools.assert_true(False, "acquire current database error")
+        current_db = res["result"][0][-1]
+
+        show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
+        print(show_sql)
+
+        def is_all_finished(results):
+            for res in results:
+                if res[0] != "SUCCESS":
+                    return False
+            return True
+        def get_success_count(results):
+            cnt = 0
+            for res in results:
+                if res[0] == "SUCCESS":
+                    cnt += 1
+            return cnt 
+        
+        MAX_LOOP_COUNT = 60 
+        is_all_ok = False
         count = 0
-        num = 0
-        while count < check_count:
-            res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][12]
-            if status != "SUCCESS":
-                time.sleep(1)
-            else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
-                break
-            count += 1
-        tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
+        if check_count is None:
+            while count < MAX_LOOP_COUNT:
+                res = self.execute_sql(show_sql, True)
+                if not res["status"]:
+                    tools.assert_true(False, "show mv state error")
+
+                is_all_ok = is_all_finished(res["result"])
+                if is_all_ok:
+                    # sleep another 5s to avoid FE's async action.
+                    time.sleep(3)
+                    break
+                time.sleep(3)
+                count += 1
+        else:
+            while count < MAX_LOOP_COUNT:
+                res = self.execute_sql(show_sql, True)
+                if not res["status"]:
+                    tools.assert_true(False, "show mv state error")
+
+                success_cnt = get_success_count(res["result"])
+                if success_cnt >= check_count:
+                    is_all_ok = True
+                    # sleep to avoid FE's async action.
+                    time.sleep(2)
+                    break
+                time.sleep(2)
+                count += 1
+        tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
@@ -1738,7 +1775,7 @@ class StarrocksSQLApiLib(object):
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect {} is not found in plan {}".format(expect, res['result']))
 
     def assert_explain_not_contains(self, query, *expects):
         """
@@ -1798,3 +1835,17 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql, True)
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
+
+    def assert_clear_stale_stats(self, query, expect_num):
+        timeout = 300
+        num = 0;
+        while timeout > 0:
+            res = self.execute_sql(query)
+            num = res["result"]
+            if int(num) < expect_num:
+                break;
+            time.sleep(10)
+            timeout -= 10
+        else:
+            tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
+               

@@ -18,6 +18,7 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.memory.MemoryTrackable;
 import org.apache.iceberg.FileScanTask;
@@ -30,9 +31,11 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
+import org.apache.iceberg.view.View;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -83,6 +86,18 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
     }
 
+    default boolean createView(ConnectorViewDefinition connectorViewDefinition, boolean replace) {
+        throw new StarRocksConnectorException("This catalog doesn't support creating views");
+    }
+
+    default boolean dropView(String dbName, String viewName) {
+        throw new StarRocksConnectorException("This catalog doesn't support dropping views");
+    }
+
+    default View getView(String dbName, String viewName) {
+        throw new StarRocksConnectorException("This catalog doesn't loading iceberg view");
+    }
+
     default List<String> listPartitionNames(String dbName, String tableName,  long snapshotId, ExecutorService executorService) {
         org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
         Set<String> partitionNames = Sets.newHashSet();
@@ -127,5 +142,13 @@ public interface IcebergCatalog extends MemoryTrackable {
                 table.schema(),
                 newTableScanContext(table),
                 srScanContext);
+    }
+
+    default String defaultTableLocation(String dbName, String tableName) {
+        return "";
+    }
+
+    default Map<String, Object> loadNamespaceMetadata(String dbName) {
+        return new HashMap<>();
     }
 }

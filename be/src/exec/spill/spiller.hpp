@@ -49,6 +49,7 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& gua
     if (_chunk_builder.chunk_schema()->empty()) {
         _chunk_builder.chunk_schema()->set_schema(chunk);
         RETURN_IF_ERROR(_serde->prepare());
+        _init_max_block_nums();
     }
 
     if (_opts.init_partition_nums > 0) {
@@ -70,6 +71,7 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
     if (_chunk_builder.chunk_schema()->empty()) {
         _chunk_builder.chunk_schema()->set_schema(chunk);
         RETURN_IF_ERROR(_serde->prepare());
+        _init_max_block_nums();
     }
 
     std::vector<uint32_t> indexs;

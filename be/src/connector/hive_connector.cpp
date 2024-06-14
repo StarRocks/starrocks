@@ -95,7 +95,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
-    _use_datacache = config::datacache_enable;
+    _use_datacache = config::datacache_enable && BlockCache::instance()->available();
     if (state->query_options().__isset.enable_scan_datacache) {
         _use_datacache &= state->query_options().enable_scan_datacache;
     }
@@ -108,6 +108,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_datacache_io_adaptor) {
         _enable_datacache_io_adaptor = state->query_options().enable_datacache_io_adaptor;
     }
+    if (state->query_options().__isset.datacache_evict_probability) {
+        _datacache_evict_probability = state->query_options().datacache_evict_probability;
+    }
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
         _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
     }
@@ -116,8 +119,9 @@ Status HiveDataSource::open(RuntimeState* state) {
         _scan_range.datacache_options.priority == -1) {
         _use_datacache = false;
     }
+    _use_file_metacache = config::datacache_enable && BlockCache::instance()->has_mem_cache();
     if (state->query_options().__isset.enable_file_metacache) {
-        _use_file_metacache = state->query_options().enable_file_metacache;
+        _use_file_metacache &= state->query_options().enable_file_metacache;
     }
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
         _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
@@ -562,6 +566,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
     scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;
     scanner_params.enable_datacache_io_adaptor = _enable_datacache_io_adaptor;
+    scanner_params.datacache_evict_probability = _datacache_evict_probability;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.use_file_metacache = _use_file_metacache;
@@ -661,8 +666,9 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_no_data) {
         return Status::EndOfFile("no data");
     }
-    _init_chunk(chunk, _runtime_state->chunk_size());
+
     do {
+        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, _runtime_state->chunk_size()));
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));
     } while ((*chunk)->num_rows() == 0);
 
@@ -674,7 +680,11 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
-void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
+Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
+    if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
+        return Status::OK();
+    }
+
     *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
 
     if (!_equality_delete_slots.empty()) {
@@ -690,6 +700,7 @@ void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
             }
         }
     }
+    return Status::OK();
 }
 
 const std::string HiveDataSource::get_custom_coredump_msg() const {

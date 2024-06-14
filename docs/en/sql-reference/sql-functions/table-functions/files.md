@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # FILES
 
-## Description
+
 
 Defines data files in remote storage.
 
@@ -248,7 +248,8 @@ From v3.2 onwards, FILES() supports defining writable files in remote storage fo
 unload_data_param::=
     "compression" = "<compression_method>",
     "partition_by" = "<column_name> [, ...]",
-    "single" = { "true" | "false" } 
+    "single" = { "true" | "false" } ,
+    "target_max_file_size" = "<int>"
 ```
 
 | **Key**          | **Required** | **Description**                                              |
@@ -256,6 +257,7 @@ unload_data_param::=
 | compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
 | partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 5. |
 | single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
+| target_max_file_size | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |
 
 ## Usage notes
 

@@ -68,6 +68,7 @@ public abstract class Operator {
     // Operator's rule mask: operator that has been push down rewrite and no needs to rewrite again.
     public static final int OP_PUSH_DOWN_BIT = 1 << 1;
     public static final int OP_TRANSPARENT_MV_BIT = 1 << 2;
+    public static final int OP_PARTITION_PRUNE_BIT = 1 << 3;
 
     // an operator logically equivalent to 'this' operator
     // used by view based mv rewrite

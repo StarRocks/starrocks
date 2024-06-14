@@ -157,6 +157,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+        return normal.getRemoteFileInfos(table, partitionNames);
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFileInfoForPartitions(Table table, List<String> partitionNames) {
+        return normal.getRemoteFileInfoForPartitions(table, partitionNames);
+    }
+
+    @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
                                                     long snapshotId, String serializedPredicate) {
         return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
@@ -261,9 +271,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
+    public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException {
-        normal.addPartitions(db, tableName, addPartitionClause);
+        normal.addPartitions(ctx, db, tableName, addPartitionClause);
     }
 
     @Override

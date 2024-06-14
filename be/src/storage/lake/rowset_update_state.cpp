@@ -52,26 +52,35 @@ void RowsetUpdateState::_reset() {
 }
 
 void RowsetUpdateState::init(const RowsetUpdateStateParams& params) {
-    DCHECK_GT(params.metadata.version(), 0);
-    DCHECK_EQ(params.tablet->id(), params.metadata.id());
-    if (!_base_versions.empty() && _schema_version < params.metadata.schema().schema_version()) {
+    DCHECK_GT(params.metadata->version(), 0);
+    DCHECK_EQ(params.tablet->id(), params.metadata->id());
+    if (!_base_versions.empty() && _schema_version < params.metadata->schema().schema_version()) {
         LOG(INFO) << "schema version has changed from " << _schema_version << " to "
-                  << params.metadata.schema().schema_version() << ", need to reload the update state."
+                  << params.metadata->schema().schema_version() << ", need to reload the update state."
                   << " tablet_id: " << params.tablet->id() << " old base version: " << _base_versions[0]
-                  << " new base version: " << params.metadata.version();
+                  << " new base version: " << params.metadata->version();
         // The data has been loaded, but the schema has changed and needs to be reloaded according to the new schema
         _reset();
     }
-    _tablet_id = params.metadata.id();
-    _schema_version = params.metadata.schema().schema_version();
+    _tablet_id = params.metadata->id();
+    _schema_version = params.metadata->schema().schema_version();
+}
+
+static bool has_partial_update_state(const RowsetUpdateStateParams& params) {
+    return !params.op_write.txn_meta().partial_update_column_unique_ids().empty();
+}
+
+static bool has_auto_increment_partial_update_state(const RowsetUpdateStateParams& params) {
+    return params.op_write.txn_meta().has_auto_increment_partial_update_column_id();
 }
 
 Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
                                        bool need_resolve_conflict, bool need_lock) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segment_us");
     if (_rowset_ptr == nullptr) {
-        _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(),
-                                               &params.op_write.rowset(), -1 /*unused*/, params.tablet_schema);
+        _rowset_meta_ptr = std::make_unique<const RowsetMetadata>(params.op_write.rowset());
+        _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
+                                               -1 /*unused*/, params.tablet_schema);
     }
     _upserts.resize(_rowset_ptr->num_segments());
     _base_versions.resize(_rowset_ptr->num_segments());
@@ -91,12 +100,12 @@ Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateSt
     if (!params.op_write.has_txn_meta() || params.op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
-    if (!params.op_write.txn_meta().partial_update_column_unique_ids().empty()) {
+    if (has_partial_update_state(params)) {
         if (_partial_update_states[segment_id].src_rss_rowids.empty()) {
             RETURN_IF_ERROR(_prepare_partial_update_states(segment_id, params, need_lock));
         }
     }
-    if (params.op_write.txn_meta().has_auto_increment_partial_update_column_id()) {
+    if (has_auto_increment_partial_update_state(params)) {
         if (_auto_increment_partial_update_states[segment_id].src_rss_rowids.empty()) {
             RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(segment_id, params, need_lock));
         }
@@ -192,7 +201,7 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
 
     if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, &_stats));
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     // only hold pkey, so can use larger chunk size
@@ -260,7 +269,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     std::vector<std::unique_ptr<Column>> read_column;
 
     std::shared_ptr<TabletSchema> modified_columns_schema = nullptr;
-    if (!txn_meta.partial_update_column_unique_ids().empty()) {
+    if (has_partial_update_state(params)) {
         std::vector<ColumnUID> update_column_ids(txn_meta.partial_update_column_unique_ids().begin(),
                                                  txn_meta.partial_update_column_unique_ids().end());
         modified_columns_schema = TabletSchema::create_with_uid(params.tablet_schema, update_column_ids);
@@ -322,7 +331,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
     _auto_increment_partial_update_states[segment_id].write_column->append_selective(*read_column[0], idxes.data(), 0,
                                                                                      idxes.size());
-
+    _memory_usage += _auto_increment_partial_update_states[segment_id].write_column->memory_usage();
     /*
         * Suppose we have auto increment ids for the rows which are not exist in the previous version.
         * The ids are allocated by system for partial update in this case. It is impossible that the ids
@@ -352,6 +361,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     if (delete_idxes.size() != 0) {
         _auto_increment_delete_pks[segment_id]->append_selective(*_upserts[segment_id], delete_idxes.data(), 0,
                                                                  delete_idxes.size());
+        _memory_usage += _auto_increment_delete_pks[segment_id]->memory_usage();
     }
     return Status::OK();
 }
@@ -388,6 +398,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         _partial_update_states[segment_id].write_columns[col_idx]->append_selective(*read_columns[col_idx],
                                                                                     idxes.data(), 0, idxes.size());
+        _memory_usage += _partial_update_states[segment_id].write_columns[col_idx]->memory_usage();
     }
     TRACE_COUNTER_INCREMENT("partial_upt_total_rows", total_rows);
     TRACE_COUNTER_INCREMENT("partial_upt_default_rows", num_default);
@@ -414,7 +425,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     const RowsetMetadata& rowset_meta = params.op_write.rowset();
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
         rowset_meta.num_rows() == 0 || params.op_write.txn_meta().has_merge_condition()) {
@@ -438,7 +449,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     // will get unmodified_column_ids is full schema which is wrong.
     // To solve it, we can simply clear the unmodified_column_ids.
     if (has_auto_increment_col && unmodified_column_ids.size() == params.tablet_schema->num_columns() &&
-        _partial_update_states.size() == 0) {
+        !has_partial_update_state(params)) {
         unmodified_column_ids.clear();
     }
 
@@ -449,7 +460,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
 
     bool skip_because_file_exist = false;
     int64_t t_rewrite_start = MonotonicMillis();
-    if (params.op_write.txn_meta().has_auto_increment_partial_update_column_id() &&
+    if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
@@ -457,14 +468,14 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
                     &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                     unmodified_column_ids,
-                    _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr,
+                    has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
                     params.op_write, params.tablet));
         } else {
             skip_because_file_exist = true;
         }
         file_info.path = dest_path;
         (*replace_segments)[segment_id] = file_info;
-    } else if (_partial_update_states.size() != 0) {
+    } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
         // if rewrite fail, let segment gc to clean dest segment file
@@ -502,7 +513,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     // There are two cases that we must resolve conflict here:
     // 1. Current transaction's base version isn't equal latest base version, which means that conflict happens.
     // 2. We use batch publish here. This transaction may conflict with a transaction in the same batch.
-    if (base_version == _base_versions[segment_id] && base_version + 1 == params.metadata.version()) {
+    if (base_version == _base_versions[segment_id] && base_version + 1 == params.metadata->version()) {
         return Status::OK();
     }
     _base_versions[segment_id] = base_version;
@@ -519,19 +530,19 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id], &new_rss_rowids, false));
 
     size_t total_conflicts = 0;
-    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
     // get rss_rowids to identify conflict exist or not
     int64_t t_start = MonotonicMillis();
 
     // reslove normal partial update
-    if (!params.op_write.txn_meta().partial_update_column_unique_ids().empty()) {
+    if (has_partial_update_state(params)) {
         RETURN_IF_ERROR(
                 _resolve_conflict_partial_update(params, new_rss_rowids, read_column_ids, segment_id, total_conflicts));
     }
 
     // reslove auto increment
-    if (params.op_write.txn_meta().has_auto_increment_partial_update_column_id()) {
+    if (has_auto_increment_partial_update_state(params)) {
         RETURN_IF_ERROR(_resolve_conflict_auto_increment(params, new_rss_rowids, segment_id, total_conflicts));
     }
     int64_t t_end = MonotonicMillis();
@@ -686,9 +697,14 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
 }
 
 void RowsetUpdateState::release_segment(uint32_t segment_id) {
+    _memory_usage -= _upserts[segment_id] ? _upserts[segment_id]->memory_usage() : 0;
     _upserts[segment_id].reset();
+    _memory_usage -= _partial_update_states[segment_id].memory_usage();
     _partial_update_states[segment_id].reset();
+    _memory_usage -= _auto_increment_partial_update_states[segment_id].memory_usage();
     _auto_increment_partial_update_states[segment_id].reset();
+    _memory_usage -=
+            _auto_increment_delete_pks[segment_id] ? _auto_increment_delete_pks[segment_id]->memory_usage() : 0;
     _auto_increment_delete_pks[segment_id].reset();
 }
 
@@ -719,12 +735,15 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
         return Status::InternalError("column deserialization failed");
     }
+    col->raw_data();
+    _memory_usage += col->memory_usage();
     _deletes[del_id] = std::move(col);
     TRACE("end read $0-th deletes files", del_id);
     return Status::OK();
 }
 
 void RowsetUpdateState::release_delete(uint32_t del_id) {
+    _memory_usage -= _deletes[del_id] ? _deletes[del_id]->memory_usage() : 0;
     _deletes[del_id].reset();
 }
 

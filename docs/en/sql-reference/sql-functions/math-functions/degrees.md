@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # degrees
 
-## Description
+
 
 Converts the angle in radians `x` to degrees.
 

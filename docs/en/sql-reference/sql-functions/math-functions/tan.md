@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # tan
 
-## Description
+
 
 Returns the tangent of `x`, where `x` is in radians.
 

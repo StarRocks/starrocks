@@ -4,13 +4,29 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.8
+
+Release date: June 7, 2024
+
+### New Features
+
+- **[Supports adding labels on BEs](https://docs.starrocks.io/docs/administration/management/resource_management/be_label/)**: Supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures even data distribution among racks and data centers, and facilitates disaster recovery in case of power failures in certain racks or faults in data centers. [#38833](https://github.com/StarRocks/starrocks/pull/38833)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- An error is returned when users DELETE data rows from tables that use the expression partitioning method with str2date. [#45939](https://github.com/StarRocks/starrocks/pull/45939)
+- BEs in the destination cluster crash when the StarRocks Cross-cluster Data Migration Tool fails to retrieve the Schema information from the source cluster. [#46068](https://github.com/StarRocks/starrocks/pull/46068)
+- The error `Multiple entries with same key` is returned to queries with non-deterministic functions. [#46602](https://github.com/StarRocks/starrocks/pull/46602)
+
 ## 3.2.7
 
 Release date: May 24, 2024
 
 ### New Features
 
-- Stream Load supports data compression during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, DEFLATE, and ZSTD. [#43732](https://github.com/StarRocks/starrocks/pull/43732)
+- Stream Load supports data compression during transmission, reducing network bandwidth overhead. Users can specify different compression algorithms using parameters `compression` and `Content-Encoding`. Supported compression algorithms including GZIP, BZIP2, LZ4_FRAME, and ZSTD. [#43732](https://github.com/StarRocks/starrocks/pull/43732)
 - Optimized the garbage collection (GC) mechanism in shared-data clusters. Supports manual compaction for tables or partitions stored in object storage. [#39532](https://github.com/StarRocks/starrocks/issues/39532)
 - Flink connector supports reading complex data types ARRAY, MAP, and STRUCT from StarRocks. [#42932](https://github.com/StarRocks/starrocks/pull/42932) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
 - Supports populating Data Cache asynchronously during queries, reducing the impact of populating cache on query performance. [#40489](https://github.com/StarRocks/starrocks/pull/40489)

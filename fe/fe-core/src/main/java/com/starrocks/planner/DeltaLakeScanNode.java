@@ -27,6 +27,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
@@ -64,12 +66,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class DeltaLakeScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
@@ -141,6 +147,12 @@ public class DeltaLakeScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws AnalysisException {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
+            setupScanRangeLocationsImpl(descTbl);
+        }
+    }
+
+    public void setupScanRangeLocationsImpl(DescriptorTable descTbl) throws AnalysisException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
         DeltaUtils.checkTableFeatureSupported(((SnapshotImpl) deltaLakeTable.getDeltaSnapshot()).getProtocol(),
                 deltaMetadata);
@@ -193,7 +205,7 @@ public class DeltaLakeScanNode extends ScanNode {
         long partitionId = -1;
         if (!partitionKeys.containsKey(partitionKey)) {
             partitionId = nextPartitionId();
-            Path filePath = new Path(fileStatus.getPath());
+            Path filePath = new Path(URLDecoder.decode(fileStatus.getPath(), StandardCharsets.UTF_8));
 
             DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
                     new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,

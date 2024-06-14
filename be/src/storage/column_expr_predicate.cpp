@@ -329,6 +329,11 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     DCHECK(like_target != nullptr);
     ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
     Slice padded_value(literal_col->get(0).get_slice());
+    // MATCH a empty string should always return empty set.
+    if (padded_value.empty()) {
+        *row_bitmap -= *row_bitmap;
+        return Status::OK();
+    }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
     if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {

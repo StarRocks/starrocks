@@ -132,6 +132,17 @@ fi
 
 echo "machine type : $MACHINE_TYPE"
 
+if [[ -z ${THIRD_PARTY_BUILD_WITH_AVX2} ]]; then
+    THIRD_PARTY_BUILD_WITH_AVX2=ON
+fi
+
+if [ -e /proc/cpuinfo ] ; then
+    # detect cpuinfo
+    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
+        THIRD_PARTY_BUILD_WITH_AVX2=OFF
+    fi
+fi
+
 check_if_source_exist() {
     if [ -z $1 ]; then
         echo "dir should specified to check if exist."
@@ -208,7 +219,7 @@ build_thrift() {
     --prefix=$TP_INSTALL_DIR --docdir=$TP_INSTALL_DIR/doc --enable-static --disable-shared --disable-tests \
     --disable-tutorial --without-qt4 --without-qt5 --without-csharp --without-erlang --without-nodejs \
     --without-lua --without-perl --without-php --without-php_extension --without-dart --without-ruby \
-    --without-haskell --without-go --without-haxe --without-d --without-python -without-java --with-cpp \
+    --without-haskell --without-go --without-haxe --without-d --without-python -without-java -without-rs --with-cpp \
     --with-libevent=$TP_INSTALL_DIR --with-boost=$TP_INSTALL_DIR --with-openssl=$TP_INSTALL_DIR
 
     if [ -f compiler/cpp/thrifty.hh ];then
@@ -664,6 +675,7 @@ build_arrow() {
     cd $TP_SOURCE_DIR/$ARROW_SOURCE/cpp
     mkdir -p release
     cd release
+    rm -rf CMakeCache.txt CMakeFiles/
     export ARROW_BROTLI_URL=${TP_SOURCE_DIR}/${BROTLI_NAME}
     export ARROW_GLOG_URL=${TP_SOURCE_DIR}/${GLOG_NAME}
     export ARROW_LZ4_URL=${TP_SOURCE_DIR}/${LZ4_NAME}
@@ -686,7 +698,7 @@ build_arrow() {
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
-    -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
+    -DARROW_GFLAGS_USE_SHARED=OFF \
     -DJEMALLOC_HOME=$TP_INSTALL_DIR/jemalloc \
     -Dzstd_SOURCE=BUNDLED \
     -DRapidJSON_ROOT=$TP_INSTALL_DIR \
@@ -703,6 +715,8 @@ build_arrow() {
     -DBoost_DIR=$TP_INSTALL_DIR \
     -DBoost_ROOT=$TP_INSTALL_DIR \
     -DARROW_BOOST_USE_SHARED=OFF \
+    -DBoost_NO_BOOST_CMAKE=ON \
+    -DARROW_FLIGHT=ON \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ ..
 
@@ -1207,7 +1221,6 @@ build_libdeflate() {
 
 #clucene
 build_clucene() {
-
     check_if_source_exist "${CLUCENE_SOURCE}"
     cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
 
@@ -1225,6 +1238,7 @@ build_clucene() {
         -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" \
         -DUSE_STAT64=0 \
         -DCMAKE_BUILD_TYPE=Release \
+        -DUSE_AVX2=$THIRD_PARTY_BUILD_WITH_AVX2 \
         -DBUILD_CONTRIBS_LIB=ON ..
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
@@ -1233,6 +1247,59 @@ build_clucene() {
     if [[ ! -d "$TP_INSTALL_DIR"/share ]]; then
         mkdir -p "$TP_INSTALL_DIR"/share
     fi
+}
+
+build_absl() {
+    check_if_source_exist "${ABSL_SOURCE}"
+    cd "$TP_SOURCE_DIR/${ABSL_SOURCE}"
+
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
+        -DCMAKE_CXX_STANDARD=17
+    
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
+build_grpc() {
+    check_if_source_exist "${GRPC_SOURCE}"
+    cd "$TP_SOURCE_DIR/${GRPC_SOURCE}"
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}            \
+        -DgRPC_INSTALL=ON                                   \
+        -DgRPC_BUILD_TESTS=OFF                              \
+        -DgRPC_BUILD_CSHARP_EXT=OFF                         \
+        -DgRPC_BUILD_GRPC_RUBY_PLUGIN=OFF                   \
+        -DgRPC_BUILD_GRPC_PYTHON_PLUGIN=OFF                 \
+        -DgRPC_BUILD_GRPC_PHP_PLUGIN=OFF                    \
+        -DgRPC_BUILD_GRPC_OBJECTIVE_C_PLUGIN=OFF            \
+        -DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF                   \
+        -DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF                 \
+        -DgRPC_BACKWARDS_COMPATIBILITY_MODE=ON              \
+        -DgRPC_SSL_PROVIDER=package                         \
+        -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE                      \
+        -DgRPC_ZLIB_PROVIDER=package                        \
+        -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a \
+        -DgRPC_ABSL_PROVIDER=package                        \
+        -Dabsl_DIR=${TP_INSTALL_DIR}/lib/cmake/absl         \
+        -DgRPC_PROTOBUF_PROVIDER=package    \
+        -DgRPC_RE2_PROVIDER=package                         \
+        -DRE2_INCLUDE_DIR=${TP_INSTALL_DIR}/include    \
+        -DRE2_LIBRARY=${TP_INSTALL_DIR}/libre2.a \
+        -DgRPC_CARES_PROVIDER=module                        \
+        -DCARES_ROOT_DIR=$TP_SOURCE_DIR/$CARES_SOURCE/      \
+        -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
+        -DCMAKE_CXX_STANDARD=17 ..
+        
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
 }
 
 # restore cxxflags/cppflags/cflags to default one
@@ -1287,11 +1354,13 @@ build_leveldb
 build_brpc
 build_rocksdb
 build_kerberos
+# must build before arrow
 build_sasl
+build_absl
+build_grpc
 build_flatbuffers
 build_jemalloc
 build_brotli
-# must build before arrow
 build_arrow
 # NOTE: librdkafka depends on ZSTD which is generated by Arrow, So this SHOULD be
 # built after arrow

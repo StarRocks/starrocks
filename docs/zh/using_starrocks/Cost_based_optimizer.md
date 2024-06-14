@@ -158,7 +158,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 ### 手动采集 (Manual Collection)
 
-可以通过 ANALYZE TABLE 语句创建手动采集任务。**手动采集默认为同步操作。您也可以将手动任务设置为异步，执行命令后，系统会立即返回命令的状态，但是统计信息采集任务会异步在后台运行。异步采集适用于表数据量大的场景，同步采集适用于表数据量小的场景。手动任务创建后仅会执行一次，无需手动删除。运行状态可以使用 SHOW ANALYZE STATUS 查看**。
+可以通过 ANALYZE TABLE 语句创建手动采集任务。**手动采集默认为同步操作。您也可以将手动任务设置为异步，执行命令后，系统会立即返回命令的状态，但是统计信息采集任务会异步在后台运行。异步采集适用于表数据量大的场景，同步采集适用于表数据量小的场景。手动任务创建后仅会执行一次，无需手动删除。运行状态可以使用 SHOW ANALYZE STATUS 查看**。创建手动采集任务，您需要被采集表的 INSERT 和 SELECT 权限。
 
 #### 手动采集基础统计信息
 
@@ -261,7 +261,7 @@ PROPERTIES(
 
 #### 创建自动采集任务
 
-可以通过 CREATE ANALYZE 语句创建自定义自动采集任务。
+可以通过 CREATE ANALYZE 语句创建自定义自动采集任务。创建采集任务，您需要被采集表的 INSERT 和 SELECT 权限。
 
 创建自定义自动采集任务之前，需要先关闭自动全量采集 `enable_collect_full_statistic=false`，否则自定义采集任务不生效。在关闭 `enable_collect_full_statistic=false` 后，**StarRocks 会自动创建自定义采集任务，默认采集所有表。**
 
@@ -608,7 +608,7 @@ KILL ANALYZE <ID>
 
 对于外部数据源中的表，需要创建一个自动采集任务，StarRocks 会根据采集任务中指定的属性，周期性检查采集任务是否需要执行，默认检查时间为 5 min。Hive 和 Iceberg 仅在发现有数据更新时，才会自动执行一次采集任务。
 
-Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由采集线程的时间间隔和用户设置的采集间隔决定，参考下面的属性进行调整）。
+StarRocks 目前不支持感知 Hudi 数据更新，所以只能周期性采集统计数据。您可以指定以下 FE 配置项来控制收集行为：
 
 - statistic_collect_interval_sec
 
@@ -636,6 +636,8 @@ Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周
 CREATE ANALYZE TABLE tbl_name (col_name [,col_name])
 [PROPERTIES (property [,property])]
 ```
+
+您可以通过 Property `statistic_auto_collect_interval` 为当前自动收集任务单独设置收集间隔。此时 FE 配置项 `statistic_auto_collect_small_table_interval` 和 `statistic_auto_collect_large_table_interval` 将不会对该任务生效。
 
 示例：
 

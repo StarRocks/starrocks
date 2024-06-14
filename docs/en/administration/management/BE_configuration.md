@@ -340,8 +340,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Default: INFO
 - Type: String
 - Unit: -
-- Is mutable: No
-- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL.
+- Is mutable: Yes (from v3.3.0, v3.2.7, and v3.1.12)
+- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
 - Introduced in: -
 
 ##### sys_log_roll_mode
@@ -3037,7 +3037,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: false
 - Type: Boolean
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description:
 - Introduced in: -
 -->
@@ -3367,7 +3367,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### starlet_use_star_cache
 
-- Default: true
+- Default: false in v3.1 and true from v3.2.3
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes

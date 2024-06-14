@@ -159,7 +159,7 @@ You can rely on automatic jobs for a majority of statistics collection, but if y
 
 ### Manual collection
 
-You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, after you run ANALYZE TABLE, the system immediately returns whether this statement is successful. However, the collection task will be running in the background and you do not have to wait for the result. You can check the status of the task by running SHOW ANALYZE STATUS. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
+You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, after you run ANALYZE TABLE, the system immediately returns whether this statement is successful. However, the collection task will be running in the background and you do not have to wait for the result. You can check the status of the task by running SHOW ANALYZE STATUS. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.** You must have the INSERT and SELECT privileges on the coreesponding table to perform the ANALYZE TABLE operation.
 
 #### Manually collect basic statistics
 
@@ -262,7 +262,7 @@ PROPERTIES(
 
 #### Customize an automatic collection task
 
-You can use the CREATE ANALYZE statement to customize an automatic collection task.
+You can use the CREATE ANALYZE statement to customize an automatic collection task. You must have the INSERT and SELECT privileges on the coreesponding table to perform the ANALYZE TABLE operation.
 
 Before creating a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
 
@@ -612,7 +612,7 @@ You can view the task ID in the output of SHOW ANALYZE STATUS.
 
 For the system to automatically collect statistics of tables in an external data source, you can create an Analyze job. StarRocks automatically checks whether to run the task at the default check interval of 5 minutes. For Hive and Iceberg tables, StarRocks runs a collection task only when data in the tables are updated.
 
-However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval you specified. You can specify the following properties when you create an Analyze job:
+However, data changes in Hudi tables cannot be perceived and StarRocks periodically collects statistics based on the check interval and collection interval you specified. You can specify the following FE configuration items to control the collection behaviors:
 
 - statistic_collect_interval_sec
 
@@ -642,6 +642,8 @@ Syntax:
 CREATE ANALYZE TABLE tbl_name (col_name [,col_name])
 [PROPERTIES (property [,property])]
 ```
+
+You can specify the property `statistic_auto_collect_interval` to set the collection interval exclusively for the automatic collection task. The FE configuration items `statistic_auto_collect_small_table_interval` and `statistic_auto_collect_large_table_interval` will not take effect on this task.
 
 Example:
 

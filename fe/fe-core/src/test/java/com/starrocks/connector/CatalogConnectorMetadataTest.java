@@ -22,6 +22,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import mockit.Expectations;
@@ -161,6 +162,9 @@ public class CatalogConnectorMetadataTest {
 
     @Test
     void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws UserException {
+        ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+        ctx.setThreadLocalInfo();
+
         new Expectations() {
             {
                 // the following methods are always routed to normal metadata
@@ -172,7 +176,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.dropTable(null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.alterMaterializedView(null);
-                connectorMetadata.addPartitions(null, null, null);
+                connectorMetadata.addPartitions(ctx, null, null, null);
                 connectorMetadata.dropPartition(null, null, null);
                 connectorMetadata.renamePartition(null, null, null);
                 connectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);
@@ -209,7 +213,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.dropTable(null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);
-        catalogConnectorMetadata.addPartitions(null, null, null);
+        catalogConnectorMetadata.addPartitions(com.starrocks.common.util.Util.getOrCreateConnectContext(), null, null, null);
         catalogConnectorMetadata.dropPartition(null, null, null);
         catalogConnectorMetadata.renamePartition(null, null, null);
         catalogConnectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);

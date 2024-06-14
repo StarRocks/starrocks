@@ -64,10 +64,11 @@ public class CreateFunctionAnalyzer {
         analyzeCommon(stmt, context);
         String langType = stmt.getLangType();
 
-        // TODO support other UDF stmt
-        if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equals(langType)) {
+        if (CreateFunctionStmt.TYPE_STARROCKS_JAR.equalsIgnoreCase(langType)) {
             String checksum = computeMd5(stmt);
             analyzeJavaUDFClass(stmt, checksum);
+        } else if (CreateFunctionStmt.TYPE_STARROCKS_PYTHON.equalsIgnoreCase(langType)) {
+            analyzePython(stmt);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, "unknown lang type");
         }
@@ -216,7 +217,7 @@ public class CreateFunctionAnalyzer {
     }
 
     private void checkStarrocksJarUdafStateClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass,
-                                                        JavaUDFInternalClass udafStateClass) {
+                                                 JavaUDFInternalClass udafStateClass) {
         // Check internal State class
         // should be public & static.
         Class<?> stateClass = udafStateClass.clazz;
@@ -236,7 +237,7 @@ public class CreateFunctionAnalyzer {
     }
 
     private void checkStarrocksJarUdafClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass,
-                                                   JavaUDFInternalClass udafStateClass) {
+                                            JavaUDFInternalClass udafStateClass) {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         Map<String, String> properties = stmt.getProperties();
@@ -513,4 +514,41 @@ public class CreateFunctionAnalyzer {
         }
     }
 
+    private void analyzePython(CreateFunctionStmt stmt) {
+        String content = stmt.getContent();
+        Map<String, String> properties = stmt.getProperties();
+        boolean isInline = content != null;
+
+        String checksum = "";
+        if (!isInline) {
+            checksum = computeMd5(stmt);
+        }
+        String symbol = properties.get(CreateFunctionStmt.SYMBOL_KEY);
+        String inputType = properties.getOrDefault(CreateFunctionStmt.INPUT_TYPE, "scalar");
+
+        if (!inputType.equalsIgnoreCase("arrow") && !inputType.equalsIgnoreCase("scalar")) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, "unknown input type:", inputType);
+        }
+
+        FunctionName functionName = stmt.getFunctionName();
+        FunctionArgsDef argsDef = stmt.getArgsDef();
+        TypeDef returnType = stmt.getReturnType();
+        String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+        String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
+
+        ScalarFunction.ScalarFunctionBuilder scalarFunctionBuilder =
+                ScalarFunction.ScalarFunctionBuilder.createUdfBuilder(TFunctionBinaryType.PYTHON);
+        scalarFunctionBuilder.name(functionName).
+                argsType(argsDef.getArgTypes()).
+                retType(returnType.getType()).
+                hasVarArgs(argsDef.isVariadic()).
+                objectFile(objectFile).
+                inputType(inputType).
+                symbolName(symbol).
+                isolation(!"shared".equalsIgnoreCase(isolation)).
+                content(content);
+        ScalarFunction function = scalarFunctionBuilder.build();
+        function.setChecksum(checksum);
+        stmt.setFunction(function);
+    }
 }

@@ -1747,6 +1747,14 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (!optimizerContext.getSessionVariable().isEnableMaterializedViewUnionRewrite()) {
             return null;
         }
+        // Disable union rewrite for sync mv:
+        // - sync mv should be always consistent(synchronized), no needs to compensate.
+        // - sync mv union rewrite may introduce extra overhead since original mv definition should be always simple.
+        // - sync mv union rewrite may be not right since current rewriter only considers selectIndexIds of query and mv's
+        // definition are the same.
+        if (materializationContext.getMv().getRefreshScheme().isSync()) {
+            return null;
+        }
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(rewriteContext.getMvExpression());
         if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
             // TODO: support union rewrite for view based mv rewrite
@@ -2198,9 +2206,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
-        OptExpression newQueryInput = duplicator.duplicate(queryInput);
         // NOTE: selected partitions and tablets should be deduced again.
-        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput, false);
+        OptExpression newQueryInput = duplicator.duplicate(queryInput, true);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         // rewrite viewInput

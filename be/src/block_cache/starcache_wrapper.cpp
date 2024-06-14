@@ -57,6 +57,7 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     opts.callback = options->callback;
     opts.mode = _enable_tiered_cache ? starcache::WriteOptions::WriteMode::WRITE_BACK
                                      : starcache::WriteOptions::WriteMode::WRITE_THROUGH;
+    opts.evict_probability = options->evict_probability;
     Status st;
     {
         // The memory when writing starcache is no longer recorded to the query memory.
@@ -82,6 +83,7 @@ Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, s
     starcache::WriteOptions opts;
     opts.ttl_seconds = options->ttl_seconds;
     opts.overwrite = options->overwrite;
+    opts.evict_probability = options->evict_probability;
     Status st;
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
@@ -127,8 +129,8 @@ Status StarCacheWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
-Status StarCacheWrapper::update_mem_quota(size_t quota_bytes) {
-    return to_status(_cache->update_mem_quota(quota_bytes));
+Status StarCacheWrapper::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
+    return to_status(_cache->update_mem_quota(quota_bytes, flush_to_disk));
 }
 
 Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {

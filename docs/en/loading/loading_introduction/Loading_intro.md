@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "English"
-toc_max_heading_level: 5
+toc_max_heading_level: 3
 ---
 
 # Loading options
@@ -29,9 +29,9 @@ In the following sections, "batch" or "batch loading" refers to the loading of a
 
 :::
 
-### Loading methods
+## Loading methods
 
-#### [Insert](../InsertInto.md)
+### [Insert](../InsertInto.md)
 
 **Business scenario:**
 
@@ -55,7 +55,7 @@ In the following sections, "batch" or "batch loading" refers to the loading of a
 
 **Data volume:** Not fixed (The data volume varies based on the memory size.)
 
-#### [Stream Load](../StreamLoad.md)
+### [Stream Load](../StreamLoad.md)
 
 **Business scenario:** Batch load data from a local file system.
 
@@ -63,7 +63,7 @@ In the following sections, "batch" or "batch loading" refers to the loading of a
 
 **Data volume:** 10 GB or less
 
-#### [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+### [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
 
 **Business scenario:**
 
@@ -74,7 +74,7 @@ In the following sections, "batch" or "batch loading" refers to the loading of a
 
 **Data volume:** Dozens of GB to hundreds of GB
 
-#### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
+### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
 
 **Business scenario:** Batch load or stream data from HDFS or AWS S3.
 
@@ -88,7 +88,7 @@ This loading method is supported from v3.2 onwards.
 
 **Data volume:** 100 GB to 1 TB or more
 
-#### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
+### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
 
 **Business scenario:** Stream data from Kafka.
 
@@ -96,7 +96,7 @@ This loading method is supported from v3.2 onwards.
 
 **Data volume:** MBs to GBs of data as mini-batches
 
-#### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
+### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
 
 **Business scenario:** Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters.
 
@@ -104,39 +104,39 @@ This loading method is supported from v3.2 onwards.
 
 **Data volume:** Dozens of GB to TBs
 
-### Ecosystem tools
+## Ecosystem tools
 
-#### [Kafka connector](../Kafka-connector-starrocks.md)
+### [Kafka connector](../Kafka-connector-starrocks.md)
 
 **Business scenario:** Stream data from Kafka.
 
-#### [Spark connector](../Spark-connector-starrocks.md)
+### [Spark connector](../Spark-connector-starrocks.md)
 
 **Business scenario:** Batch load data from Spark.
 
-#### [Flink connector](../Flink-connector-starrocks.md)
+### [Flink connector](../Flink-connector-starrocks.md)
 
 **Business scenario:** Stream data from Flink.
 
-#### [SMT](../../integrations/loading_tools/SMT.md)
+### [SMT](../../integrations/loading_tools/SMT.md)
 
 **Business scenario:** Load data from data sources such as MySQL, PostgreSQL, SQL Server, Oracle, Hive, ClickHouse, and TiDB through Flink.
 
-#### [DataX](../../integrations/loading_tools/DataX-starrocks-writer.md)
+### [DataX](../../integrations/loading_tools/DataX-starrocks-writer.md)
 
 **Business scenario:** Synchronize data between various heterogeneous data sources, including relational databases (for example, MySQL and Oracle), HDFS, and Hive.
 
-#### [CloudCanal](../../integrations/loading_tools/CloudCanal.md)
+### [CloudCanal](../../integrations/loading_tools/CloudCanal.md)
 
 **Business scenario:** Migrate or synchronize data from source databases (for example, MySQL, Oracle, and PostgreSQL) to StarRocks.
 
-#### [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
+### [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
 
 **Business scenario:** Integrate with Kettle. By combining Kettle's robust data processing and transformation capabilities with StarRocks's high-performance data storage and analytical abilities, more flexible and efficient data processing workflows can be achieved.
 
-### API
+## API
 
-#### [Stream Load transaction interface](../Stream_Load_transaction_interface.md)
+### [Stream Load transaction interface](../Stream_Load_transaction_interface.md)
 
 **Business scenario:** Implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Flink and Kafka, while improving the performance of highly concurrent stream loads. This feature is supported from v2.4 onwards.
 

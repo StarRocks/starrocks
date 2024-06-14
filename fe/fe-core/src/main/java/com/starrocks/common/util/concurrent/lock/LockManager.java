@@ -413,7 +413,7 @@ public class LockManager {
                     throw exception;
                 }
             } else {
-                String msg = "Deadlock was detected. \n" + deadLockChecker;
+                String msg = "LockManager detects dead lock.\n" + deadLockChecker;
                 LOG.warn(msg);
                 return null;
             }
@@ -455,26 +455,27 @@ public class LockManager {
             return hasCycleInternal(rootLocker, rid, rootLockType, null);
         }
 
-        private boolean hasCycleInternal(Locker checkedLocker, Long rid, LockType requestLockType, LockType ownLockType) {
-            Lock ridLock;
+        private boolean hasCycleInternal(Locker checkedLocker, Long requestLockRid, LockType requestLockType,
+                                         LockType ownLockType) {
+            Lock requestLock;
             Set<LockHolder> ownersForCheckedLock;
 
-            final int lockTableIndex = getLockTableIndex(rid);
+            final int lockTableIndex = getLockTableIndex(requestLockRid);
             synchronized (lockTableMutexes[lockTableIndex]) {
-                if (isOwnerInternal(rid, checkedLocker, requestLockType, lockTableIndex)) {
+                if (isOwnerInternal(requestLockRid, checkedLocker, requestLockType, lockTableIndex)) {
                     return false;
                 }
 
                 final Map<Long, Lock> lockTable = lockTables[lockTableIndex];
-                ridLock = lockTable.get(rid);
-                ownersForCheckedLock = cloneOwnersInternal(rid, lockTableIndex);
+                requestLock = lockTable.get(requestLockRid);
+                ownersForCheckedLock = cloneOwnersInternal(requestLockRid, lockTableIndex);
             }
 
             if (ownersForCheckedLock == null) {
                 return false;
             }
 
-            CycleNode node = new CycleNode(checkedLocker, rid, ridLock, requestLockType, ownLockType);
+            CycleNode node = new CycleNode(checkedLocker, requestLockRid, requestLock, requestLockType, ownLockType);
             cycle.add(node);
 
             for (final LockHolder lockHolder : ownersForCheckedLock) {
@@ -483,23 +484,31 @@ public class LockManager {
                 final Long lockHolderWaitingForRid = locker.getWaitingForRid();
                 final LockType lockHolderWaitingForType = locker.getWaitingForType();
 
+                /*
+                 * Because the lock of LockManager is reentrant, it is possible that the owner list of
+                 * the wait lock contains itself, but this situation should not be judged as a deadlock,
+                 * so it is necessary to skip the loop that directly points to itself.
+                 *
+                 * For example, if locker1 and locker2 both hold the S lock of the same resource,
+                 * any locker that request for X lock will wait, but this is not a deadlock state.
+                 */
                 if (locker != checkedLocker) {
                     if (locker.equals(rootLocker)) {
                         cycle.get(0).ownLockType = lockHolderOwnLockType;
                         return true;
                     }
-                }
 
-                for (int i = 0; i < cycle.size(); ++i) {
-                    if (cycle.get(i).getLocker().equals(locker)) {
-                        cycle.subList(0, i).clear();
-                        return true;
+                    for (int i = 0; i < cycle.size(); ++i) {
+                        if (cycle.get(i).getLocker().equals(locker)) {
+                            cycle.subList(0, i).clear();
+                            return true;
+                        }
                     }
-                }
 
-                if (lockHolderWaitingForRid != null) {
-                    if (hasCycleInternal(locker, lockHolderWaitingForRid, lockHolderWaitingForType, lockHolderOwnLockType)) {
-                        return true;
+                    if (lockHolderWaitingForRid != null) {
+                        if (hasCycleInternal(locker, lockHolderWaitingForRid, lockHolderWaitingForType, lockHolderOwnLockType)) {
+                            return true;
+                        }
                     }
                 }
             }
@@ -524,13 +533,15 @@ public class LockManager {
                 final LockType ownType = cycleNode.getOwnLockType();
 
                 sb.append("Locker: \"");
-                sb.append(locker).append("\" --- owns lock: ");
-                sb.append(System.identityHashCode(ownLock)).append("(RID: ").append(lockRID);
-                sb.append(", ownedType: ").append(ownType).append("), ");
-
-                sb.append("waits for lock: ");
-                sb.append(System.identityHashCode(lock)).append("(RID: ").append(rid);
-                sb.append(", requestType: ").append(requestType).append(")");
+                sb.append(locker).append("\" --- owns lock(");
+                sb.append("HashCode: ").append(System.identityHashCode(ownLock)).append(", ");
+                sb.append("Rid: ").append(lockRID).append(", ");
+                sb.append("LockType: ").append(ownType).append(")");
+                sb.append(", ");
+                sb.append("waits for lock(");
+                sb.append("HashCode: ").append(System.identityHashCode(lock)).append(", ");
+                sb.append("Rid: ").append(rid).append(", ");
+                sb.append("LockType: ").append(requestType).append(")");
                 sb.append("\n");
 
                 ownLock = lock;

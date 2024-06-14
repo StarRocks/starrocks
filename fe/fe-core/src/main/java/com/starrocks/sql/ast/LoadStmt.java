@@ -39,6 +39,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.LoadPriority;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
@@ -152,6 +153,7 @@ public class LoadStmt extends DdlStmt {
             .add(STRIP_OUTER_ARRAY)
             .add(JSONPATHS)
             .add(JSONROOT)
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # array_cum_sum
 
-## 功能
+
 
 对数组中的元素进行向前累加。
 

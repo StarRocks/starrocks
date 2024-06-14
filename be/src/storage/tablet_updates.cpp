@@ -1862,9 +1862,13 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
-    // already committed, so we can ignore timeout error here
-    std::unique_lock<std::mutex> ul(_lock);
-    RETURN_IF_ERROR(_wait_for_version(version, 120000, ul));
+    {
+        // already committed, so we can ignore timeout error here
+        std::unique_lock<std::mutex> ul(_lock);
+        RETURN_IF_ERROR(_wait_for_version(version, 120000, ul));
+    }
+    // Release metadata memory after rowsets have been compacted.
+    Rowset::close_rowsets(input_rowsets);
     return Status::OK();
 }
 
@@ -3642,9 +3646,13 @@ struct RowsetLoadInfo {
 Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
                                 const TabletSchemaCSPtr& base_tablet_schema, const std::string& err_msg_header) {
     OlapStopWatch watch;
-    DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << err_msg_header << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
-            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
+        string msg = strings::Substitute(
+                "$0 tablet state is not TABLET_NOTREADY, link_from is not allowed tablet_id:$1 tablet_state:$2",
+                err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     LOG(INFO) << err_msg_header << "link_from start tablet:" << _tablet.tablet_id()
               << " #pending:" << _pending_commits.size() << " base_tablet:" << base_tablet->tablet_id()
               << " request_version:" << request_version;
@@ -3856,9 +3864,13 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                                    ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
                                    const std::string& err_msg_header) {
     OlapStopWatch watch;
-    DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << err_msg_header << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
-            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
+        string msg = strings::Substitute(
+                "$0 tablet state is not TABLET_NOTREADY, convert_from is not allowed tablet_id:$1 tablet_state:$2",
+                err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     LOG(INFO) << err_msg_header << "convert_from start tablet:" << _tablet.tablet_id()
               << " #pending:" << _pending_commits.size() << " base_tablet:" << base_tablet->tablet_id()
               << " request_version:" << request_version;
@@ -4121,9 +4133,13 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                                    ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
                                    const std::string& err_msg_header) {
     OlapStopWatch watch;
-    DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
-            << err_msg_header << "tablet state is not TABLET_NOTREADY, reorder_from is not allowed"
-            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    if (_tablet.tablet_state() != TABLET_NOTREADY) {
+        string msg = strings::Substitute(
+                "$0 tablet state is not TABLET_NOTREADY, reorder_from is not allowed tablet_id:$1 tablet_state:$2",
+                err_msg_header, _tablet.tablet_id(), _tablet.tablet_state());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     LOG(INFO) << err_msg_header << "reorder_from start tablet:" << _tablet.tablet_id()
               << " #pending:" << _pending_commits.size() << " base_tablet:" << base_tablet->tablet_id()
               << " request_version:" << request_version;
@@ -4960,18 +4976,18 @@ static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext&
 static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDeltaColumnContext& ctx,
                                                                          const std::shared_ptr<FileSystem>& fs,
                                                                          ColumnIteratorOptions& iter_opts,
-                                                                         uint32_t ucid,
+                                                                         const TabletColumn& column,
                                                                          const TabletSchemaCSPtr& read_tablet_schema) {
     // build column iter from delta column group
     int32_t col_index = 0;
-    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, ucid, &col_index, read_tablet_schema));
+    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, column.unique_id(), &col_index, read_tablet_schema));
     if (dcg_segment != nullptr) {
         if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
             ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_info()));
             ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
         }
         iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
-        return dcg_segment->new_column_iterator(ucid, nullptr);
+        return dcg_segment->new_column_iterator(column, nullptr);
     }
     return nullptr;
 }
@@ -5074,12 +5090,12 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                                                              *full_row_column, column_ids, columns));
         } else {
             for (auto i = 0; i < column_ids.size(); ++i) {
+                const auto& column = read_tablet_schema->column(column_ids[i]);
                 // try to build iterator from delta column file first
                 ASSIGN_OR_RETURN(auto col_iter,
-                                 new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
+                                 new_dcg_column_iterator(ctx, fs, iter_opts, column, read_tablet_schema));
                 if (col_iter == nullptr) {
                     // not found in delta column file, build iterator from main segment
-                    const auto& column = read_tablet_schema->column(column_ids[i]);
                     ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
                     iter_opts.read_file = read_file.get();
                 }
@@ -5114,9 +5130,9 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         iter_opts.stats = &stats;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_info()));
         for (auto i = 0; i < column_ids.size(); ++i) {
+            const auto& column = read_tablet_schema->column(column_ids[i]);
             // try to build iterator from delta column file first
-            ASSIGN_OR_RETURN(auto col_iter,
-                             new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
+            ASSIGN_OR_RETURN(auto col_iter, new_dcg_column_iterator(ctx, fs, iter_opts, column, read_tablet_schema));
             if (col_iter == nullptr) {
                 // not found in delta column file, build iterator from main segment
                 // use partial segment column offset id to get the column

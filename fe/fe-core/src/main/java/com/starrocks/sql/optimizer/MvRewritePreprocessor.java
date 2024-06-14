@@ -270,6 +270,7 @@ public class MvRewritePreprocessor {
 
                 // initialize mv rewrite strategy finally
                 MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, queryOptExpression, strategy);
+                logMVPrepare(connectContext, "Mv rewrite strategy: {}", strategy);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}", tableNames, e.getMessage());

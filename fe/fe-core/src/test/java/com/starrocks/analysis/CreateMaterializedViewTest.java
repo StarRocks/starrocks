@@ -1489,7 +1489,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view query statement only support select"));
+            Assert.assertTrue(e.getMessage().contains("Materialized view query statement only supports a single query blocks"));
         }
     }
 
@@ -4395,6 +4395,28 @@ public class CreateMaterializedViewTest {
                                 ") " +
                                 "as select k1, v1, concat(k2, 'xxx') as k3 from (select * from tt1 where k1 > '19930101') tbl";
                         starRocksAssert.withMaterializedView(sql, () -> {});
+                    }
+                    {
+                        String sql = "create materialized view mv3 " +
+                                "partition by date_trunc('day', k1) " +
+                                "distributed by random " +
+                                "refresh async EVERY(INTERVAL 1 SECOND)\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ") " +
+                                "as select k1, v1, concat(k2, 'xxx') as k3 from (select * from tt1 where k1 > '19930101') tbl";
+                        Exception e = Assert.assertThrows(DdlException.class,
+                                () -> starRocksAssert.withMaterializedView(sql));
+                        Assert.assertEquals("Refresh schedule interval 1 is too small " +
+                                "which may cost a lot of memory/cpu resources to refresh the asynchronous " +
+                                "materialized view, please config an interval larger than " +
+                                "Config.materialized_view_min_refresh_interval(60s).", e.getMessage());
+
+                        // change the limitation
+                        int before = Config.materialized_view_min_refresh_interval;
+                        Config.materialized_view_min_refresh_interval = 1;
+                        starRocksAssert.withMaterializedView(sql);
+                        Config.materialized_view_min_refresh_interval = before;
                     }
                 });
     }

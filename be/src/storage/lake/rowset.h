@@ -61,6 +61,7 @@ public:
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema,
+                                                                                    bool file_data_cache,
                                                                                     OlapReaderStatistics* stats);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,

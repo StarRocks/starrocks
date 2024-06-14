@@ -444,6 +444,15 @@ public:
     const TableDescriptor* table_desc() const { return _table_desc; }
     void set_table_desc(TableDescriptor* table_desc) { _table_desc = table_desc; }
 
+    SlotDescriptor* get_slot_by_id(SlotId id) const {
+        for (auto s : _slots) {
+            if (s->id() == id) {
+                return s;
+            }
+        }
+        return nullptr;
+    }
+
     TupleId id() const { return _id; }
 
     std::string debug_string() const;

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # multi_distinct_count
 
-## 功能
+
 
 返回 `expr` 中去除重复值后的行数，功能等同于 COUNT(DISTINCT expr)。
 

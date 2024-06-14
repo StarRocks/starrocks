@@ -33,6 +33,8 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Scalar operator support function call
+ * Please be careful when adding new attributes. Rewriting expr operation exists everywhere in the optimizer.
+ * If you add new attributes, please make sure that the new attributes will not be erased by the rewriting operation.
  */
 public class CallOperator extends ScalarOperator {
     private String fnName;
@@ -54,9 +56,6 @@ public class CallOperator extends ScalarOperator {
 
     // Ignore nulls.
     private boolean ignoreNulls = false;
-
-    // for nonDeterministicFunctions, to reuse it in common exprs
-    private int id = 0;
 
     public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments) {
         this(fnName, returnType, arguments, null);
@@ -119,35 +118,6 @@ public class CallOperator extends ScalarOperator {
 
     public boolean isRemovedDistinct() {
         return removedDistinct;
-    }
-
-    public void setRemovedDistinct(boolean removedDistinct) {
-        this.removedDistinct = removedDistinct;
-    }
-
-    public void setId(int id) {
-        this.id = id;
-    }
-
-    public List<ScalarOperator> getDistinctChildren() {
-        if (!isDistinct) {
-            throw new IllegalArgumentException("callOperator: " + this + " should be a distinct function.");
-        }
-        List<ScalarOperator> res = Lists.newArrayList();
-        if (FunctionSet.GROUP_CONCAT.equals(fnName)) {
-            AggregateFunction aggFunc = (AggregateFunction) fn;
-            int idx = arguments.size() - aggFunc.getIsAscOrder().size() - 1;
-            for (int i = 0; i < arguments.size(); i++) {
-                if (idx == i) {
-                    // skip the separator argument
-                    continue;
-                }
-                res.add(arguments.get(i));
-            }
-        } else {
-            res = arguments;
-        }
-        return res;
     }
 
     @Override
@@ -226,7 +196,7 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(fnName, arguments, isDistinct, id);
+        return Objects.hash(fnName, arguments, isDistinct);
     }
 
     @Override
@@ -242,8 +212,7 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
                 Objects.equals(arguments, other.arguments) &&
-                Objects.equals(fn, other.fn) &&
-                id == other.id;
+                Objects.equals(fn, other.fn);
     }
 
 
@@ -285,7 +254,6 @@ public class CallOperator extends ScalarOperator {
         operator.fnName = this.fnName;
         operator.isDistinct = this.isDistinct;
         operator.ignoreNulls = this.ignoreNulls;
-        operator.id = this.id;
         return operator;
     }
 

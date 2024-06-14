@@ -236,12 +236,13 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
         DCHECK(write_offset_cursor % _block_size == 0);
         WriteCacheOptions options{};
         options.async = _enable_async_populate_mode;
+        options.evict_probability = _datacache_evict_probability;
         const int64_t write_size = std::min(_block_size, write_end_offset - write_offset_cursor);
 
         SharedBufferPtr sb = nullptr;
         if (options.async) {
             auto ret = _sb_stream->find_shared_buffer(write_offset_cursor, write_size);
-            if (ret.ok()) {
+            if (ret.ok() && ret.value()->buffer.capacity() > 0) {
                 sb = ret.value();
                 auto cb = [sb](int code, const std::string& msg) {
                     // We only need to keep the shared buffer pointer
@@ -252,16 +253,15 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
             }
         }
         Status r = _cache->write_buffer(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
-        if (r.ok()) {
+        if (r.ok() || r.is_already_exist()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += write_size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
             _stats.write_disk_cache_bytes += options.stats.write_disk_bytes;
-        } else if (!r.is_already_exist() && !r.is_resource_busy()) {
+        } else if (!_can_ignore_populate_error(r)) {
             _stats.write_cache_fail_count += 1;
             _stats.write_cache_fail_bytes += write_size;
             LOG(WARNING) << "write block cache failed, errmsg: " << r.message();
-            // Failed to write cache, but we can keep processing query.
         }
         src_cursor += write_size;
         write_offset_cursor += write_size;
@@ -423,14 +423,14 @@ StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
 
 void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count,
                                                              const SharedBufferPtr& sb) {
-    BlockCache* cache = BlockCache::instance();
     int64_t begin = offset / _block_size * _block_size;
     int64_t end = std::min((offset + count + _block_size - 1) / _block_size * _block_size, _size);
     p -= (offset - begin);
-    auto f = [cache, sb, this](const char* buf, size_t offset, size_t size) {
+    auto f = [sb, this](const char* buf, size_t off, size_t size) {
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
         options.async = _enable_async_populate_mode;
+        options.evict_probability = _datacache_evict_probability;
         if (options.async) {
             auto cb = [sb](int code, const std::string& msg) {
                 // We only need to keep the shared buffer pointer
@@ -439,16 +439,13 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
             options.callback = cb;
             options.allow_zero_copy = true;
         }
-        Status r = cache->write_buffer(_cache_key, offset, size, buf, &options);
-        if (r.ok()) {
+        Status r = _cache->write_buffer(_cache_key, off, size, buf, &options);
+        if (r.ok() || r.is_already_exist()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
             _stats.write_disk_cache_bytes += options.stats.write_disk_bytes;
-        } else if (r.is_cancelled()) {
-            _stats.skip_write_cache_count += 1;
-            _stats.skip_write_cache_bytes += size;
-        } else if (!r.is_already_exist() && !r.is_resource_busy()) {
+        } else if (!_can_ignore_populate_error(r)) {
             _stats.write_cache_fail_count += 1;
             _stats.write_cache_fail_bytes += size;
             LOG(WARNING) << "write block cache failed, errmsg: " << r.message();
@@ -462,6 +459,13 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         p += size;
     }
     return;
+}
+
+bool CacheInputStream::_can_ignore_populate_error(const Status& status) const {
+    if (status.is_resource_busy() || status.is_mem_limit_exceeded() || status.is_capacity_limit_exceeded()) {
+        return true;
+    }
+    return false;
 }
 
 } // namespace starrocks::io

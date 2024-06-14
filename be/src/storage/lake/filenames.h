@@ -108,6 +108,10 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
+inline std::string gen_cols_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.cols", txn_id, generate_uuid_string());
+}
+
 inline std::string gen_del_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.del", txn_id, generate_uuid_string());
 }

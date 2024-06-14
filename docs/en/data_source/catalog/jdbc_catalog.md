@@ -11,7 +11,7 @@ A JDBC catalog is a kind of external catalog that enables you to query data from
 
 Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on JDBC catalogs.
 
-JDBC catalogs currently support MySQL and PostgreSQL and Oracle.
+JDBC catalogs currently support MySQL, PostgreSQL, Oracle, and SQLServer.
 
 ## Prerequisites
 
@@ -95,6 +95,18 @@ PROPERTIES
     "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
     "driver_class"="oracle.jdbc.driver.OracleDriver"
 );
+       
+CREATE EXTERNAL CATALOG jdbc3
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:sqlserver://127.0.0.1:1433;databaseName=MyDatabase;",
+    "driver_url"="https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/12.4.2.jre11/mssql-jdbc-12.4.2.jre11.jar",
+    "driver_class"="com.microsoft.sqlserver.jdbc.SQLServerDriver"
+);
+       
 ```
 
 ## View JDBC catalogs

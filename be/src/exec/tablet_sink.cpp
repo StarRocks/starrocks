@@ -658,6 +658,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                         return Status::EAgain("");
                     } else {
                         _automatic_partition_token->wait();
+                        RETURN_IF_ERROR(this->_automatic_partition_status);
                         // after the partition is created, go through the data again
                         RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
                                                                             &_validate_selection, &invalid_row_indexs,
@@ -665,6 +666,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                     }
                 }
             } else {
+                RETURN_IF_ERROR(this->_automatic_partition_status);
                 RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
                                                                     &_validate_selection, &invalid_row_indexs, _txn_id,
                                                                     nullptr));
@@ -687,11 +689,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 
             if (num_rows_after_validate - _validate_select_idx.size() > 0) {
                 std::stringstream ss;
-                if (_enable_automatic_partition) {
-                    ss << "The row create partition failed since " << _automatic_partition_status.to_string();
-                } else {
-                    ss << "The row is out of partition ranges. Please add a new partition.";
-                }
+                ss << "The row is out of partition ranges. Please add a new partition.";
                 if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
                     std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
                     state->append_error_msg_to_file(debug_row, ss.str());

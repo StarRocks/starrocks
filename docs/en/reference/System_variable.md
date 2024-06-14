@@ -96,17 +96,40 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### Set variables in a single query statement
 
-In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement. Example:
+In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement.
+
+StarRocks supports using `SET_VAR` in the following statements;
+
+- SELECT
+- INSERT (from v3.1.12 and v3.2.0 onwards)
+- UPDATE (from v3.1.12 and v3.2.0 onwards)
+- DELETE (from v3.1.12 and v3.2.0 onwards)
+
+`SET_VAR` can only be placed after the above keywords and enclosed in `/*+...*/`.
+
+Example:
 
 ```sql
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
-```
 
-> **NOTE**
->
-> `SET_VAR` can only be placed after the `SELECT` keyword and enclosed in `/*+...*/`.
+UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+
+DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
+FROM my_table PARTITION p1
+WHERE k1 = 3;
+
+INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
+```
 
 You can also set multiple variables in a single statement. Example:
 
@@ -354,6 +377,12 @@ Default value: `true`.
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v2.5
 
+### enable_gin_filter
+
+* **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
+* **Default**: true
+* **Introduced in**: v3.3.0
+
 ### enable_group_level_query_queue (global)
 
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
@@ -383,7 +412,7 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 
 ### enable_short_circuit
 
-* **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the table uses hybrid row-column storage and the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit to directly query the data stored in the row-by-row fashion.
+* **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit.
 * **Default**: false
 * **Introduced in**: v3.2.3
 

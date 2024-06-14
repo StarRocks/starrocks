@@ -183,7 +183,7 @@ void AgentServer::Impl::init_or_die() {
         max_publish_version_worker_count =
                 std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
         BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
-                                       max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                       max_publish_version_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_publish_version);
         REGISTER_THREAD_POOL_METRICS(publish_version, _thread_pool_publish_version);
 #endif

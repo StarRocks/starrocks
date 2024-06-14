@@ -25,7 +25,8 @@
                 "quick_start/shared-nothing",
                 "quick_start/shared-data",
                 "quick_start/iceberg",
-                "quick_start/hudi"
+                "quick_start/hudi",
+                "quick_start/routine-load"
             ]
         },
         {
@@ -348,6 +349,7 @@
                 "using_starrocks/Colocate_join",
                 "using_starrocks/Lateral_join",
                 "using_starrocks/query_cache",
+                "using_starrocks/block_cache",
                 {
                     "type": "category",
                     "label": "Computing the number of distinct values",
@@ -565,6 +567,7 @@
                     ]
                 },
                 "administration/Data_recovery",
+                "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 {
                     "type": "category",
@@ -1797,6 +1800,7 @@
                 "using_starrocks/Colocate_join",
                 "using_starrocks/Lateral_join",
                 "using_starrocks/query_cache",
+                "using_starrocks/block_cache",
                 {
                     "type": "category",
                     "label": "数据去重",
@@ -2014,6 +2018,7 @@
                     ]
                 },
                 "administration/Data_recovery",
+                "administration/Meta_recovery",
                 "administration/data_migration_tool",
                 {
                     "type": "category",

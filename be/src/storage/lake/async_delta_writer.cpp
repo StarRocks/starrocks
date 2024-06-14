@@ -171,7 +171,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         case kFinishTask: {
             auto finish_task = std::static_pointer_cast<FinishTask>(task_ptr);
             if (st.ok()) {
-                auto res = delta_writer->finish(finish_task->finish_mode);
+                auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);
                 st.update(res.status());
                 LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
                                         << " txn_id: " << delta_writer->txn_id() << ": " << st;
@@ -349,6 +349,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_immutable_tablet_size(_immutable_tablet_size)
                                           .set_miss_auto_increment_column(_miss_auto_increment_column)
                                           .set_schema_id(_schema_id)
+                                          .set_partial_update_mode(_partial_update_mode)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);
