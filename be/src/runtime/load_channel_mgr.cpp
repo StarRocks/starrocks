@@ -131,6 +131,8 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
         }
     }
     channel->open(cntl, request, response, done_guard.release());
+    LOG(INFO) << "local channels open, sleep 3600s";
+    sleep(3600);
 }
 
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
