@@ -4,11 +4,8 @@ displayed_sidebar: "Chinese"
 
 # rand, random
 
-<<<<<<< HEAD
 ## 功能
 
-=======
->>>>>>> d75190469d ([Doc] bugfix in rand() (#46867))
 返回一个 0 (包含) 到 1（不包含）之间的随机浮点数。
 
 ## 语法
