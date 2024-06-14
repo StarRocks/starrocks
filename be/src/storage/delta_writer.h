@@ -65,9 +65,9 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
-    // ptable_schema_param is valid during initialization. T
-    // The address may become invalid after initialization, so please do not access it afterward.
-    POlapTableSchemaParam* ptable_schema_param;
+    // `ptable_schema_param` is valid during initialization.
+    // And it may become invalid after initialization, so please do not access it afterward.
+    const POlapTableSchemaParam* ptable_schema_param;
     int64_t immutable_tablet_size = 0;
 };
 
