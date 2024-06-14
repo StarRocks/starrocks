@@ -347,7 +347,9 @@ public class OlapTable extends Table {
         if (this.partitionInfo != null) {
             olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
         }
-        olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
+        if (this.defaultDistributionInfo != null) {
+            olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
+        }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
@@ -375,7 +377,9 @@ public class OlapTable extends Table {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
         }
         olapTable.bfFpp = this.bfFpp;
-        olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
+        if (this.curBinlogConfig != null) {
+            olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
+        }
     }
 
     public BinlogConfig getCurBinlogConfig() {

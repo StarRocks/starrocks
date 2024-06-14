@@ -217,7 +217,7 @@ public class StarRocksIcebergTableScan
     }
 
     private boolean useCache() {
-        return dataFileCache != null;
+        return dataFileCache != null && (!shouldReturnColumnStats() || dataFileCacheWithMetrics);
     }
 
     private void planDeletesLocallyWithCache(List<ManifestFile> deleteManifests) {
@@ -337,7 +337,9 @@ public class StarRocksIcebergTableScan
             return null;
         }
 
-        if (!deleteFileIndex.isEmpty() && enableCacheDataFileIdentifierColumnMetrics) {
+        // only the table created by flink has equality ids in the table schema.
+        if (!deleteFileIndex.noEqDeletes() && enableCacheDataFileIdentifierColumnMetrics &&
+                !tableSchema().identifierFieldIds().isEmpty()) {
             this.dataFileCacheWithMetrics = true;
             return tableSchema().identifierFieldIds();
         }

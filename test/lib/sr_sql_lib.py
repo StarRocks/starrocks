@@ -1775,7 +1775,7 @@ class StarrocksSQLApiLib(object):
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect {} is not found in plan {}".format(expect, res['result']))
 
     def assert_explain_not_contains(self, query, *expects):
         """

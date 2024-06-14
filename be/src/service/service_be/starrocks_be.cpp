@@ -53,7 +53,8 @@ DECLARE_bool(socket_keepalive);
 namespace starrocks {
 
 Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& storage_paths) {
-    if (!config::datacache_enable && config::block_cache_enable) {
+    // When configured old `block_cache` configurations, use the old items for compatibility.
+    if (config::block_cache_enable) {
         config::datacache_enable = true;
         config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
         config::datacache_disk_size = std::to_string(config::block_cache_disk_size);

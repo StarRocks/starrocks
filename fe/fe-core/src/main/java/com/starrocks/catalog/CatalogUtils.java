@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
@@ -270,7 +271,7 @@ public class CatalogUtils {
             throws DdlException {
         try {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
-            List<Long> partitionIds = listPartitionInfo.getPartitionIds(isTemp);
+            Set<Long> partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(isTemp));
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
                 listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
@@ -299,36 +300,13 @@ public class CatalogUtils {
                 });
 
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
-                for (List<String> itemExpr : multiItemListPartitionDesc.getMultiValues()) {
-                    if (!listPartitionInfo.isValid(itemExpr)) {
-                        throw new DdlException("Duplicate values " +
-                                "(" + String.join(",", itemExpr) + ") ");
-                    }
-                }
-
-                /*
-                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
-                MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
                 for (List<LiteralExpr> itemExpr : multiItemListPartitionDesc.getMultiLiteralExprValues()) {
-                    for (List<LiteralExpr> valueExpr : allMultiLiteralExprValues) {
-                        int duplicatedSize = 0;
-                        for (int i = 0; i < itemExpr.size(); i++) {
-                            String itemValue = itemExpr.get(i).getStringValue();
-                            String value = valueExpr.get(i).getStringValue();
-                            if (value.equals(itemValue)) {
-                                duplicatedSize++;
-                            }
-                        }
-                        if (duplicatedSize == partitionColSize) {
-                            List<String> msg = itemExpr.stream()
-                                    .map(value -> ("\"" + value.getStringValue() + "\""))
-                                    .collect(Collectors.toList());
-                            throw new DdlException("Duplicate values " +
-                                    "(" + String.join(",", msg) + ") ");
-                        }
+                    if (!listPartitionInfo.isValid(itemExpr, isTemp)) {
+                        List<String> multiValues = itemExpr.stream().map(LiteralExpr::getStringValue)
+                                .collect(Collectors.toList());
+                        throw new DdlException("Duplicate values " + "(" + String.join(",", multiValues) + ") ");
                     }
                 }
-                 */
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
