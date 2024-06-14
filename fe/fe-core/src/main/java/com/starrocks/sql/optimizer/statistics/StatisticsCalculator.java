@@ -595,6 +595,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
 
         Statistics.Builder allBuilder = Statistics.builder();
+        allBuilder.setOutputRowCount(inputStatistics.getOutputRowCount());
         allBuilder.addColumnStatistics(inputStatistics.getColumnStatistics());
 
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {

@@ -881,4 +881,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2133: case\n" +
                 "  |  limit: 100"));
     }
+
+    @Test
+    public void testSplitOrderBy() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/split_order_by"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:MERGING-EXCHANGE"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("20:TOP-N"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:MERGING-EXCHANGE"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("14:TOP-N"));
+    }
 }
