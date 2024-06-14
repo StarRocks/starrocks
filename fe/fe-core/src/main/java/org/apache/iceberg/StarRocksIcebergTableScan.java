@@ -217,7 +217,7 @@ public class StarRocksIcebergTableScan
     }
 
     private boolean useCache() {
-        return dataFileCache != null;
+        return dataFileCache != null && (!shouldReturnColumnStats() || dataFileCacheWithMetrics);
     }
 
     private void planDeletesLocallyWithCache(List<ManifestFile> deleteManifests) {
