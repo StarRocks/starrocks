@@ -17,27 +17,24 @@ package com.starrocks.catalog;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.IOException;
-
 /**
  * TODO: Support comments for struct fields. The Metastore does not properly store
  * comments of struct fields. We set comment to null to avoid compatibility issues.
  */
-public class StructField implements GsonPostProcessable {
+public class StructField {
     @SerializedName(value = "name")
-    private final String name;
+    private String name;
     @SerializedName(value = "type")
-    private final Type type;
+    private Type type;
 
     // comment is not used now, it's always null.
     @SerializedName(value = "comment")
-    private final String comment;
+    private String comment;
     private int position;  // in struct
 
     @SerializedName(value = "fieldId")
@@ -150,14 +147,7 @@ public class StructField implements GsonPostProcessable {
 
     @Override
     public StructField clone() {
-        return new StructField(name, type.clone(), comment);
-    }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        if (fieldId <= 0) {
-            fieldId = -1;
-        }
+        return new StructField(name, fieldId, type.clone(), comment);
     }
 }
 
