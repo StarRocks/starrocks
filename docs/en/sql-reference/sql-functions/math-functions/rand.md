@@ -4,11 +4,8 @@ displayed_sidebar: "English"
 
 # rand, random
 
-<<<<<<< HEAD
 ## Description
 
-=======
->>>>>>> d75190469d ([Doc] bugfix in rand() (#46867))
 Returns a random floating-point number between 0 (inclusive) and 1 (exclusive).
 
 ## Syntax
