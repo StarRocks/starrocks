@@ -680,6 +680,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_HUGE_FILE_SIZE = "connector_huge_file_size";
     public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
 
+    // A group of like predicates with the same column and concatenated by OR, can be consolidated into
+    // regexp predicate, only the number of like predicates is not less that `like_predicate_consolidate_min`
+    // would be consolidated, since when the number of like predicates is too small, its corresponding
+    // regexp predicate is less efficient than like predicates.
+    public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1883,6 +1889,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
     }
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePipelineLevelShuffle = true;
+
+    @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
+    private boolean enableConstantExecuteInFE = true;
+
+    @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
+    private int likePredicateConsolidateMin = 2;
+>>>>>>> fd240f1502 ([Enhancement] Optimize multiple like predicates (#46914))
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -3461,6 +3478,37 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableConnectorSplitIoTasks;
     }
 
+<<<<<<< HEAD
+=======
+    public void setEnableConnectorSplitIoTasks(boolean v) {
+        enableConnectorSplitIoTasks = v;
+    }
+
+    public boolean isEnablePredicateMoveAround() {
+        return enablePredicateMoveAround;
+    }
+
+    public void setEnablePredicateMoveAround(boolean enablePredicateMoveAround) {
+        this.enablePredicateMoveAround = enablePredicateMoveAround;
+    }
+
+    public boolean isEnableConstantExecuteInFE() {
+        return enableConstantExecuteInFE;
+    }
+
+    public void setEnableConstantExecuteInFE(boolean enableConstantExecuteInFE) {
+        this.enableConstantExecuteInFE = enableConstantExecuteInFE;
+    }
+
+    public int getLikePredicateConsolidateMin() {
+        return likePredicateConsolidateMin;
+    }
+
+    public void setLikePredicateConsolidateMin(int value) {
+        this.likePredicateConsolidateMin = value;
+    }
+
+>>>>>>> fd240f1502 ([Enhancement] Optimize multiple like predicates (#46914))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
