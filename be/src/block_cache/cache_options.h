@@ -57,6 +57,11 @@ struct WriteCacheOptions {
     bool allow_zero_copy = false;
     std::function<void(int, const std::string&)> callback = nullptr;
 
+    // The probability to evict other items if the cache space is full, which can help avoid frequent cache replacement
+    // and improve cache hit rate sometimes.
+    // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
+    int32_t evict_probability = 100;
+
     struct Stats {
         int64_t write_mem_bytes = 0;
         int64_t write_disk_bytes = 0;
