@@ -606,6 +606,36 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
+<<<<<<< HEAD
+=======
+
+    public static final String ENABLE_PREDICATE_MOVE_AROUND = "enable_predicate_move_around";
+
+    public static final String JIT_LEVEL = "jit_level";
+
+    /**
+     * Used to split files stored in dfs such as object storage or hdfs into smaller files.
+     */
+    public static final String CONNECTOR_MAX_SPLIT_SIZE = "connector_max_split_size";
+
+    /**
+     * BE can split file of some specific formats, so FE don't need to split at all.
+     * But if a file is very huge, we still want FE to split them to more BEs.
+     * And this parameter is to define how huge this file is.
+     */
+    public static final String CONNECTOR_HUGE_FILE_SIZE = "connector_huge_file_size";
+
+    public static final String ENABLE_CONNECTOR_SINK_WRITER_SCALING = "enable_connector_sink_writer_scaling";
+
+    public static final String ENABLE_CONSTANT_EXECUTE_IN_FE = "enable_constant_execute_in_fe";
+
+    // A group of like predicates with the same column and concatenated by OR, can be consolidated into
+    // regexp predicate, only the number of like predicates is not less that `like_predicate_consolidate_min`
+    // would be consolidated, since when the number of like predicates is too small, its corresponding
+    // regexp predicate is less efficient than like predicates.
+    public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
+
+>>>>>>> fd240f1502 ([Enhancement] Optimize multiple like predicates (#46914))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1616,6 +1646,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
     }
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePipelineLevelShuffle = true;
+
+    @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
+    private boolean enableConstantExecuteInFE = true;
+
+    @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
+    private int likePredicateConsolidateMin = 2;
+>>>>>>> fd240f1502 ([Enhancement] Optimize multiple like predicates (#46914))
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -3011,6 +3052,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSkewJoinRandRange(int skewJoinRandRange) {
         this.skewJoinRandRange = skewJoinRandRange;
+    }
+
+    public int getLikePredicateConsolidateMin() {
+        return likePredicateConsolidateMin;
+    }
+
+    public void setLikePredicateConsolidateMin(int value) {
+        this.likePredicateConsolidateMin = value;
     }
 
     // Serialize to thrift object

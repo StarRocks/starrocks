@@ -769,4 +769,131 @@ public class Utils {
         }
         return false;
     }
+<<<<<<< HEAD
+=======
+
+    public static void calculateStatistics(OptExpression expr, OptimizerContext context) {
+        for (OptExpression child : expr.getInputs()) {
+            calculateStatistics(child, context);
+        }
+        // Do not calculate statistics for LogicalTreeAnchorOperator
+        if (expr.getOp() instanceof LogicalTreeAnchorOperator) {
+            return;
+        }
+
+        ExpressionContext expressionContext = new ExpressionContext(expr);
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
+                expressionContext, context.getColumnRefFactory(), context);
+        try {
+            statisticsCalculator.estimatorStats();
+        } catch (Exception e) {
+            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            return;
+        }
+
+        expr.setStatistics(expressionContext.getStatistics());
+    }
+
+    /**
+     * Add new project into input, merge input's existing project if input has one.
+     * @param input input expression
+     * @param newProjectionMap new project map to be pushed down into input
+     * @return a new expression with new project
+     */
+    public static OptExpression mergeProjection(OptExpression input,
+                                                Map<ColumnRefOperator, ScalarOperator> newProjectionMap) {
+        if (newProjectionMap == null || newProjectionMap.isEmpty()) {
+            return input;
+        }
+        Operator newOp = input.getOp();
+        if (newOp.getProjection() == null || newOp.getProjection().getColumnRefMap().isEmpty()) {
+            newOp.setProjection(new Projection(newProjectionMap));
+        } else {
+            // merge two projections
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
+            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
+                ScalarOperator result = rewriter.rewrite(entry.getValue());
+                resultMap.put(entry.getKey(), result);
+            }
+            newOp.setProjection(new Projection(resultMap));
+        }
+        return input;
+    }
+
+    /**
+     * Check if the operator has applied the rule
+     * @param op input operator to be checked
+     * @param ruleMask specific rule mask
+     * @return true if the operator has applied the rule, false otherwise
+     */
+    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
+        if (op == null) {
+            return false;
+        }
+        // TODO: support cte inline
+        int opRuleMask = op.getOpRuleMask();
+        return (opRuleMask & ruleMask) != 0;
+    }
+
+    /**
+     * Set the rule mask to the operator
+     * @param op input operator
+     * @param ruleMask specific rule mask
+     */
+    public static void setOpAppliedRule(Operator op, int ruleMask) {
+        if (op == null) {
+            return;
+        }
+        op.setOpRuleMask(op.getOpRuleMask() | ruleMask);
+    }
+
+    /**
+     * Reset the rule mask to the operator
+     * @param op input operator
+     * @param ruleMask specific rule mask
+     */
+    public static void resetOpAppliedRule(Operator op, int ruleMask) {
+        if (op == null) {
+            return;
+        }
+        op.setOpRuleMask(op.getOpRuleMask() | (~ ruleMask));
+    }
+
+    /**
+     * Check if the optExpression has applied the rule in recursively
+     * @param optExpression input optExpression to be checked
+     * @param ruleMask specific rule mask
+     * @return true if the optExpression or its children have applied the rule, false otherwise
+     */
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        if (optExpression == null) {
+            return false;
+        }
+        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
+            return true;
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            if (isOptHasAppliedRule(child, ruleMask)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T, S extends T> Optional<S> downcast(T obj, Class<S> klass) {
+        Preconditions.checkArgument(obj != null);
+        if (obj.getClass().equals(Objects.requireNonNull(klass))) {
+            return Optional.of((S) obj);
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    public static <T, S extends T> S mustCast(T obj, Class<S> klass) {
+        return downcast(obj, klass)
+                .orElseThrow(() -> new IllegalArgumentException("Cannot cast " + obj.getClass() + " to " + klass));
+    }
+>>>>>>> fd240f1502 ([Enhancement] Optimize multiple like predicates (#46914))
 }

@@ -78,7 +78,13 @@ import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
+=======
+import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
+import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
+import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
+>>>>>>> fd240f1502 ([Enhancement] Optimize multiple like predicates (#46914))
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -456,6 +462,14 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
+<<<<<<< HEAD
+=======
+
+        ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
+
+        tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+>>>>>>> fd240f1502 ([Enhancement] Optimize multiple like predicates (#46914))
         return tree.getInputs().get(0);
     }
 
