@@ -39,7 +39,7 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.5.0</iceberg.version>
-        <paimon.version>0.8.0</paimon.version>
+        <paimon.version>0.8.1</paimon.version>
         <delta-kernel.version>3.2.0</delta-kernel.version>
         <staros.version>3.3-rc2</staros.version>
         <python>python</python>
@@ -851,70 +851,11 @@ under the License.
             <scope>compile</scope>
         </dependency>
 
-        <!--Decouple dependencies from paimon-bundle, after paimon-bundle fix cve problems, we can use paimon-bundle instead-->
-        <!--BEGIN-->
         <dependency>
             <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-common</artifactId>
+            <artifactId>paimon-bundle</artifactId>
             <version>${paimon.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-core</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-        <!-- codegen runtime dependencies -->
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-codegen-loader</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-        <!-- format runtime dependencies -->
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-format</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.xerial.snappy</groupId>
-            <artifactId>snappy-java</artifactId>
-            <version>1.1.8.3</version>
-        </dependency>
-        <dependency>
-            <groupId>org.lz4</groupId>
-            <artifactId>lz4-java</artifactId>
-            <version>1.8.0</version>
-        </dependency>
-        <!-- paimon catalogs -->
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-hive-catalog</artifactId>
-            <version>${paimon.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>*</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <!-- other runtime dependencies -->
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-shade-jackson-2</artifactId>
-            <version>2.14.2-${paimon.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-shade-guava-30</artifactId>
-            <version>30.1.1-jre-${paimon.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-shade-caffeine-2</artifactId>
-            <version>2.9.3-${paimon.version}</version>
-        </dependency>
-        <!--END-->
-        <!--Decouple from paimon-bundle-->
 
         <dependency>
             <groupId>org.apache.paimon</groupId>
