@@ -697,7 +697,7 @@ public class Config extends ConfigBase {
     // so the validation is turned off here to be compatible with old users
     // https://github.com/netty/netty/pull/12760
     @ConfField
-    public static boolean http_validate_headers = false;
+    public static boolean enable_http_validate_headers = false;
 
     /**
      * If a request takes longer than the configured time, a log will be generated to trace it.

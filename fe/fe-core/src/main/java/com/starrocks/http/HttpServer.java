@@ -233,7 +233,7 @@ public class HttpServer {
                             Config.http_max_initial_line_length,
                             Config.http_max_header_size,
                             Config.http_max_chunk_size,
-                            Config.http_validate_headers))
+                            Config.enable_http_validate_headers))
                     .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
                     .addLast(new ChunkedWriteHandler())
                     // add content compressor
