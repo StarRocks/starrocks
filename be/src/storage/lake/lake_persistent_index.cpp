@@ -292,7 +292,8 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
         }
     }
 
-    if (cumulative_level_bytes * 10 < base_level_bytes) {
+    if ((double)base_level_bytes * config::lake_pk_index_cumulative_base_compaction_ratio >
+        (double)cumulative_level_bytes) {
         // cumulative merge
         sstables->swap(cumulative_sstables);
         *merge_base_level = false;
@@ -489,6 +490,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
+        if (rowset->id() + rowset->num_segments() <= rebuild_rss_id) {
+            // All segments under this rowset are not need to rebuild
+            continue;
+        }
         const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
         auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
         if (!res.ok()) {
