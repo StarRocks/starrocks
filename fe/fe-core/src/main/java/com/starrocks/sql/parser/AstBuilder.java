@@ -2364,7 +2364,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.DATABASE() != null) {
-            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() == null,
+            return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.SAMPLE() != null,
                     properties, pos);
         } else if (context.TABLE() != null) {
             List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
@@ -2373,7 +2373,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
             return new CreateAnalyzeJobStmt(tableName, columns, context.SAMPLE() != null, properties, pos);
         } else {
-            return new CreateAnalyzeJobStmt(context.FULL() == null, properties, pos);
+            return new CreateAnalyzeJobStmt(context.SAMPLE() != null, properties, pos);
         }
     }
 
