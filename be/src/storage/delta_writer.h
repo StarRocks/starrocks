@@ -67,7 +67,7 @@ struct DeltaWriterOptions {
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
     // `ptable_schema_param` is valid during initialization.
     // And it will be set to nullptr because we only need to access it during intialization.
-    // If you need to access it after intialization, please make sure the point is valid.
+    // If you need to access it after intialization, please make sure the pointer is valid.
     const POlapTableSchemaParam* ptable_schema_param = nullptr;
     int64_t immutable_tablet_size = 0;
 };

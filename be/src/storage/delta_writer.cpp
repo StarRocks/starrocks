@@ -632,7 +632,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
                 ASSIGN_OR_RETURN(_tablet_schema,
                                  TabletSchema::create(*ori_tablet_schema, ptable_schema_param->indexes(i).schema_id(),
                                                       ptable_schema_param->version(),
-                                                      ptable_schema_param->indexpes(i).column_param()));
+                                                      ptable_schema_param->indexes(i).column_param()));
                 if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
                     _tablet->update_max_version_schema(_tablet_schema);
                 }
