@@ -1091,30 +1091,25 @@ private:
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
         ColumnPtr dest_column = src_column->clone_empty();
 
-        std::vector<const ArrayColumn*> key_array_columns;
-        std::vector<ColumnPtr> key_element_columns;
-
+        std::vector<ColumnPtr> key_array_columns;
         for (size_t i = 1; i < columns.size(); ++i) {
             ColumnPtr key_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[i]);
-            auto key_array_column = down_cast<const ArrayColumn*>(key_column.get());
-            key_array_columns.push_back(key_array_column);
-            key_element_columns.push_back(key_array_column->elements_column());
+            key_array_columns.push_back(key_column);
         }
 
-        _sort_multi_array_column(ctx, columns, dest_column.get(), *src_column, key_array_columns, key_element_columns);
+        _sort_multi_array_column(ctx, *src_column, key_array_columns, dest_column);
 
         return dest_column;
     }
 
-    static void _sort_multi_array_column(FunctionContext* ctx, const Columns& columns, Column* dest_array_column,
-                                         const Column& src_array_column,
-                                         const std::vector<const ArrayColumn*>& key_array_columns,
-                                         const std::vector<ColumnPtr>& key_element_columns) {
+    static void _sort_multi_array_column(FunctionContext* ctx, const Column& src_array_column,
+                                         const std::vector<ColumnPtr>& key_array_columns,
+                                         ColumnPtr& dest_array_column) {
         const auto& src_elements_column = down_cast<const ArrayColumn&>(src_array_column).elements();
         const auto& src_offsets_column = down_cast<const ArrayColumn&>(src_array_column).offsets();
 
-        auto* dest_elements_column = down_cast<ArrayColumn*>(dest_array_column)->elements_column().get();
-        auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_array_column)->offsets_column().get();
+        auto* dest_elements_column = down_cast<ArrayColumn*>(dest_array_column.get())->elements_column().get();
+        auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_array_column.get())->offsets_column().get();
         dest_offsets_column->get_data() = src_offsets_column.get_data();
 
         auto src_elements_size = src_elements_column.size();
@@ -1124,6 +1119,22 @@ private:
         size_t chunk_size = src_array_column.size();
         size_t key_array_size = key_array_columns.size();
 
+        std::vector<ColumnPtr> key_elements_columns;
+        std::vector<std::shared_ptr<UInt32Column>> key_offsets_columns;
+        for (size_t i = 0; i < key_array_size; ++i) {
+            ColumnPtr key_data = key_array_columns[i];
+            if (key_data->is_nullable()) {
+                const auto* key_nullable_column = down_cast<const NullableColumn*>(key_data.get());
+                key_data = key_nullable_column->data_column();
+            }
+
+            const auto& key_element_column = down_cast<ArrayColumn*>(key_data.get())->elements_column();
+            const auto& key_offset_column = down_cast<ArrayColumn*>(key_data.get())->offsets_column();
+
+            key_elements_columns.push_back(key_element_column);
+            key_offsets_columns.push_back(key_offset_column);
+        }
+
         const std::atomic<bool>& cancel = ctx->state()->cancelled_ref();
         Status status;
         SortDescs sort_desc = SortDescs::asc_null_first(src_elements_size);
@@ -1131,9 +1142,8 @@ private:
         for (size_t i = 0; i < chunk_size; ++i) {
             auto src_column_offset_size = src_offsets_column.get_data()[i + 1] - src_offsets_column.get_data()[i];
             for (size_t key_column_size = 0; key_column_size < key_array_size; ++key_column_size) {
-                const auto& key_offsets_column = key_array_columns[key_column_size]->offsets();
-                auto key_column_offset_size = key_offsets_column.get_data()[i + 1] - key_offsets_column.get_data()[i];
-
+                auto key_column_offset_size = key_offsets_columns[key_column_size].get()->get_data()[i + 1] -
+                                              key_offsets_columns[key_column_size]->get_data()[i];
                 if (src_column_offset_size != key_column_offset_size) {
                     throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
                 }
@@ -1141,7 +1151,7 @@ private:
 
             Permutation perm;
             auto range = std::make_pair(src_offsets_column.get_data()[i], src_offsets_column.get_data()[i + 1]);
-            status = sort_and_tie_columns(cancel, key_element_columns, sort_desc, &perm, range);
+            status = sort_and_tie_columns(cancel, key_elements_columns, sort_desc, &perm, range);
             if (!status.ok()) {
                 throw std::runtime_error("sort_and_tie_columns error");
             }
