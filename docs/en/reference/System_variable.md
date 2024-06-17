@@ -318,7 +318,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### connector_sink_target_max_file_size
 
-* **Description**: Specifies the target maximum file size in bytes used for writing data into Hive tables or Iceberg tables, or exporting data with Files(). The actual size may be larger.
+* **Description**: Specifies the target maximum file size in bytes used for writing data into Hive tables or Iceberg tables, or exporting data with Files(). The limit is not exact and is applied on a best-effort basis.
 * **Default**: 1073741824
 * **Data type**: Long
 * **Introduced in**: v3.3.0
