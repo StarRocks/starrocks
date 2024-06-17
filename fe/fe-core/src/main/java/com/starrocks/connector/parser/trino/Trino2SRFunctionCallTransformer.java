@@ -81,6 +81,7 @@ public class Trino2SRFunctionCallTransformer {
         registerUnicodeFunctionTransformer();
         registerMapFunctionTransformer();
         registerBinaryFunctionTransformer();
+        registerHLLFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -195,6 +196,10 @@ public class Trino2SRFunctionCallTransformer {
         // to_timestamp -> to_tera_timestamp
         registerFunctionTransformer("to_timestamp", 2, "to_tera_timestamp",
                 ImmutableList.of(Expr.class, Expr.class));
+
+        // last_day_of_month(x)  -> last_day(x,'month')
+        registerFunctionTransformer("last_day_of_month", 1, new FunctionCallExpr("last_day",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("month"))));
     }
 
     private static void registerStringFunctionTransformer() {
@@ -311,10 +316,29 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("from_hex", 1, "hex_decode_binary", ImmutableList.of(Expr.class));
     }
 
+    private static void registerHLLFunctionTransformer() {
+        // cardinality -> hll_cardinality
+        registerFunctionTransformer("cardinality", 1, "hll_cardinality", ImmutableList.of(Expr.class));
+
+        // approx_set -> HLL_HASH
+        registerFunctionTransformer("approx_set", 1, "hll_hash", ImmutableList.of(Expr.class));
+
+        // empty_approx_set -> HLL_EMPTY
+        registerFunctionTransformer("empty_approx_set", "hll_empty");
+
+        // merge -> HLL_RAW_AGG
+        registerFunctionTransformer("merge", 1, "hll_raw_agg", ImmutableList.of(Expr.class));
+    }
+
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
                                                     List<Class<? extends Expr>> starRocksArgumentsClass) {
         FunctionCallExpr starRocksFunctionCall = buildStarRocksFunctionCall(starRocksFnName, starRocksArgumentsClass);
         registerFunctionTransformer(trinoFnName, trinoFnArgNums, starRocksFunctionCall);
+    }
+
+    private static void registerFunctionTransformer(String trinoFnName, String starRocksFnName) {
+        FunctionCallExpr starRocksFunctionCall = buildStarRocksFunctionCall(starRocksFnName, Lists.newArrayList());
+        registerFunctionTransformer(trinoFnName, 0, starRocksFunctionCall);
     }
 
     private static void registerFunctionTransformerWithVarArgs(String trinoFnName, String starRocksFnName,
@@ -326,7 +350,12 @@ public class Trino2SRFunctionCallTransformer {
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums,
                                                     FunctionCallExpr starRocksFunctionCall) {
-        FunctionCallTransformer transformer = new FunctionCallTransformer(starRocksFunctionCall, trinoFnArgNums);
+        FunctionCallTransformer transformer;
+        if (trinoFnArgNums == 0) {
+            transformer = new FunctionCallTransformer(starRocksFunctionCall, false);
+        } else {
+            transformer = new FunctionCallTransformer(starRocksFunctionCall, trinoFnArgNums);
+        }
 
         List<FunctionCallTransformer> transformerList = TRANSFORMER_MAP.computeIfAbsent(trinoFnName,
                 k -> Lists.newArrayList());
