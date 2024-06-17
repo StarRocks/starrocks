@@ -19,7 +19,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
