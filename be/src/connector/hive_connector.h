@@ -108,6 +108,7 @@ private:
     bool _enable_populate_datacache = false;
     bool _enable_datacache_aync_populate_mode = false;
     bool _enable_datacache_io_adaptor = false;
+    int32_t _datacache_evict_probability = 0;
     bool _use_file_metacache = false;
     bool _enable_split_tasks = false;
 

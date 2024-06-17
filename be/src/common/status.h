@@ -197,6 +197,8 @@ public:
 
     static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
+    static Status CapacityLimitExceed(const Slice& msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
+
     bool ok() const {
         mark_checked();
         return _state == nullptr;
@@ -210,6 +212,11 @@ public:
     bool is_mem_limit_exceeded() const {
         mark_checked();
         return code() == TStatusCode::MEM_LIMIT_EXCEEDED;
+    }
+
+    bool is_capacity_limit_exceeded() const {
+        mark_checked();
+        return code() == TStatusCode::CAPACITY_LIMIT_EXCEED;
     }
 
     bool is_thrift_rpc_error() const {

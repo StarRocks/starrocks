@@ -264,6 +264,8 @@ struct TQueryOptions {
 
   132: optional bool enable_datacache_async_populate_mode;
   133: optional bool enable_datacache_io_adaptor;
+
+  141: optional i32 datacache_evict_probability;
 }
 
 

@@ -236,12 +236,20 @@ Status FileReader::_get_footer() {
         // cache does not understand shared ptr at all.
         // so we have to new a object to hold this shared ptr.
         FileMetaDataPtr* capture = new FileMetaDataPtr(_file_metadata);
+        Status st = Status::InternalError("write footer cache failed");
+        DeferOp op([&st, this, capture, file_metadata_size]() {
+            if (st.ok()) {
+                _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
+                _scanner_ctx->stats->footer_cache_write_count += 1;
+            } else {
+                _scanner_ctx->stats->footer_cache_write_fail_count += 1;
+                delete capture;
+            }
+        });
         auto deleter = [capture]() { delete capture; };
-        Status st = cache->write_object(metacache_key, capture, file_metadata_size, deleter, &cache_handle);
-        if (st.ok()) {
-            _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
-            _scanner_ctx->stats->footer_cache_write_count += 1;
-        }
+        WriteCacheOptions options;
+        options.evict_probability = _scanner_ctx->datacache_evict_probability;
+        st = cache->write_object(metacache_key, capture, file_metadata_size, deleter, &cache_handle, &options);
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
     }
