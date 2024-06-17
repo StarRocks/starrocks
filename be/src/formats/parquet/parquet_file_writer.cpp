@@ -390,7 +390,6 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
                                                       ::parquet::Type::INT32, -1, file_column_id.field_id);
     }
     case TYPE_DATETIME: {
-        // TODO(letian-jiang): set isAdjustedToUTC to true, and normalize datetime value
         // Apache Hive version 3 or lower does not support reading timestamps encoded as INT64
         if (_writer_options->use_int96_timestamp_encoding) {
             return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::Type::INT96,
@@ -398,7 +397,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
         } else {
             return ::parquet::schema::PrimitiveNode::Make(
                     name, rep_type,
-                    ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
+                    ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MICROS),
                     ::parquet::Type::INT64, -1, file_column_id.field_id);
         }
     }
