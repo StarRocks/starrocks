@@ -44,7 +44,7 @@ public class CreateAnalyzeJobTest {
         String sql = "create analyze table hive0.partitioned_db.t1";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (SemanticException e) {
+        } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("External table hive0.partitioned_db.t1 don't support SAMPLE analyze."));
         }
 

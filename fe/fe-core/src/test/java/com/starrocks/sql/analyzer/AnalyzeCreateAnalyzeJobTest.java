@@ -27,6 +27,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
@@ -92,11 +93,7 @@ public class AnalyzeCreateAnalyzeJobTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         sql = "create analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
-        try {
-            analyzeSuccess(sql);
-        } catch (Exception e) {
-            Assert.assertTrue(e instanceof SemanticException);
-            Assert.assertTrue(e.getMessage().contains("External table hive0.tpch.customer don't support SAMPLE analyze."));
-        }
+        analyzeFail(sql, "External table hive0.tpch.customer don't support SAMPLE analyze.");
+
     }
 }
