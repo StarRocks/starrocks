@@ -103,6 +103,7 @@ import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
@@ -2225,12 +2226,38 @@ public class StmtExecutor {
                         Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                 txnStatus = TransactionStatus.ABORTED;
             } else {
+                InsertTxnCommitAttachment attachment = null;
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    if (insertStmt.isVersionOverwrite()) {
+                        Map<Long, Long> partitionVersionMap = Maps.newHashMap();
+                        Map<PlanNodeId, ScanNode> scanNodeMap = execPlan.getFragments().get(0).collectScanNodes();
+                        for (Map.Entry<PlanNodeId, ScanNode> entry : scanNodeMap.entrySet()) {
+                            if (entry.getValue() instanceof OlapScanNode) {
+                                OlapScanNode olapScanNode = (OlapScanNode) entry.getValue();
+                                partitionVersionMap.putAll(olapScanNode.getScanPartitionVersions());
+                            }
+                        }
+                        Preconditions.checkState(partitionVersionMap.size() <= 1);
+                        if (partitionVersionMap.size() == 1) {
+                            attachment = new InsertTxnCommitAttachment(
+                                    loadedRows, partitionVersionMap.values().iterator().next());
+                        } else if (partitionVersionMap.size() == 0) {
+                            attachment = new InsertTxnCommitAttachment(loadedRows);
+                        }
+                        LOG.debug("insert overwrite txn {} with partition version map {}", transactionId, partitionVersionMap);
+                    } else {
+                        attachment = new InsertTxnCommitAttachment(loadedRows);
+                    }
+                } else {
+                    attachment = new InsertTxnCommitAttachment(loadedRows);
+                }
                 VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        new InsertTxnCommitAttachment(loadedRows),
+                        attachment,
                         jobDeadLineMs - System.currentTimeMillis());
 
                 long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
@@ -2382,7 +2409,7 @@ public class StmtExecutor {
                 }
             } while (!batch.isEos());
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());

@@ -103,6 +103,8 @@ public class StatisticUtils {
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
+        context.getSessionVariable().setCboCteReuse(true);
+        context.getSessionVariable().setCboCTERuseRatio(0);
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
         context.getSessionVariable().setWarehouseName(warehouse.getName());

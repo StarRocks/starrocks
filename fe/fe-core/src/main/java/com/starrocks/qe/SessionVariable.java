@@ -467,6 +467,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
     public static final String ENABLE_DATACACHE_ASYNC_POPULATE_MODE = "enable_datacache_async_populate_mode";
     public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
+    public static final String DATACACHE_EVICT_PROBABILITY = "datacache_evict_probability";
 
     // The following configurations will be deprecated, and we use the `datacache` suffix instead.
     // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -754,6 +755,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_CONSTANT_EXECUTE_IN_FE = "enable_constant_execute_in_fe";
 
+    // A group of like predicates with the same column and concatenated by OR, can be consolidated into
+    // regexp predicate, only the number of like predicates is not less that `like_predicate_consolidate_min`
+    // would be consolidated, since when the number of like predicates is too small, its corresponding
+    // regexp predicate is less efficient than like predicates.
+    public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1004,6 +1011,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_REUSE)
     private boolean cboCteReuse = true;
 
+    // -1 (< 0): disable cte, force inline. 0: force cte; other (> 0): compute by costs * ratio
     @VarAttr(name = CBO_CTE_REUSE_RATE_V2, flag = VariableMgr.INVISIBLE, alias = CBO_CTE_REUSE_RATE,
             show = CBO_CTE_REUSE_RATE)
     private double cboCTERuseRatio = 1.15;
@@ -1614,6 +1622,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_IO_ADAPTOR)
     private boolean enableDataCacheIOAdaptor = true;
 
+    @VariableMgr.VarAttr(name = DATACACHE_EVICT_PROBABILITY, flag = VariableMgr.INVISIBLE)
+    private int datacacheEvictProbability = 100;
+
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
 
@@ -2147,6 +2158,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
     private boolean enableConstantExecuteInFE = true;
 
+    @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
+    private int likePredicateConsolidateMin = 2;
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2248,6 +2261,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableDataCacheIOAdaptor(boolean enableDataCacheIOAdaptor) {
         this.enableDataCacheIOAdaptor = enableDataCacheIOAdaptor;
+    }
+
+    public void setDataCacheEvictProbability(int datacacheEvictProbability) {
+        this.datacacheEvictProbability = datacacheEvictProbability;
     }
 
     public boolean isCboUseDBLock() {
@@ -3141,6 +3158,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return singleNodeExecPlan;
     }
 
+    // -1 (< 0): disable cte, force inline. 0: force cte; other (> 0): compute by costs * ratio
     public double getCboCTERuseRatio() {
         return cboCTERuseRatio;
     }
@@ -3886,6 +3904,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableConstantExecuteInFE = enableConstantExecuteInFE;
     }
 
+    public int getLikePredicateConsolidateMin() {
+        return likePredicateConsolidateMin;
+    }
+
+    public void setLikePredicateConsolidateMin(int value) {
+        this.likePredicateConsolidateMin = value;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -4001,6 +4027,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_populate_datacache(enablePopulateDataCache);
         tResult.setEnable_datacache_async_populate_mode(enableDataCacheAsyncPopulateMode);
         tResult.setEnable_datacache_io_adaptor(enableDataCacheIOAdaptor);
+        tResult.setDatacache_evict_probability(datacacheEvictProbability);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);

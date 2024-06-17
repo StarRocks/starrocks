@@ -638,7 +638,7 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_dop) {
     int64_t lake_scan_dop = 0;
-    if (enable_tablet_internal_parallel) {
+    if (!scan_ranges.empty() && enable_tablet_internal_parallel) {
         ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
                                                                        tablet_internal_parallel_mode, &lake_scan_dop,
                                                                        &splitted_scan_rows));

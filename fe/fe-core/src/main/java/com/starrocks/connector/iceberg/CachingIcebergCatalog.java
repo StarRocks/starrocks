@@ -375,7 +375,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return delegate.getTableScan(table, scanContext);
     }
 
-
     private CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         if (expiresAfterWriteSec >= 0) {

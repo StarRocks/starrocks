@@ -24,6 +24,7 @@ import com.starrocks.scheduler.Task;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 public class OptimizeTask extends Task {
 
@@ -39,8 +40,30 @@ public class OptimizeTask extends Task {
     @SerializedName("lastVersion")
     private long lastVersion;
 
+    @SerializedName("partitionNames")
+    private List<String> partitionNames;
+
+    @SerializedName("tempPartitionNames")
+    private List<String> tempPartitionNames;
+
     public OptimizeTask(String name) {
         super(name);
+    }
+
+    public List<String> getTempPartitionNames() {
+        return tempPartitionNames;
+    }
+
+    public void setTempPartitionNames(List<String> tempPartitionNames) {
+        this.tempPartitionNames = tempPartitionNames;
+    }
+
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionNames(List<String> partitionNames) {
+        this.partitionNames = partitionNames;
     }
 
     public String getPartitionName() {

@@ -934,6 +934,15 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropCatalogStatement(DropCatalogStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                String catalogName = stmt.getName();
+                if (!context.getGlobalStateMgr().getCatalogMgr().catalogExists(catalogName)) {
+                    if (stmt.isIfExists()) {
+                        LOG.info("drop catalog[{}] which does not exist", catalogName);
+                        return;
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+                    }
+                }
                 context.getGlobalStateMgr().getCatalogMgr().dropCatalog(stmt);
             });
             return null;
@@ -1079,7 +1088,7 @@ public class DDLStmtExecutor {
             try {
                 metrics = DataCacheSelectExecutor.cacheSelect(statement, context);
             } catch (Exception e) {
-                LOG.warn(e);
+                LOG.warn("Failed to execute cacheSelect", e);
                 throw new RuntimeException(e.getMessage());
             }
 

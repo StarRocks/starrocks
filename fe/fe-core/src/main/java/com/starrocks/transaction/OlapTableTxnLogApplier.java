@@ -65,9 +65,18 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+            } else if (txnState.isVersionOverwrite()) {
+                // overwrite empty partition, it's next version will less than overwrite version
+                // otherwise, it's next version will not change
+                if (partitionCommitInfo.getVersion() + 1 > partition.getNextVersion()) {
+                    partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+                }
+            } else if (partitionCommitInfo.isDoubleWrite()) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
             }
+            LOG.debug("partition[{}] next version[{}]", partitionId, partition.getNextVersion());
         }
     }
 
@@ -157,7 +166,13 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 } // end for tablets
             } // end for indices
             long versionTime = partitionCommitInfo.getVersionTime();
-            partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+            if (txnState.isVersionOverwrite()) {
+                if (partition.getVisibleVersion() < version) {
+                    partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+                }
+            } else {
+                partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
+            }
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
