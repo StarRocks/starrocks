@@ -26,7 +26,7 @@ function check_keywords() {
         echo "Analyze profile succeeded"
     else
         echo "Analyze profile failed, keywords: ${keywords}, expect_num: ${expect_num}, actual_num: ${actual_num}"
-        echo -n "${profile}"
+        echo -e "${profile}"
     fi
 }
 
