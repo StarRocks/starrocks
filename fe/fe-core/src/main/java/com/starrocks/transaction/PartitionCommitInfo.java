@@ -79,6 +79,8 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
+    private boolean isDoubleWrite = false;
+
     public PartitionCommitInfo() {
 
     }
@@ -134,6 +136,14 @@ public class PartitionCommitInfo implements Writable {
         return versionTime;
     }
 
+    public void setIsDoubleWrite(boolean isDoubleWrite) {
+        this.isDoubleWrite = isDoubleWrite;
+    }
+
+    public boolean isDoubleWrite() {
+        return isDoubleWrite;
+    }
+
     public List<String> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }
@@ -162,6 +172,7 @@ public class PartitionCommitInfo implements Writable {
         sb.append(", version=").append(version);
         sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);
+        sb.append(", isDoubleWrite=").append(isDoubleWrite);
         return sb.toString();
     }
 }
