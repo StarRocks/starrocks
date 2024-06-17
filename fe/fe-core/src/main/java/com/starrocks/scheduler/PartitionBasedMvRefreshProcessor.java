@@ -114,7 +114,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -520,15 +520,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         for (String partitionName : partitionsToRefresh) {
             mappedPartitionsToRefresh.put(partitionName, rangePartitionMap.get(partitionName));
         }
-        LinkedHashMap<String, Range<PartitionKey>> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
+        LinkedList<String> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(LinkedList::new));
 
-        Iterator<String> partitionNameIter = sortedPartition.keySet().iterator();
+        Iterator<String> partitionNameIter = Config.materialized_view_refresh_ascending
+                ? sortedPartition.iterator() : sortedPartition.descendingIterator();
         String mvRefreshPartition = "";
         for (int i = 0; i < partitionRefreshNumber; i++) {
             if (partitionNameIter.hasNext()) {
                 mvRefreshPartition = partitionNameIter.next();
+                partitionNameIter.remove();
             }
 
             // NOTE: if mv's need to refresh partitions in the many-to-many mappings, no need to filter to
@@ -554,6 +557,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 return;
             }
         }
+        if (!Config.materialized_view_refresh_ascending) {
+            partitionNameIter = sortedPartition.iterator();
+        }
+        setNextPartitionStartAndEnd(partitionsToRefresh, mappedPartitionsToRefresh, partitionNameIter);
+    }
+
+    private void setNextPartitionStartAndEnd(Set<String> partitionsToRefresh,
+                   Map<String, Range<PartitionKey>> mappedPartitionsToRefresh,
+                   Iterator<String> partitionNameIter) {
         String nextPartitionStart = null;
         String endPartitionName = null;
         if (partitionNameIter.hasNext()) {
