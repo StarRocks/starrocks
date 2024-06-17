@@ -103,11 +103,11 @@ public class RoutineLoadScheduler extends FrontendDaemon {
             } catch (MetaNotFoundException e) {
                 errorJobState = RoutineLoadJob.JobState.CANCELLED;
                 userException = e;
-                LOG.warn(userException.getMessage());
+                LOG.warn(userException.getMessage(), userException);
             } catch (UserException e) {
                 errorJobState = RoutineLoadJob.JobState.PAUSED;
                 userException = e;
-                LOG.warn(userException.getMessage());
+                LOG.warn(userException.getMessage(), userException);
             }
 
             if (errorJobState != null) {

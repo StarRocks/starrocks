@@ -639,7 +639,7 @@ public class NodeMgr {
                 System.exit(-1);
             }
         } catch (UnknownHostException e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
             System.exit(-1);
         }
         LOG.debug("get self node: {}", selfNode);

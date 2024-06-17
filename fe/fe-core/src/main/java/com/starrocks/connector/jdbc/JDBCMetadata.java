@@ -71,7 +71,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             String driverName = getDriverName();
             Class.forName(driverName);
         } catch (ClassNotFoundException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
         }
         if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {

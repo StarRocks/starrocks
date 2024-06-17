@@ -87,7 +87,7 @@ public class CurrentQueryInfoProvider {
                     brpcNetAddress = SystemInfoService.toBrpcHost(instanceInfo.getAddress());
                     brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
                 } catch (Exception e) {
-                    LOG.warn(e.getMessage());
+                    LOG.warn(e.getMessage(), e);
                     throw new AnalysisException(e.getMessage());
                 }
             }
@@ -124,10 +124,10 @@ public class CurrentQueryInfoProvider {
                     statisticsMap.put(host, statistics);
                 }
             } catch (InterruptedException e) {
-                LOG.warn("Thread interrupted! " + e.getCause());
+                LOG.warn("Thread interrupted! ", e);
                 Thread.currentThread().interrupt();
             } catch (ExecutionException | TimeoutException e) {
-                LOG.warn("fail to receive result " + e.getCause());
+                LOG.warn("fail to receive result ", e);
                 throw new AnalysisException(e.getMessage());
             }
         }
@@ -146,7 +146,7 @@ public class CurrentQueryInfoProvider {
                         brpcNetAddress = SystemInfoService.toBrpcHost(instanceInfo.getAddress());
                         brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
                     } catch (Exception e) {
-                        LOG.warn(e.getMessage());
+                        LOG.warn(e.getMessage(), e);
                         throw new AnalysisException(e.getMessage());
                     }
                 }
@@ -208,10 +208,10 @@ public class CurrentQueryInfoProvider {
                     }
                 }
             } catch (InterruptedException e) {
-                LOG.warn("Thread interrupt! " + e.getCause());
+                LOG.warn("Thread interrupt! ", e);
                 Thread.currentThread().interrupt();
             } catch (ExecutionException | TimeoutException e) {
-                LOG.warn("fail to receive result" + e.getCause());
+                LOG.warn("fail to receive result", e);
                 throw new AnalysisException(e.getMessage());
             }
         }

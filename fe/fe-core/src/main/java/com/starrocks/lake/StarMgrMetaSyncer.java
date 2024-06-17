@@ -129,7 +129,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     response.failedTablets.forEach(shards::remove);
                 }
             } catch (Throwable e) {
-                LOG.error(e);
+                LOG.error(e.getMessage(), e);
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }

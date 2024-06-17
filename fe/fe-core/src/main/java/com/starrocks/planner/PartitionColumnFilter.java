@@ -162,7 +162,7 @@ public class PartitionColumnFilter {
                 upperKey = PartitionKey.createPartitionKey(
                         Lists.newArrayList(new PartitionValue(upperBound.getStringValue())), columns);
             } catch (AnalysisException e) {
-                LOG.warn(e.getMessage());
+                LOG.warn(e.getMessage(), e);
                 return null;
             }
             return Range.range(lowerKey, lowerType, upperKey, upperType);

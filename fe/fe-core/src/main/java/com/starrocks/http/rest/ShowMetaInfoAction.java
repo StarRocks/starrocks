@@ -162,7 +162,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
             long lastCheckpointTime = storage.getCurrentImageFile().lastModified();
             feInfo.put("last_checkpoint_time", String.valueOf(lastCheckpointTime));
         } catch (IOException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
         }
         return feInfo;
     }
