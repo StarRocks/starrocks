@@ -75,9 +75,8 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
 }
 
 inline SmallPermutation create_small_permutation(std::pair<int, int> range) {
-    int start = range.first;
-    int end = range.second;
-    int size = end - start;
+    const auto [start, end] = range;
+    auto size = end - start;
 
     SmallPermutation perm(size);
     for (uint32_t i = 0; i < size; i++) {
