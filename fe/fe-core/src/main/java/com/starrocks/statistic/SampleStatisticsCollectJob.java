@@ -36,10 +36,13 @@ import java.util.stream.Collectors;
 
 public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
+    private static final String INSERT_SELECT_WITH_TEMPLATE =
+            "WITH base_cte_table as (SELECT $columnNames from `$dbName`.`$tableName` $hints) ";
+
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', COUNT(1) * $ratio, "
                     + "$dataSize * $ratio, 0, 0, '', '', NOW() "
-                    + "FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` $hints ) as t ";
+                    + "FROM (SELECT 1 as column_key FROM `base_cte_table` ) as t ";
 
     private static final String INSERT_SELECT_TYPE_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', "
@@ -49,7 +52,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     + "       $maxFunction, $minFunction, NOW() "
                     + "FROM ( "
                     + "    SELECT t0.`column_key`, COUNT(1) as count "
-                    + "    FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` $hints) as t0 "
+                    + "    FROM (SELECT $columnName as column_key FROM `base_cte_table`) as t0 "
                     + "    GROUP BY t0.column_key "
                     + ") as t1 ";
 
@@ -78,9 +81,9 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                 splitSize = columnNames.size();
             }
         }
-        // Supports a maximum of 256 tasks for a union,
+        // Supports a maximum of 64 tasks for a union,
         // preventing unexpected situations caused by too many tasks being executed at one time
-        return (int) Math.min(256, splitSize);
+        return (int) Math.min(64, splitSize);
     }
 
     @Override
@@ -169,6 +172,27 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
         Set<String> lowerDistributeColumns =
                 table.getDistributionColumnNames().stream().map(String::toLowerCase).collect(Collectors.toSet());
+
+        {
+            VelocityContext cteContext = new VelocityContext();
+            cteContext.put("dbName", db.getFullName());
+            cteContext.put("tableName", table.getName());
+            cteContext.put("hints", hintTablets);
+            List<String> collectNames = Lists.newArrayList();
+            for (int i = 0; i < columnNames.size(); i++) {
+                Type columnType = columnTypes.get(i);
+                if (columnType.canStatistic()) {
+                    collectNames.add(StatisticUtils.quoting(columnNames.get(i)));
+                }
+            }
+            if (collectNames.isEmpty()) {
+                collectNames.add(StatisticUtils.quoting(columnNames.get(0)));
+            }
+            cteContext.put("columnNames", String.join(", ", collectNames));
+            StringWriter sw = new StringWriter();
+            DEFAULT_VELOCITY_ENGINE.evaluate(cteContext, sw, "", INSERT_SELECT_WITH_TEMPLATE);
+            builder.append(sw).append(" ");
+        }
 
         for (int i = 0; i < columnNames.size(); i++) {
             VelocityContext context = new VelocityContext();

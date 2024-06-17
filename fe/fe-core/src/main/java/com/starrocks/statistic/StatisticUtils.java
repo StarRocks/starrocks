@@ -101,6 +101,9 @@ public class StatisticUtils {
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
+        context.getSessionVariable().setCboCteReuse(true);
+        context.getSessionVariable().setCboCTERuseRatio(0);
+
         context.setStatisticsContext(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
