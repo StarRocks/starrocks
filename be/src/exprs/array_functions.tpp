@@ -1163,7 +1163,7 @@ private:
             auto src_column_offset_size = src_offsets_column.get_data()[i + 1] - src_offsets_column.get_data()[i];
             for (size_t key_column_size = 0; key_column_size < key_array_size; ++key_column_size) {
                 auto key_column_offset_size = key_offsets_columns[key_column_size].get()->get_data()[i + 1] -
-                                              key_offsets_columns[key_column_size]->get_data()[i];
+                                              key_offsets_columns[key_column_size].get()->get_data()[i];
                 if (src_column_offset_size != key_column_offset_size) {
                     throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
                 }
