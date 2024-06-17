@@ -75,15 +75,9 @@ public class BloomFilterIndexUtil {
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {
-        if (!properties.containsKey(FPP_KEY)) {
-            properties.put(FPP_KEY, NgramBfIndexParamsKey.BLOOM_FILTER_FPP.defaultValue());
-        }
-        if (!properties.containsKey(GRAM_NUM_KEY)) {
-            properties.put(GRAM_NUM_KEY, NgramBfIndexParamsKey.GRAM_NUM.defaultValue());
-        }
-        if (!properties.containsKey(CASE_SENSITIVE_KEY)) {
-            properties.put(CASE_SENSITIVE_KEY, NgramBfIndexParamsKey.CASE_SENSITIVE.defaultValue());
-        }
+        properties.computeIfAbsent(FPP_KEY, k -> NgramBfIndexParamsKey.BLOOM_FILTER_FPP.defaultValue());
+        properties.computeIfAbsent(GRAM_NUM_KEY, k -> NgramBfIndexParamsKey.GRAM_NUM.defaultValue());
+        properties.computeIfAbsent(CASE_SENSITIVE_KEY, k -> NgramBfIndexParamsKey.CASE_SENSITIVE.defaultValue());
     }
 
     public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)
