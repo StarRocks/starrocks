@@ -91,7 +91,7 @@ public class CTASAutoTabletTest {
             db.readUnlock();
         }
         Assert.assertEquals(bucketNum1, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
-        Assert.assertEquals(bucketNum2, 6);
+        Assert.assertEquals(bucketNum2, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
         Assert.assertEquals(bucketNum3, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
     }
 }
