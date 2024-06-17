@@ -554,6 +554,89 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
+### Aggregation pushdown
+
+From v3.3.0, StarRocks supports aggregation pushdown for materialized view query rewrite. When this feature is enabled, aggregate functions will be pushed down to the Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance.
+
+This feature is disabled by default, To enable this feature, you must set the system variable `enable_materialized_view_agg_pushdown_rewrite` to `true`.
+
+Suppose you want to accelerate the following SSB-based query `SQL1`:
+
+```sql
+-- SQL1
+SELECT 
+    LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE)
+FROM lineorder l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE 
+ORDER BY LO_ORDERDATE;
+```
+
+`SQL1` consists of aggregations on the table `lineorder` and a Join of `lineorder` and `dates`. Because aggregations happen within `lineorder` and the Join with `dates` is only used for data filtering, `SQL1` is logically equivalent to the following `SQL2`:
+
+```sql
+-- SQL2
+SELECT 
+    LO_ORDERDATE, sum(sum1), max(max1), bitmap_union_count(bitmap1)
+FROM 
+ (SELECT
+  LO_ORDERDATE,  sum(LO_REVENUE) AS sum1, max(LO_REVENUE) AS max1, bitmap_union(to_bitmap(LO_REVENUE)) AS bitmap1
+  FROM lineorder 
+  GROUP BY LO_ORDERDATE) l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE 
+ORDER BY LO_ORDERDATE;
+```
+
+`SQL2` brings aggregations forward, thus shrinking the data size of Join. You can create a materialized view based on the sub-query of `SQL2`, and enable aggregation pushdown to rewrite and accelerate the aggregations:
+
+```sql
+-- Create the materialized view mv0
+CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
+SELECT
+  LO_ORDERDATE, 
+  sum(LO_REVENUE) AS sum1, 
+  max(LO_REVENUE) AS max1, 
+  bitmap_union(to_bitmap(LO_REVENUE)) AS bitmap1
+FROM lineorder 
+GROUP BY LO_ORDERDATE;
+
+-- Enable aggregation pushdown for materialized view query rewrite
+SET enable_materialized_view_agg_pushdown_rewrite=true;
+```
+
+Then, `SQL1` will be rewritten and accelerated by the materialized view. It is rewritten to the following query:
+
+```sql
+SELECT 
+    LO_ORDERDATE, sum(sum1), max(max1), bitmap_union_count(bitmap1)
+FROM 
+ (SELECT LO_ORDERDATE, sum1, max1, bitmap1 FROM mv0) l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE
+ORDER BY LO_ORDERDATE;
+```
+
+Please note that only certain aggregate functions that support Aggregate Rollup rewrite are eligible for pushdown. They are:
+
+- MIN
+- MAX
+- COUNT
+- COUNT DISTINCT
+- SUM
+- BITMAP_UNION
+- HLL_UNION
+- PERCENTILE_UNION
+- BITMAP_AGG
+- ARRAY_AGG_DISTINCT
+
+:::note
+- After pushdown, the aggregate functions need to be rolled up to align with the original semantics. For more instructions on Aggregation Rollup, Please refer to [Aggregation Rollup Rewrite](#aggregation-rollup-rewrite).
+- Aggregation pushdown supports Rollup rewrite of Count Distinct based on Bitmap or HLL functions.
+- Aggregation pushdown only supports pushing aggregate functions down to the Scan Operator before Join, Filter, or Where operators.
+- Aggregation pushdown only supports query rewrite and acceleration based on materialized view built on a single table.
+:::
+
 ### COUNT DISTINCT rewrite
 
 StarRocks supports rewriting COUNT DISTINCT calculations into bitmap-based calculations, enabling high-performance, precise deduplication using materialized views. For example, create a materialized view as follows:
