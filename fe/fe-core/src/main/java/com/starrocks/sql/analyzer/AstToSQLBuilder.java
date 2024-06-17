@@ -16,8 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LargeStringLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -439,15 +437,6 @@ public class AstToSQLBuilder {
             }
             sb.append("}");
             return sb.toString();
-        }
-
-        @Override
-        public String visitLiteral(LiteralExpr node, Void context) {
-            if (node instanceof LargeStringLiteral) {
-                return ((LargeStringLiteral) node).toFullSqlImpl();
-            } else {
-                return node.toSql();
-            }
         }
     }
 }
