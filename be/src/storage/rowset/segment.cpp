@@ -358,7 +358,7 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
             continue;
         }
 
-        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this);
+        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this, &column);
         if (!res.ok()) {
             return res.status();
         }
@@ -371,7 +371,20 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
+<<<<<<< HEAD
         return _column_readers.at(id)->new_iterator(path);
+=======
+        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
+        if (_column_readers[id]->column_type() == column.type()) {
+            return source_iter;
+        } else {
+            auto nullable = _column_readers[id]->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(_column_readers[id]->column_type());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
+                                                                 column.scale());
+            return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+        }
+>>>>>>> 757f14205a ([Feature] Support add/drop field for struct column(part1) (#46451))
     } else if (!column.has_default_value() && !column.is_nullable()) {
         return Status::InternalError(
                 fmt::format("invalid nonexistent column({}) without default value.", column.name()));
@@ -389,7 +402,20 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
     auto iter = _column_readers.find(id);
     if (iter != _column_readers.end()) {
+<<<<<<< HEAD
         return iter->second->new_iterator(path);
+=======
+        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, nullptr));
+        if (iter->second->column_type() == column.type()) {
+            return source_iter;
+        } else {
+            auto nullable = iter->second->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(iter->second->column_type());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
+                                                                 column.scale());
+            return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
+        }
+>>>>>>> 757f14205a ([Feature] Support add/drop field for struct column(part1) (#46451))
     } else {
         return Status::NotFound(fmt::format("{} does not contain column of id {}", _segment_file_info.path, id));
     }
