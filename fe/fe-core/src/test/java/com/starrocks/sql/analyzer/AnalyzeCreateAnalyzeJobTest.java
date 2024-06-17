@@ -92,12 +92,11 @@ public class AnalyzeCreateAnalyzeJobTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         sql = "create analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
-        Assert.assertEquals("[c_name, c_phone]", analyzeStmt.getColumnNames().toString());
-
         try {
-            analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
+            analyzeSuccess(sql);
         } catch (Exception e) {
             Assert.assertTrue(e instanceof SemanticException);
+            Assert.assertTrue(e.getMessage().contains("External table hive0.tpch.customer don't support SAMPLE analyze."));
         }
     }
 }
