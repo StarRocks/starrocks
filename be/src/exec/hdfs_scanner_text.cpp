@@ -25,14 +25,6 @@
 
 namespace starrocks {
 
-static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
-    ssize_t end = filename.size() - 1;
-    while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
-    if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
-    const std::string& ext = filename.substr(end + 1);
-    return CompressionUtils::to_compression_pb(ext);
-}
-
 class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
@@ -151,6 +143,7 @@ void HdfsScannerCSVReader::_trim_row_delimeter(Record* record) {
 }
 
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+<<<<<<< HEAD
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
 
     // All delimiters will not be empty.
@@ -161,6 +154,20 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     }
 
     // _field_delimiter and _record_delimiter should use std::string,
+=======
+    const TTextFileDesc& text_file_desc = _scanner_params.scan_range->text_file_desc;
+    RETURN_IF_ERROR(_setup_delimiter(text_file_desc));
+    RETURN_IF_ERROR(_setup_compression_type(text_file_desc));
+
+    if (text_file_desc.__isset.skip_header_line_count) {
+        _skip_header_line_count = text_file_desc.skip_header_line_count;
+    }
+    return Status::OK();
+}
+
+Status HdfsTextScanner::_setup_delimiter(const TTextFileDesc& text_file_desc) {
+    // _field_delimiter and _line_delimiter should use std::string,
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
     // because the CSVReader is using std::string type as delimiter.
     _field_delimiter = text_file_desc.field_delim;
     // we should cast string to char now since csv reader only support record delimiter by char.
@@ -169,32 +176,89 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
     // but in fact, only the first character of the delimiter will take effect.
     // So here, we only use the first character of collection_delim and mapkey_delim.
+<<<<<<< HEAD
     _collection_delimiter = text_file_desc.collection_delim.front();
     _mapkey_delimiter = text_file_desc.mapkey_delim.front();
-
-    // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
-    // parse compression type from FE first.
-    _compression_type = CompressionTypePB::UNKNOWN_COMPRESSION;
-    if (text_file_desc.__isset.compression_type) {
-        _compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
+=======
+    if (text_file_desc.__isset.collection_delim) {
+        if (text_file_desc.collection_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's collection delim is empty");
+        }
+        _collection_delimiter = text_file_desc.collection_delim.front();
+    } else {
+        _collection_delimiter = DEFAULT_COLLECTION_DELIM.front();
     }
 
+    if (text_file_desc.__isset.mapkey_delim) {
+        if (text_file_desc.mapkey_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's mapkey delim is empty");
+        }
+        _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+    } else {
+        _mapkey_delimiter = DEFAULT_MAPKEY_DELIM.front();
+    }
+    return Status::OK();
+}
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
+
+Status HdfsTextScanner::_setup_compression_type(const TTextFileDesc& text_file_desc) {
+    // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
+    // parse compression type from FE first.
+    CompressionTypePB compression_type;
+    if (text_file_desc.__isset.compression_type) {
+        compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
+    } else {
+        // if FE does not specify compress type, we choose it by looking at filename.
+        compression_type = get_compression_type_from_path(_scanner_params.path);
+    }
+    if (compression_type != UNKNOWN_COMPRESSION) {
+        _compression_type = compression_type;
+    } else {
+        _compression_type = NO_COMPRESSION;
+    }
+
+    // If it's compressed file, we only handle scan range whose offset == 0.
+    if (_compression_type != NO_COMPRESSION && _scanner_params.scan_range->offset != 0) {
+        _no_data = true;
+    }
     return Status::OK();
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
-    const std::string& path = _scanner_params.path;
-    // if FE does not specify compress type, we choose it by looking at filename.
-    if (_compression_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
-        _compression_type = return_compression_type_from_filename(path);
-        if (_compression_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
-            _compression_type = CompressionTypePB::NO_COMPRESSION;
-        }
+    if (_no_data) {
+        return Status::OK();
     }
+
     RETURN_IF_ERROR(open_random_access_file());
+<<<<<<< HEAD
     RETURN_IF_ERROR(_setup_io_ranges());
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+=======
+
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+    // create csv reader eat lines may throw EOF, we need to handle it
+    Status st = _create_csv_reader();
+    if (st.is_end_of_file()) {
+        _no_data = true;
+        return Status::OK();
+    } else if (!st.ok()) {
+        return st;
+    }
+
+    // update materialized columns.
+    {
+        std::unordered_set<std::string> names;
+        for (const auto& column : _scanner_ctx.materialized_columns) {
+            if (column.name() == "___count___") continue;
+            names.insert(column.name());
+        }
+        RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
+    }
+
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
     for (const auto slot : _scanner_params.materialize_slots) {
         DCHECK(slot != nullptr);
@@ -212,6 +276,9 @@ void HdfsTextScanner::do_update_counter(HdfsScanProfile* profile) {
 }
 
 void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
+    if (_no_data) {
+        return;
+    }
     _reader.reset();
 }
 
@@ -220,7 +287,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
         return Status::EndOfFile("");
     }
     CHECK(chunk != nullptr);
-    RETURN_IF_ERROR(parse_csv(runtime_state->chunk_size(), chunk));
+    RETURN_IF_ERROR(_parse_csv(runtime_state->chunk_size(), chunk));
 
     ChunkPtr ck = *chunk;
     // do stats before we filter rows which does not match.
@@ -236,6 +303,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     if (_shared_buffered_input_stream != nullptr) {
         // we need to release previous shared buffers to save memory
@@ -243,6 +311,9 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         _shared_buffered_input_stream->release_to_offset(reader_offset);
     }
 
+=======
+Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
     DCHECK_EQ(0, chunk->get()->num_rows());
 
     int num_columns = chunk->get()->num_columns();
@@ -328,6 +399,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     return rows_read > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
+<<<<<<< HEAD
 Status HdfsTextScanner::_create_or_reinit_reader() {
     if (_compression_type != NO_COMPRESSION) {
         // Since we can not parse compressed file in pieces, we only handle scan range whose offset == 0.
@@ -358,32 +430,53 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     }
     {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+=======
+Status HdfsTextScanner::_create_csv_reader() {
+    const THdfsScanRange* scan_range = _scanner_ctx.scan_range;
 
-        // if reading start of file, skipping UTF-8 BOM
-        bool has_bom = false;
-        if (scan_range->offset == 0) {
-            CSVReader::Record first_line;
-            RETURN_IF_ERROR(reader->next_record(&first_line));
-            if (first_line.size >= 3 && (unsigned char)first_line.data[0] == 0xEF &&
-                (unsigned char)first_line.data[1] == 0xBB && (unsigned char)first_line.data[2] == 0xBF) {
-                has_bom = true;
-            }
-        }
-        if (has_bom) {
+    if (_compression_type != NO_COMPRESSION) {
+        // we don't know real stream size in adavance, so we set a very large stream size
+        auto file_size = static_cast<size_t>(-1);
+        _reader = std::make_shared<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
+                                                         _field_delimiter, file_size);
+    } else {
+        // no compressed file, splittable.
+        _reader = std::make_shared<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
+                                                         _field_delimiter, scan_range->file_length);
+    }
+    auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
+
+    // (TODO) only support uncompressed file to skip utf-8 bom, because compressed input stream didn't support seek() function
+    if (_compression_type == NO_COMPRESSION) {
+        // if reading start of file, try to skipping UTF-8 BOM
+        ASSIGN_OR_RETURN(const bool has_utf8_bom, _has_utf8_bom());
+        if (has_utf8_bom) {
             RETURN_IF_ERROR(reader->reset(scan_range->offset + 3, scan_range->length - 3));
         } else {
+            // reset offset
             RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
         }
-        if (scan_range->offset != 0) {
-            // Always skip first record of scan range with non-zero offset.
-            // Notice that the first record will read by previous scan range.
-            CSVReader::Record dummy;
+    }
+
+    if (scan_range->offset != 0) {
+        // Always skip first record of scan range with non-zero offset.
+        // Notice that the first record will read by previous scan range.
+        CSVReader::Record dummy;
+        RETURN_IF_ERROR(reader->next_record(&dummy));
+    }
+
+    // skip header line count only in offset = 0
+    if (scan_range->offset == 0 && _skip_header_line_count > 0) {
+        CSVReader::Record dummy;
+        for (int32_t i = 0; i < _skip_header_line_count; i++) {
             RETURN_IF_ERROR(reader->next_record(&dummy));
         }
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HdfsTextScanner::_setup_io_ranges() const {
     if (_shared_buffered_input_stream != nullptr) {
         std::vector<io::SharedBufferedInputStream::IORange> ranges{};
@@ -396,6 +489,21 @@ Status HdfsTextScanner::_setup_io_ranges() const {
         RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
     }
     return Status::OK();
+=======
+StatusOr<bool> HdfsTextScanner::_has_utf8_bom() const {
+    // if reading start of file, skipping UTF-8 BOM
+    if (_scanner_ctx.scan_range->offset == 0) {
+        auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+        CSVReader::Record first_line;
+        RETURN_IF_ERROR(reader->next_record(&first_line));
+        if (first_line.size >= 3 && static_cast<unsigned char>(first_line.data[0]) == 0xEF &&
+            static_cast<unsigned char>(first_line.data[1]) == 0xBB &&
+            static_cast<unsigned char>(first_line.data[2]) == 0xBF) {
+            return true;
+        }
+    }
+    return false;
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
 }
 
 Status HdfsTextScanner::_build_hive_column_name_2_index() {

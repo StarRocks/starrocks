@@ -42,6 +42,12 @@ import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.OpenCSVSerde;
+import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
@@ -202,11 +208,15 @@ public class HiveMetastoreApiConverter {
 
     public static Partition toPartition(StorageDescriptor sd, Map<String, String> params) {
         requireNonNull(sd, "StorageDescriptor is null");
+        Map<String, String> textFileParameters = Maps.newHashMap();
+        textFileParameters.putAll(sd.getSerdeInfo().getParameters());
+        // "skip.header.line.count" is set in TBLPROPERTIES
+        textFileParameters.putAll(params);
         Partition.Builder partitionBuilder = Partition.builder()
                 .setParams(params)
                 .setFullPath(sd.getLocation())
                 .setInputFormat(toRemoteFileInputFormat(sd.getInputFormat()))
-                .setTextFileFormatDesc(toTextFileFormatDesc(sd.getSerdeInfo().getParameters()))
+                .setTextFileFormatDesc(toTextFileFormatDesc(textFileParameters))
                 .setSplittable(RemoteFileInputFormat.isSplittable(sd.getInputFormat()));
 
         return partitionBuilder.build();
@@ -355,7 +365,7 @@ public class HiveMetastoreApiConverter {
         }
     }
 
-    public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> serdeParams) {
+    public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> parameters) {
         final String DEFAULT_FIELD_DELIM = "\001";
         final String DEFAULT_COLLECTION_DELIM = "\002";
         final String DEFAULT_MAPKEY_DELIM = "\003";
@@ -369,20 +379,24 @@ public class HiveMetastoreApiConverter {
         // There is a typo in Hive 2.x version, and fixed in Hive 3.x version.
         // https://issues.apache.org/jira/browse/HIVE-16922
         String collectionDelim;
-        if (serdeParams.containsKey("colelction.delim")) {
-            collectionDelim = serdeParams.getOrDefault("colelction.delim", "");
+        if (parameters.containsKey("colelction.delim")) {
+            collectionDelim = parameters.getOrDefault("colelction.delim", "");
         } else {
-            collectionDelim = serdeParams.getOrDefault("collection.delim", "");
+            collectionDelim = parameters.getOrDefault(serdeConstants.COLLECTION_DELIM, "");
         }
 
-        String fieldDelim = serdeParams.getOrDefault("field.delim", "");
+        String fieldDelim = parameters.getOrDefault(serdeConstants.FIELD_DELIM, "");
         if (fieldDelim.isEmpty()) {
             // Support for hive org.apache.hadoop.hive.serde2.OpenCSVSerde
             // https://cwiki.apache.org/confluence/display/hive/csv+serde
-            fieldDelim = serdeParams.getOrDefault("separatorChar", "");
+            fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, "");
         }
-        String lineDelim = serdeParams.getOrDefault("line.delim", "");
-        String mapkeyDelim = serdeParams.getOrDefault("mapkey.delim", "");
+        String lineDelim = parameters.getOrDefault(serdeConstants.LINE_DELIM, "");
+        String mapkeyDelim = parameters.getOrDefault(serdeConstants.MAPKEY_DELIM, "");
+        int skipHeaderLineCount = Integer.parseInt(parameters.getOrDefault(serdeConstants.HEADER_COUNT, "0"));
+        if (skipHeaderLineCount < 0) {
+            skipHeaderLineCount = 0;
+        }
 
         // check is empty
         fieldDelim = fieldDelim.isEmpty() ? DEFAULT_FIELD_DELIM : fieldDelim;
@@ -390,7 +404,7 @@ public class HiveMetastoreApiConverter {
         collectionDelim = collectionDelim.isEmpty() ? DEFAULT_COLLECTION_DELIM : collectionDelim;
         mapkeyDelim = mapkeyDelim.isEmpty() ? DEFAULT_MAPKEY_DELIM : mapkeyDelim;
 
-        return new TextFileFormatDesc(fieldDelim, lineDelim, collectionDelim, mapkeyDelim);
+        return new TextFileFormatDesc(fieldDelim, lineDelim, collectionDelim, mapkeyDelim, skipHeaderLineCount);
     }
 
     public static HiveCommonStats toHiveCommonStats(Map<String, String> params) {

@@ -98,6 +98,8 @@ struct TTextFileDesc {
     
     // escape character
     8: optional i8 escape
+
+    9: optional i32 skip_header_line_count
 }
 
 enum TSchemaTableType {

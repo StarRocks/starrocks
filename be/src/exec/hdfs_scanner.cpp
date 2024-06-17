@@ -19,6 +19,7 @@
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
+#include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 
 static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
@@ -487,4 +488,80 @@ bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const
     return true;
 }
 
+<<<<<<< HEAD
+=======
+void HdfsScannerContext::merge_split_tasks() {
+    if (split_tasks.size() < 2) return;
+
+    // NOTE: the prerequisites of `split_tasks` are
+    // 1. all ranges in it are sorted
+    // 2. and none of them is overlapped.
+    std::vector<HdfsSplitContextPtr> new_split_tasks;
+
+    auto do_merge = [&](size_t start, size_t end) {
+        auto start_ctx = split_tasks[start].get();
+        auto end_ctx = split_tasks[end].get();
+        auto new_ctx = start_ctx->clone();
+        new_ctx->split_start = start_ctx->split_start;
+        new_ctx->split_end = end_ctx->split_end;
+        new_split_tasks.emplace_back(std::move(new_ctx));
+    };
+
+    size_t head = 0;
+    for (size_t i = 1; i < split_tasks.size(); i++) {
+        bool cut = false;
+
+        auto prev_ctx = split_tasks[i - 1].get();
+        auto ctx = split_tasks[i].get();
+        auto head_ctx = split_tasks[head].get();
+
+        if ((ctx->split_start != prev_ctx->split_end) ||
+            (ctx->split_end - head_ctx->split_start > connector_max_split_size)) {
+            cut = true;
+        }
+
+        if (cut) {
+            do_merge(head, i - 1);
+            head = i;
+        }
+    }
+    do_merge(head, split_tasks.size() - 1);
+
+    // handle the tail stripe, if it's small and consecutive, merge it to the last one.
+    size_t new_size = new_split_tasks.size();
+    if (new_size >= 2) {
+        auto tail_ctx = new_split_tasks[new_size - 1].get();
+        size_t tail_size = (tail_ctx->split_end - tail_ctx->split_start);
+        if ((tail_size * 2) < connector_max_split_size) {
+            auto last_ctx = new_split_tasks[new_size - 2].get();
+            if (last_ctx->split_end == tail_ctx->split_start) {
+                last_ctx->split_end = tail_ctx->split_end;
+                new_split_tasks.pop_back();
+            }
+        }
+    }
+
+    split_tasks.swap(new_split_tasks);
+}
+void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+    size_t max_split_size = 0;
+    for (auto& t : _scanner_ctx.split_tasks) {
+        size_t size = (t->split_end - t->split_start);
+        max_split_size = std::max(max_split_size, size);
+        split_tasks->emplace_back(std::move(t));
+    }
+    if (split_tasks->size() > 0) {
+        _scanner_ctx.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
+    }
+}
+
+CompressionTypePB HdfsScanner::get_compression_type_from_path(const std::string& filename) {
+    ssize_t end = filename.size() - 1;
+    while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
+    if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
+    const std::string& ext = filename.substr(end + 1);
+    return CompressionUtils::to_compression_pb(ext);
+}
+
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
 } // namespace starrocks
