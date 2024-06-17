@@ -383,6 +383,11 @@ public class CatalogUtils {
         int bucketNum = 0;
         if (olapTable.getPartitions().size() < recentPartitionNum || !enableAutoTabletDistribution) {
             bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            // If table is not partitioned, the bucketNum should be at least DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM
+            if (!olapTable.getPartitionInfo().isPartitioned()) {
+                bucketNum = bucketNum > FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM ?
+                        bucketNum : FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM;
+            }
             return bucketNum;
         }
 
