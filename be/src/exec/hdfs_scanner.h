@@ -359,6 +359,7 @@ public:
 
 protected:
     Status open_random_access_file();
+    static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
 

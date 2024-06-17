@@ -19,6 +19,7 @@
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
+#include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 
 namespace starrocks {
@@ -626,6 +627,14 @@ void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* s
     if (split_tasks->size() > 0) {
         _scanner_ctx.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
     }
+}
+
+CompressionTypePB HdfsScanner::get_compression_type_from_path(const std::string& filename) {
+    ssize_t end = filename.size() - 1;
+    while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
+    if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
+    const std::string& ext = filename.substr(end + 1);
+    return CompressionUtils::to_compression_pb(ext);
 }
 
 } // namespace starrocks
