@@ -329,41 +329,42 @@ bool VectorizedFunctionCallExpr::split_like_string_to_ngram(const Slice& needle,
     size_t index_gram_num = reader_options.index_gram_num;
 
     // below is a window sliding algorithm which consider escaped character
-    // cur_grams_begin_index is window's left site, i is window's right site
-    // in each iteration of while loop, we will keep moving window's right site i from cur_grams_begin_index until we find a valid ngram and save it into  ngram_set
+    // cur_grams_begin_index is window's left site, cur_grams_end_index is window's right site
+    // in each iteration of while loop, we will keep moving window's right site from cur_grams_begin_index until we find a valid ngram and save it into  ngram_set
     // then move window's left site cur_grams_begin_index to the next utf-8 gram
     size_t cur_grams_begin_index = 0;
-    while (cur_grams_begin_index < needle.size) {
-        // we stop here when there is not enough grams left
-        if (needle.size - cur_grams_begin_index < index_gram_num) {
-            break;
-        }
+    size_t cur_grams_end_index = 0;
+    while (cur_grams_end_index < needle.size) {
         size_t cur_valid_grams_num = 0;
         bool escaped = false;
         std::string cur_valid_grams;
         cur_valid_grams.reserve(index_gram_num);
-        // when iteration begin,[cur_grams_begin_index, i) is the current ngram
-        // cur_valid_grams contains the number of utf-8 gram in needle[cur_grams_begin_index, i) without '\\'
-        // cur_valid_grams_num is the number of utf-8 gram in needle[cur_grams_begin_index, i)
-        // escaped means needle[i - 1] is '\\'
-        for (size_t i = cur_grams_begin_index; i < needle.size;) {
-            if (escaped && (needle[i] == '%' || needle[i] == '_' || needle[i] == '\\')) {
-                cur_valid_grams += needle[i];
+        // when iteration begin,[cur_grams_begin_index, cur_grams_end_index) is the current ngram
+        // cur_valid_grams contains the number of utf-8 gram in needle[cur_grams_begin_index, cur_grams_end_index) without '\\'
+        // cur_valid_grams_num is the number of utf-8 gram in needle[cur_grams_begin_index, cur_grams_end_index)
+        // escaped means needle[cur_grams_end_index - 1] is '\\'
+
+        for (cur_grams_end_index = cur_grams_begin_index; cur_grams_end_index < needle.size;) {
+            if (escaped && (needle[cur_grams_end_index] == '%' || needle[cur_grams_end_index] == '_' ||
+                            needle[cur_grams_end_index] == '\\')) {
+                cur_valid_grams += needle[cur_grams_end_index];
                 ++cur_valid_grams_num;
                 escaped = false;
-                ++i;
-            } else if (!escaped && (needle[i] == '%' || needle[i] == '_')) {
+                ++cur_grams_end_index;
+            } else if (!escaped && (needle[cur_grams_end_index] == '%' || needle[cur_grams_end_index] == '_')) {
                 // not enough grams, so move left site of window to need[i+1]
-                cur_grams_begin_index = i + 1;
+                ++cur_grams_end_index;
+                cur_grams_begin_index = cur_grams_end_index;
                 break;
-            } else if (!escaped && needle[i] == '\\') {
+            } else if (!escaped && needle[cur_grams_end_index] == '\\') {
                 escaped = true;
-                ++i;
+                ++cur_grams_end_index;
             } else {
                 // add next gram into cur_valid_grams
-                size_t cur_gram_length = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(needle.data[i])];
-                cur_valid_grams.append(&needle[i], cur_gram_length);
-                i += cur_gram_length;
+                size_t cur_gram_length =
+                        UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(needle.data[cur_grams_end_index])];
+                cur_valid_grams.append(&needle[cur_grams_end_index], cur_gram_length);
+                cur_grams_end_index += cur_gram_length;
                 ++cur_valid_grams_num;
                 escaped = false;
             }

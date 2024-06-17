@@ -41,7 +41,7 @@ CREATE TABLE ngram_index_default_2(
     INDEX idx_name1(username) USING NGRAMBF ("bloom_filter_fpp" = "0.05")
 )PROPERTIES ("replication_num" = "1");
 show index from ngram_index_default_2;
-// if default value of gram_num is not set, be will crash when insert data
+-- if default value of gram_num is not set, be will crash when insert data
 insert into ngram_index_default_2 values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaaaaaaaaaaab",4),('2023-01-03',"我爱吃烤全羊yangyangchin",4),('2023-01-04',"tonightisgreadnight",4);
 
 

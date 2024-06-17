@@ -89,10 +89,8 @@ show index from ngram_index_default_2;
 -- result:
 ngram_bloom_filter_db_2.ngram_index_default_2		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "2")	
 -- !result
-// if default value of gram_num is not set, be will crash when insert data
 insert into ngram_index_default_2 values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaaaaaaaaaaab",4),('2023-01-03',"我爱吃烤全羊yangyangchin",4),('2023-01-04',"tonightisgreadnight",4);
 -- result:
-E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected input '/', the most similar input is {'ADD', 'ADMIN', 'ALTER', 'ANALYZE', 'BACKUP', '(', ';'}.")
 -- !result
 CREATE TABLE ngram_index_default_3(
     timestamp DATETIME NOT NULL,
