@@ -673,7 +673,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
 
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/jindosdk
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.so ${STARROCKS_OUTPUT}/be/lib/jindosdk/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/libjindosdk_c.so.* ${STARROCKS_OUTPUT}/be/lib/jindosdk/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/odps-reader-lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/

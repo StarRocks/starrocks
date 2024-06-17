@@ -20,19 +20,20 @@ namespace starrocks::io {
 
 Status JindoOutputStream::write(const void* data, int64_t size) {
     if (_write_handle == nullptr) {
-        JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
-        _write_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_OVERWRITE, 0777);
+        JdoHandleCtx_t jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
+        _write_handle =
+                jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_OVERWRITE, 0777, nullptr);
         Status init_status = io::check_jindo_status(jdo_ctx);
-        jdo_freeContext(jdo_ctx);
+        jdo_freeHandleCtx(jdo_ctx);
         if (!init_status.ok()) {
             return init_status;
         }
     }
 
-    JdoContext_t jdo_write_ctx = jdo_createContext2(*_jindo_client, _write_handle);
-    jdo_write(jdo_write_ctx, static_cast<const char*>(data), size);
+    JdoHandleCtx_t jdo_write_ctx = jdo_createHandleCtx2(*_jindo_client, _write_handle);
+    jdo_write(jdo_write_ctx, static_cast<const char*>(data), size, nullptr);
     Status status = io::check_jindo_status(jdo_write_ctx);
-    jdo_freeContext(jdo_write_ctx);
+    jdo_freeHandleCtx(jdo_write_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_write";
         return Status::IOError("");
@@ -45,10 +46,10 @@ Status JindoOutputStream::write(const void* data, int64_t size) {
 }
 
 Status JindoOutputStream::flush() {
-    JdoContext_t jdo_write_ctx = jdo_createContext2(*_jindo_client, _write_handle);
-    jdo_flush(jdo_write_ctx);
+    JdoHandleCtx_t jdo_write_ctx = jdo_createHandleCtx2(*_jindo_client, _write_handle);
+    jdo_flush(jdo_write_ctx, nullptr);
     Status status = io::check_jindo_status(jdo_write_ctx);
-    jdo_freeContext(jdo_write_ctx);
+    jdo_freeHandleCtx(jdo_write_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_flush";
         return Status::IOError("");
@@ -57,10 +58,10 @@ Status JindoOutputStream::flush() {
 }
 
 Status JindoOutputStream::close() {
-    auto jdo_ctx = jdo_createContext2(*_jindo_client, _write_handle);
-    jdo_close(jdo_ctx);
+    auto jdo_ctx = jdo_createHandleCtx2(*_jindo_client, _write_handle);
+    jdo_close(jdo_ctx, nullptr);
     Status status = io::check_jindo_status(jdo_ctx);
-    jdo_freeContext(jdo_ctx);
+    jdo_freeHandleCtx(jdo_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_close";
         return Status::IOError("");

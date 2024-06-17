@@ -260,7 +260,7 @@ find_package(Poco REQUIRED COMPONENTS Net NetSSL)
 include_directories(${Poco_INCLUDE_DIRS})
 
 add_library(jindo-sdk SHARED IMPORTED)
-set_target_properties(jindo-sdk PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/jindosdk/libjindo-csdk.so)
+set_target_properties(jindo-sdk PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/jindosdk/libjindosdk_c.so.6)
 
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)

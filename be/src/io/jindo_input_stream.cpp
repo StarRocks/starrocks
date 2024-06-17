@@ -22,10 +22,10 @@ namespace starrocks::io {
 
 StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     if (_open_handle == nullptr) {
-        JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
-        _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777);
+        JdoHandleCtx_t jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
+        _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777, nullptr);
         Status init_status = io::check_jindo_status(jdo_ctx);
-        jdo_freeContext(jdo_ctx);
+        jdo_freeHandleCtx(jdo_ctx);
         if (!init_status.ok()) {
             return init_status;
         }
@@ -41,13 +41,13 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     int64_t bytes_read = 0;
     int64_t bytes = 0;
     while (bytes_to_read > 0) {
-        JdoContext_t jdo_read_ctx = jdo_createContext2(*_jindo_client, _open_handle);
-        bytes = jdo_pread(jdo_read_ctx, buffer + bytes_read, bytes_to_read, _offset);
+        JdoHandleCtx_t jdo_read_ctx = jdo_createHandleCtx2(*_jindo_client, _open_handle);
+        bytes = jdo_pread(jdo_read_ctx, buffer + bytes_read, bytes_to_read, _offset, nullptr);
         Status read_status = check_jindo_status(jdo_read_ctx);
-        jdo_freeContext(jdo_read_ctx);
+        jdo_freeHandleCtx(jdo_read_ctx);
         if (UNLIKELY(!read_status.ok())) {
             LOG(ERROR) << fmt::format("Failed to read the file {}, offset = {}, length = {}", _file_path, _offset,
-                                      bytes_to_read);
+                                      bytes_to_read, nullptr);
             return read_status;
         }
         if (bytes < 0) {
@@ -81,11 +81,11 @@ StatusOr<int64_t> JindoInputStream::position() {
 StatusOr<int64_t> JindoInputStream::get_size() {
     if (_size == -1) {
         {
-            JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
-            bool file_exist = jdo_exists(jdo_ctx, _file_path.c_str());
-            Status get_status = check_jindo_status(jdo_ctx);
-            jdo_freeContext(jdo_ctx);
-            if (UNLIKELY(!get_status.ok())) {
+            auto jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
+            bool file_exist = jdo_exists(jdo_ctx, _file_path.c_str(), nullptr);
+            Status status = io::check_jindo_status(jdo_ctx);
+            jdo_freeHandleCtx(jdo_ctx);
+            if (UNLIKELY(!status.ok())) {
                 LOG(ERROR) << "Failed to execute jdo_exists for " << _file_path;
                 return Status::IOError(_file_path);
             }
@@ -96,16 +96,15 @@ StatusOr<int64_t> JindoInputStream::get_size() {
             }
         }
         {
-            JdoFileStatus_t info;
-            JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
-            jdo_getFileStatus(jdo_ctx, _file_path.c_str(), &info);
-            Status get_status = check_jindo_status(jdo_ctx);
-            jdo_freeContext(jdo_ctx);
-            if (UNLIKELY(!get_status.ok())) {
+            auto jdo_ctx = jdo_createHandleCtx1(*_jindo_client);
+            JdoFileStatus_t file_status = jdo_getFileStatus(jdo_ctx, _file_path.c_str(), nullptr);
+            Status status = io::check_jindo_status(jdo_ctx);
+            jdo_freeHandleCtx(jdo_ctx);
+            if (UNLIKELY(!status.ok())) {
                 LOG(ERROR) << fmt::format("Failed to get the size of file {}", _file_path);
-                return get_status;
+                return status;
             }
-            _size = jdo_getFileStatusFileSize(info);
+            _size = jdo_getFileStatusSize(file_status);
         }
     }
     return _size;

@@ -24,11 +24,11 @@
 #include "jindosdk/jdo_defines.h"
 
 namespace starrocks::io {
-inline Status check_jindo_status(JdoContext_t jdo_ctx) {
-    int32_t code = jdo_getCtxErrorCode(jdo_ctx);
+inline Status check_jindo_status(JdoHandleCtx_t jdo_ctx) {
+    int32_t code = jdo_getHandleCtxErrorCode(jdo_ctx);
     if (UNLIKELY(code != 0)) {
         std::string error_msg;
-        const char* msg = jdo_getCtxErrorMsg(jdo_ctx);
+        const char* msg = jdo_getHandleCtxErrorMsg(jdo_ctx);
         if (msg != nullptr) {
             error_msg.assign(msg);
         }

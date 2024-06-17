@@ -28,16 +28,16 @@ namespace starrocks::io {
 
 class JindoInputStream final : public SeekableInputStream {
 public:
-    explicit JindoInputStream(std::shared_ptr<JdoSystem_t> client, std::string file_path)
+    explicit JindoInputStream(std::shared_ptr<JdoStore_t> client, std::string file_path)
             : _jindo_client(std::move(client)), _open_handle(nullptr), _file_path(std::move(file_path)) {}
 
     ~JindoInputStream() override {
         if (_open_handle != nullptr) {
-            auto jdo_ctx = jdo_createContext2(*_jindo_client, _open_handle);
-            jdo_close(jdo_ctx);
+            auto jdo_ctx = jdo_createHandleCtx2(*_jindo_client, _open_handle);
+            jdo_close(jdo_ctx, nullptr);
             Status init_status = io::check_jindo_status(jdo_ctx);
-            jdo_freeContext(jdo_ctx);
-            jdo_freeHandle(_open_handle);
+            jdo_freeHandleCtx(jdo_ctx);
+            jdo_freeIOContext(_open_handle);
         }
         _open_handle = nullptr;
         _jindo_client.reset();
@@ -62,8 +62,8 @@ public:
     void set_size(int64_t size) override;
 
 private:
-    std::shared_ptr<JdoSystem_t> _jindo_client;
-    JdoHandle_t _open_handle;
+    std::shared_ptr<JdoStore_t> _jindo_client;
+    JdoIOContext_t _open_handle;
     std::string _file_path;
     int64_t _offset{0};
     int64_t _size{-1};
