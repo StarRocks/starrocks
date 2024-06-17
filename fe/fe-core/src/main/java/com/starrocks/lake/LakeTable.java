@@ -182,8 +182,10 @@ public class LakeTable extends OlapTable {
         List<Long> shardIds = null;
         try {
             // Ignore the parameter replicationNum
-            long indexShardGroupId = shardGroupId == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID ? index.getShardGroupId() : shardGroupId;
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, indexShardGroupId, null, properties,
+            long indexShardGroupId = shardGroupId == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID ?
+                    index.getShardGroupId() : shardGroupId;
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, indexShardGroupId,
+                    null, properties,
                     StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         } catch (DdlException e) {
             LOG.error(e.getMessage(), e);
