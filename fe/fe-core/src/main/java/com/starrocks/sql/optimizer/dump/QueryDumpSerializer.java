@@ -57,7 +57,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         try {
             dumpJson.addProperty("session_variables", dumpInfo.getSessionVariable().getJsonString());
         } catch (IOException e) {
-            LOG.warn("serialize session variables failed. " + e);
+            LOG.warn("serialize session variables failed. ", e);
         }
 
         // BE number

@@ -345,7 +345,7 @@ public class ColocateTableIndex implements Writable {
                     GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
                             false /* isJoin */);
                 } catch (DdlException e) {
-                    LOG.error(e.getMessage());
+                    LOG.error(e.getMessage(), e);
                 }
             }
 
@@ -621,7 +621,7 @@ public class ColocateTableIndex implements Writable {
             addTableToGroup(info.getGroupId().dbId, tbl, tbl.getColocateGroup(), info.getGroupId(), true /* isReplay */);
         } catch (DdlException e) {
             // should not happen, just log an error here
-            LOG.error(e.getMessage());
+            LOG.error(e.getMessage(), e);
         } finally {
             writeUnlock();
         }

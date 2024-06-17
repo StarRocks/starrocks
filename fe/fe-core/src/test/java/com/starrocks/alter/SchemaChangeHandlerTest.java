@@ -424,7 +424,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             AlterTableStmt addValColStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr2);
             GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt2);
         } catch (Exception e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must not be less than 0"));
         }
 
@@ -433,7 +433,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             AlterTableStmt addValColStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr3);
             GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt3);
         } catch (Exception e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
         }
     }

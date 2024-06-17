@@ -370,7 +370,7 @@ public class MetaService {
                 Storage storage = new Storage(imageDir.getAbsolutePath());
                 response.updateHeader(MetaBaseAction.TOKEN, storage.getToken());
             } catch (IOException e) {
-                LOG.error(e);
+                LOG.error(e.getMessage(), e);
             }
             writeResponse(request, response);
         }
