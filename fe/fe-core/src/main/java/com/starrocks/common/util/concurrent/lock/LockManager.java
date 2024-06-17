@@ -224,7 +224,7 @@ public class LockManager {
                 removeFromWaiterList(rid, currentLocker, lockType);
                 /* Failure to acquire lock within the timeout ms */
                 DeadlockException exception = DeadlockException.makeDeadlockException(dc, currentLocker, false);
-                LOG.warn(exception.getMessage());
+                LOG.warn(exception.getMessage(), exception);
                 throw exception;
             }
 
@@ -409,7 +409,7 @@ public class LockManager {
                     removeFromWaiterList(rid, locker, lockType);
                     DeadlockException exception =
                             DeadlockException.makeDeadlockException(deadLockChecker, victim, true);
-                    LOG.warn(exception.getMessage());
+                    LOG.warn(exception.getMessage(), exception);
                     throw exception;
                 }
             } else {

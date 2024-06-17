@@ -272,7 +272,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         try {
             BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort()).abortTxn(request);
         } catch (Throwable e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
         }
     }
 

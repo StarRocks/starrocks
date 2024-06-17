@@ -1200,6 +1200,12 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view = true;
 
     /**
+     * control materialized view refresh order
+     */
+    @ConfField(mutable = true)
+    public static boolean materialized_view_refresh_ascending = true;
+
+    /**
      * Control whether to enable spill for all materialized views in the refresh mv.
      */
     @ConfField(mutable = true)

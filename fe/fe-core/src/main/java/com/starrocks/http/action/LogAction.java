@@ -96,7 +96,7 @@ public class LogAction extends WebBaseAction {
             appendUpdateVerboseButton(buffer, "add_verbose");
             appendUpdateVerboseButton(buffer, "del_verbose");
         } catch (IOException e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
         }
     }
 

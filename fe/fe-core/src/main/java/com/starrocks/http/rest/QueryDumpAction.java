@@ -110,7 +110,7 @@ public class QueryDumpAction extends RestBaseAction {
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             executor.execute();
         } catch (Exception e) {
-            LOG.warn("execute query failed. " + e);
+            LOG.warn("execute query failed. ", e);
             response.getContent().append("execute query failed. " + e.getMessage());
             sendResult(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
