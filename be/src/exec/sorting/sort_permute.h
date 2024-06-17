@@ -95,12 +95,10 @@ inline SmallPermutation create_small_permutation(uint32_t rows) {
 }
 
 inline void restore_small_permutation(const SmallPermutation& perm, Permutation& output, std::pair<int, int> range) {
-    int start = range.first;
-    int end = range.second;
-
-    output.resize(end - start);
-    for (int i = start; i < end; i++) {
-        output[i - start].index_in_chunk = perm[i - start].index_in_chunk;
+    const auto [start, end] = range;
+    const auto size = end - start;
+    for (int i = 0; i < size; i++) {
+        output[i].index_in_chunk = perm[i].index_in_chunk;
     }
 }
 

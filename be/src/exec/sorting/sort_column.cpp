@@ -439,8 +439,8 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
     if (columns.size() < 1) {
         return Status::OK();
     }
-    size_t num_rows = columns[0]->size();
-    Tie tie(num_rows, 1);
+
+    Tie tie(range.second - range.first, 1);
     SmallPermutation small_perm = create_small_permutation(range);
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {

@@ -1040,8 +1040,6 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
         if (columns.size() > 2) {
             return _process_multi_array_sort(ctx, columns);
         }
@@ -1095,7 +1093,7 @@ private:
         std::vector<ColumnPtr> key_array_columns;
         for (size_t i = 1; i < columns.size(); ++i) {
             ColumnPtr key_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[i]);
-            key_array_columns.push_back(key_column);
+            key_array_columns.emplace_back(std::move(key_column));
         }
 
         if (src_column->is_nullable()) {
