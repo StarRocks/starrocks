@@ -179,7 +179,7 @@ SELECT * FROM sales_records;
 
 ### Unload to MinIO
 
-The parameters used for MinIO is different from those used for AWS S3.
+The parameters used for MinIO are different from those used for AWS S3.
 
 Example:
 
