@@ -629,6 +629,7 @@ void StorageEngine::stop() {
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
     wake_finish_publish_vesion_thread();
+    wake_schedule_apply_thread();
     JOIN_THREAD(_finish_publish_version_thread)
 
     JOIN_THREADS(_base_compaction_threads)
@@ -1606,6 +1607,14 @@ void StorageEngine::decommission_disks(const std::vector<string>& decommission_d
             }
         }
     }
+}
+
+void StorageEngine::add_schedule_apply_task(int64_t tablet_id, int64_t time) {
+    {
+        std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
+        _schedule_apply_tasks.emplace(time, tablet_id);
+    }
+    _apply_tablet_changed_cv.notify_one();
 }
 
 } // namespace starrocks

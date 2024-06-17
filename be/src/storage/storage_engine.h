@@ -304,6 +304,13 @@ public:
         _finish_publish_version_cv.notify_one();
     }
 
+    void add_schedule_apply_task(int64_t tablet_id, int64_t time);
+
+    void wake_schedule_apply_thread() {
+        std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
+        _apply_tablet_changed_cv.notify_one();
+    }
+
     bool is_as_cn() { return !_options.need_write_cluster_id; }
 
     bool enable_light_pk_compaction_publish();
@@ -507,6 +514,13 @@ private:
     std::mutex _delta_column_group_cache_lock;
     std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
+
+    mutable std::mutex _schedule_apply_mutex;
+    std::condition_variable _apply_tablet_changed_cv;
+    std::thread _schedule_apply_thread;
+    std::priority_queue<std::pair<std::chrono::steady_clock::time_point, int64_t>>,
+            std::vector<std::pair<std::chrono::steady_clock::time_point, int64_t>> >,
+            std::greater<> > _schedule_apply_tasks;
 
 #ifdef USE_STAROS
     std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;

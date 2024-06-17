@@ -400,14 +400,14 @@ private:
 
     void _ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
-    void _apply_rowset_commit(const EditVersionInfo& version_info);
+    Status _apply_rowset_commit(const EditVersionInfo& version_info);
 
     // used for normal update or row-mode partial update
-    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
+    Status _apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
     // used for column-mode partial update
-    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
+    Status _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
 
-    void _apply_compaction_commit(const EditVersionInfo& version_info);
+    Status _apply_compaction_commit(const EditVersionInfo& version_info);
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold

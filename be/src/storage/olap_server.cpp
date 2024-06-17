@@ -910,4 +910,40 @@ void* StorageEngine::_tablet_checkpoint_callback(void* arg) {
     return nullptr;
 }
 
+void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        int32_t interval = config::retry_apply_interval_second;
+        {
+            auto wait_timeout = std::chrono::seconds(1);
+            std::unique_lock<std::mutex> ul(_schedule_apply_mutex);
+            while (_schedule_apply_tasks.empty() && !_bg_worker_stopped.load(std::memory_order_consume) {
+                _apply_tablet_changed_cv.wait_for(ul, wait_timeout);
+            }
+
+            if (_bg_worker_stopped.load(std::memory_order_consume) {
+                break;
+            }
+
+            auto now = std::chrono::steady_clock::now();
+            while (!_schedule_apply_tasks.empty() && _schedule_apply_tasks.top().first <= now) {
+                _schedule_apply_tasks.pop();
+                auto tablet_id = _schedule_apply_tasks.top().second;
+                auto tablet = _tablet_manager->get_tablet(tablet_id);
+                if (tablet == nullptr || tablet->updates() == nullptr) {
+                    continue;
+                }
+                tablet->updates()->check_for_apply();
+            }
+
+            if (!_schedule_apply_tasks.empty()) {
+                _apply_tablet_changed_cv.wait_until(ul, _schedule_apply_tasks.top().first);
+            }
+        }
+    }
+    return nullptr;
+}
+
 } // namespace starrocks
