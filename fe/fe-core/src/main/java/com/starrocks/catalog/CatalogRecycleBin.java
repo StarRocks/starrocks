@@ -899,7 +899,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             eraseDatabase(currentTimeMs);
             removeInvalidateReference();
         } catch (InterruptedException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute runAfterCatalogReady", e);
         }
     }
 

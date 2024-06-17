@@ -178,7 +178,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                LOG.warn(e);
+                LOG.warn("Failed to execute submitSubTask", e);
             }
         }
         return true;

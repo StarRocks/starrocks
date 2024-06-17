@@ -239,7 +239,7 @@ public class ListPartitionPruner implements PartitionPruner {
         try {
             result = LiteralExpr.create(value, type);
         } catch (Exception e) {
-            LOG.warn(e);
+            LOG.warn("Failed to execute LiteralExpr.create", e);
             throw new StarRocksConnectorException("can not cast literal value " + literalExpr.getStringValue() +
                     " to target type " + type.prettyPrint());
         }
@@ -351,11 +351,8 @@ public class ListPartitionPruner implements PartitionPruner {
                         matches.removeAll(partitionValueMap.get(literal));
                     } else {
                         Set<Long> partitionIds = partitionValueMap.get(literal);
-                        Map<Long, List<String>> partitionIdToValues = listPartitionInfo.getIdToValues();
                         for (Long id : partitionIds) {
-                            // if the list partition just has one value, we can prune it
-                            // or we can not prune it because the partition has other values
-                            if (partitionIdToValues.get(id).size() == 1) {
+                            if (listPartitionInfo.pruneById(id)) {
                                 matches.remove(id);
                             }
                         }

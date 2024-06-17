@@ -1288,7 +1288,6 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query = "select bitmap_union_count(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
         String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "MV");
-        System.out.println(plan);
         PlanTestBase.assertContains(plan, USER_TAG_MV_NAME);
         PlanTestBase.assertContains(plan, "  |  <slot 2> : 2: user_id\n" +
                 "  |  <slot 6> : 5: mv_bitmap_union_tag_id");
@@ -1656,6 +1655,28 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testSyncMVWithUnionRewrite() throws Exception {
+        String t1 = "CREATE TABLE `t1` (\n" +
+                "  `k1` tinyint(4) NULL,\n" +
+                "  `k2` varchar(64) NULL,\n" +
+                "  `k3` bigint NULL,\n" +
+                "  `k4` varchar(64) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3 \n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n";
+        starRocksAssert.withTable(t1);
+        String mv1 = "CREATE MATERIALIZED VIEW test_mv1\n" +
+                "as select k1, k3 from t1 where k3 > 1;";
+        starRocksAssert.withMaterializedView(mv1);
+
+        String query = "select k1, k3 from t1 ;";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+        PlanTestBase.assertNotContains(plan, "test_mv1");
+        starRocksAssert.dropTable("t1");
+    }
+
+    @Test
     public void testCaseWhenComplexExpressionMV1() throws Exception {
         String t1 = "CREATE TABLE case_when_t1 (\n" +
                 "    k1 INT,\n" +
@@ -1672,5 +1693,65 @@ public class MVRewriteTest {
 
         String query = "SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_t1;";
         starRocksAssert.query(query).explainContains("case_when_mv1");
+    }
+
+    @Test
+    public void testRewriteWithHashDistribution() throws Exception {
+        String createTableSQL = "create table t1 " +
+                " (`k1` date NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` smallint(6) NULL,\n" +
+                "  `v1` varchar(2048) NULL) \n" +
+                "distributed by hash(k2) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTableSQL);
+
+        // mv contains complex expression, should use mv
+        String createMVSQL = "create materialized view test_mv1 " +
+                "as select k1, sum(k3) as sum1 from t1 group by k1";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "Optimizer");
+        PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: k1 = '2024-06-12'\n" +
+                "     partitions=1/1\n" +
+                "     rollup: test_mv1");
+        PlanTestBase.assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(5: mv_sum_k3)\n" +
+                "  |  group by: 1: k1");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    @Test
+    public void testRewriteWithRandomDistribution() throws Exception {
+        String createTableSQL = "create table t1 " +
+                " (`k1` date NULL,\n" +
+                "  `k2` int(11) NULL,\n" +
+                "  `k3` smallint(6) NULL,\n" +
+                "  `v1` varchar(2048) NULL) \n" +
+                "distributed by random properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTableSQL);
+
+        // mv contains complex expression, should use mv
+        String createMVSQL = "create materialized view test_mv1 " +
+                "as select k1, sum(k3) as sum1 from t1 group by k1";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "Optimizer");
+        System.out.println(plan);
+        PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: k1 = '2024-06-12'\n" +
+                "     partitions=1/1\n" +
+                "     rollup: test_mv1");
+        PlanTestBase.assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(5: mv_sum_k3)\n" +
+                "  |  group by: 1: k1");
+        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropMaterializedView("test_mv1");
     }
 }

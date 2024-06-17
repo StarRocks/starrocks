@@ -359,15 +359,19 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
+        // normalize to utc
+        auto timestamp = timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, _offset);
         if constexpr (use_int96_timestamp_encoding) {
-            // normalize to utc
-            auto timestamp = timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, _offset);
             auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
             auto nanosecond = reinterpret_cast<int64_t*>(values[i].value);
             *date = timestamp::to_julian(timestamp);
             *nanosecond = timestamp::to_time(timestamp) * 1000;
         } else {
-            values[i] = data_col[i].to_unix_second() * 1000;
+            int64_t value = timestamp::to_julian(timestamp);
+            value *= USECS_PER_DAY;
+            value += timestamp::to_time(timestamp);
+            value -= timestamp::UNIX_EPOCH_SECONDS * USECS_PER_SEC;
+            values[i] = value;
         }
     }
 
