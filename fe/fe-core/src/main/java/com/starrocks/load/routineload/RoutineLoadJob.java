@@ -1565,8 +1565,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
         } else {
-            jobProperties.put("columnSeparator", columnSeparator == null ? "\t" : columnSeparator.toString());
-            jobProperties.put("rowDelimiter", rowDelimiter == null ? "\t" : rowDelimiter.toString());
+            jobProperties.put("columnSeparator", columnSeparator == null ? "\t" : columnSeparator.getOriSeparator());
+            jobProperties.put("rowDelimiter", rowDelimiter == null ? "\n" : rowDelimiter.getOriDelimiter());
         }
         jobProperties.put("maxErrorNum", String.valueOf(maxErrorNum));
         jobProperties.put("maxFilterRatio", String.valueOf(maxFilterRatio));
