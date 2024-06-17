@@ -63,6 +63,12 @@ By default,  INSERT INTO FILES unloads data into multiple data files, each with 
 
 The following example unloads all data rows in `sales_records` as multiple Parquet files prefixed by `data1`. The size of each file is 1 KB.
 
+:::note
+
+Here, setting `target_max_file_size` to 1 KB is to demonstrate unloding into multiple files with a small dataset. In production environment, you are strongly advised to set this value within the range of hundreds of MB to multiple GB.
+
+:::
+
 - **To S3**:
 
 ```SQL
