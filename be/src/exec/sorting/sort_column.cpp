@@ -450,7 +450,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
                                             range, build_tie));
     }
 
-    restore_small_permutation(small_perm, *permutation);
+    restore_small_permutation(small_perm, *permutation, range);
 
     return Status::OK();
 }
