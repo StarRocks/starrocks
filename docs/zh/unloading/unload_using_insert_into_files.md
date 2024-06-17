@@ -63,6 +63,12 @@ INSERT INTO FILES 支持将数据导出到单个文件或多个文件。您可�
 
 以下示例将 `sales_records` 中的所有数据行导出为多个以 `data1` 为前缀的 Parquet 文件。每个文件的大小为 1 KB。
 
+:::note
+
+此处将 `target_max_file_size` 设置为 1 KB 是为了通过小数据集演示导入到多个文件中。在生产环境中，强烈建议将该值设置在几百 MB 到几 GB 的范围内。
+
+:::
+
 - **导出至 S3：**
 
 ```SQL
@@ -171,7 +177,9 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
-- **导出至 MinIO：**
+### 导出至 MinIO
+
+用于 MinIO 导出的参数与用于 AWS S3 刀出的参数不同。
 
 ```SQL
 INSERT INTO 
