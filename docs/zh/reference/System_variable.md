@@ -320,7 +320,8 @@ SELECT /*+ SET_VAR
 
 ### connector_sink_target_max_file_size
 
-* 描述: 指定将数据写入 Hive 表或 Iceberg 表或使用 Files() 导出数据时使用的目标最大文件大小（以字节为单位）。该限制并不一定精确，只作为尽力而为的保证。
+* 描述: 指定将数据写入 Hive 表或 Iceberg 表或使用 Files() 导出数据时目标文件的最大大小。该限制并不一定精确，只作为尽可能的保证。
+* 单位：Bytes
 * 默认值: 1073741824
 * 类型: Long
 * 引入版本: v3.3.0
