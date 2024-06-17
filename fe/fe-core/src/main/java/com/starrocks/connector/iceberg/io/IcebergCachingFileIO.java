@@ -400,7 +400,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     }
                 } catch (Exception e) {
                     // Ignore, exception would not have affection on Diskcache
-                    LOG.warn("Encountered exception when loading disk metadata " + e.getMessage());
+                    LOG.warn("Encountered exception when loading disk metadata ", e);
                 }
             });
             executor.shutdown();

@@ -58,7 +58,7 @@ public class AlterRoutineLoadAnalyzer {
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
         } catch (UserException e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
             throw new SemanticException(e.getMessage());
         }
     }

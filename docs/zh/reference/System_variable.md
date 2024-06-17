@@ -250,6 +250,12 @@ SELECT /*+ SET_VAR
 * 单位：毫秒
 * 类型：Long
 
+### enable_materialized_view_agg_pushdown_rewrite
+
+* 描述：是否为物化视图查询改写启用聚合函数下推。如果设置为 `true`，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。有关此功能的具体场景和限制的详细信息，请参见 [聚合函数下推](../using_starrocks/query_rewrite_with_materialized_views.md#聚合下推)。
+* 默认值：false
+* 引入版本：v3.3.0
+
 ### enable_materialized_view_text_match_rewrite
 
 * 描述：是否启用基于文本的物化视图改写。当此项设置为 `true` 时，优化器将查询与现有的物化视图进行比较。如果物化视图定义的抽象语法树与查询或其子查询的抽象语法树匹配，则会对查询进行改写。
@@ -317,6 +323,14 @@ SELECT /*+ SET_VAR
 * 默认值：uncompressed
 * 类型：String
 * 引入版本：v3.2.3
+
+### connector_sink_target_max_file_size
+
+* 描述: 指定将数据写入 Hive 表或 Iceberg 表或使用 Files() 导出数据时目标文件的最大大小。该限制并不一定精确，只作为尽可能的保证。
+* 单位：Bytes
+* 默认值: 1073741824
+* 类型: Long
+* 引入版本: v3.3.0
 
 ### count_distinct_column_buckets
 
@@ -835,7 +849,7 @@ SELECT /*+ SET_VAR
 
 ### rewrite_count_distinct_to_bitmap_hll (已弃用)
 
-是否将 Bitmap 和 HLL 类型的 count distinct 查询重写为 bitmap_union_count 和 hll_union_agg。
+是否将 Bitmap 和 HLL 类型的 count distinct 查询改写为 bitmap_union_count 和 hll_union_agg。
 
 ### runtime_filter_on_exchange_node
 

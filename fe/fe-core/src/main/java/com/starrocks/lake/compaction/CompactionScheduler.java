@@ -310,7 +310,7 @@ public class CompactionScheduler extends Daemon {
             job.setTasks(tasks);
             return job;
         } catch (Exception e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
             partition.setMinRetainVersion(0);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(job, e.getMessage());
