@@ -324,6 +324,14 @@ SELECT /*+ SET_VAR
 * 类型：String
 * 引入版本：v3.2.3
 
+### connector_sink_target_max_file_size
+
+* 描述: 指定将数据写入 Hive 表或 Iceberg 表或使用 Files() 导出数据时目标文件的最大大小。该限制并不一定精确，只作为尽可能的保证。
+* 单位：Bytes
+* 默认值: 1073741824
+* 类型: Long
+* 引入版本: v3.3.0
+
 ### count_distinct_column_buckets
 
 * 描述：group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。
