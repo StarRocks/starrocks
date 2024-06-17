@@ -65,7 +65,10 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
-    POlapTableSchemaParam ptable_schema_param;
+    // `ptable_schema_param` is valid during initialization.
+    // And it will be set to nullptr because we only need to access it during intialization.
+    // If you need to access it after intialization, please make sure the pointer is valid.
+    const POlapTableSchemaParam* ptable_schema_param = nullptr;
     int64_t immutable_tablet_size = 0;
 };
 
@@ -172,7 +175,7 @@ private:
 
     Status _init();
     Status _flush_memtable();
-    Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& table_schema_param,
+    Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam* table_schema_param,
                                         const TabletSchemaCSPtr& ori_tablet_schema);
 
     const char* _state_name(State state) const;
