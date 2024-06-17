@@ -1123,8 +1123,7 @@ private:
     }
 
     static void _sort_multi_array_column(FunctionContext* ctx, const Column& src_array_column,
-                                         const std::vector<ColumnPtr>& key_array_columns,
-                                         Column* dest_array_column) {
+                                         const std::vector<ColumnPtr>& key_array_columns, Column* dest_array_column) {
         const auto& src_elements_column = down_cast<const ArrayColumn&>(src_array_column).elements();
         const auto& src_offsets_column = down_cast<const ArrayColumn&>(src_array_column).offsets();
 
@@ -1141,18 +1140,29 @@ private:
 
         std::vector<ColumnPtr> key_elements_columns;
         std::vector<std::shared_ptr<UInt32Column>> key_offsets_columns;
+
+        std::vector<const NullableColumn*> nullable_columns(key_array_size, nullptr);
+        std::vector<ColumnPtr> non_nullable_key_array_columns(key_array_size);
+
         for (size_t i = 0; i < key_array_size; ++i) {
             ColumnPtr key_data = key_array_columns[i];
             if (key_data->is_nullable()) {
                 const auto* key_nullable_column = down_cast<const NullableColumn*>(key_data.get());
-                key_data = key_nullable_column->data_column();
+                if (key_nullable_column) {
+                    nullable_columns[i] = key_nullable_column;
+                    non_nullable_key_array_columns[i] = key_nullable_column->data_column();
+                }
+            } else {
+                non_nullable_key_array_columns[i] = key_data;
             }
 
-            const auto& key_element_column = down_cast<ArrayColumn*>(key_data.get())->elements_column();
-            const auto& key_offset_column = down_cast<ArrayColumn*>(key_data.get())->offsets_column();
+            const auto& key_element_column =
+                    down_cast<ArrayColumn*>(non_nullable_key_array_columns[i].get())->elements_column();
+            const auto& key_offset_column =
+                    down_cast<ArrayColumn*>(non_nullable_key_array_columns[i].get())->offsets_column();
 
-            key_elements_columns.push_back(key_element_column);
-            key_offsets_columns.push_back(key_offset_column);
+            key_elements_columns.emplace_back(std::move(key_element_column));
+            key_offsets_columns.emplace_back(std::move(key_offset_column));
         }
 
         const std::atomic<bool>& cancel = ctx->state()->cancelled_ref();
@@ -1161,17 +1171,31 @@ private:
 
         for (size_t i = 0; i < chunk_size; ++i) {
             auto src_column_offset_size = src_offsets_column.get_data()[i + 1] - src_offsets_column.get_data()[i];
+            std::vector<ColumnPtr> filtered_key_elements_columns;
+
             for (size_t key_column_size = 0; key_column_size < key_array_size; ++key_column_size) {
-                auto key_column_offset_size = key_offsets_columns[key_column_size].get()->get_data()[i + 1] -
-                                              key_offsets_columns[key_column_size].get()->get_data()[i];
+                //  If key_nullable_column->immutable_null_column_data[i] is true, Skip this key column for row i
+                if (nullable_columns[key_column_size] &&
+                    nullable_columns[key_column_size]->immutable_null_column_data()[i]) {
+                    continue;
+                }
+
+                auto key_column_offset_size = key_offsets_columns[key_column_size]->get_data()[i + 1] -
+                                              key_offsets_columns[key_column_size]->get_data()[i];
                 if (src_column_offset_size != key_column_offset_size) {
                     throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
                 }
+
+                filtered_key_elements_columns.push_back(key_elements_columns[key_column_size]);
+            }
+
+            if (filtered_key_elements_columns.empty()) {
+                continue;
             }
 
             Permutation perm;
             auto range = std::make_pair(src_offsets_column.get_data()[i], src_offsets_column.get_data()[i + 1]);
-            status = sort_and_tie_columns(cancel, key_elements_columns, sort_desc, &perm, range);
+            status = sort_and_tie_columns(cancel, filtered_key_elements_columns, sort_desc, &perm, range);
             if (!status.ok()) {
                 throw std::runtime_error("sort_and_tie_columns error");
             }
