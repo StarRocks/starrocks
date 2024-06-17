@@ -617,6 +617,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
         buffer.append("committedVersion: ").append(visibleVersion).append("; ");
         buffer.append("committedVersionHash: ").append(0).append("; ");
+        buffer.append("nextVersion: ").append(nextVersion).append("; ");
 
         buffer.append("distribution_info.type: ").append(distributionInfo.getType().name()).append("; ");
         buffer.append("distribution_info: ").append(distributionInfo.toString());

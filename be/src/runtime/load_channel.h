@@ -50,6 +50,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "util/uid_util.h"
 
@@ -101,7 +102,7 @@ public:
 
     void abort();
 
-    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason);
+    void abort(const TabletsChannelKey& key, const std::vector<int64_t>& tablet_ids, const std::string& reason);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
@@ -111,9 +112,9 @@ public:
 
     int64_t timeout() const { return _timeout_s; }
 
-    std::shared_ptr<TabletsChannel> get_tablets_channel(int64_t index_id);
+    std::shared_ptr<TabletsChannel> get_tablets_channel(const TabletsChannelKey& key);
 
-    void remove_tablets_channel(int64_t index_id);
+    void remove_tablets_channel(const TabletsChannelKey& key);
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
@@ -148,8 +149,8 @@ private:
 
     // lock protect the tablets channel map
     bthread::Mutex _lock;
-    // index id -> tablets channel
-    std::unordered_map<int64_t, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    // key -> tablets channel
+    std::map<TabletsChannelKey, std::shared_ptr<TabletsChannel>> _tablets_channels;
     std::atomic<bool> _closed{false};
 
     Span _span;

@@ -41,6 +41,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "storage/lake/tablet_manager.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
@@ -178,7 +179,8 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
-            channel->abort(request.index_id(), {request.tablet_id()}, request.reason());
+            channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()),
+                           {request.tablet_id()}, request.reason());
         }
     } else if (request.tablet_ids_size() > 0) {
         auto channel = _find_load_channel(load_id);
@@ -187,7 +189,8 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
             for (auto& tablet_id : request.tablet_ids()) {
                 tablet_ids.emplace_back(tablet_id);
             }
-            channel->abort(request.index_id(), tablet_ids, request.reason());
+            channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()), tablet_ids,
+                           request.reason());
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {

@@ -18,10 +18,7 @@
 
 namespace starrocks {
 class CombinedTxnLogPB;
-}
-
-namespace starrocks::stream_load {
 
 Status write_combined_txn_log(const CombinedTxnLogPB& logs);
 
-}
+} // namespace starrocks

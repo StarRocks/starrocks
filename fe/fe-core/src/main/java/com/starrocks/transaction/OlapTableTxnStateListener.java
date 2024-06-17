@@ -287,6 +287,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                 partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
             }
+        } else if (txnState.isVersionOverwrite()) {
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                partitionCommitInfo.setVersion(((InsertTxnCommitAttachment) txnState
+                        .getTxnCommitAttachment()).getPartitionVersion());
+            }
         }
 
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);

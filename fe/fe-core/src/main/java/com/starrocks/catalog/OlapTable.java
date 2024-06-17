@@ -263,6 +263,8 @@ public class OlapTable extends Table {
 
     private Map<String, Lock> createPartitionLocks = Maps.newHashMap();
 
+    protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -369,6 +371,28 @@ public class OlapTable extends Table {
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.sessionId = this.sessionId;
+    }
+
+    public void addDoubleWritePartition(String sourcePartitionName, String tempPartitionName) {
+        Partition temp = tempPartitions.getPartition(tempPartitionName);
+        if (temp != null) {
+            Partition p = getPartition(sourcePartitionName);
+            if (p != null) {
+                doubleWritePartitions.put(p.getId(), temp.getId());
+            } else {
+                LOG.warn("partition {} does not exist", sourcePartitionName);
+            }
+        } else {
+            LOG.warn("partition {} does not exist", tempPartitionName);
+        }
+    }
+
+    public void clearDoubleWritePartition() {
+        doubleWritePartitions.clear();
+    }
+
+    public Map<Long, Long> getDoubleWritePartitions() {
+        return doubleWritePartitions;
     }
 
     public BinlogConfig getCurBinlogConfig() {

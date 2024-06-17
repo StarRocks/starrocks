@@ -17,11 +17,11 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 Status write_combined_txn_log(const CombinedTxnLogPB& logs) {
     auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     return tablet_mgr->put_combined_txn_log(logs);
 }
 
-} // namespace starrocks::stream_load
+} // namespace starrocks
