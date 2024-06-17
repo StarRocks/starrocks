@@ -24,6 +24,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -34,7 +35,7 @@ namespace starrocks::lake {
 class LocalPkIndexManagerTest : public TestBase {
 public:
     LocalPkIndexManagerTest() : TestBase(kTestGroupPath) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
@@ -85,7 +86,7 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_local_pk_index_gc";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = next_id();
