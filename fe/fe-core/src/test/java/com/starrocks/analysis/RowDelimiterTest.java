@@ -47,24 +47,29 @@ public class RowDelimiterTest {
         RowDelimiter delimiter = new RowDelimiter("\n");
         Assert.assertEquals("'\n'", delimiter.toSql());
         Assert.assertEquals("\n", delimiter.getRowDelimiter());
+        Assert.assertEquals("\n", delimiter.getOriDelimiter());
 
         // \x01
         delimiter = new RowDelimiter("\\x01");
         Assert.assertEquals("'\\x01'", delimiter.toSql());
         Assert.assertEquals("\1", delimiter.getRowDelimiter());
+        Assert.assertEquals("\\x01", delimiter.getOriDelimiter());
 
         // \x00 \x01
         delimiter = new RowDelimiter("\\x0001");
         Assert.assertEquals("'\\x0001'", delimiter.toSql());
         Assert.assertEquals("\0\1", delimiter.getRowDelimiter());
+        Assert.assertEquals("\\x0001", delimiter.getOriDelimiter());
 
         delimiter = new RowDelimiter("|");
         Assert.assertEquals("'|'", delimiter.toSql());
         Assert.assertEquals("|", delimiter.getRowDelimiter());
+        Assert.assertEquals("|", delimiter.getOriDelimiter());
 
         delimiter = new RowDelimiter("\\|");
         Assert.assertEquals("'\\|'", delimiter.toSql());
         Assert.assertEquals("\\|", delimiter.getRowDelimiter());
+        Assert.assertEquals("\\|", delimiter.getOriDelimiter());
     }
 
     @Test(expected = SemanticException.class)

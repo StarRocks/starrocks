@@ -47,24 +47,29 @@ public class ColumnSeparatorTest {
         ColumnSeparator separator = new ColumnSeparator("\t");
         Assert.assertEquals("'\t'", separator.toSql());
         Assert.assertEquals("\t", separator.getColumnSeparator());
+        Assert.assertEquals("\t", separator.getOriSeparator());
 
         // \x01
         separator = new ColumnSeparator("\\x01");
         Assert.assertEquals("'\\x01'", separator.toSql());
         Assert.assertEquals("\1", separator.getColumnSeparator());
+        Assert.assertEquals("\\x01", separator.getOriSeparator());
 
         // \x00 \x01
         separator = new ColumnSeparator("\\x0001");
         Assert.assertEquals("'\\x0001'", separator.toSql());
         Assert.assertEquals("\0\1", separator.getColumnSeparator());
+        Assert.assertEquals("\\x0001", separator.getOriSeparator());
 
         separator = new ColumnSeparator("|");
         Assert.assertEquals("'|'", separator.toSql());
         Assert.assertEquals("|", separator.getColumnSeparator());
+        Assert.assertEquals("|", separator.getOriSeparator());
 
         separator = new ColumnSeparator("\\|");
         Assert.assertEquals("'\\|'", separator.toSql());
         Assert.assertEquals("\\|", separator.getColumnSeparator());
+        Assert.assertEquals("\\|", separator.getOriSeparator());
     }
 
     @Test(expected = SemanticException.class)
