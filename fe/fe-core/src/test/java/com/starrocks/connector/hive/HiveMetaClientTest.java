@@ -168,10 +168,18 @@ public class HiveMetaClientTest {
         blankParameters.put("collection.delim", "");
         blankParameters.put("mapkey.delim", "");
         TextFileFormatDesc blankDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(blankParameters);
+<<<<<<< HEAD
         Assert.assertEquals("\001", blankDesc.getFieldDelim());
         Assert.assertEquals("\n", blankDesc.getLineDelim());
         Assert.assertEquals("\002", blankDesc.getCollectionDelim());
         Assert.assertEquals("\003", blankDesc.getMapkeyDelim());
+=======
+        Assert.assertNull(blankDesc.getFieldDelim());
+        Assert.assertNull(blankDesc.getLineDelim());
+        Assert.assertNull(blankDesc.getCollectionDelim());
+        Assert.assertNull(blankDesc.getMapkeyDelim());
+        Assert.assertEquals(0, blankDesc.getSkipHeaderLineCount());
+>>>>>>> 2c838f7b0f ([Enhancement] Support to recognize skip.header.line.count in hive's textfile (#47001))
 
         // Check is using OpenCSVSerde
         Map<String, String> openCSVParameters = new HashMap<>();
@@ -188,11 +196,16 @@ public class HiveMetaClientTest {
         parameters.put("line.delim", "\004");
         parameters.put("collection.delim", "\006");
         parameters.put("mapkey.delim", ":");
+        parameters.put("skip.header.line.count", "2");
         TextFileFormatDesc customDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(parameters);
         Assert.assertEquals(",", customDesc.getFieldDelim());
         Assert.assertEquals("\004", customDesc.getLineDelim());
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
+        Assert.assertEquals(2, customDesc.getSkipHeaderLineCount());
+        parameters.put("skip.header.line.count", "-10");
+        customDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(parameters);
+        Assert.assertEquals(0, customDesc.getSkipHeaderLineCount());
     }
 
     @Test
