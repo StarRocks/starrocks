@@ -59,7 +59,7 @@ public class CreateAnalyzeJobTest {
         Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql3, connectContext));
 
         String sql4 = "create analyze full table hive0.partitioned_db.t1";
-        statementBase = UtFrameUtils.parseStmtWithNewParser(sql4, connectContext);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql4, connectContext);
         Assert.assertTrue(statementBase instanceof CreateAnalyzeJobStmt);
     }
 
