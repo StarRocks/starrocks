@@ -1098,19 +1098,40 @@ private:
             key_array_columns.push_back(key_column);
         }
 
-        _sort_multi_array_column(ctx, *src_column, key_array_columns, dest_column);
+        if (src_column->is_nullable()) {
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+            const auto& src_data_column = src_nullable_column->data_column_ref();
+            const auto& src_null_column = src_nullable_column->null_column_ref();
+
+            auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
+            auto* dest_data_column = dest_nullable_column->mutable_data_column();
+            auto* dest_null_column = dest_nullable_column->mutable_null_column();
+
+            if (src_column->has_null()) {
+                dest_null_column->get_data().assign(src_null_column.get_data().begin(),
+                                                    src_null_column.get_data().end());
+            } else {
+                dest_null_column->get_data().resize(chunk_size, 0);
+            }
+
+            dest_nullable_column->set_has_null(src_nullable_column->has_null());
+
+            _sort_multi_array_column(ctx, src_data_column, key_array_columns, dest_data_column);
+        } else {
+            _sort_multi_array_column(ctx, *src_column, key_array_columns, dest_column.get());
+        }
 
         return dest_column;
     }
 
     static void _sort_multi_array_column(FunctionContext* ctx, const Column& src_array_column,
                                          const std::vector<ColumnPtr>& key_array_columns,
-                                         ColumnPtr& dest_array_column) {
+                                         Column* dest_array_column) {
         const auto& src_elements_column = down_cast<const ArrayColumn&>(src_array_column).elements();
         const auto& src_offsets_column = down_cast<const ArrayColumn&>(src_array_column).offsets();
 
-        auto* dest_elements_column = down_cast<ArrayColumn*>(dest_array_column.get())->elements_column().get();
-        auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_array_column.get())->offsets_column().get();
+        auto* dest_elements_column = down_cast<ArrayColumn*>(dest_array_column)->elements_column().get();
+        auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_array_column)->offsets_column().get();
         dest_offsets_column->get_data() = src_offsets_column.get_data();
 
         auto src_elements_size = src_elements_column.size();
