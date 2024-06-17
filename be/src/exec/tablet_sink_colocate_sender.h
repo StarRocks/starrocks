@@ -16,7 +16,7 @@
 
 #include "exec/tablet_sink_sender.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 // TabletSinkColocateSender will control one index/table's send chunks.
 class TabletSinkColocateSender final : public TabletSinkSender {
@@ -57,4 +57,4 @@ private:
     std::vector<std::vector<int64_t>> _index_tablet_ids;
 };
 
-} // namespace starrocks::stream_load
+} // namespace starrocks

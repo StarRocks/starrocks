@@ -62,7 +62,7 @@ protected:
         _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), nullptr, _load_id, _txn_id, string(),
                                                       1000, std::move(load_mem_tracker));
         _open_request = create_open_request();
-        TabletsChannelKey key{_load_id, _index_id};
+        TabletsChannelKey key{_load_id, 0, _index_id};
         _schema_param.reset(new OlapTableSchemaParam());
         ASSERT_OK(_schema_param->init(_open_request.schema()));
         _tablets_channel =

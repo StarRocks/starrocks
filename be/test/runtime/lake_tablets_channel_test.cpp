@@ -198,7 +198,7 @@ protected:
         _load_channel =
                 std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(), UniqueId::gen_uid(),
                                               next_id(), string(), 1000, std::move(load_mem_tracker));
-        TabletsChannelKey key{UniqueId::gen_uid().to_proto(), kIndexId};
+        TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 0, kIndexId};
         _tablets_channel = new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key,
                                                     _load_channel->mem_tracker(), _root_profile.get());
     }
