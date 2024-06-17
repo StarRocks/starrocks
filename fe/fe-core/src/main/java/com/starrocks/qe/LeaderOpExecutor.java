@@ -165,41 +165,7 @@ public class LeaderOpExecutor {
 
         Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
         TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
-        TMasterOpRequest params = new TMasterOpRequest();
-        params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-        params.setSql(originStmt.originStmt);
-        params.setStmtIdx(originStmt.idx);
-        params.setUser(ctx.getQualifiedUser());
-        params.setCatalog(ctx.getCurrentCatalog());
-        params.setDb(ctx.getDatabase());
-        params.setSqlMode(ctx.getSessionVariable().getSqlMode());
-        params.setUser_ip(ctx.getRemoteIP());
-        params.setTime_zone(ctx.getSessionVariable().getTimeZone());
-        params.setStmt_id(ctx.getStmtId());
-        params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
-        params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
-        params.setForward_times(forwardTimes);
-        params.setSession_id(ctx.getSessionId().toString());
-
-        TUserRoles currentRoles = new TUserRoles();
-        Preconditions.checkState(ctx.getCurrentRoleIds() != null);
-        currentRoles.setRole_id_list(new ArrayList<>(ctx.getCurrentRoleIds()));
-        params.setUser_roles(currentRoles);
-
-        params.setIsLastStmt(ctx.getIsLastStmt());
-
-        TQueryOptions queryOptions = new TQueryOptions();
-        queryOptions.setMem_limit(ctx.getSessionVariable().getMaxExecMemByte());
-        queryOptions.setQuery_timeout(ctx.getSessionVariable().getQueryTimeoutS());
-        queryOptions.setLoad_mem_limit(ctx.getSessionVariable().getLoadMemLimit());
-        params.setQuery_options(queryOptions);
-
-        params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        // forward all session variables
-        SetStmt setStmt = ctx.getModifiedSessionVariables();
-        if (setStmt != null) {
-            params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
-        }
+        TMasterOpRequest params = createTMasterOpRequest(ctx, forwardTimes);
         LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
         result = FrontendServiceProxy.call(thriftAddress,
@@ -246,6 +212,48 @@ public class LeaderOpExecutor {
 
     public void setResult(TMasterOpResult result) {
         this.result = result;
+    }
+
+    public TMasterOpRequest createTMasterOpRequest(ConnectContext ctx, int forwardTimes) {
+        TMasterOpRequest params = new TMasterOpRequest();
+        params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        params.setSql(originStmt.originStmt);
+        params.setStmtIdx(originStmt.idx);
+        params.setUser(ctx.getQualifiedUser());
+        params.setCatalog(ctx.getCurrentCatalog());
+        params.setDb(ctx.getDatabase());
+        params.setSqlMode(ctx.getSessionVariable().getSqlMode());
+        params.setUser_ip(ctx.getRemoteIP());
+        params.setTime_zone(ctx.getSessionVariable().getTimeZone());
+        params.setStmt_id(ctx.getStmtId());
+        params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
+        params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
+        params.setForward_times(forwardTimes);
+        params.setSession_id(ctx.getSessionId().toString());
+
+        TUserRoles currentRoles = new TUserRoles();
+        Preconditions.checkState(ctx.getCurrentRoleIds() != null);
+        currentRoles.setRole_id_list(new ArrayList<>(ctx.getCurrentRoleIds()));
+        params.setUser_roles(currentRoles);
+
+        params.setIsLastStmt(ctx.getIsLastStmt());
+
+        TQueryOptions queryOptions = new TQueryOptions();
+        queryOptions.setMem_limit(ctx.getSessionVariable().getMaxExecMemByte());
+        queryOptions.setQuery_timeout(ctx.getSessionVariable().getQueryTimeoutS());
+        queryOptions.setLoad_mem_limit(ctx.getSessionVariable().getLoadMemLimit());
+        params.setQuery_options(queryOptions);
+
+        params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        // forward all session variables
+        SetStmt setStmt = ctx.getModifiedSessionVariables();
+        if (setStmt != null) {
+            params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
+        }
+
+        params.setWarehouse_id(ctx.getCurrentWarehouseId());
+
+        return params;
     }
 }
 
