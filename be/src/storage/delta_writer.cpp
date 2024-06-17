@@ -628,8 +628,8 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
                 ptable_schema_param->version() != ori_tablet_schema->schema_version()) {
                 new_schema->copy_from(ori_tablet_schema);
                 RETURN_IF_ERROR(new_schema->build_current_tablet_schema(
-                        ptable_schema_param.indexes(i).schema_id(), ptable_schema_param.version(),
-                        ptable_schema_param.indexes(i).column_param(), ori_tablet_schema));
+                        ptable_schema_param->indexes(i).schema_id(), ptable_schema_param->version(),
+                        ptable_schema_param->indexes(i).column_param(), ori_tablet_schema));
             }
         }
     }
