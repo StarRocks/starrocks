@@ -68,7 +68,7 @@ displayed_sidebar: "Chinese"
 
 ### 具体步骤
 
-**阶段一：创建全局字典表，并且导入** **CSV** **文件中的订单编号列值，从而构建 STRING 和 INTEGER 值之间的映射关系。**
+**阶段一：创建全局字典表，并且导入 CSV 文件中的订单编号列值，从而构建 STRING 和 INTEGER 值之间的映射关系。**
 
 1. 创建一个主键表作为全局字典，定义主键也就是 key 列为 `order_uuid`（STRING 类型），value 列为 `order_id_int`（INTEGER 类型）并且为自增列。
 
@@ -104,9 +104,13 @@ displayed_sidebar: "Chinese"
           -XPUT http://<fe_host>:<fe_http_port>/api/example_db/dict/_stream_load
       ```
 
+> **说明**
+>
+> 在进入下一阶段前，如果数据源有新增数据，需将所有新增数据导入字典表以保证映射一定存在。
+
 **阶段二**：创建目标表，并且包含具有 `dict_mapping` 属性的字典 ID 列，后续导入订单数据至目标表时，系统将自动关联字典表并插入对应的字典 ID。
 
-1. 创建一张表 `dest_table`，包含 CSV 文件的所有列。 并且您还需要定义一个 INTEGER 类型的 `order_id_int` 列，与 STRING 类型的 `order_id_int` 列进行映射，并且具有 dict_mapping 列属性。后续会基于 `order_id_int` 列进行查询分析。
+1. 创建一张表 `dest_table`，包含 CSV 文件的所有列。 并且您还需要定义一个整数类型的 `order_id_int` 列（通常为 BIGINT），与 STRING 类型的 `order_id_int` 列进行映射，并且具有 dict_mapping 列属性。后续会基于 `order_id_int` 列进行查询分析。
 
       ```SQL
       -- 目标数据表里，订单编号`order_uuid`对应的字典ID 增加 dict_mapping 列属性
@@ -161,7 +165,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
           order_id_bitmap BITMAP BITMAP_UNION
       )
       AGGREGATE KEY (id)
-      DISTRIBUTED BY HASH(id) BUCKETS 2;
+      DISTRIBUTED BY HASH(id) BUCKETS 6;
       ```
 
 2. 向聚合表 `dest_table_bitmap` 中插入数据。 `id` 列插入表 `dest_table` 的列 `id` 的数据；`order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 的数据（经过函数 `to_bitmap` 处理后的值）。
@@ -170,7 +174,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
     INSERT INTO dest_table_bitmap (id, order_id_bitmap)
     SELECT id,  to_bitmap(dict_mapping('dict', order_uuid))
     FROM dest_table
-    WHERE dest_table.batch = 1;
+    WHERE dest_table.batch = 1; -- 此处 batch 用于模拟不同批次的处理。
         
     INSERT INTO dest_table_bitmap (id, order_id_bitmap)
     SELECT id, to_bitmap(dict_mapping('dict', order_uuid))
@@ -197,7 +201,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
           order_id_bitmap BITMAP BITMAP_UNION
       )
       AGGREGATE KEY (id)
-      DISTRIBUTED BY HASH(id) BUCKETS 2;
+      DISTRIBUTED BY HASH(id) BUCKETS 6;
       ```
 
 2. 向聚合表中插入数据。`id` 列直接插入 CSV 文件中的`id` 列的数据；`order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 列的数据（经过函数 `to_bitmap` 处理后的值）。
@@ -207,7 +211,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
          -H "format: CSV" -H "column_separator:," \
          -H "columns: id, order_uuid,  order_id_bitmap=to_bitmap(dict_mapping('dict', order_uuid))" \
          -T batch1.csv \
-         -XPUT http:///<fe_host>:<fe_http_port>/api/example_db/dest_table_bitmap/_stream_load
+         -XPUT http://<fe_host>:<fe_http_port>/api/example_db/dest_table_bitmap/_stream_load
      
      curl --location-trusted -u root: \
          -H "format: CSV" -H "column_separator:," \
