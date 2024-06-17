@@ -30,6 +30,9 @@ public class DropPartitionClause extends AlterTableClause {
     private final MultiRangePartitionDesc multiRangePartitionDesc;
     private final List<String> partitionNames;
 
+    //Object Resolved by Analyzer
+    private List<String> resolvedPartitionNames;
+
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition, boolean forceDrop) {
         this(ifExists, partitionName, isTempPartition, forceDrop, NodePosition.ZERO);
     }
@@ -68,6 +71,14 @@ public class DropPartitionClause extends AlterTableClause {
         this.forceDrop = forceDrop;
         this.multiRangePartitionDesc = multiRangePartitionDesc;
         this.partitionNames = null;
+    }
+
+    public List<String> getResolvedPartitionNames() {
+        return resolvedPartitionNames;
+    }
+
+    public void setResolvedPartitionNames(List<String> resolvedPartitionNames) {
+        this.resolvedPartitionNames = resolvedPartitionNames;
     }
 
     public boolean isSetIfExists() {
