@@ -494,7 +494,7 @@ select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757",4) as a from 
 -- !result
 select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string_table;
 -- result:
-E: (1064, "ngram search's second parameter must be const")
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 67. Detail message: ngram_search function 's second parameter and third parameter must be constant.")
 -- !result
 select ngram_search("chi","chi",0);
 -- result:
