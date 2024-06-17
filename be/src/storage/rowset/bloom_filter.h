@@ -71,7 +71,7 @@ struct NgramBloomFilterState {
     bool initialized = false;
     // whether this index can be used for predicate or not
     bool index_useful = false;
-    std::vector<Slice> ngram_set;
+    std::vector<std::string> ngram_set;
     // when index is case_insensitive, buffer is used to store the lower case of ngram_set
     std::string buffer;
 };

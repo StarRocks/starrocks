@@ -49,11 +49,12 @@ protected:
     [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
-    bool split_normal_string_to_ngram(FunctionContext* fn_ctx, const NgramBloomFilterReaderOptions& reader_options,
-                                      NgramBloomFilterState* ngram_state, const std::string& func_name) const;
+    bool split_normal_string_to_ngram(const Slice& needle, FunctionContext* fn_ctx,
+                                      const NgramBloomFilterReaderOptions& reader_options,
+                                      std::vector<std::string>& ngram_set, const std::string& func_name) const;
 
-    bool split_like_string_to_ngram(FunctionContext* fn_ctx, const NgramBloomFilterReaderOptions& reader_options,
-                                    std::vector<Slice>& ngram_set) const;
+    bool split_like_string_to_ngram(const Slice& needle, const NgramBloomFilterReaderOptions& reader_options,
+                                    std::vector<std::string>& ngram_set) const;
 
     const FunctionDescriptor* _fn_desc{nullptr};
 
