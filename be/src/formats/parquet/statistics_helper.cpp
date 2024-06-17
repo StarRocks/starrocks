@@ -246,6 +246,11 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     // [0, 0, 1] & [1, 1, 0] -> [0, 0, 0], so there is no value locate in 4->6
 
     for (size_t i = 0; i < min_values.size(); i++) {
+        // just skip the area that filtered
+        if (!selected[i]) {
+            continue;
+        }
+
         ObjectPool pool;
         std::string min_value;
         std::string max_value;
