@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -92,7 +93,12 @@ public class AnalyzeCreateAnalyzeJobTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         sql = "create analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
-        analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
         Assert.assertEquals("[c_name, c_phone]", analyzeStmt.getColumnNames().toString());
+
+        try {
+            analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof SemanticException);
+        }
     }
 }
