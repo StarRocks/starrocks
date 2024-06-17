@@ -629,7 +629,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.ptable_schema_param = params.schema();
+        options.ptable_schema_param = &(params.schema());
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -819,6 +819,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
+        options.ptable_schema_param = &(params.schema());
         options.immutable_tablet_size = params.immutable_tablet_size();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {

@@ -365,6 +365,8 @@ Status DeltaWriter::_init() {
     VLOG(2) << "DeltaWriter [tablet_id=" << _opt.tablet_id << ", load_id=" << print_id(_opt.load_id)
             << ", replica_state=" << _replica_state_name(_replica_state) << "] open success.";
 
+    // no need after initialization.
+    _opt.ptable_schema_param = nullptr;
     return Status::OK();
 }
 
@@ -607,7 +609,7 @@ Status DeltaWriter::_flush_memtable() {
     return st;
 }
 
-Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
+Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam* ptable_schema_param,
                                                  const TabletSchemaCSPtr& ori_tablet_schema) {
     Status st;
     TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>();
@@ -615,18 +617,20 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
     // new tablet schema if new table
     // find the right index id
     int i = 0;
-    for (; i < ptable_schema_param.indexes_size(); i++) {
-        if (ptable_schema_param.indexes(i).id() == index_id) break;
-    }
-    if (i < ptable_schema_param.indexes_size()) {
-        if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(i).has_column_param() &&
-            ptable_schema_param.indexes(i).column_param().columns_desc_size() != 0 &&
-            ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
-            ptable_schema_param.version() != ori_tablet_schema->schema_version()) {
-            new_schema->copy_from(ori_tablet_schema);
-            RETURN_IF_ERROR(new_schema->build_current_tablet_schema(
-                    ptable_schema_param.indexes(i).schema_id(), ptable_schema_param.version(),
-                    ptable_schema_param.indexes(i).column_param(), ori_tablet_schema));
+    if (ptable_schema_param != nullptr) {
+        for (; i < ptable_schema_param->indexes_size(); i++) {
+            if (ptable_schema_param->indexes(i).id() == index_id) break;
+        }
+        if (i < ptable_schema_param->indexes_size()) {
+            if (ptable_schema_param->indexes_size() > 0 && ptable_schema_param->indexes(i).has_column_param() &&
+                ptable_schema_param->indexes(i).column_param().columns_desc_size() != 0 &&
+                ptable_schema_param->indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
+                ptable_schema_param->version() != ori_tablet_schema->schema_version()) {
+                new_schema->copy_from(ori_tablet_schema);
+                RETURN_IF_ERROR(new_schema->build_current_tablet_schema(
+                        ptable_schema_param->indexes(i).schema_id(), ptable_schema_param->version(),
+                        ptable_schema_param->indexes(i).column_param(), ori_tablet_schema));
+            }
         }
     }
     if (new_schema->schema_version() > ori_tablet_schema->schema_version()) {
