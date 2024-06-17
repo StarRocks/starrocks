@@ -1138,9 +1138,8 @@ private:
         size_t chunk_size = src_array_column.size();
         size_t key_array_size = key_array_columns.size();
 
-        std::vector<ColumnPtr> key_elements_columns;
-        std::vector<std::shared_ptr<UInt32Column>> key_offsets_columns;
-
+        std::vector<ColumnPtr> key_elements_columns(key_array_size);
+        std::vector<std::shared_ptr<UInt32Column>> key_offsets_columns(key_array_size);
         std::vector<const NullableColumn*> nullable_columns(key_array_size, nullptr);
         std::vector<ColumnPtr> non_nullable_key_array_columns(key_array_size);
 
@@ -1161,8 +1160,8 @@ private:
             const auto& key_offset_column =
                     down_cast<ArrayColumn*>(non_nullable_key_array_columns[i].get())->offsets_column();
 
-            key_elements_columns.emplace_back(std::move(key_element_column));
-            key_offsets_columns.emplace_back(std::move(key_offset_column));
+            key_elements_columns[i] = key_element_column;
+            key_offsets_columns[i] = key_offset_column;
         }
 
         const std::atomic<bool>& cancel = ctx->state()->cancelled_ref();
