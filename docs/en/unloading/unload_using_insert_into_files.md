@@ -177,7 +177,11 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
-- **To MinIO**:
+### Unload to MinIO
+
+The parameters used for MinIO is different from those used for AWS S3.
+
+Example:
 
 ```SQL
 INSERT INTO 
