@@ -124,6 +124,7 @@ public abstract class MetadataCollectJob {
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setStartTime();
+        context.setCurrentWarehouse(originSessionVariable.getWarehouseName());
 
         return context;
     }
