@@ -220,15 +220,14 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
         bool index_useful;
 
         // checked in support_ngram_bloom_filter(size_t gram_num), so it 's safe to get const column's value
-        Slice needle;
-        const auto& needle_column = fn_ctx->get_constant_column(1);
 
-        if (reader_options.index_case_sensitive) {
-            needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
-        } else {
-            // for case_insensitive, we need to convert needle to lower case
-            std::string& buf = ngram_state->buffer;
-            needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column).tolower(buf);
+        const auto& needle_column = fn_ctx->get_constant_column(1);
+        std::string needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column).to_string();
+
+        // for case_insensitive, we need to convert needle to lower case
+        if (!reader_options.index_case_sensitive) {
+            std::transform(needle.begin(), needle.end(), needle.begin(),
+                           [](unsigned char c) { return std::tolower(c); });
         }
 
         if (_fn_desc->name == "LIKE") {
@@ -286,7 +285,7 @@ bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context
 bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(const Slice& needle, FunctionContext* fn_ctx,
                                                               const NgramBloomFilterReaderOptions& reader_options,
                                                               std::vector<std::string>& ngram_set,
-                                                              const std::string& func_name) const {
+                                                              const std::string& func_name) {
     size_t index_gram_num = reader_options.index_gram_num;
     bool index_case_sensitive = reader_options.index_case_sensitive;
 
@@ -326,7 +325,7 @@ bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(const Slice& needl
 
 bool VectorizedFunctionCallExpr::split_like_string_to_ngram(const Slice& needle,
                                                             const NgramBloomFilterReaderOptions& reader_options,
-                                                            std::vector<std::string>& ngram_set) const {
+                                                            std::vector<std::string>& ngram_set) {
     size_t index_gram_num = reader_options.index_gram_num;
 
     // below is a window sliding algorithm which consider escaped character
@@ -340,9 +339,9 @@ bool VectorizedFunctionCallExpr::split_like_string_to_ngram(const Slice& needle,
             break;
         }
         size_t cur_valid_grams_num = 0;
-        size_t cur_grams_begin_index = 0;
         bool escaped = false;
         std::string cur_valid_grams;
+        cur_valid_grams.reserve(index_gram_num);
         // when iteration begin,[cur_grams_begin_index, i) is the current ngram
         // cur_valid_grams contains the number of utf-8 gram in needle[cur_grams_begin_index, i) without '\\'
         // cur_valid_grams_num is the number of utf-8 gram in needle[cur_grams_begin_index, i)
@@ -361,8 +360,9 @@ bool VectorizedFunctionCallExpr::split_like_string_to_ngram(const Slice& needle,
                 escaped = true;
                 ++i;
             } else {
+                // add next gram into cur_valid_grams
                 size_t cur_gram_length = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(needle.data[i])];
-                cur_valid_grams.append(needle[cur_grams_begin_index], cur_gram_length);
+                cur_valid_grams.append(&needle[i], cur_gram_length);
                 i += cur_gram_length;
                 ++cur_valid_grams_num;
                 escaped = false;
