@@ -255,9 +255,6 @@ public class QueryRuntimeProfile {
         boolean res = false;
         try {
             res = profileDoneSignal.await(timeout, unit);
-            if (!res) {
-                LOG.warn("failed to get profile within {} seconds", timeout);
-            }
         } catch (InterruptedException e) { // NOSONAR
             LOG.warn("profile signal await error", e);
         }
