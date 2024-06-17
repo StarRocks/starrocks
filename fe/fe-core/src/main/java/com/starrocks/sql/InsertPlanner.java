@@ -403,11 +403,14 @@ public class InsertPlanner {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+                session.getSessionVariable().setEnableSpill(true);
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+                session.getSessionVariable().setEnableSpill(true);
             } else if (targetTable instanceof TableFunctionTable) {
                 dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
+                session.getSessionVariable().setEnableSpill(true);
             } else if (targetTable.isBlackHoleTable()) {
                 dataSink = new BlackHoleTableSink();
             } else {
