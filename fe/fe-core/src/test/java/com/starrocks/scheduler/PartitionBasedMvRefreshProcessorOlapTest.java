@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
@@ -53,6 +54,7 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.After;
@@ -67,6 +69,7 @@ import org.junit.runners.MethodSorters;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -230,12 +233,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
-                        "partition by k1\n" +
-                        "distributed by hash(k2) buckets 10\n" +
-                        "refresh deferred manual\n" +
-                        "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
+                        "PROPERTIES('replication_num' = '1');");
     }
 
     @AfterClass
@@ -908,8 +906,20 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testFilterPartitionByRefreshNumber() throws Exception {
+        // PARTITION p0 values [('2021-12-01'),('2022-01-01'))
+        // PARTITION p1 values [('2022-01-01'),('2022-02-01'))
+        // PARTITION p2 values [('2022-02-01'),('2022-03-01'))
+        // PARTITION p3 values [('2022-03-01'),('2022-04-01'))
+        // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
+
+        String mvName = "mv_with_test_refresh";
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_test_refresh"));
+        starRocksAssert.withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
+                "partition by k1\n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
@@ -931,6 +941,98 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         mvContext = processor.getMvContext();
         Assert.assertNull(mvContext.getNextPartitionStart());
         Assert.assertNull(mvContext.getNextPartitionEnd());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testFilterPartitionByRefreshNumberAndDescending() throws Exception {
+        // PARTITION p0 values [('2021-12-01'),('2022-01-01'))
+        // PARTITION p1 values [('2022-01-01'),('2022-02-01'))
+        // PARTITION p2 values [('2022-02-01'),('2022-03-01'))
+        // PARTITION p3 values [('2022-03-01'),('2022-04-01'))
+        // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        String mvName = "mv_reverse_refresh";
+        starRocksAssert.withMaterializedView("create materialized view test.mv_reverse_refresh\n" +
+                "partition by k1\n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
+
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        initAndExecuteTaskRun(taskRun);
+
+        materializedView.getTableProperty().setPartitionRefreshNumber(1);
+        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
+
+        MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
+        processor.setMvContext(mvContext);
+
+        Set<String> allPartitions = new HashSet<>(materializedView.getPartitionNames());
+
+        // ascending refresh
+        {
+            Set<String> refreshedPartitions = new HashSet<>();
+
+            // round 1
+            Set<String> toRefresh = new HashSet<>(allPartitions);
+            processor.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), materializedView);
+            Assert.assertEquals(ImmutableSet.of("p0"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 2
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), materializedView);
+            Assert.assertEquals(ImmutableSet.of("p1"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 3
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), materializedView);
+            Assert.assertEquals(ImmutableSet.of("p2"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+        }
+
+        // descending refresh
+        {
+            Config.materialized_view_refresh_ascending = false;
+            Set<String> refreshedPartitions = new HashSet<>();
+
+            // round 1
+            Set<String> toRefresh = new HashSet<>(allPartitions);
+            processor.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), materializedView);
+            Assert.assertEquals(ImmutableSet.of("p4"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 2
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), materializedView);
+            Assert.assertEquals(ImmutableSet.of("p3"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 3
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), materializedView);
+            Assert.assertEquals(ImmutableSet.of("p2"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 4
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), materializedView);
+            Assert.assertEquals(ImmutableSet.of("p1"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 5
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, Sets.newHashSet(), materializedView);
+            Assert.assertEquals(ImmutableSet.of("p0"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+            Config.materialized_view_refresh_ascending = true;
+        }
+        starRocksAssert.dropMaterializedView(mvName);
     }
 
     @Test
