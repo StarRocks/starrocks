@@ -331,12 +331,12 @@ bool VectorizedFunctionCallExpr::split_like_string_to_ngram(const Slice& needle,
 
     // below is a window sliding algorithm which consider escaped character
     // cur_grams_begin_index is window's left site, i is window's right site
-    // in each iteration of while loop, we will keep moving window's right site until we find a valid ngram and save it into  ngram_set
-    // then move window's left site to the next utf-8 gram
+    // in each iteration of while loop, we will keep moving window's right site i from cur_grams_begin_index until we find a valid ngram and save it into  ngram_set
+    // then move window's left site cur_grams_begin_index to the next utf-8 gram
     size_t cur_grams_begin_index = 0;
-    while (cur_grams_begin_index < needle.size()) {
+    while (cur_grams_begin_index < needle.size) {
         // we stop here when there is not enough grams left
-        if (needle.size() - cur_grams_begin_index + 1 < index_gram_num) {
+        if (needle.size - cur_grams_begin_index < index_gram_num) {
             break;
         }
         size_t cur_valid_grams_num = 0;
@@ -355,10 +355,8 @@ bool VectorizedFunctionCallExpr::split_like_string_to_ngram(const Slice& needle,
                 ++i;
             } else if (!escaped && (needle[i] == '%' || needle[i] == '_')) {
                 // not enough grams, so move left site of window to need[i+1]
-                cur_valid_grams_num = 0;
-                escaped = false;
-                ++i;
-                cur_grams_begin_index = i;
+                cur_grams_begin_index = i + 1;
+                break;
             } else if (!escaped && needle[i] == '\\') {
                 escaped = true;
                 ++i;
