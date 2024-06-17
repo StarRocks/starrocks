@@ -192,7 +192,7 @@ public class LakeTable extends OlapTable {
             shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, null, properties,
                     StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         } catch (DdlException e) {
-            LOG.error(e.getMessage());
+            LOG.error(e.getMessage(), e);
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }
         for (long shardId : shardIds) {

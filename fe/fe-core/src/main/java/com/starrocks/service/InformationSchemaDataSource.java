@@ -413,7 +413,7 @@ public class InformationSchemaDataSource {
                     try {
                         table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
                     } catch (Exception e) {
-                        LOG.warn(e.getMessage());
+                        LOG.warn(e.getMessage(), e);
                     }
                     if (table == null) {
                         continue;

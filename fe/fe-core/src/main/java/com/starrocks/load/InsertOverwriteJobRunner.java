@@ -286,7 +286,7 @@ public class InsertOverwriteJobRunner {
         try {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
-            LOG.warn(ex);
+            LOG.warn(ex.getMessage(), ex);
             throw new RuntimeException(ex);
         }
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
@@ -296,7 +296,7 @@ public class InsertOverwriteJobRunner {
         try {
             state.getLocalMetastore().addPartitions(context, db, olapTable.getName(), addPartitionClause);
         } catch (Exception ex) {
-            LOG.warn(ex);
+            LOG.warn(ex.getMessage(), ex);
             throw new RuntimeException(ex);
         }
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();

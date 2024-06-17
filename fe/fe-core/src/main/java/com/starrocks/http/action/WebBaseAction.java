@@ -354,7 +354,7 @@ public class WebBaseAction extends BaseAction {
                 node = instance.open(path);
             }
         } catch (AnalysisException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             return null;
         }
         return node;
