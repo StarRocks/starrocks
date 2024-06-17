@@ -316,6 +316,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.2.3
 
+### connector_sink_target_max_file_size
+
+* **Description**: Specifies the target maximum file size in bytes used for writing data into Hive tables or Iceberg tables, or exporting data with Files(). The actual size may be larger.
+* **Default**: 1073741824
+* **Data type**: Long
+* **Introduced in**: v3.3.0
+
 ### count_distinct_column_buckets
 
 * **Description**: The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`.
