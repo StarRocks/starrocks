@@ -19,12 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
->>>>>>> 2176e83e28 ([Enhancement] Make default bucket num at least 16 when table is unpartitioned (#47005))
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import org.jetbrains.annotations.TestOnly;
