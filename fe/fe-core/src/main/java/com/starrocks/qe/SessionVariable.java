@@ -352,6 +352,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
+    public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
+    public static final String CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE = "cbo_push_down_groupingset_reshuffle";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
@@ -1405,6 +1407,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // auto, global, local
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
     private String cboPushDownAggregate = "global";
+
+    @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownGroupingSet = true;
+
+    @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownGroupingSetReshuffle = true;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
@@ -3199,6 +3207,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownAggregate(String cboPushDownAggregate) {
         this.cboPushDownAggregate = cboPushDownAggregate;
+    }
+
+    public boolean isCboPushDownGroupingSet() {
+        return cboPushDownGroupingSet;
+    }
+
+    public void setCboPushDownGroupingSet(boolean cboPushDownGroupingSet) {
+        this.cboPushDownGroupingSet = cboPushDownGroupingSet;
+    }
+
+    public boolean isCboPushDownGroupingSetReshuffle() {
+        return cboPushDownGroupingSetReshuffle;
+    }
+
+    public void setCboPushDownGroupingSetReshuffle(boolean cboPushDownGroupingSetReshuffle) {
+        this.cboPushDownGroupingSetReshuffle = cboPushDownGroupingSetReshuffle;
     }
 
     public void setCboPushDownDistinctBelowWindow(boolean flag) {

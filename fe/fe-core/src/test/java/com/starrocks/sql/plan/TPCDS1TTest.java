@@ -617,6 +617,7 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPartitionTopNStatistics() throws Exception {
         String plan = getCostExplain("select * from (select i_category, i_brand,\n" +
                 "        cc_name,\n" +
@@ -642,5 +643,27 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
                 "  |  order by: [13, VARCHAR, true] ASC, [63, INT, true] ASC, [65, INT, true] ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 10");
+=======
+    public void testQuery67() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        String plan = getFragmentPlan(Q67);
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 15\n" +
+                "    HASH_PARTITIONED: 102: i_product_name\n" +
+                "\n" +
+                "  14:AGGREGATE (update serialize)");
+        assertContains(plan, "  20:REPEAT_NODE\n" +
+                "  |  repeat: repeat 7 lines [[], [108], [108, 109], [108, 109, 110], " +
+                "[108, 109, 110, 111], [112, 108, 109, 110, 111], [112, 113, 108, 109, 110, 111], " +
+                "[112, 113, 114, 108, 109, 110, 111]]\n");
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 18\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 26\n" +
+                "    RANDOM");
+>>>>>>> 2d100a51b1 ([Enhancement] push down aggregate on grouping-set (#46007))
     }
 }

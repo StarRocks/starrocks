@@ -287,6 +287,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
             return this;
         }
 
+        public Builder setSplit(boolean split) {
+            builder.isSplit = split;
+            return this;
+        }
+
         public Builder setPartitionByColumns(
                 List<ColumnRefOperator> partitionByColumns) {
             builder.partitionByColumns = partitionByColumns;
