@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-keywords: ['fenqu', 'beifen']
+keywords: ['fenqu']
 ---
 
 # 动态分区
