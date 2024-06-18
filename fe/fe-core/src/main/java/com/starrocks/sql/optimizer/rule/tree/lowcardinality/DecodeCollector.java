@@ -146,6 +146,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         return physicalOlapScanColumns.containsAll(matchChildren);
     }
+
     private void fillDisableStringColumns() {
         // build string dependency
         // a = upper(b) b = upper(c)
@@ -203,7 +204,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         // for each relation group if any element in group is disable then disable all group
         for (Set<Integer> relationSet : relationSets) {
             for (Integer cid : relationSet) {
-                if (disableRewriteStringColumns.contains(cid)){
+                if (disableRewriteStringColumns.contains(cid)) {
                     unionAll(disableRewriteStringColumns, relationSet);
                     break;
                 }
