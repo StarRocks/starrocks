@@ -253,12 +253,13 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         VelocityContext context = new VelocityContext();
 
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
-        String quoteColumnName = StatisticUtils.quoting(columnName);
+        String quoteColumnName = StatisticUtils.quoting(table, columnName);
+        String quoteColumnKey = "`column_key`";
 
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
         context.put("partitionId", partition.getId());
         context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", fullAnalyzeGetDataSize("column_key", columnType));
+        context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnKey, columnType));
         context.put("partitionName", partition.getName());
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
@@ -270,10 +271,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + "`column_key`" + "), hll_empty())))");
-            context.put("countNullFunction", "COUNT(1) - COUNT(" + "`column_key`" + ")");
-            context.put("maxFunction", getMinMaxFunction(columnType, "`column_key`", true));
-            context.put("minFunction", getMinMaxFunction(columnType, "`column_key`", false));
+            context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnKey + "), hll_empty())))");
+            context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnKey + ")");
+            context.put("maxFunction", getMinMaxFunction(columnType, quoteColumnKey, true));
+            context.put("minFunction", getMinMaxFunction(columnType, quoteColumnKey, false));
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));

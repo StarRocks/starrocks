@@ -176,7 +176,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
         for (int i = 0; i < columnNames.size(); i++) {
             VelocityContext context = new VelocityContext();
-            String quoteColumnName =  StatisticUtils.quoting(columnNames.get(i));
+            String quoteColumnName = StatisticUtils.quoting(table, columnNames.get(i));
             String columnNameStr = StringEscapeUtils.escapeSql(columnNames.get(i));
             Type columnType = columnTypes.get(i);
 
