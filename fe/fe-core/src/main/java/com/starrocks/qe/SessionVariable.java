@@ -1625,6 +1625,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DATACACHE_EVICT_PROBABILITY, flag = VariableMgr.INVISIBLE)
     private int datacacheEvictProbability = 100;
 
+    private int datacachePriority = 0;
+
+    private long datacacheTTLSeconds = 0L;
+
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
 
@@ -2265,6 +2269,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDataCacheEvictProbability(int datacacheEvictProbability) {
         this.datacacheEvictProbability = datacacheEvictProbability;
+    }
+
+    public void setDataCachePriority(int dataCachePriority) {
+        this.datacachePriority = dataCachePriority;
+    }
+
+    public void setDatacacheTTLSeconds(long datacacheTTLSeconds) {
+        this.datacacheTTLSeconds = datacacheTTLSeconds;
     }
 
     public boolean isCboUseDBLock() {
@@ -4028,6 +4040,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_datacache_async_populate_mode(enableDataCacheAsyncPopulateMode);
         tResult.setEnable_datacache_io_adaptor(enableDataCacheIOAdaptor);
         tResult.setDatacache_evict_probability(datacacheEvictProbability);
+        tResult.setDatacache_priority(datacachePriority);
+        tResult.setDatacache_ttl_seconds(datacacheTTLSeconds);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);

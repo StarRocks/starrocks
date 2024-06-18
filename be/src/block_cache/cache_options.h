@@ -47,6 +47,7 @@ struct CacheOptions {
 };
 
 struct WriteCacheOptions {
+    int8_t priority = 0;
     // If ttl_seconds=0 (default), no ttl restriction will be set. If an old one exists, remove it.
     uint64_t ttl_seconds = 0;
     // If overwrite=true, the cache value will be replaced if it already exists.
