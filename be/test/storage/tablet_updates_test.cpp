@@ -1987,14 +1987,7 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     // stop apply
     best_tablet->updates()->stop_apply(true);
-<<<<<<< HEAD
     std::thread th([&]() { best_tablet->updates()->compaction(_compaction_mem_tracker.get()); });
-    // check rows mapper file
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    // read from file
-    auto output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
-=======
-    std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
     RowsetSharedPtr output_rs;
     size_t retry_cnt = 0;
     while (output_rs == nullptr && retry_cnt <= 10) {
@@ -2005,7 +1998,6 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
         retry_cnt++;
     }
     ASSERT_TRUE(output_rs != nullptr);
->>>>>>> 5658db23cf ([UT] fix unstable be ut vertical_compaction_with_rows_mapper (#47150))
     RowsMapperIterator iterator;
     ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
     for (uint32_t i = 0; i < 100; i += 20) {
@@ -2303,14 +2295,7 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     // stop apply
     best_tablet->updates()->stop_apply(true);
-<<<<<<< HEAD
     std::thread th([&]() { best_tablet->updates()->compaction(_compaction_mem_tracker.get()); });
-    // check rows mapper file
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    // read from file
-    auto output_rs = best_tablet->updates()->get_rowset(rs->rowset_meta()->get_rowset_seg_id() + 1);
-=======
-    std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
     RowsetSharedPtr output_rs;
     size_t retry_cnt = 0;
     while (output_rs == nullptr && retry_cnt <= 10) {
@@ -2321,7 +2306,6 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
         retry_cnt++;
     }
     ASSERT_TRUE(output_rs != nullptr);
->>>>>>> 5658db23cf ([UT] fix unstable be ut vertical_compaction_with_rows_mapper (#47150))
     RowsMapperIterator iterator;
     ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
     for (uint32_t i = 0; i < 100; i += 20) {
