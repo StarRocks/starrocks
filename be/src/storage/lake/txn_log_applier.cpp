@@ -129,6 +129,10 @@ public:
 private:
     bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
     bool need_re_publish(const Status& st) { return _builder.recover_flag() == RecoverFlag::RECOVER_WITH_PUBLISH; }
+    bool is_column_mode_partial_update(const TxnLogPB_OpWrite& op_write) const {
+        // TODO support COLUMN_UPSERT_MODE
+        return op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE;
+    }
 
     Status check_and_recover(const std::function<Status()>& publish_func) {
         auto ret = publish_func();
@@ -174,8 +178,13 @@ private:
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
-        return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet, _index_entry,
-                                                                &_builder, _base_version);
+        if (is_column_mode_partial_update(op_write)) {
+            return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
+                                                                            &_builder, _base_version);
+        } else {
+            return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet, _index_entry,
+                                                                    &_builder, _base_version);
+        }
     }
 
     Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id) {

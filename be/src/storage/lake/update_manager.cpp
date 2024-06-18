@@ -317,6 +317,26 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     return Status::OK();
 }
 
+Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                                         const TabletMetadataPtr& metadata, Tablet* tablet,
+                                                         MetaFileBuilder* builder, int64_t base_version) {
+    auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+    RssidFileInfoContainer rssid_fileinfo_container;
+    rssid_fileinfo_container.add_rssid_to_file(*metadata);
+
+    RowsetUpdateStateParams params{
+            .op_write = op_write,
+            .tablet_schema = tablet_schema,
+            .metadata = metadata,
+            .tablet = tablet,
+            .container = rssid_fileinfo_container,
+    };
+
+    ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
+    RETURN_IF_ERROR(handler.execute(params, builder));
+    return Status::OK();
+}
+
 Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const ColumnUniquePtr& upsert,
                                  PrimaryIndex& index, DeletesMap* new_deletes) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");

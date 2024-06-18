@@ -102,6 +102,10 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
+    Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                              const TabletMetadataPtr& metadata, Tablet* tablet,
+                                              MetaFileBuilder* builder, int64_t base_version);
+
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
                                    std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
