@@ -344,13 +344,24 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
         super.updateProgress(attachment);
-        this.progress.update(attachment.getProgress());
+        updateProgressAndLatestOffset(attachment);
         this.timestampProgress.update(attachment.getTimestampProgress());
     }
 
     @Override
     protected void replayUpdateProgress(RLTaskTxnCommitAttachment attachment) {
         super.replayUpdateProgress(attachment);
+        updateProgressAndLatestOffset(attachment);
+    }
+
+    // update the latest offsets in local cache timely can reduce potential rpc request to Kafka within function `readyToExecute`
+    private void updateProgressAndLatestOffset(RLTaskTxnCommitAttachment attachment) {
+        ((KafkaProgress) attachment.getProgress()).getPartitionIdToOffset().forEach((partition, offset) -> {
+            Long localLatestOffset = getPartitionOffset(partition);
+            if (localLatestOffset != null && localLatestOffset < offset + 1) {
+                setPartitionOffset(partition, offset + 1);
+            }
+        });
         this.progress.update(attachment.getProgress());
     }
 
