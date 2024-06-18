@@ -64,10 +64,15 @@ ColumnModePartialUpdateHandler::ColumnModePartialUpdateHandler(int64_t base_vers
                                                                MemTracker* tracker)
         : _base_version(base_version), _txn_id(txn_id), _tracker(tracker) {}
 
+ColumnModePartialUpdateHandler::~ColumnModePartialUpdateHandler() {
+    _tracker->release(_memory_usage);
+}
+
 void ColumnModePartialUpdateHandler::_release_upserts(uint32_t start_idx, uint32_t end_idx) {
     for (uint32_t idx = start_idx; idx < _upserts.size() && idx < end_idx; idx++) {
         if (_upserts[idx] != nullptr) {
             if (_upserts[idx]->is_last(idx)) {
+                _memory_usage -= _upserts[idx]->upserts->memory_usage();
                 _tracker->release(_upserts[idx]->upserts->memory_usage());
             }
             _upserts[idx].reset();
@@ -132,10 +137,6 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
         }
         // merge pk column into BatchPKs
         header_ptr->upserts->append(*col);
-        // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
-        // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
-        // So we try build slice in advance in here to make sure the correctness of memory statistics
-        header_ptr->upserts->raw_data();
         // all idx share same ptr with start idx
         _upserts[idx] = header_ptr;
         *end_idx = idx + 1;
@@ -149,7 +150,12 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
     header_ptr->offsets.push_back(header_ptr->upserts->size());
     header_ptr->end_idx = *end_idx;
     DCHECK(header_ptr->offsets.size() == header_ptr->end_idx - header_ptr->start_idx + 1);
+    // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
+    // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
+    // So we try build slice in advance in here to make sure the correctness of memory statistics
+    header_ptr->upserts->raw_data();
     _tracker->consume(header_ptr->upserts->memory_usage());
+    _memory_usage += header_ptr->upserts->memory_usage();
 
     return Status::OK();
 }
@@ -411,14 +417,15 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // rss_id -> update file id -> <rowid, update rowid>
     std::map<uint32_t, UptidToRowidPairs> rss_upt_id_to_rowid_pairs;
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
-        for (const auto& each : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
-            auto rssid = (uint32_t)(each.first >> 32);
-            auto rowid = (uint32_t)(each.first & ROWID_MASK);
-            rss_upt_id_to_rowid_pairs[rssid][upt_id].emplace_back(rowid, each.second);
+        for (const auto& each_rss : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
+            for (const auto& each : each_rss.second) {
+                rss_upt_id_to_rowid_pairs[each_rss.first][upt_id].emplace_back(each.first, each.second);
+            }
+            TRACE_COUNTER_INCREMENT("pcu_update_cnt", each_rss.second.size());
         }
         TRACE_COUNTER_INCREMENT("pcu_insert_rows", _partial_update_states[upt_id].insert_rowids.size());
-        TRACE_COUNTER_INCREMENT("pcu_update_cnt", _partial_update_states[upt_id].rss_rowid_to_update_rowid.size());
     }
+    _partial_update_states.clear();
     // must record unique column id in delta column group
     // dcg_column_ids and dcg_column_files are mapped one to the other. E.g.
     // {{1,2}, {3,4}} -> {"aaa.cols", "bbb.cols"}
