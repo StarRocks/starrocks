@@ -1086,6 +1086,10 @@ public:
 
 private:
     static ColumnPtr _process_multi_array_sort(FunctionContext* ctx, const Columns& columns) {
+        if (columns[0]->only_null()) {
+            return columns[0];
+        }
+
         size_t chunk_size = columns[0]->size();
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
         ColumnPtr dest_column = src_column->clone_empty();
