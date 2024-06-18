@@ -11,10 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "exprs/array_functions.h"
-
 #include <memory>
-
+#include "exprs/array_functions.h"
 #include "column/array_column.h"
 #include "column/column_hash.h"
 #include "column/map_column.h"
