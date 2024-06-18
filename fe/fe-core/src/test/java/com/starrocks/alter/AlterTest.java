@@ -2100,6 +2100,67 @@ public class AlterTest {
     }
 
     @Test(expected = DdlException.class)
+    public void testAddRangePartitionWithMultiTypePartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE `partition1` (\n" +
+                "  `dtstattime` datetime NOT NULL COMMENT \"xxxx\",\n" +
+                "  `hour1` varchar(65533) NULL COMMENT \"xxx\",\n" +
+                "  `ping1` double NULL COMMENT \"xxx\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dtstattime`, `hour1`)\n" +
+                "COMMENT \"test\"\n" +
+                "PARTITION BY RANGE(`dtstattime`)\n" +
+                "()\n" +
+                "DISTRIBUTED BY HASH(`dtstattime`) BUCKETS 256\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"dynamic_partition.enable\" = \"false\",\n" +
+                "\"dynamic_partition.time_unit\" = \"hour\",\n" +
+                "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                "\"dynamic_partition.start\" = \"-2147483648\",\n" +
+                "\"dynamic_partition.end\" = \"240\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"dynamic_partition.buckets\" = \"1\",\n" +
+                "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+
+        try {
+            String sql = "ALTER TABLE partition1 ADD PARTITION p2023072000 " +
+                    "VALUES [(\"2023-07-20 00:00:00\"), (\"2023-07-20 01:00:00\"));";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+
+            sql = "ALTER TABLE partition1 ADD PARTITION p2023072001 " +
+                    "VALUES [(\"2023-07-20 01:00:00\"), (\"2023-07-20 02:00:00\"));";
+            alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+
+            sql = "ALTER TABLE partition1 ADD PARTITION p2023072002 " +
+                    "VALUES [(\"2023-07-20 02:00:00\"), (\"2023-07-20 03:00:00\"));";
+            alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        } catch (Exception e) {
+            Assert.assertEquals("failed to add partition", 1, 0);
+        }
+        String sql = "ALTER TABLE partition1 ADD PARTITION p2023071700 " +
+                "VALUES [(\"2023-07-17 00:00:00\"), (\"2023-07-17 01:00:00\"));";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+
+        sql = "ALTER TABLE partition1 ADD PARTITION p20230717 VALUES [(\"2023-07-17 00:00:00\"), (\"2023-07-18 00:00:00\"));";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test(expected = DdlException.class)
     public void testAddMultiListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_2 (\n" +
