@@ -135,10 +135,11 @@ class FileWriterBase {
 public:
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size);
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size, RuntimeState* state);
 
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
-                   std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs);
+                   std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs,
+                   RuntimeState* state);
 
     virtual ~FileWriterBase() = default;
 
@@ -180,20 +181,22 @@ protected:
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
     int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
     int64_t _max_file_size = 512 * 1024 * 1024; // 512MB
+    RuntimeState* _state = nullptr;
 };
 
 class SyncFileWriter : public FileWriterBase {
 public:
     SyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size, RuntimeState* state)
             : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
-                             max_file_size) {}
+                             max_file_size, state) {}
 
     SyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
-                   std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs)
-            : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema),
-                             std::move(type_descs)) {}
+                   std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs,
+                   RuntimeState* state)
+            : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), std::move(type_descs),
+                             state) {}
 
     ~SyncFileWriter() override = default;
 
