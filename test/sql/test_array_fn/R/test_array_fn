@@ -4714,7 +4714,7 @@ select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_co
 -- !result
 select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 8;
 -- result:
-[7,[3,2,1],[3,2,1]]
+[8,[3,2,1],[3,2,1]]
 -- !result
 drop table test_array_sortby_muliti;
 -- result:
