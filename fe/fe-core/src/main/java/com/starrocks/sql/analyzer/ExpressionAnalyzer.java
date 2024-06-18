@@ -1316,7 +1316,7 @@ public class ExpressionAnalyzer {
                             }
                             if (!(expr.getType().canOrderBy() || expr.getType().isJsonType())) {
                                 throw new SemanticException(
-                                        "function args must be can be order by type or json type, but real type is " +
+                                        "function args must be can be order by orderable type or json type, but real type is " +
                                                 expr.getType().toSql(),
                                         node.getPos());
                             }
