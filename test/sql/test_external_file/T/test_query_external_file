@@ -2,6 +2,7 @@
 
 shell: ossutil64 mkdir oss://${oss_bucket}/test_query_external_file/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_two_page.parquet oss://${oss_bucket}/test_query_external_file/${uuid0}/dict_two_page.parquet | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/data_two_page_nullable.parquet oss://${oss_bucket}/test_query_external_file/${uuid0}/data_two_page_nullable.parquet | grep -Pv "(average|elapsed)"
 
 CREATE EXTERNAL TABLE dict_two_page
 (
@@ -15,7 +16,7 @@ CREATE EXTERNAL TABLE dict_two_page
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_query_external_file/${uuid0}/", 
+    "path" = "oss://${oss_bucket}/test_query_external_file/${uuid0}/dict_two_page.parquet",
     "format" = "parquet"
 );
 
@@ -57,6 +58,21 @@ select count(*) from dict_two_page;
 set enable_rewrite_simple_agg_to_hdfs_scan = false;
 
 select count(*) from dict_two_page;
+
+CREATE EXTERNAL TABLE data_two_page_nullable
+(
+    c0 int
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_query_external_file/${uuid0}/data_two_page_nullable.parquet",
+    "format" = "parquet"
+);
+
+select count(*) from data_two_page_nullable where c0 is null;
+
+select count(*) from data_two_page_nullable where c0 is not null;
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_query_external_file/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 

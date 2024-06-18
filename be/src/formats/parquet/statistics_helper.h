@@ -35,8 +35,7 @@ public:
 
     static Status in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                             const std::vector<std::string>& max_values, ExprContext* ctx,
-                                            const ParquetField* field, const std::string& timezone,
-                                            std::vector<bool>& selected);
+                                            const ParquetField* field, const std::string& timezone, Filter& selected);
 };
 
 } // namespace starrocks::parquet
