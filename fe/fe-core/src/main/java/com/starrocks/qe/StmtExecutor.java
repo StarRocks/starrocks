@@ -452,7 +452,7 @@ public class StmtExecutor {
         // Try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
-        context.setBackupSessionVariable(context.getSessionVariable());
+        SessionVariable sessionVariableBackup = context.getSessionVariable();
 
         // if use http protocal, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
@@ -745,8 +745,7 @@ public class StmtExecutor {
             }
 
             // restore session variable in connect context
-            context.setSessionVariable(context.getBackupSessionVariable());
-            context.clearBackupSessionVariable();
+            context.setSessionVariable(sessionVariableBackup);
         }
     }
 
