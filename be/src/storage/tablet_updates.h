@@ -364,6 +364,8 @@ public:
 
     RowsetSharedPtr get_rowset(uint32_t rowset_id);
 
+    void check_for_apply() { _check_for_apply(); }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -485,8 +487,6 @@ private:
         }
     }
 
-    void check_for_apply() { _check_for_apply(); }
-
     std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
@@ -496,6 +496,10 @@ private:
     Status _light_apply_compaction_commit(const EditVersion& version, Rowset* output_rowset, PrimaryIndex* index,
                                           size_t* total_deletes, size_t* total_rows,
                                           vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
+
+    bool _is_tolerable(Status& status);
+
+    void _reset_apply_status(const EditVersionInfo& version_info_apply);
 
 private:
     Tablet& _tablet;

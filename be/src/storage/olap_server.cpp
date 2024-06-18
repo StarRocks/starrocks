@@ -254,6 +254,9 @@ Status StorageEngine::start_bg_threads() {
         Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
     }
 
+    _schedule_apply_thread = std::thread([this] { _schedule_apply_thread_callback(nullptr); });
+    Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
+
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
 }
@@ -914,21 +917,21 @@ void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        int32_t interval = config::retry_apply_interval_second;
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         {
             auto wait_timeout = std::chrono::seconds(1);
             std::unique_lock<std::mutex> ul(_schedule_apply_mutex);
-            while (_schedule_apply_tasks.empty() && !_bg_worker_stopped.load(std::memory_order_consume) {
+            while (_schedule_apply_tasks.empty() && !_bg_worker_stopped.load(std::memory_order_consume)) {
                 _apply_tablet_changed_cv.wait_for(ul, wait_timeout);
             }
 
-            if (_bg_worker_stopped.load(std::memory_order_consume) {
+            if (_bg_worker_stopped.load(std::memory_order_consume)) {
                 break;
             }
 
-            auto now = std::chrono::steady_clock::now();
-            while (!_schedule_apply_tasks.empty() && _schedule_apply_tasks.top().first <= now) {
+            auto time_point = std::chrono::steady_clock::now();
+            while (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty() &&
+                   _schedule_apply_tasks.top().first <= time_point) {
                 _schedule_apply_tasks.pop();
                 auto tablet_id = _schedule_apply_tasks.top().second;
                 auto tablet = _tablet_manager->get_tablet(tablet_id);
@@ -938,7 +941,7 @@ void* StorageEngine::_schedule_apply_thread_callback(void* arg) {
                 tablet->updates()->check_for_apply();
             }
 
-            if (!_schedule_apply_tasks.empty()) {
+            if (!_bg_worker_stopped.load(std::memory_order_consume) && !_schedule_apply_tasks.empty()) {
                 _apply_tablet_changed_cv.wait_until(ul, _schedule_apply_tasks.top().first);
             }
         }
