@@ -795,6 +795,8 @@ struct TMasterOpRequest {
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
     35: optional string session_id
+
+    101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
 
 struct TColumnDefinition {
