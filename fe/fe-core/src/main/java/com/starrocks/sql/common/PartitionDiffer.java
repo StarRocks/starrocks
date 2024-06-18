@@ -23,6 +23,7 @@ import com.google.common.collect.RangeMap;
 import com.google.common.collect.TreeRangeMap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -34,6 +35,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
@@ -231,6 +234,7 @@ public class PartitionDiffer {
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
      */
     private static Map<Table, Map<String, Range<PartitionKey>>> collectRBTPartitionKeyMap(
+            Database db,
             MaterializedView mv,
             Expr mvPartitionExpr,
             Map<Table, Map<String, Set<String>>> extBTMVPartitionNameMap) {
@@ -240,6 +244,8 @@ public class PartitionDiffer {
         }
 
         // TODO: lock base tables or use snapshot tables to avoid the partition change during the process.
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
         try {
             for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
@@ -262,6 +268,8 @@ public class PartitionDiffer {
         } catch (UserException | SemanticException e) {
             LOG.warn("Partition differ collects ref base table partition failed.", e);
             return null;
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
         }
         return refBaseTablePartitionMap;
     }
@@ -318,7 +326,8 @@ public class PartitionDiffer {
      * @param partitionRange: <partition start, partition end> pair
      * @return MvPartitionDiffResult: the result of partition difference
      */
-    public static MvPartitionDiffResult computePartitionRangeDiff(MaterializedView mv,
+    public static MvPartitionDiffResult computePartitionRangeDiff(Database db,
+                                                                  MaterializedView mv,
                                                                   Pair<String, String> partitionRange) {
         Expr mvPartitionExpr = mv.getFirstPartitionRefTableExpr();
         Map<Table, Column> refBaseTableAndColumns = mv.getRelatedPartitionTableAndColumn();
@@ -328,7 +337,7 @@ public class PartitionDiffer {
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
         // collect all ref base table's partition range map
         Map<Table, Map<String, Set<String>>> extRBTMVPartitionNameMap = Maps.newHashMap();
-        Map<Table, Map<String, Range<PartitionKey>>> rBTPartitionMap = collectRBTPartitionKeyMap(mv, mvPartitionExpr,
+        Map<Table, Map<String, Range<PartitionKey>>> rBTPartitionMap = collectRBTPartitionKeyMap(db, mv, mvPartitionExpr,
                 extRBTMVPartitionNameMap);
         // merge all ref base tables' partition range map to avoid intersected partitions
         Map<String, Range<PartitionKey>> mergedRBTPartitionKeyMap = mergeRBTPartitionKeyMap(mvPartitionExpr, rBTPartitionMap);
