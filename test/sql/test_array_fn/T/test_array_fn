@@ -912,3 +912,34 @@ select array_contains_seq(ai_0, ai_1) from array_test_01 order by pk;
 select array_contains_seq(ai_1, ai_1) from array_test_01 order by pk;
 select array_contains_seq(ai_1, ai_0) from array_test_01 order by pk;
 select array_contains_seq(ai_0,null) from array_test_01 order by pk;
+
+CREATE TABLE test_array_sortby_muliti (
+    id INT(11) not null,
+    array_col1 ARRAY<int(11)> ,
+    array_col2 ARRAY<int(11)> ,
+    array_col3 ARRAY<int(11)> ,
+    array_col4 ARRAY<int(11)> 
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(id)
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false",
+    "compression" = "LZ4"
+);
+INSERT INTO test_array_sortby_muliti VALUES
+(1, [4, 3, 5], [82, 4, 4], [1, 3, 2], [7, 8, 9]),
+(2, [4, 3, 5], [82, 4, 4], [1, 2, 3], [6, 5, 4]),
+(3, [4, 3, 5, 6], [82, 4, 4, 4], [1, 2, 3, 3], [3, 2, 1]),
+(4, [4, 3, 5, 6], [82, 4, 4, 4], [1, 3, 2, 3], [9, 8, 7]),
+(5, [1, 2, 3], [3, 2, 2], NULL, [5, 5, 5]),
+(6, NULL, [1, 2, 3], [4, 5, 6], [1, 1, 1]),
+(7, [7, 8, 9], NULL, [7, 8, 9], [2, 2, 2]),
+(8, [3, 2, 1], [5, 6, 7], [2, 3, 1], [4, 4, 4]);
+select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 1;
+select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 2;
+select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 5;
+select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 7;
+select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 8;
