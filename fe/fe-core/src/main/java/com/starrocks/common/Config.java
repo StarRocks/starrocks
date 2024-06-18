@@ -1432,6 +1432,7 @@ public class Config extends ConfigBase {
      * To avoid this situation, we introduced the tablet_sched_colocate_balance_after_system_stable_time_s parameter.
      * If the status(alive and decommissioned) of all backend can maintain consistency within
      * tablet_sched_colocate_balance_after_system_stable_time_s, then the colocate balance will be triggered.
+     * Default value is 15min.
      */
     @ConfField(mutable = true)
     public static long tablet_sched_colocate_balance_after_system_stable_time_s = 15 * 60;
