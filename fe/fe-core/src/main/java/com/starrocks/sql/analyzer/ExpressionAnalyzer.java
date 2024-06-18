@@ -1291,35 +1291,39 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 case FunctionSet.ARRAY_SORTBY:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions, " +
+                                "but really have " + node.getChildren().size() + " inputs",
+                                node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
+                                " should be an array or a lambda function, but real type is " +
+                                node.getChild(0).getType().toSql(), node.getPos());
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
+                                " should be an array or a lambda function, but real type is " +
+                                node.getChild(1).getType().toSql(), node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_SORTBY_MULTI:
                     if (node.getChildren().size() < 2) {
                         throw new SemanticException(fnName + " should have at least 2 inputs, " +
                                 "but really have " + node.getChildren().size() + " inputs",
                                 node.getPos());
                     }
-                    if (node.getChildren().size() == 2) {
-                        if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                            throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
-                                    " should be an array or a lambda function, but real type is " +
-                                    node.getChild(0).getType().toSql(), node.getPos());
+                    for (Expr expr : node.getChildren()) {
+                        if (!expr.getType().isArrayType()) {
+                            throw new SemanticException(
+                                    "function args must be array, but real type is " + expr.getType().toSql(),
+                                    node.getPos());
                         }
-                        if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                            throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
-                                    " should be an array or a lambda function, but real type is " +
-                                    node.getChild(1).getType().toSql(), node.getPos());
-                        }
-                    } else {
-                        for (Expr expr : node.getChildren()) {
-                            if (!expr.getType().isArrayType()) {
-                                throw new SemanticException(
-                                        "function args must be array, but real type is " + expr.getType().toSql(),
-                                        node.getPos());
-                            }
-                            if (!(expr.getType().canOrderBy() || expr.getType().isJsonType())) {
-                                throw new SemanticException(
-                                        "function args must be can be order by orderable type or json type, but real type is " +
-                                                expr.getType().toSql(),
-                                        node.getPos());
-                            }
+                        if (!(expr.getType().canOrderBy() || expr.getType().isJsonType())) {
+                            throw new SemanticException(
+                                    "function args must be can be order by orderable type or json type, but real type is " +
+                                            expr.getType().toSql(),
+                                    node.getPos());
                         }
                     }
                     break;
