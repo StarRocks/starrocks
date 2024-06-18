@@ -45,6 +45,7 @@ public class SplitPlanFragment extends PlanFragment {
         this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
     }
 
+    // get the list of destination fragments by exchange nodes
     public List<PlanFragment> getDestFragmentList() {
         return destNodeList.stream().map(PlanNode::getFragment).collect(Collectors.toList());
     }
