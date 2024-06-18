@@ -575,7 +575,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;
     scanner_params.enable_datacache_io_adaptor = _enable_datacache_io_adaptor;
     scanner_params.datacache_evict_probability = _datacache_evict_probability;
-    scanner_params.datacache_priortiy = _datacache_priority;
+    scanner_params.datacache_priority = _datacache_priority;
     scanner_params.datacache_ttl_seconds = _datacache_ttl_seconds;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;

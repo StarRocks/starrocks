@@ -236,7 +236,7 @@ Status HdfsScanner::open_random_access_file() {
         _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
         _cache_input_stream->set_enable_async_populate_mode(_scanner_params.enable_datacache_async_populate_mode);
         _cache_input_stream->set_enable_cache_io_adaptor(_scanner_params.enable_datacache_io_adaptor);
-        _cache_input_stream->set_priority(_scanner_params.datacache_priortiy);
+        _cache_input_stream->set_priority(_scanner_params.datacache_priority);
         _cache_input_stream->set_ttl_seconds(_scanner_params.datacache_ttl_seconds);
         _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
         _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
