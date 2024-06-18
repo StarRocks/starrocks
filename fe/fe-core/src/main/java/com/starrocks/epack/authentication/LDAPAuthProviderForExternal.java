@@ -45,6 +45,11 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
         try {
             // this will send a bind call to ldap server, throw exception if failed
             ctx = securityIntegration.createDirContextOnConnection(userDn, userPwd);
+            if (ctx == null) {
+                throw new AuthenticationException(String.format("create ldap context for %s failed, " +
+                        "pwd len: %s, security integration: %s", userDn,
+                        userPwd == null ? "null" : userPwd.length(), securityIntegration));
+            }
             return true;
         } finally {
             if (ctx != null) {
