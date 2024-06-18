@@ -436,16 +436,18 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
 
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation, std::pair<int, int> range) {
+    DCHECK(!columns.empty());
     if (columns.size() < 1) {
         return Status::OK();
     }
-
+    
+    DCHECK(range.second >= range.first);
     Tie tie(range.second - range.first, 1);
     SmallPermutation small_perm = create_small_permutation(range);
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {
         ColumnPtr column = columns[col_index];
-        bool build_tie = col_index != columns.size() - 1;
+        bool build_tie = (col_index != (columns.size() - 1));
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), small_perm, tie,
                                             range, build_tie));
     }
