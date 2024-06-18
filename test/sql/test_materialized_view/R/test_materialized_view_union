@@ -1,4 +1,140 @@
-
+-- name: test_materialized_view_union
+CREATE TABLE `t1` (
+  `k1` int(11) NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(
+PARTITION p2 VALUES [("202301"), ("202302")),
+PARTITION p3 VALUES [("202302"), ("202303")),
+PARTITION p4 VALUES [("202303"), ("202304")),
+PARTITION p5 VALUES [("202304"), ("202305")),
+PARTITION p6 VALUES [("202305"), ("202306")))
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t2` (
+  `k1` int(11) NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(
+PARTITION p2 VALUES [("202301"), ("202302")),
+PARTITION p3 VALUES [("202302"), ("202303")),
+PARTITION p4 VALUES [("202303"), ("202304")),
+PARTITION p5 VALUES [("202304"), ("202305")),
+PARTITION p6 VALUES [("202305"), ("202306")))
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW `test_union_mv1_${uuid0}`
+PARTITION BY (`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+REFRESH DEFERRED ASYNC
+PROPERTIES (
+"replication_num" = "1",
+"storage_medium" = "HDD"
+)
+AS select k1, v1, v2 from t1
+union all
+select k1, v1, v2 from t2;
+-- result:
+-- !result
+insert into t1 values ("202301",1,1),("202305",1,2);
+-- result:
+-- !result
+refresh materialized view test_union_mv1_${uuid0} with sync mode;
+select * from test_union_mv1_${uuid0} order by k1, v1;
+-- result:
+202301	1	1
+202305	1	2
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop materialized view test_union_mv1_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `k1` int(11) NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(
+PARTITION p2 VALUES [("202301"), ("202302")),
+PARTITION p3 VALUES [("202302"), ("202303")),
+PARTITION p4 VALUES [("202303"), ("202304")),
+PARTITION p5 VALUES [("202304"), ("202305")),
+PARTITION p6 VALUES [("202305"), ("202306")))
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t2` (
+  `k1` int(11) NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values (202301,1,1),(202305,1,2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW `test_union_mv2_${uuid0}`
+PARTITION BY (`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+REFRESH DEFERRED ASYNC
+PROPERTIES (
+"replication_num" = "1",
+"storage_medium" = "HDD",
+"auto_refresh_partitions_limit" = "1"
+)
+AS select k1, v1, v2 from t1
+union
+select k1, v1, v2 from t2;
+-- result:
+-- !result
+refresh materialized view test_union_mv2_${uuid0} with sync mode;
+select * from test_union_mv2_${uuid0} order by k1, v1;
+-- result:
+202301	1	1
+202305	1	2
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop materialized view test_union_mv2_${uuid0};
+-- result:
+-- !result
 -- name: test_materialized_view_union_all_unaligned
 CREATE TABLE IF NOT EXISTS t1 (
     leg_id VARCHAR(100) NOT NULL,
@@ -74,7 +210,7 @@ SELECT * FROM t2;
 	
 REFRESH MATERIALIZED VIEW v1 WITH SYNC MODE;
 -- result:
-4c6f86f1-2d22-11ef-9d69-e67f2420b196
+031065ac-2d7e-11ef-b31f-e67f2420b196
 -- !result
 select count(*) from v1;
 -- result:

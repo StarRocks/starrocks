@@ -239,6 +239,7 @@ public class PartitionDiffer {
             return Maps.newHashMap();
         }
 
+        // TODO: lock base tables or use snapshot tables to avoid the partition change during the process.
         Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
         try {
             for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {

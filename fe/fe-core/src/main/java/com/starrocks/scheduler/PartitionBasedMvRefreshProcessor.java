@@ -263,10 +263,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
                 return mvToRefreshedPartitions;
             }
+
             // Only refresh the first partition refresh number partitions, other partitions will generate new tasks
             filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, materializedView);
-
-            // do check again after filter
             int partitionRefreshNumber = materializedView.getTableProperty().getPartitionRefreshNumber();
             LOG.info("Filter partitions to refresh for materialized view {}, partitionRefreshNumber={}, " +
                             "partitionsToRefresh:{}, mvPotentialPartitionNames:{}, next start:{}, next end:{}",

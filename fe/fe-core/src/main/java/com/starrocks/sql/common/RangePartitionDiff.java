@@ -95,9 +95,11 @@ public class RangePartitionDiff {
 
     @Override
     public String toString() {
-        return "RangePartitionDiff{" +
-                "adds=" + adds +
-                ", deletes=" + deletes +
-                '}';
+        StringBuilder sb = new StringBuilder();
+        sb.append("RangePartitionDiff{");
+        sb.append("adds=").append(adds);
+        sb.append(", deletes=").append(deletes);
+        sb.append('}');
+        return sb.toString();
     }
 }
