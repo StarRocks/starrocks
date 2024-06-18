@@ -988,7 +988,10 @@ public class DefaultCoordinator extends Coordinator {
 
             // Waiting for other fragment instances to finish execState
             // Ideally, it should wait indefinitely, but out of defense, set timeout
-            queryProfile.waitForProfileFinished(timeout, TimeUnit.SECONDS);
+            boolean isFinished = queryProfile.waitForProfileFinished(timeout, TimeUnit.SECONDS);
+            if (!isFinished) {
+                LOG.warn("failed to get profile within {} seconds", timeout);
+            }
         }
 
         lock();
@@ -1045,9 +1048,10 @@ public class DefaultCoordinator extends Coordinator {
         final long fixedMaxWaitTime = 5;
 
         long leftTimeoutS = timeoutS;
+        boolean awaitRes = false;
         while (leftTimeoutS > 0) {
             long waitTime = Math.min(leftTimeoutS, fixedMaxWaitTime);
-            boolean awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
+            awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
             if (awaitRes) {
                 return true;
             }
@@ -1062,6 +1066,10 @@ public class DefaultCoordinator extends Coordinator {
             }
 
             leftTimeoutS -= waitTime;
+        }
+
+        if (!awaitRes) {
+            LOG.warn("failed to get profile within {} seconds", timeoutS);
         }
         return false;
     }
