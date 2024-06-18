@@ -286,38 +286,14 @@ from (
 group by dt;
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("test_mv1")
--- result:
-None
--- !result
-function: wait_async_materialized_view_finish("test_mv2")
--- result:
-None
--- !result
-function: wait_async_materialized_view_finish("test_mv3")
--- result:
-None
--- !result
-function: wait_async_materialized_view_finish("test_mv4")
--- result:
-None
--- !result
-function: wait_async_materialized_view_finish("test_mv5")
--- result:
-None
--- !result
-function: wait_async_materialized_view_finish("test_mv6")
--- result:
-None
--- !result
-function: wait_async_materialized_view_finish("test_mv7")
--- result:
-None
--- !result
-function: wait_async_materialized_view_finish("test_mv8")
--- result:
-None
--- !result
+refresh materialized view test_mv1 with sync mode;
+refresh materialized view test_mv2 with sync mode;
+refresh materialized view test_mv3 with sync mode;
+refresh materialized view test_mv4 with sync mode;
+refresh materialized view test_mv5 with sync mode;
+refresh materialized view test_mv6 with sync mode;
+refresh materialized view test_mv7 with sync mode;
+refresh materialized view test_mv8 with sync mode;
 select count(1) from test_mv1;
 -- result:
 10
@@ -436,4 +412,28 @@ select dt from test_mv8 group by dt order by 1;
 2024-03-13
 2024-03-14
 2024-04-10
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv3;
+-- result:
+-- !result
+drop materialized view test_mv4;
+-- result:
+-- !result
+drop materialized view test_mv5;
+-- result:
+-- !result
+drop materialized view test_mv6;
+-- result:
+-- !result
+drop materialized view test_mv7;
+-- result:
+-- !result
+drop materialized view test_mv8;
+-- result:
 -- !result

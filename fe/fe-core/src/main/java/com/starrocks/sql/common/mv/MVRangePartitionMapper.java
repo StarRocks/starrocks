@@ -27,11 +27,11 @@ import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
 /**
  * {@link MVRangePartitionMapper} is used to map the partition range of the base table to the partition range of mv,
  * It's for the mv with partition expr(e.g. {@code date_trunc(granularity, dt)}).
- *
+ * </p>
  * Why are there two different implementations of {@link MVRangePartitionMapper}?
- * - Eager mode, which will map/unroll the base table partition range by the granularity of mv partition expr.
- * - Lazy mode, which will use the base table partition range directly and make the mv's range mapping continuous.
- *
+ * * Eager mode, which will map/unroll the base table partition range by the granularity of mv partition expr.
+ * * Lazy mode, which will use the base table partition range directly and make the mv's range mapping continuous.
+ * </p>
  * But eager mode may generate too many partitions when the granularity is {@code minute or hour}, so distinguish them
  * by granularity.
  */
@@ -50,7 +50,7 @@ public abstract class MVRangePartitionMapper {
     /**
      * Get the mv range partition mapper instance.
      * @param granularity mv partition expr's granularity
-     * @return mv range partition mapper instance according by the granularity
+     * @return mv range partition mapper instance according to the granularity
      */
     public static MVRangePartitionMapper getInstance(String granularity) {
         if (granularity != null && TIME_MAP.containsKey(granularity) && TIME_MAP.get(granularity) < TIME_MAP.get(DAY)) {

@@ -41,14 +41,19 @@ import static com.starrocks.sql.common.SyncPartitionUtils.getUpperDateTime;
 import static com.starrocks.sql.common.SyncPartitionUtils.toPartitionKey;
 
 /**
- * {@link MVLazyRangePartitionMapper} will map/unroll the base table partition range by the granularity of mv partition expr.
+ * {@link MVLazyRangePartitionMapper} will create mv partition ranges by the granularity of mv partition expr lazily, it first
+ * deduces partitions by the partition ranges of the base table, then maps/unrolls the base table partition range by the
+ * granularity of mv.
+ *
  * eg:
  *  base table partition range  : [2021-01-01, 2021-01-03),
  *  mv partition expr           : date_trunc('day', dt)
  *
  *  mv's partition map result   :
  *                           p0 : [2021-01-01, 2021-01-03),
- *
+ * rather than:
+ *                           p0 : [2021-01-01, 2021-01-02),
+ *                           p1 : [2021-01-02, 2021-01-03),
  * Lazy mode will generate less partition ranges, but it may generate intersected partition ranges which we will handle it in
  * {@link com.starrocks.sql.common.PartitionDiffer#computePartitionRangeDiff}.
  */

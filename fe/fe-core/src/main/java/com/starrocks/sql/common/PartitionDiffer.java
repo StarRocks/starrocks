@@ -16,6 +16,7 @@ package com.starrocks.sql.common;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeMap;
@@ -29,6 +30,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.RangeUtils;
@@ -332,6 +334,24 @@ public class PartitionDiffer {
         if (mergedRBTPartitionKeyMap == null) {
             LOG.warn("Merge materialized view {} with base tables failed.", mv.getName());
             return null;
+        }
+
+        // only used for checking unaligned partitions in unit test
+        if (FeConstants.runningUnitTest) {
+            try {
+                // Check unaligned partitions, unaligned partitions may cause uncorrected result which is not supported for now.
+                List<RangePartitionDiff> rangePartitionDiffList = Lists.newArrayList();
+                for (Map.Entry<Table, Column> entry : refBaseTableAndColumns.entrySet()) {
+                    Table refBaseTable = entry.getKey();
+                    PartitionDiffer differ = PartitionDiffer.build(mv, partitionRange);
+                    rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(mvPartitionExpr,
+                            rBTPartitionMap.get(refBaseTable), mvRangePartitionMap, differ));
+                }
+                RangePartitionDiff.checkRangePartitionAligned(rangePartitionDiffList);
+            } catch (AnalysisException e) {
+                LOG.warn("Materialized view compute partition difference with base table failed.", e);
+                return null;
+            }
         }
 
         try {
