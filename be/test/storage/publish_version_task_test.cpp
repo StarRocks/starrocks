@@ -204,6 +204,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
     writer_options.partition_id = 10;
     writer_options.load_id.set_hi(1000);
     writer_options.load_id.set_lo(2222);
+    writer_options.replica_state = Primary;
     TupleDescriptor* tuple_desc = _create_tuple_desc();
     writer_options.slots = &tuple_desc->slots();
 
@@ -291,6 +292,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
     writer_options.partition_id = 10;
     writer_options.load_id.set_hi(2000);
     writer_options.load_id.set_lo(3222);
+    writer_options.replica_state = Primary;
     TupleDescriptor* tuple_desc = _create_tuple_desc();
     writer_options.slots = &tuple_desc->slots();
 
