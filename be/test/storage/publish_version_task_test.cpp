@@ -229,11 +229,11 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
             cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
-        ASSERT_TRUE(st.ok()) << st.status().to_string();
+        ASSERT_TRUE(st.ok()) << st.to_string();
         st = delta_writer->close();
-        ASSERT_TRUE(st.ok()) << st.status().to_string();
+        ASSERT_TRUE(st.ok()) << st.to_string();
         st = delta_writer->commit();
-        ASSERT_TRUE(st.ok()) << st.status().to_string();
+        ASSERT_TRUE(st.ok()) << st.to_string();
     }
 
     std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
@@ -246,7 +246,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
         const RowsetSharedPtr& rowset = tablet_rs.second;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
         // success because the related transaction is GCed
-        ASSERT_TRUE(st.ok()) << st.status().to_string();
+        ASSERT_TRUE(st.ok()) << st.to_string();
     }
     Version max_version = tablet->max_version();
     ASSERT_EQ(3, max_version.first);
@@ -316,11 +316,11 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
             cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
-        ASSERT_TRUE(st.ok()) << st.status().to_string();
+        ASSERT_TRUE(st.ok()) << st.to_string();
         st = delta_writer->close();
-        ASSERT_TRUE(st.ok()) << st.status().to_string();
+        ASSERT_TRUE(st.ok()) << st.to_string();
         st = delta_writer->commit();
-        ASSERT_TRUE(st.ok()) << st.status().to_string();
+        ASSERT_TRUE(st.ok()) << st.to_string();
     }
     // publish version 3
     auto token = ExecEnv::GetInstance()
