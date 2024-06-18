@@ -82,7 +82,7 @@ public class UpdateAnalyzer {
             }
         }
 
-        if (table.isOlapTable()) {
+        if (table.isOlapTable() || table.isCloudNativeTable()) {
             if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
                 // use partial update by column
                 updateStmt.setUsePartialUpdate();
