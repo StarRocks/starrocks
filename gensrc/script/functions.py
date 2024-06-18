@@ -1211,7 +1211,7 @@ vectorized_functions = [
      "ArrayFunctions::array_generate<TYPE_LARGEINT>"],
 
     [150335, 'array_sortby', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY', 'ANY_ARRAY', "..."]
-    ,'ArrayFunctions::array_sortby_multi<TYPE_BOOLEAN>'],
+    ,'ArrayFunctions::array_sortby<TYPE_BOOLEAN>'],
 
     # high-order functions related to lambda functions.
     [160100, 'array_map', True, False, 'ANY_ARRAY', ['FUNCTION', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_map'],
