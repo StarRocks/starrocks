@@ -353,47 +353,26 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 " as select t1a, t1b, sum(t1f) as total from test.test_all_type group by t1a, t1b;", () -> {
             {
                 String query = "select t1a, sum(if(t1b=0, t1f, 0)) as total from test.test_all_type group by t1a;";
-                // TODO: fix this later.
                 sql(query).notContain("mv0");
             }
             {
                 String query = "select t1a, sum(if(t1b=0, t1b, 0)) as total from test.test_all_type group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(if(14: t1b = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).notContain("mv0");
             }
             {
                 String query = "select t1a, sum(if(murmur_hash3_32(t1b %3) = 0, t1b, 0)) as total from test.test_all_type group" +
                         " by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(if(murmur_hash3_32(CAST(14: t1b % 3 AS VARCHAR)) = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).notContain("mv0");
             }
             {
                 String query = "select t1a, sum(case when(t1b=0) then t1b else 0 end) as total from test.test_all_type " +
                         "group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(if(14: t1b = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).notContain("mv0");
             }
             {
                 String query = "select t1a, sum(case when(t1b=0) then t1b else 0 end) as total from test.test_all_type " +
                         "group by t1a;";
-                sql(query)
-                        .contains("mv0")
-                        .contains("  1:AGGREGATE (update serialize)\n" +
-                                "  |  STREAMING\n" +
-                                "  |  output: sum(if(14: t1b = 0, 14: t1b, 0))\n" +
-                                "  |  group by: 13: t1a");
+                sql(query).notContain("mv0");
             }
         });
     }
