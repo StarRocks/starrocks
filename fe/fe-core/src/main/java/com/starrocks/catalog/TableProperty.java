@@ -302,6 +302,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
         newTableProperty.hasDelete = this.hasDelete;
         newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
+        if (this.storageInfo != null) {
+            newTableProperty.storageInfo =
+                    new StorageInfo(this.storageInfo.getFilePathInfo(), this.storageInfo.getCacheInfo());
+        }
         return newTableProperty;
     }
 

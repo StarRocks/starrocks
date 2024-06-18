@@ -139,6 +139,7 @@ import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
@@ -979,7 +980,6 @@ public class LocalMetastore implements ConnectorMetadata {
         return olapTable;
     }
 
-
     private void checkPartitionType(PartitionInfo partitionInfo) throws DdlException {
         PartitionType partitionType = partitionInfo.getType();
         if (!partitionInfo.isRangePartition() && partitionType != PartitionType.LIST) {
@@ -1368,8 +1368,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
-
-            copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTable = getShadowCopyTable(olapTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
             checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         } catch (AnalysisException | NotImplementedException e) {
@@ -1821,7 +1820,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Only support adding physical partition to random distributed table");
             }
 
-            copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTable = getShadowCopyTable(olapTable);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -4671,7 +4670,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 
-            copiedTbl = olapTable.selectiveCopy(origPartitions.keySet(), true, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTbl = getShadowCopyTable(olapTable);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -5221,7 +5220,7 @@ public class LocalMetastore implements ConnectorMetadata {
             for (Long id : sourcePartitionIds) {
                 origPartitions.put(id, olapTable.getPartition(id).getName());
             }
-            copiedTbl = olapTable.selectiveCopy(origPartitions.values(), true, MaterializedIndex.IndexExtState.VISIBLE);
+            copiedTbl = getShadowCopyTable(olapTable);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -5232,6 +5231,22 @@ public class LocalMetastore implements ConnectorMetadata {
     public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
                                     Map<Long, String> origPartitions) {
         return getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, false);
+    }
+
+    private OlapTable getShadowCopyTable(OlapTable olapTable) {
+        OlapTable copiedTable;
+        if (olapTable instanceof LakeMaterializedView) {
+            copiedTable = new LakeMaterializedView();
+        } else if (olapTable instanceof MaterializedView) {
+            copiedTable = new MaterializedView();
+        } else if (olapTable instanceof LakeTable) {
+            copiedTable = new LakeTable();
+        } else {
+            copiedTable = new OlapTable();
+        }
+
+        olapTable.copyOnlyForQuery(copiedTable);
+        return copiedTable;
     }
 
     @VisibleForTesting
