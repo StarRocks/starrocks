@@ -452,7 +452,7 @@ public class StmtExecutor {
         // Try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
-        SessionVariable sessionVariableBackup = context.getSessionVariable();
+        context.setBackupSessionVariable(context.getSessionVariable());
 
         // if use http protocal, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
@@ -741,14 +741,16 @@ public class StmtExecutor {
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
-                clearQueryScopeHintContext(sessionVariableBackup);
+                clearQueryScopeHintContext();
             }
 
+            // restore session variable in connect context
+            context.setSessionVariable(context.getBackupSessionVariable());
+            context.clearBackupSessionVariable();
         }
     }
 
-    private void clearQueryScopeHintContext(SessionVariable sessionVariableBackup) {
-        context.setSessionVariable(sessionVariableBackup);
+    private void clearQueryScopeHintContext() {
         Iterator<Map.Entry<String, UserVariable>> iterator = context.userVariables.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, UserVariable> entry = iterator.next();

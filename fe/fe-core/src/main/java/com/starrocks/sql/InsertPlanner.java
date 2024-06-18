@@ -403,18 +403,22 @@ public class InsertPlanner {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
-                session.getSessionVariable().setEnableSpill(true);
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
-                session.getSessionVariable().setEnableSpill(true);
             } else if (targetTable instanceof TableFunctionTable) {
                 dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
-                session.getSessionVariable().setEnableSpill(true);
             } else if (targetTable.isBlackHoleTable()) {
                 dataSink = new BlackHoleTableSink();
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+            }
+
+            // enable spill for connector sink
+            if (session.getSessionVariable().isConnectorSinkEnableSpill() && (targetTable instanceof IcebergTable
+                    || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
+                session.setSessionVariable((SessionVariable) session.getSessionVariable().clone());
+                session.getSessionVariable().setEnableSpill(true);
             }
 
             PlanFragment sinkFragment = execPlan.getFragments().get(0);

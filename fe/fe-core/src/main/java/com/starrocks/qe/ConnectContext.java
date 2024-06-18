@@ -161,6 +161,9 @@ public class ConnectContext {
     protected MysqlSerializer serializer;
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
+    // Variables belong to this session
+    // used to back up `sessionVariable` after query start, and restore `sessionVariable` before query end
+    protected SessionVariable backupSessionVariable = null;
     // all the modified session variables, will forward to leader
     protected Map<String, SystemVariable> modifiedSessionVariables = new HashMap<>();
     // user define variable in this session
@@ -442,6 +445,18 @@ public class ConnectContext {
 
     public void setSessionVariable(SessionVariable sessionVariable) {
         this.sessionVariable = sessionVariable;
+    }
+
+    public SessionVariable getBackupSessionVariable() {
+        return this.backupSessionVariable;
+    }
+
+    public void setBackupSessionVariable(SessionVariable sessionVariable) {
+        this.backupSessionVariable = sessionVariable;
+    }
+
+    public void clearBackupSessionVariable() {
+        this.setBackupSessionVariable(null);
     }
 
     public ConnectScheduler getConnectScheduler() {
