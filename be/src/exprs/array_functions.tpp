@@ -1193,12 +1193,10 @@ private:
             }
 
             if (filtered_key_elements_columns.empty()) {
-                for (size_t key_column_size = 0; key_column_size < key_array_size; ++key_column_size) {
-                    auto start_offset = key_offsets_columns[key_column_size]->get_data()[i];
-                    auto end_offset = key_offsets_columns[key_column_size]->get_data()[i + 1];
-                    for (auto j = start_offset; j < end_offset; ++j) {
-                        key_sort_index.push_back(static_cast<uint32_t>(j));
-                    }
+                auto start_offset = src_offsets_column.get_data()[i];
+                auto end_offset = src_offsets_column.get_data()[i + 1];
+                for (auto j = start_offset; j < end_offset; ++j) {
+                    key_sort_index.push_back(static_cast<uint32_t>(j));
                 }
                 continue;
             }
