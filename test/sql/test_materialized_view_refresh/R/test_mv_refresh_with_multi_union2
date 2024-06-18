@@ -300,7 +300,7 @@ select count(1) from test_mv1;
 -- !result
 select count(1) from test_mv2;
 -- result:
-12
+13
 -- !result
 select count(1) from test_mv3;
 -- result:
@@ -316,11 +316,11 @@ select count(1) from test_mv5;
 -- !result
 select count(1) from test_mv6;
 -- result:
-63
+64
 -- !result
 select count(1) from test_mv7;
 -- result:
-63
+64
 -- !result
 select count(1) from test_mv8;
 -- result:
@@ -346,6 +346,7 @@ select dt from test_mv2 group by dt order by 1;
 2024-03-16
 2024-03-17
 2024-03-18
+2024-04-10
 -- !result
 select dt from test_mv3 group by dt order by 1;
 -- result:
