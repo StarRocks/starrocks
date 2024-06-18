@@ -1267,7 +1267,7 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
     RowsetSharedPtr output_rs;
     size_t retry_cnt = 0;
-    while (output_rs == nullptr || retry_cnt <= 10) {
+    while (output_rs == nullptr && retry_cnt <= 10) {
         // check rows mapper file
         std::this_thread::sleep_for(std::chrono::seconds(1));
         // read from file
@@ -1571,7 +1571,7 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
     RowsetSharedPtr output_rs;
     size_t retry_cnt = 0;
-    while (output_rs == nullptr || retry_cnt <= 10) {
+    while (output_rs == nullptr && retry_cnt <= 10) {
         // check rows mapper file
         std::this_thread::sleep_for(std::chrono::seconds(1));
         // read from file
