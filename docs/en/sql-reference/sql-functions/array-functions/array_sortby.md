@@ -27,6 +27,7 @@ After array `b` is sorted in ascending order, it becomes [5,6,7]. Array `a` beco
 ```Haskell
 array_sortby(array0, array1)
 array_sortby(<lambda function>, array0 [, array1...])
+array_sortby(array0, array1, array2 [, array3...])
 ```
 
 - `array_sortby(array0, array1)`
@@ -37,11 +38,18 @@ array_sortby(<lambda function>, array0 [, array1...])
 
    Sorts `array0` according to the array returned from the lambda function.
 
+- `array_sortby(array0, array1, array2 [, array3...])`
+
+  For each row in the table, sort array0 based on the values in multiple array columns (array1, array2, array3, etc.). The sorting rule is: first compare the corresponding elements in array1, if they are the same, then compare the corresponding elements in array2, and so on, until the last array column.
+   
+   
+
 ## Parameters
 
 - `array0`: the array you want to sort. It must be an array, array expression, or `null`. Elements in the array must be sortable.
 - `array1`: the sorting array used to sort `array0`. It must be an array, array expression, or `null`.
 - `lambda function`: the lambda expression used to generate the sorting array.
+- array1, array2 [, array3...]: the sorting array used to sort `array0`. It must be an array, array expression, or `null`.
 
 ## Return value
 
@@ -164,6 +172,62 @@ from test_array where c1=1;
 +----------+---------+----------+------------+------------------+
 | [82,1,4] | [4,3,5] | [86,4,9] | [4,9,86]   | [1,4,82]         |
 +----------+---------+----------+------------+------------------+
+```
+
+```SQL
+CREATE TABLE test_array_sortby_muliti (
+    id INT(11) not null,
+    array_col1 ARRAY<int(11)> ,
+    array_col2 ARRAY<int(11)> ,
+    array_col3 ARRAY<int(11)> ,
+    array_col4 ARRAY<int(11)> 
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(id)
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false",
+    "compression" = "LZ4"
+);
+
+INSERT INTO test_array_sortby_muliti VALUES
+(1, [4, 3, 5], [82, 4, 4], [1, 3, 2], [7, 8, 9]),
+(2, [4, 3, 5], [82, 4, 4], [1, 2, 3], [6, 5, 4]),
+(3, [4, 3, 5, 6], [82, 4, 4, 4], [1, 2, 3, 3], [3, 2, 1]),
+(4, [4, 3, 5, 6], [82, 4, 4, 4], [1, 3, 2, 3], [9, 8, 7]),
+(5, [1, 2, 3], [3, 2, 2], NULL, [5, 5, 5]),
+(6, NULL, [1, 2, 3], [4, 5, 6], [1, 1, 1]),
+(7, [7, 8, 9], NULL, [7, 8, 9], [2, 2, 2]),
+(8, [3, 2, 1], [5, 6, 7], [2, 3, 1], [4, 4, 4]);
+
+select * from test_array_sortby_muliti;
++------+------------+------------+------------+------------+
+| id   | array_col1 | array_col2 | array_col3 | array_col4 |
++------+------------+------------+------------+------------+
+|    3 | [4,3,5,6]  | [82,4,4,4] | [1,2,3,3]  | [3,2,1]    |
+|    5 | [1,2,3]    | [3,2,2]    | NULL       | [5,5,5]    |
+|    6 | NULL       | [1,2,3]    | [4,5,6]    | [1,1,1]    |
+|    1 | [4,3,5]    | [82,4,4]   | [1,3,2]    | [7,8,9]    |
+|    2 | [4,3,5]    | [82,4,4]   | [1,2,3]    | [6,5,4]    |
+|    4 | [4,3,5,6]  | [82,4,4,4] | [1,3,2,3]  | [9,8,7]    |
+|    7 | [7,8,9]    | NULL       | [7,8,9]    | [2,2,2]    |
+|    8 | [3,2,1]    | [5,6,7]    | [2,3,1]    | [4,4,4]    |
++------+------------+------------+------------+------------+
+8 rows in set (0.07 sec)
+```
+
+Example 1: Sort `array_col1` according to `array_col2`，`array_col3`，`array_col4`
+
+```Plaintext
+select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 1;
++------+------------+--------------------------------------------------------------+
+| id   | array_col1 | array_sortby(array_col1, array_col2, array_col3, array_col4) |
++------+------------+--------------------------------------------------------------+
+|    1 | [4,3,5]    | [5,3,4]                                                      |
++------+------------+--------------------------------------------------------------+
+1 row in set (0.04 sec)
 ```
 
 ## References
