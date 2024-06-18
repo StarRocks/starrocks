@@ -2576,4 +2576,44 @@ public class AlterTest {
             }
         }
     }
+
+    @Test
+    public void testCatalogAddPartitionsForce() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test_partition_exception (\n" +
+                "      k1 DATE,\n" +
+                "      k2 SMALLINT,\n" +
+                "      v1 VARCHAR(2048),\n" +
+                "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2024-05-20\") END (\"2024-05-24\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.start\" = \"-30\",\n" +
+                "\"dynamic_partition.end\" = \"1\",\n" +
+                "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"dynamic_partition.buckets\" = \"1\"\n" +
+                ");";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+
+        String alterSQL =
+                "ALTER TABLE test_partition_exception ADD PARTITION p20240501 VALUES [(\"2024-05-01\"), (\"2024-05-02\")) FORCE";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, "test_partition_exception", addPartitionClause);
+
+        Table table = db.getTable("test_partition_exception");
+
+        Assert.assertEquals(5, ((OlapTable) table).getPartitions().size());
+    }
 }

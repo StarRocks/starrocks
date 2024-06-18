@@ -866,6 +866,25 @@ public class LocalMetastore implements ConnectorMetadata {
         createTable(stmt.getCreateTableStmt());
     }
 
+    private void disableDynamicProperty(Database db, OlapTable table, boolean systemAutoOperateDynamic) {
+        if (!systemAutoOperateDynamic) {
+            return;
+        }
+        TableProperty tableProperty = table.getTableProperty();
+        tableProperty.modifyTableProperties(DynamicPartitionProperty.ENABLE, "false");
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), table);
+    }
+
+    private void enableDynamicProperty(Database db, OlapTable table, boolean systemAutoOperateDynamic) {
+        if (!systemAutoOperateDynamic) {
+            return;
+        }
+        TableProperty tableProperty = table.getTableProperty();
+        tableProperty.modifyTableProperties(DynamicPartitionProperty.ENABLE, "true");
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), table);
+    }
+
+
     @Override
     public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException {
@@ -884,6 +903,18 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
+        boolean systemAutoOperateDynamic = false;
+        // force clause must in dynamic partition table
+        if (addPartitionClause.isForce()) {
+            if (!DynamicPartitionUtil.isDynamicPartitionTable(olapTable)) {
+                throw new DdlException("The force syntax can only be used on dynamically partitioned tables.");
+            } else {
+                systemAutoOperateDynamic = true;
+            }
+        }
+        // close the dynamic_partition.enable property
+        disableDynamicProperty(db, olapTable, systemAutoOperateDynamic);
+        // go to synchronize add partition
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleItemListPartitionDesc
                 || partitionDesc instanceof MultiItemListPartitionDesc
@@ -922,6 +953,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     .map(item -> (PartitionDesc) item).collect(Collectors.toList());
             addPartitions(ctx, db, tableName, partitionDescs, addPartitionClause);
         }
+        // open the dynamic_partition.enable property
+        enableDynamicProperty(db, olapTable, systemAutoOperateDynamic);
     }
 
     private void checkNotSystemTableForAutoPartition(PartitionInfo partitionInfo, PartitionDesc partitionDesc)
