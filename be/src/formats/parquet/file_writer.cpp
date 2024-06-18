@@ -323,8 +323,9 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
-        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size) {
+                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size,
+                               RuntimeState* state)
+        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size), _state(state) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _type_descs.reserve(output_expr_ctxs.size());
     for (auto expr : output_expr_ctxs) {
@@ -339,8 +340,11 @@ FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               std::vector<TypeDescriptor> type_descs)
-        : _properties(std::move(properties)), _schema(std::move(schema)), _type_descs(std::move(type_descs)) {
+                               std::vector<TypeDescriptor> type_descs, RuntimeState* state)
+        : _properties(std::move(properties)),
+          _schema(std::move(schema)),
+          _type_descs(std::move(type_descs)),
+          _state(state) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _eval_func = [](Chunk* chunk, size_t col_idx) { return chunk->get_column_by_index(col_idx); };
 }
@@ -357,8 +361,7 @@ void FileWriterBase::_generate_chunk_writer() {
     DCHECK(_writer != nullptr);
     if (_chunk_writer == nullptr) {
         auto rg_writer = _writer->AppendBufferedRowGroup();
-        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func,
-                                                      TimezoneUtils::default_time_zone);
+        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func, _state->timezone());
     }
 }
 
@@ -453,7 +456,7 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
                                  RuntimeProfile* parent_profile, int64_t max_file_size, RuntimeState* state)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
-                         max_file_size),
+                         max_file_size, state),
           _file_location(std::move(file_location)),
           _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
