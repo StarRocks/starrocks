@@ -40,7 +40,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeAlterTableStatementTest {
     private static ConnectContext connectContext;
-    private static AlterTableClauseVisitor clauseAnalyzerVisitor;
+    private static AlterTableClauseAnalyzer clauseAnalyzerVisitor;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -49,7 +49,7 @@ public class AnalyzeAlterTableStatementTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         connectContext = AnalyzeTestUtil.getConnectContext();
-        clauseAnalyzerVisitor = new AlterTableClauseVisitor();
+        clauseAnalyzerVisitor = new AlterTableClauseAnalyzer(null);
     }
 
     @Test
@@ -63,7 +63,7 @@ public class AnalyzeAlterTableStatementTest {
     @Test(expected = SemanticException.class)
     public void testEmptyNewTableName() {
         TableRenameClause clause = new TableRenameClause("");
-        clauseAnalyzerVisitor.analyze(clause, connectContext);
+        clauseAnalyzerVisitor.analyze(connectContext, clause);
     }
 
     @Test(expected = SemanticException.class)

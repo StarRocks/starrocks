@@ -28,6 +28,9 @@ public class DropPartitionClause extends AlterTableClause {
     private final boolean isTempPartition;
     private final boolean forceDrop;
 
+    //Object Resolved by Analyzer
+    private List<String> resolvedPartitionNames;
+
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition, boolean forceDrop) {
         this(ifExists, partitionName, isTempPartition, forceDrop, NodePosition.ZERO);
     }
@@ -40,6 +43,14 @@ public class DropPartitionClause extends AlterTableClause {
         this.isTempPartition = isTempPartition;
         this.needTableStable = false;
         this.forceDrop = forceDrop;
+    }
+
+    public List<String> getResolvedPartitionNames() {
+        return resolvedPartitionNames;
+    }
+
+    public void setResolvedPartitionNames(List<String> resolvedPartitionNames) {
+        this.resolvedPartitionNames = resolvedPartitionNames;
     }
 
     public boolean isSetIfExists() {

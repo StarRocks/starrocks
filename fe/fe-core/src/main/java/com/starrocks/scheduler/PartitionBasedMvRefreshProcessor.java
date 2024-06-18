@@ -76,6 +76,7 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -1150,7 +1151,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Set<String> result = getMVPartitionNamesByBasePartitionNames(updatePartitionNames);
         result.retainAll(mvRangePartitionNames);
         LOG.info("The ref base table {} has updated partitions: {}, the corresponding mv partitions to refresh: {}, " +
-                        "mvRangePartitionNames: {}", refBaseTable.getName(), updatePartitionNames, result, mvRangePartitionNames);
+                "mvRangePartitionNames: {}", refBaseTable.getName(), updatePartitionNames, result, mvRangePartitionNames);
         return result;
     }
 
@@ -1318,12 +1319,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return false;
     }
 
+<<<<<<< HEAD
     private boolean checkBaseTablePartitionChange(MaterializedView mv) {
         List<Database> dbs = collectDatabases(mv);
         // check snapshotBaseTables and current tables in catalog
         if (!StatementPlanner.tryLockDatabases(dbs, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock databases: " + Joiner.on(",").join(dbs.stream()
                     .map(Database::getFullName).collect(Collectors.toList())));
+=======
+    /**
+     * Check whether the base table's partition has changed or not. Wait to refresh until all mv's base tables
+     * don't change again.
+     *
+     * @return: true if the base table's partition has changed, otherwise false.
+     */
+    private boolean checkBaseTablePartitionChange(MaterializedView materializedView) {
+        List<Database> dbs = collectDatabases(materializedView);
+        Locker locker = new Locker();
+        if (!locker.tryLockDatabases(dbs, LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            throw new LockTimeoutException("Failed to lock database: " + Joiner.on(",").join(dbs)
+                    + " in checkBaseTablePartitionChange");
+>>>>>>> 9773e866e9 ([Enhancement] Move some add/drop partition analysis logic to AlterTableClauseAnalyzer (#47106))
         }
         // check snapshotBaseTables and current tables in catalog
         try {
@@ -1371,12 +1387,38 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Collect all deduplicated databases of the materialized view's base tables.
+     *
+     * @param materializedView: the materialized view to check
+     * @return: the deduplicated databases of the materialized view's base tables,
+     * throw exception if the database do not exist.
+     */
+    List<Database> collectDatabases(MaterializedView materializedView) {
+        Map<Long, Database> databaseMap = Maps.newHashMap();
+        for (BaseTableInfo baseTableInfo : materializedView.getBaseTableInfos()) {
+            Optional<Database> dbOpt = GlobalStateMgr.getCurrentState().getMetadataMgr().getDatabase(baseTableInfo);
+            if (dbOpt.isEmpty()) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}",
+                        baseTableInfo.getDbInfoStr(), materializedView.getName());
+                throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
+            }
+            Database db = dbOpt.get();
+            databaseMap.put(db.getId(), db);
+        }
+        return Lists.newArrayList(databaseMap.values());
+    }
+
+    /**
+>>>>>>> 9773e866e9 ([Enhancement] Move some add/drop partition analysis logic to AlterTableClauseAnalyzer (#47106))
      * Collect all base table snapshot infos for the materialized view which the snapshot infos are kept and used in the final
      * update meta phase.
      * </p>
      * NOTE:
      * 1. deep copy of the base table's metadata may be time costing, we can optimize it later.
      * 2. no needs to lock the base table's metadata since the metadata is not changed during the refresh process.
+     *
      * @param materializedView the materialized view to collect
      * @return the base table and its snapshot info map
      */
@@ -1504,6 +1546,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     new RangePartitionDesc(materializedView.getPartitionColumnNames(), batch);
             AddPartitionClause alterPartition = new AddPartitionClause(rangePartitionDesc, distributionDesc,
                     partitionProperties, false);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
+            analyzer.analyze(mvContext.getCtx(), alterPartition);
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
                         database, materializedView.getName(), alterPartition);
@@ -1528,10 +1572,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MultiItemListPartitionDesc multiItemListPartitionDesc =
                     new MultiItemListPartitionDesc(false, mvPartitionName, partitionKeyList, partitionProperties);
             try {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().addPartitions(
                         database, materializedView.getName(), new AddPartitionClause(
                                 multiItemListPartitionDesc, distributionDesc,
                                 partitionProperties, false));
+=======
+                AddPartitionClause addPartitionClause =
+                        new AddPartitionClause(multiItemListPartitionDesc, distributionDesc, partitionProperties, false);
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
+                analyzer.analyze(mvContext.getCtx(), addPartitionClause);
+
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
+                        database, materializedView.getName(), addPartitionClause);
+>>>>>>> 9773e866e9 ([Enhancement] Move some add/drop partition analysis logic to AlterTableClauseAnalyzer (#47106))
             } catch (Exception e) {
                 throw new DmlException("add list partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                         database.getFullName(), materializedView.getName());
@@ -1555,9 +1609,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 throw new DmlException("drop partition failed. partition:" + dropPartitionName + " not exist");
             }
 
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().dropPartition(
                     database, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));
+=======
+            DropPartitionClause dropPartitionClause = new DropPartitionClause(false, dropPartitionName, false, true);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
+            analyzer.analyze(new ConnectContext(), dropPartitionClause);
+
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, materializedView, dropPartitionClause);
+>>>>>>> 9773e866e9 ([Enhancement] Move some add/drop partition analysis logic to AlterTableClauseAnalyzer (#47106))
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                     database.getFullName(), materializedView.getName());
@@ -1601,8 +1663,26 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 for (String mvPartitionName : mvToRefreshedPartitions) {
                     needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(mvPartitionName));
                 }
+<<<<<<< HEAD
                 refTableAndPartitionNames.put(table, needRefreshTablePartitionNames);
                 return refTableAndPartitionNames;
+=======
+                Map<Table, Set<String>> mvToBaseNameRef = mvToBaseNameRefs.get(mvPartitionName);
+                if (mvToBaseNameRef.containsKey(snapshotTable)) {
+                    if (needRefreshTablePartitionNames == null) {
+                        needRefreshTablePartitionNames = Sets.newHashSet();
+                    }
+                    // The table in this map has related partition with mv
+                    // It's ok to add empty set for a table, means no partition corresponding to this mv partition
+                    needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(snapshotTable));
+                } else {
+                    LOG.info("MV {}'s refTable {} is not found in `mvRefBaseTableIntersectedPartitions` " +
+                            "because of empty update", materializedView.getName(), snapshotTable.getName());
+                }
+            }
+            if (needRefreshTablePartitionNames != null) {
+                refTableAndPartitionNames.put(snapshotInfo, needRefreshTablePartitionNames);
+>>>>>>> 9773e866e9 ([Enhancement] Move some add/drop partition analysis logic to AlterTableClauseAnalyzer (#47106))
             }
         }
         return refTableAndPartitionNames;

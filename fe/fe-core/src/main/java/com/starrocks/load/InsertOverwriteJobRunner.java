@@ -38,6 +38,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -283,7 +284,13 @@ public class InsertOverwriteJobRunner {
         Database db = state.getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
+<<<<<<< HEAD
             state.addPartitions(db, olapTable.getName(), addPartitionClause);
+=======
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+            analyzer.analyze(context, addPartitionClause);
+            state.getLocalMetastore().addPartitions(context, db, olapTable.getName(), addPartitionClause);
+>>>>>>> 9773e866e9 ([Enhancement] Move some add/drop partition analysis logic to AlterTableClauseAnalyzer (#47106))
         } catch (Exception ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);

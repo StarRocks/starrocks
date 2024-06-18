@@ -143,6 +143,12 @@ import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+>>>>>>> 9773e866e9 ([Enhancement] Move some add/drop partition analysis logic to AlterTableClauseAnalyzer (#47106))
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -2371,7 +2377,19 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
+<<<<<<< HEAD
             state.addPartitions(db, olapTable.getName(), addPartitionClause);
+=======
+
+            // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
+            ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            }
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+            analyzer.analyze(ctx, addPartitionClause);
+            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+>>>>>>> 9773e866e9 ([Enhancement] Move some add/drop partition analysis logic to AlterTableClauseAnalyzer (#47106))
         } catch (Exception e) {
             LOG.warn(e);
             errorStatus.setError_msgs(Lists.newArrayList(
