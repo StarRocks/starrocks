@@ -147,6 +147,7 @@ public class TrinoTestBase {
         FeConstants.runningUnitTest = false;
 
         connectContext.getSessionVariable().setSqlDialect("trino");
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
     }
 
     public static StatementBase analyzeSuccess(String originStmt) {
