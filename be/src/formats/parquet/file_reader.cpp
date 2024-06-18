@@ -498,7 +498,7 @@ bool FileReader::_filter_group_with_more_filter(const tparquet::RowGroup& row_gr
                     }
                     auto st = _get_min_max_value(slot, column_meta, field, min_values, max_values);
                     if (!st.ok()) continue;
-                    std::vector<bool> selected(min_values.size(), true);
+                    Filter selected(min_values.size(), 1);
                     st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctx, field,
                                                                      _scanner_ctx->timezone, selected);
                     if (!st.ok()) continue;
