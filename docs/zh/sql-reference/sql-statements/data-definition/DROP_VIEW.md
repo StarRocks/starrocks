@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['shitu']
 ---
 
 # DROP VIEW
