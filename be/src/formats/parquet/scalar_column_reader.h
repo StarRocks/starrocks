@@ -63,7 +63,7 @@ public:
         return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
     }
 
-    Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) override;
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOType type, bool active) override;
@@ -114,6 +114,7 @@ private:
     bool _need_lazy_decode = false;
     // dict code
     ColumnPtr _dict_code = nullptr;
+    ColumnPtr _ori_column = nullptr;
 };
 
 } // namespace starrocks::parquet
