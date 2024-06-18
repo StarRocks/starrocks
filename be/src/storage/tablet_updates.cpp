@@ -65,6 +65,7 @@
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -935,7 +936,6 @@ void TabletUpdates::do_apply() {
         if (_error) {
             break;
         }
-        // TODO(zhangqiang)
         // submit a delay apply task to storage_engine
         if (config::enable_retry_apply && !apply_st.ok() && _is_tolerable(apply_st)) {
             auto time_point =
@@ -943,7 +943,7 @@ void TabletUpdates::do_apply() {
             StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
             std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
                                                   _tablet.tablet_id(), apply_st.to_string());
-            //TODO(zhangqiang)
+            LOG(WARNING) << msg;
             //reset pk index, reset rowset_update_states, reset compaction_state
             _reset_apply_status(*version_info_apply);
             break;
@@ -1195,10 +1195,33 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
     return false;
 }
 
+DEFINE_FAIL_POINT(tablet_apply_normal_rowset_commit_internal_error);
+DEFINE_FAIL_POINT(tablet_apply_normal_rowset_commit_memory_exceed);
+DEFINE_FAIL_POINT(tablet_apply_load_rowset_update_state_failed);
+DEFINE_FAIL_POINT(tablet_apply_load_index_failed);
+DEFINE_FAIL_POINT(tablet_apply_rowset_not_found);
+DEFINE_FAIL_POINT(tablet_apply_index_prepare_failed);
+DEFINE_FAIL_POINT(tablet_apply_load_upserts_failed);
+DEFINE_FAIL_POINT(tablet_apply_load_deletes_failed);
+DEFINE_FAIL_POINT(tablet_apply_rowset_update_state_apply_failed);
+DEFINE_FAIL_POINT(tablet_apply_index_upsert_failed);
+DEFINE_FAIL_POINT(tablet_apply_index_delete_failed);
+DEFINE_FAIL_POINT(tablet_apply_index_commit_failed);
+DEFINE_FAIL_POINT(tablet_apply_get_pindex_meta_failed);
+DEFINE_FAIL_POINT(tablet_apply_get_del_vec_failed);
+DEFINE_FAIL_POINT(tablet_apply_write_meta_failed);
+DEFINE_FAIL_POINT(tablet_apply_cache_del_vec_failed);
+DEFINE_FAIL_POINT(tablet_apply_tablet_drop);
+
 Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset) {
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
     Status apply_st;
+
+    FAIL_POINT_TRIGGER_RETURN(tablet_apply_normal_rowset_commit_internal_error,
+                              Status::InternalError("inject tablet_apply_normal_rowset_commit_internal_error"));
+    FAIL_POINT_TRIGGER_RETURN(tablet_apply_normal_rowset_commit_memory_exceed,
+                              Status::MemoryLimitExceeded("inject tablet_apply_normal_rowset_commit_memory_exceed"));
 
     // NOTE: after commit, apply must success or fatal crash
     int64_t t_start = MonotonicMillis();
@@ -1213,7 +1236,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
 
     span->SetAttribute("txn_id", rowset->txn_id());
     span->SetAttribute("version", version.major_number());
-
     // 1. load upserts/deletes in rowset
     auto state_entry = manager->update_state_cache().get_or_create(
             strings::Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
@@ -1221,6 +1243,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     auto& state = state_entry->value();
     auto st = state.load(&_tablet, rowset.get());
     manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+
+    FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_rowset_update_state_failed,
+                               { st = Status::InternalError("inject tablet_apply_load_rowset_update_state_failed"); });
+
     if (!st.ok()) {
         manager->update_state_cache().remove(state_entry);
         std::string msg = strings::Substitute("_apply_rowset_commit error: load rowset update state failed: $0 $1",
@@ -1247,6 +1273,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     // empty rowset does not need to load in-memory primary index, so skip it
     if (rowset->has_data_files() || _tablet.get_enable_persistent_index()) {
         auto st = index.load(&_tablet);
+
+        FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_index_failed,
+                                   { st = Status::InternalError("inject tablet_apply_load_index_failed"); });
+
         manager->index_cache().update_object_size(index_entry, index.memory_usage());
         if (!st.ok()) {
             std::string msg = strings::Substitute("_apply_rowset_commit error: load primary index failed: $0 $1",
@@ -1262,6 +1292,9 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     {
         std::lock_guard lg(_rowset_stats_lock);
         auto iter = _rowset_stats.find(rowset_id);
+
+        FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_rowset_not_found, { iter = _rowset_stats.end(); });
+
         if (iter == _rowset_stats.end()) {
             string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rowsetid=$1",
                                              _tablet.tablet_id(), rowset_id);
@@ -1274,6 +1307,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         }
     }
     st = index.prepare(version, merge_num);
+
+    FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_prepare_failed,
+                               { st = Status::InternalError("inject tablet_apply_index_prepare_failed"); });
+
     if (!st.ok()) {
         std::string msg = strings::Substitute("_apply_rowset_commit error: primary index prepare failed: $0 $1",
                                               st.to_string(), debug_string());
@@ -1389,6 +1426,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             }
             while (i < del_idx) {
                 st = state.load_upserts(rowset.get(), loaded_upsert);
+
+                FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_upserts_failed,
+                                           { st = Status::InternalError("inject tablet_apply_load_upserts_failed"); });
+
                 if (!st.ok()) {
                     std::string msg = strings::Substitute("_apply_rowset_commit error: load upserts failed: $0 $1",
                                                           st.to_string(), debug_string());
@@ -1402,6 +1443,11 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                     // apply partial rowset segment
                     st = state.apply(&_tablet, apply_tschema, rowset.get(), rowset_id, loaded_upsert,
                                      latest_applied_version, index, delete_pks, &full_row_size);
+
+                    FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_rowset_update_state_apply_failed, {
+                        st = Status::InternalError("inject tablet_apply_rowset_update_state_apply_failed");
+                    });
+
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
                                 "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
@@ -1411,6 +1457,11 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                     }
                     st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major_number(),
                                     upserts, index, tablet_id, &new_deletes, apply_tschema);
+
+                    FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_upsert_failed, {
+                        st = Status::InternalError("inject tablet_apply_index_upsert_failed");
+                    });
+
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
                                 "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
@@ -1437,6 +1488,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             if (loaded_delfile < delfile_num) {
                 DCHECK(i == del_idx);
                 st = state.load_deletes(rowset.get(), loaded_delfile);
+
+                FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_deletes_failed,
+                                           { st = Status::InternalError("inject tablet_apply_load_deletes_failed"); });
+
                 if (!st.ok()) {
                     std::string msg = strings::Substitute("_apply_rowset_commit error: load deletes failed: $0 $1",
                                                           st.to_string(), debug_string());
@@ -1446,6 +1501,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 auto& deletes = state.deletes();
                 delete_op += deletes[loaded_delfile]->size();
                 st = index.erase(*deletes[loaded_delfile], &new_deletes);
+
+                FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_delete_failed,
+                                           { st = Status::InternalError("inject tablet_apply_index_delete_failed"); });
+
                 if (!st.ok()) {
                     std::string msg = strings::Substitute("_apply_rowset_commit error: index erase failed: $0 $1",
                                                           st.to_string(), debug_string());
@@ -1470,6 +1529,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     PersistentIndexMetaPB index_meta;
     if (enable_persistent_index) {
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+
+        FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_get_pindex_meta_failed,
+                                   { st = Status::InternalError("inject tablet_apply_get_pindex_meta_failed"); });
+
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
                                                   _debug_string(false, true));
@@ -1479,6 +1542,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     }
     span->AddEvent("commit_index");
     st = index.commit(&index_meta);
+
+    FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_commit_failed,
+                               { st = Status::InternalError("inject tablet_apply_index_commit_failed"); });
+
     if (!st.ok()) {
         std::string msg = strings::Substitute("primary index commit failed: $0", st.to_string());
         failure_handler(msg, st.code(), true);
@@ -1519,6 +1586,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             DelVectorPtr old_del_vec;
             // TODO(cbl): should get the version before this apply version, to be safe
             st = manager->get_latest_del_vec(_tablet.data_dir()->get_meta(), tsid, &old_del_vec);
+
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_get_del_vec_failed,
+                                       { st = Status::InternalError("inject tablet_apply_get_del_vec_failed"); });
+
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_rowset_commit error: get_latest_del_vec failed: $0 $1",
                                                       st.to_string(), debug_string());
@@ -1577,6 +1648,9 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
 
     {
         std::lock_guard wl(_lock);
+
+        FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_tablet_drop, { _edit_version_infos.clear(); });
+
         if (_edit_version_infos.empty()) {
             string msg = strings::Substitute("tablet deleted when apply rowset commmit tablet: $0", tablet_id);
             failure_handler(msg, TStatusCode::OK, false);

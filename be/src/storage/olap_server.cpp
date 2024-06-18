@@ -254,11 +254,15 @@ Status StorageEngine::start_bg_threads() {
         Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
     }
 
-    _schedule_apply_thread = std::thread([this] { _schedule_apply_thread_callback(nullptr); });
-    Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
+    start_schedule_apply_thread();
 
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
+}
+
+void StorageEngine::start_schedule_apply_thread() {
+    _schedule_apply_thread = std::thread([this] { _schedule_apply_thread_callback(nullptr); });
+    Thread::set_thread_name(_schedule_apply_thread, "schedule_apply");
 }
 
 void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {

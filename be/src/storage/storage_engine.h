@@ -312,6 +312,8 @@ public:
         _apply_tablet_changed_cv.notify_one();
     }
 
+    void start_schedule_apply_thread();
+
     bool is_as_cn() { return !_options.need_write_cluster_id; }
 
     bool enable_light_pk_compaction_publish();

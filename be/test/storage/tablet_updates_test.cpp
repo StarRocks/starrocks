@@ -18,6 +18,7 @@
 
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -3458,6 +3459,108 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
     ASSERT_FALSE(_tablet->updates()->link_from(_tablet2.get(), 1, nullptr, _tablet2->tablet_schema(), "").ok());
     ASSERT_FALSE(_tablet->updates()->convert_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
     ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
+}
+
+TEST_F(TabletUpdatesTest, test_retry_apply) {
+    config::retry_apply_interval_second = 1;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    const int N = 10;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    Int64Column deletes;
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
+
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+
+    // 1. memory exceed limit
+    std::string fp_name = "tablet_apply_normal_rowset_commit_memory_exceed";
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+    auto rs0 = create_rowset(_tablet, keys, &deletes);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_EQ(N / 2, read_tablet(_tablet, 2));
+
+    auto test_fail_point = [&](const std::string& fp_name, int version, int expected_read_result) {
+        // Enable fail point
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+        fp->setMode(trigger_mode);
+
+        // Create and commit rowset
+        auto rs = create_rowset(_tablet, keys, &deletes);
+        ASSERT_TRUE(_tablet->rowset_commit(version, rs).ok());
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+
+        // Wait for a short duration and check error state
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet->updates()->is_error());
+
+        // Disable fail point and reset error
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+        _tablet->updates()->reset_error();
+        _tablet->updates()->check_for_apply();
+
+        // Verify the read result
+        ASSERT_EQ(expected_read_result, read_tablet(_tablet, version));
+    };
+
+    // 2. internal error
+    test_fail_point("tablet_apply_normal_rowset_commit_internal_error", 3, N / 2);
+
+    // 3. load rowset_update_state failed
+    test_fail_point("tablet_apply_load_rowset_update_state_failed", 4, N / 2);
+
+    // 4. load index failed
+    test_fail_point("tablet_apply_load_index_failed", 5, N / 2);
+
+    // 5. apply_rowset_not_found
+    test_fail_point("tablet_apply_rowset_not_found", 6, N / 2);
+
+    // 6. index prepare failed
+    test_fail_point("tablet_apply_index_prepare_failed", 7, N / 2);
+
+    // 7. rowset_update_state load upsert failed
+    test_fail_point("tablet_apply_load_upserts_failed", 8, N / 2);
+
+    // 8. rowset_update_state load deletes failed
+    test_fail_point("tablet_apply_load_deletes_failed", 9, N / 2);
+
+    // 9. rowset_update_state apply failed
+    test_fail_point("tablet_apply_rowset_update_state_apply_failed", 10, N / 2);
+
+    // 10. index upsert failed
+    test_fail_point("tablet_apply_index_upsert_failed", 11, N / 2);
+
+    // 11. index delete failed
+    test_fail_point("tablet_apply_index_delete_failed", 12, N / 2);
+
+    // 12. index commit failed
+    test_fail_point("tablet_apply_index_commit_failed", 13, N / 2);
+
+    // 13. get pindex meta failed
+    test_fail_point("tablet_apply_get_pindex_meta_failed", 14, N / 2);
+
+    // 14. get del_vec failed
+    test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
+
+    fp_name = "tablet_apply_tablet_drop";
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+    auto rs1 = create_rowset(_tablet, keys, &deletes);
+    ASSERT_TRUE(_tablet->rowset_commit(16, rs1).ok());
+    ASSERT_EQ(16, _tablet->updates()->max_version());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(!_tablet->updates()->is_error());
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
 }
 
 } // namespace starrocks
