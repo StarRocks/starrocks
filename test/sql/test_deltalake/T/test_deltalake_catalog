@@ -1,5 +1,6 @@
 -- name: testDeltaLakeCatalog
 
+set time_zone="Asia/Shanghai";
 create external catalog delta_test_${uuid0} PROPERTIES (
     "type"="deltalake",
     "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
@@ -50,8 +51,8 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_test_column_mapping;
 
 -- test timestamp as partition type
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp order by col_smallint;
-select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 01:01:01' order by col_smallint;
-select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp = '2023-01-01 01:01:01' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 09:01:01' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp = '2023-01-01 09:01:01' order by col_smallint;
 
 -- test double as partition type
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double order by col_smallint;

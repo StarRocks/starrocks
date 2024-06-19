@@ -50,14 +50,21 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
+import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -708,6 +715,55 @@ public abstract class ConnectorPartitionTraits {
                                                     MaterializedView.AsyncRefreshContext context) {
             // TODO: implement
             return null;
+        }
+
+        @Override
+        public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+                throws AnalysisException {
+            DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+            StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
+
+            return createPartitionKeyWithType(partitionValues,
+                    partitionColumns.stream().map(Column::getType).collect(Collectors.toList()),
+                    partitionColumns.stream().map(name -> {
+                        StructField field = schema.get(name.getName());
+                        return DeltaDataType.instanceFrom(field.getDataType().getClass()) == DeltaDataType.TIMESTAMP;
+                    }).collect(Collectors.toList()));
+        }
+
+        public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types,
+                                                       List<Boolean> isTimeZoneAwareDateTypes) throws AnalysisException {
+            Preconditions.checkState(values.size() == types.size(),
+                    "columns size is %s, but values size is %s", types.size(), values.size());
+            PartitionKey partitionKey = createEmptyKey();
+
+            // change string value to LiteralExpr,
+            for (int i = 0; i < values.size(); i++) {
+                String rawValue = values.get(i);
+                Type type = types.get(i);
+                LiteralExpr exprValue;
+                // rawValue could be null for delta table
+                if (rawValue == null) {
+                    rawValue = "null";
+                }
+                if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
+                    partitionKey.setNullPartitionValue(rawValue);
+                    exprValue = NullLiteral.create(type);
+                } else {
+                    if (isTimeZoneAwareDateTypes.get(i)) {
+                        LocalDateTime localDateTime = DateUtils.parseUnixDateTime(rawValue)
+                                .atZone(ZoneOffset.UTC)
+                                .withZoneSameInstant(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+                        String partitionValue = localDateTime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
+
+                        exprValue = LiteralExpr.create(partitionValue, type);
+                    } else {
+                        exprValue = LiteralExpr.create(rawValue, type);
+                    }
+                }
+                partitionKey.pushColumn(exprValue, type.getPrimitiveType());
+            }
+            return partitionKey;
         }
     }
 }

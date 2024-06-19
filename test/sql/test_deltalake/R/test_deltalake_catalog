@@ -1,4 +1,5 @@
 -- name: testDeltaLakeCatalog
+set time_zone="Asia/Shanghai";
 create external catalog delta_test_${uuid0} PROPERTIES (
     "type"="deltalake",
     "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
@@ -170,18 +171,18 @@ E: (1064, "Unknown table 'Delta table feature [column mapping] is not supported'
 -- !result
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp order by col_smallint;
 -- result:
-1	1	2024-01-01 01:01:01
-2	2	2023-01-01 01:01:01
-3	3	2022-01-01 01:01:01
+1	1	2024-01-01 09:01:01
+2	2	2023-01-01 09:01:01
+3	3	2022-01-01 09:01:01
 -- !result
-select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 01:01:01' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp > '2022-01-01 09:01:01' order by col_smallint;
 -- result:
-1	1	2024-01-01 01:01:01
-2	2	2023-01-01 01:01:01
+1	1	2024-01-01 09:01:01
+2	2	2023-01-01 09:01:01
 -- !result
-select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp = '2023-01-01 01:01:01' order by col_smallint;
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_timestamp where col_timestamp = '2023-01-01 09:01:01' order by col_smallint;
 -- result:
-2	2	2023-01-01 01:01:01
+2	2	2023-01-01 09:01:01
 -- !result
 select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double order by col_smallint;
 -- result:

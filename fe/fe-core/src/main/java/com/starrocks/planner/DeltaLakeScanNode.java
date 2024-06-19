@@ -187,7 +187,7 @@ public class DeltaLakeScanNode extends ScanNode {
                                         Collectors.toList());
                         PartitionKey partitionKey =
                                 PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
-                                        deltaLakeTable.getType());
+                                        deltaLakeTable);
                         addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
                     }
                 }
