@@ -64,31 +64,45 @@ public class Histogram {
     }
 
     public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
-        Optional<Double> value = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(),
+        Optional<Double> valueOpt = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(),
                 constantOperator.toString());
-        if (!value.isPresent()) {
+        if (!valueOpt.isPresent()) {
             return Optional.empty();
         }
 
-        long rowCount;
-        for (int i = 0; i < buckets.size(); i++) {
-            Bucket bucket = buckets.get(i);
-            if (bucket.getLower() <= value.get() && value.get() < bucket.getUpper()) {
-                rowCount = bucket.getCount() - bucket.getUpperRepeats();
-                if (i > 0) {
-                    rowCount = rowCount - buckets.get(i - 1).getCount();
+        double value = valueOpt.get();
+
+        int left = 0;
+        int right = buckets.size() - 1;
+        while (left <= right) {
+            int mid = (left + right) / 2;
+            Bucket bucket = buckets.get(mid);
+
+            if (bucket.getLower() <= value && value < bucket.getUpper()) {
+                long rowCount = bucket.getCount() - bucket.getUpperRepeats();
+
+                if (mid > 0) {
+                    rowCount -= buckets.get(mid - 1).getCount();
                 }
+
                 if (constantOperator.getType().isFixedPointType()) {
                     rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, (bucket.getUpper() - bucket.getLower()))));
                 } else {
                     rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
                 }
+
                 return Optional.of(rowCount);
-            } else if (bucket.getUpper() == value.get()) {
-                rowCount = bucket.getUpperRepeats();
-                return Optional.of(rowCount);
+            } else if (bucket.getUpper() == value) {
+                return Optional.of(bucket.getUpperRepeats());
+            }
+
+            if (value < bucket.getLower()) {
+                right = mid - 1;
+            } else {
+                left = mid + 1;
             }
         }
+
         return Optional.empty();
     }
 }
