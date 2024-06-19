@@ -1,6 +1,7 @@
 -- name: test_delta_lake_analyze
 
 -- create catalog
+set time_zone="Asia/Shanghai";
 create external catalog delta_test_${uuid0} PROPERTIES (
     "type"="deltalake",
     "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
