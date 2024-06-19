@@ -769,8 +769,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                             partitionCols.get(i).getName(),
                             builder.getColumnStatistics(partitionCols.get(i)));
                 }
-                long ndv = extractDistinctPartitionValues(listPartitionInfo, selectedPartitionId, i,
-                        partitionCols.size() > 1 || listPartitionInfo.isAutomaticPartition());
+                long ndv = extractDistinctPartitionValues(listPartitionInfo, selectedPartitionId, i);
                 ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(builder.getColumnStatistics(partitionCols.get(i)))
                         .setDistinctValuesCount(ndv).build();
                 builder.addColumnStatistic(partitionCols.get(i), columnStatistic);
@@ -1690,17 +1689,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private long extractDistinctPartitionValues(ListPartitionInfo listPartitionInfo, Collection<Long> selectedPartitionId,
-                                                int partitionColIdx, boolean chooseMultiValues) {
+                                                int partitionColIdx) {
         Set<String> distinctValues = Sets.newHashSet();
         for (long partitionId : selectedPartitionId) {
-            if (chooseMultiValues) {
+            if (listPartitionInfo.getIdToMultiValues().containsKey(partitionId)) {
                 List<List<String>> values = listPartitionInfo.getIdToMultiValues().get(partitionId);
                 values.forEach(v -> distinctValues.add(v.get(partitionColIdx)));
-            } else {
+            } else if (listPartitionInfo.getIdToValues().containsKey(partitionId)) {
                 distinctValues.addAll(listPartitionInfo.getIdToValues().get(partitionId));
             }
 
         }
-        return distinctValues.size();
+        return Math.max(1, distinctValues.size());
     }
 }
