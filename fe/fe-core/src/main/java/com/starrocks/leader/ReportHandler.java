@@ -944,6 +944,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
                                             .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
                                             .setCompressionType(olapTable.getCompressionType())
+                                            .setCompressionLevel(olapTable.getCompressionLevel())
                                             .setRecoverySource(RecoverySource.REPORT)
                                             .setTabletSchema(tabletSchema)
                                             .build();

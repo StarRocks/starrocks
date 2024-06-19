@@ -2612,11 +2612,22 @@ public class OlapTable extends Table {
         tableProperty.buildCompressionType();
     }
 
+    public void setCompressionLevel(int compressionLevel) {
+        tableProperty.setCompressionLevel(compressionLevel);
+    }
+
     public TCompressionType getCompressionType() {
         if (tableProperty == null) {
             return TCompressionType.LZ4_FRAME;
         }
         return tableProperty.getCompressionType();
+    }
+
+    public int getCompressionLevel() {
+        if (tableProperty == null) {
+            return -1;
+        }
+        return tableProperty.getCompressionLevel();   
     }
 
     public void setPartitionLiveNumber(int number) {
@@ -2998,7 +3009,12 @@ public class OlapTable extends Table {
         if (compressionType == TCompressionType.LZ4_FRAME) {
             compressionType = TCompressionType.LZ4;
         }
-        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionType.name());
+        int compressionLevel = getCompressionLevel();
+        String compressionTypeName = compressionType.name();
+        if (compressionLevel != -1) {
+            compressionTypeName = compressionTypeName + "(" + String.valueOf(compressionLevel) + ")";
+        }
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionTypeName);
 
         // unique properties
         properties.putAll(getUniqueProperties());
