@@ -236,7 +236,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     }
 
     @Test
-    public void testModifyDynamicPartitionNormal() throws UserException {
+    public void testModifyDynamicPartitionNormal() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
@@ -287,6 +287,12 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
         schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
         Assert.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets());
+    }
+    @Test
+    public void testModifyDynamicPropertyTrim() throws Exception {
+        String sql = "ALTER TABLE testDb1.testTable1 SET(\"dynamic_partition.buckets \"=\"1\")";
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertEquals("1", stmt.getOps().get(0).getProperties().get("dynamic_partition.buckets"));
     }
 
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
