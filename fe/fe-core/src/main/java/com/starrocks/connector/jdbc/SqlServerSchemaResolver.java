@@ -65,11 +65,6 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
         switch (dataType) {
-            // todo temp unsupport
-            //            case Types.BINARY:
-            //            case Types.VARBINARY:
-            //            case Types.LONGVARBINARY:
-            //                return ScalarType.createVarbinary(columnSize);
             case Types.BIT:
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
@@ -91,10 +86,12 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
             case Types.DOUBLE:
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
+            // SMALLMONEY, MONEY
             case Types.DECIMAL:
             case Types.NUMERIC:
                 primitiveType = PrimitiveType.DECIMAL32;
                 break;
+            // UNIQUEIDENTIFIER
             case Types.CHAR:
             case Types.NCHAR:
                 return ScalarType.createCharType(columnSize);
@@ -107,7 +104,9 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
                 }
             // DATETIMEOFFSET
             case -155:
+            // TEXT
             case Types.LONGVARCHAR:
+            // NTEXT
             case Types.LONGNVARCHAR:
                 if (typeName.equalsIgnoreCase("text") || typeName.equalsIgnoreCase("ntext") ||
                         typeName.equalsIgnoreCase("xml")) {
@@ -117,9 +116,19 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
+            // IMAGE
+            case Types.LONGVARBINARY:
+            case Types.BINARY:
+            case Types.VARBINARY:
+                if (columnSize > 0) {
+                    return ScalarType.createVarbinary(columnSize);
+                } else {
+                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
+            // SMALLDATETIME
             case Types.TIMESTAMP:
                 primitiveType = PrimitiveType.DATETIME;
                 break;

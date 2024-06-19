@@ -60,32 +60,34 @@ public class SqlServerSchemaResolverTest {
                         Types.DECIMAL, Types.DECIMAL, Types.DOUBLE, Types.INTEGER, Types.INTEGER, Types.LONGNVARCHAR,
                         Types.LONGNVARCHAR,
                         Types.LONGVARCHAR, Types.NCHAR, Types.NUMERIC, Types.NVARCHAR, Types.REAL, Types.SMALLINT,
-                        Types.TIME, Types.TIMESTAMP, Types.TIMESTAMP, Types.TIMESTAMP, Types.TINYINT, Types.VARCHAR));
+                        Types.TIME, Types.TIMESTAMP, Types.TIMESTAMP, Types.TIMESTAMP, Types.TINYINT, Types.VARCHAR,
+                        Types.LONGVARBINARY, Types.BINARY, Types.VARBINARY));
         columnResult.addColumn("TYPE_NAME",
                 Arrays.asList("datetimeoffset", "bigint", "bit", "char", "uniqueidentifier", "date", "decimal",
                         "smallmoney", "money", "float", "int identity", "int", "ntext", "xml",
                         "text", "nchar", "numerics", "nvarchar", "real", "smallint",
-                        "time", "datetime2", "smalldatetime", "datetime", "tinyint", "varchar"));
+                        "time", "datetime2", "smalldatetime", "datetime", "tinyint", "varchar", "longvarbinary",
+                        "binary", "varbinary"));
         columnResult.addColumn("COLUMN_SIZE",
                 Arrays.asList(34, 19, 1, 10, 36, 10, 18,
                         10, 19, 53, 10, 10, 1073741823, 2147483647,
                         2147483647, 10, 18, 50, 24, 5,
-                        16, 27, 16, 23, 3, 50));
+                        16, 27, 16, 23, 3, 50, 0, 10, 100));
         columnResult.addColumn("DECIMAL_DIGITS",
                 Arrays.asList(7, 0, 0, 0, 0, 0, 4,
                         4, 4, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0,
-                        7, 7, 0, 3, 0, 0));
+                        7, 7, 0, 3, 0, 0, 0, 0, 0));
         columnResult.addColumn("COLUMN_NAME",
                 Arrays.asList("a", "b", "c", "d", "e", "f", "g",
                         "h", "i", "j", "k", "l", "m", "n",
                         "o", "p", "q", "r", "s", "t",
-                        "u", "v", "w", "x", "y", "z"));
+                        "u", "v", "w", "x", "y", "z", "aa", "bb", "cc"));
         columnResult.addColumn("IS_NULLABLE",
                 Arrays.asList("YES", "YES", "YES", "YES", "YES", "YES", "YES",
                         "YES", "YES", "YES", "NO", "YES", "YES", "YES",
                         "YES", "YES", "YES", "YES", "YES", "YES",
-                        "YES", "YES", "YES", "YES", "YES", "YES"));
+                        "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES"));
         properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "com.microsoft.sqlserver.jdbc.SQLServerDriver");
         properties.put(JDBCResource.URI, "jdbc:sqlserver://127.0.0.1:1433;databaseName=MyDatabase;");
@@ -218,7 +220,9 @@ public class SqlServerSchemaResolverTest {
             Assert.assertTrue(table.getColumn("x").getType().isDatetime());
             Assert.assertTrue(table.getColumn("y").getType().isSmallint());
             Assert.assertTrue(table.getColumn("z").getType().isVarchar());
-
+            Assert.assertTrue(table.getColumn("aa").getType().isBinaryType());
+            Assert.assertTrue(table.getColumn("bb").getType().isBinaryType());
+            Assert.assertTrue(table.getColumn("cc").getType().isBinaryType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
