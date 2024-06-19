@@ -79,7 +79,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -131,7 +130,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // this lock is protect List<MultiDeleteInfo> add / remove dbToDeleteInfos is use newConcurrentMap
     // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
     // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final Set<Long> killJobSet;
 
     public DeleteMgr() {
