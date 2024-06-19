@@ -732,13 +732,12 @@ public:
         }
 
         static ZstdBlockCompression s_instances[22] = {
-            ZstdBlockCompression(1), ZstdBlockCompression(2), ZstdBlockCompression(3), ZstdBlockCompression(4),
-            ZstdBlockCompression(5), ZstdBlockCompression(6), ZstdBlockCompression(7), ZstdBlockCompression(8),
-            ZstdBlockCompression(9), ZstdBlockCompression(10), ZstdBlockCompression(11), ZstdBlockCompression(12),
-            ZstdBlockCompression(13), ZstdBlockCompression(14), ZstdBlockCompression(15), ZstdBlockCompression(16),
-            ZstdBlockCompression(17), ZstdBlockCompression(18), ZstdBlockCompression(19), ZstdBlockCompression(20),
-            ZstdBlockCompression(21), ZstdBlockCompression(22)
-        };
+                ZstdBlockCompression(1), ZstdBlockCompression(2), ZstdBlockCompression(3), ZstdBlockCompression(4),
+                ZstdBlockCompression(5), ZstdBlockCompression(6), ZstdBlockCompression(7), ZstdBlockCompression(8),
+                ZstdBlockCompression(9), ZstdBlockCompression(10), ZstdBlockCompression(11), ZstdBlockCompression(12),
+                ZstdBlockCompression(13), ZstdBlockCompression(14), ZstdBlockCompression(15), ZstdBlockCompression(16),
+                ZstdBlockCompression(17), ZstdBlockCompression(18), ZstdBlockCompression(19), ZstdBlockCompression(20),
+                ZstdBlockCompression(21), ZstdBlockCompression(22)};
         return &s_instances[level - 1];
     }
 
