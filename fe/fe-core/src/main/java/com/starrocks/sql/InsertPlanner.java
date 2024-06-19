@@ -415,7 +415,7 @@ public class InsertPlanner {
             }
 
             // enable spill for connector sink
-            if (session.getSessionVariable().isConnectorSinkEnableSpill() && (targetTable instanceof IcebergTable
+            if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
                     || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
                 session.setSessionVariable((SessionVariable) session.getSessionVariable().clone());
                 session.getSessionVariable().setEnableSpill(true);
