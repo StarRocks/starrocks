@@ -61,6 +61,7 @@ protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;
     Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override;
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
 
 private:
     std::vector<ChunkIteratorPtr> _children;
