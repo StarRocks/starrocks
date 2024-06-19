@@ -220,7 +220,8 @@ public class HistogramStatisticsTest {
         Statistics statistics = builder.build();
 
         // hit upper bound
-        Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(columnRefOperator),
+        Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(
+                Optional.of(columnRefOperator),
                 columnStatistic, eq10, Optional.of(ConstantOperator.createBigint(10)), statistics);
         Assert.assertEquals(20, estimated.getOutputRowCount(), 0.001);
 
@@ -234,7 +235,7 @@ public class HistogramStatisticsTest {
         Assert.assertEquals(16, estimated.getOutputRowCount(), 0.001);
 
         // not in bucket
-        BinaryPredicateOperator eq35= new BinaryPredicateOperator(
+        BinaryPredicateOperator eq35 = new BinaryPredicateOperator(
                 BinaryType.EQ,
                 columnRefOperator,
                 ConstantOperator.createBigint(35));
