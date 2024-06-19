@@ -122,13 +122,17 @@ public class BinaryPredicateStatisticCalculator {
             // to estimate the filter ratio.
             if (histogramTopN.containsKey(constantOperator.toString())) {
                 double rowCountInHistogram = histogramTopN.get(constantOperator.toString());
-                predicateFactor = rowCountInHistogram / statistics.getOutputRowCount();
+                predicateFactor = rowCountInHistogram / hist.getTotalRows();
             } else {
                 Optional<Long> rowCounts = hist.getRowCountInBucket(constantOperator, columnStatistic.getDistinctValuesCount());
                 if (rowCounts.isPresent()) {
-                    predicateFactor = rowCounts.get() / statistics.getOutputRowCount();
+                    predicateFactor = rowCounts.get() / hist.getTotalRows();
                 } else {
-                    predicateFactor = (statistics.getOutputRowCount() - hist.getTotalRows()) / statistics.getOutputRowCount();
+                    Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
+                    double f = 1 / Math.max(columnStatistic.getDistinctValuesCount() - histogramTopN.size(),
+                            hist.getBuckets().size());
+                    predicateFactor = (columnStatistic.getHistogram().getTotalRows() - mostCommonValuesCount)
+                            * f / hist.getTotalRows();
                 }
             }
 
