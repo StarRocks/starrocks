@@ -131,7 +131,7 @@ public:
         return Status::OK();
     }
 
-    virtual Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) {
+    virtual Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         dst->swap_column(*src);
         return Status::OK();
     }
