@@ -3461,7 +3461,7 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
     ASSERT_FALSE(_tablet->updates()->reorder_from(_tablet2, 1, nullptr, _tablet2->tablet_schema(), "").ok());
 }
 
-TEST_F(TabletUpdatesTest, test_retry_apply) {
+TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     config::retry_apply_interval_second = 1;
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(true);
@@ -3561,6 +3561,97 @@ TEST_F(TabletUpdatesTest, test_retry_apply) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_TRUE(!_tablet->updates()->is_error());
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+}
+
+TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}
+
+TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
+    config::retry_apply_interval_second = 1;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    _tablet->updates()->stop_compaction(true);
+    const int N = 10;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(N, read_tablet(_tablet, 3));
+
+    // 1. load index failed
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    std::string fp_name = "tablet_apply_load_index_failed";
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+
+    auto test_fail_point = [&](const std::string& fp_name1, const std::string& fp_name2) {
+        // Enable fail point
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        auto fp1 = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name1);
+        fp1->setMode(trigger_mode);
+
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp2 = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name2);
+        fp2->setMode(trigger_mode);
+
+        _tablet->updates()->reset_error();
+        _tablet->updates()->check_for_apply();
+
+        // Verify the read result
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet->updates()->is_error());
+        ASSERT_TRUE(!_tablet->updates()->compaction_running());
+    };
+
+    _tablet->updates()->stop_compaction(false);
+    _tablet->updates()->compaction(_compaction_mem_tracker.get());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->updates()->is_error());
+
+    // 2. get pindex meta failed
+    config::enable_pindex_rebuild_in_compaction = false;
+    test_fail_point("tablet_apply_load_index_failed", "tablet_apply_get_pindex_meta_failed");
+    config::enable_pindex_rebuild_in_compaction = true;
+
+    // 3. rowset not found
+    test_fail_point("tablet_apply_get_pindex_meta_failed", "tablet_apply_rowset_not_found");
+
+    // 4. load compaction state failed
+    config::enable_light_pk_compaction_publish = false;
+    test_fail_point("tablet_apply_rowset_not_found", "tablet_apply_load_compaction_state_failed");
+
+    // 5. index prepare failed
+    test_fail_point("tablet_apply_load_compaction_state_failed", "tablet_apply_index_prepare_failed");
+
+    // 6. compaction state load segment failed
+    test_fail_point("tablet_apply_index_prepare_failed", "tablet_apply_load_segments_failed");
+
+    // 7. index upsert failed
+    test_fail_point("tablet_apply_load_segments_failed", "tablet_apply_index_upsert_failed");
+    _tablet->updates()->reset_update_state();
+
+    // 8. index replace failed
+    config::enable_pindex_rebuild_in_compaction = false;
+    test_fail_point("tablet_apply_index_upsert_failed", "tablet_apply_index_replace_failed");
+    _tablet->updates()->reset_update_state();
+
+    // 9. index commit failed
+    config::enable_light_pk_compaction_publish = true;
+    test_fail_point("tablet_apply_index_replace_failed", "tablet_apply_index_commit_failed");
+    _tablet->updates()->reset_update_state();
+
+    // 10. normal apply
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_index_commit_failed");
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    _tablet->updates()->reset_error();
+    _tablet->updates()->check_for_apply();
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
 }
 
 } // namespace starrocks
