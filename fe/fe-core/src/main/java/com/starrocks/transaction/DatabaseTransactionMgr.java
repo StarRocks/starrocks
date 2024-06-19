@@ -142,7 +142,6 @@ public class DatabaseTransactionMgr {
     private EditLog editLog;
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
-
     private long maxCommitTs = 0;
 
     public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {

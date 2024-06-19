@@ -47,7 +47,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.server.GlobalStateMgr;
@@ -88,7 +87,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public static final TabletMeta NOT_EXIST_TABLET_META = new TabletMeta(NOT_EXIST_VALUE, NOT_EXIST_VALUE,
             NOT_EXIST_VALUE, NOT_EXIST_VALUE, NOT_EXIST_VALUE, TStorageMedium.HDD);
 
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     // tablet id -> tablet meta
     private final Map<Long, TabletMeta> tabletMetaMap = Maps.newConcurrentMap();

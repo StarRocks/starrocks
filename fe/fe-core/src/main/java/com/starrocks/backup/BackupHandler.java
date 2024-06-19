@@ -58,7 +58,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -124,7 +123,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     protected MvRestoreContext mvRestoreContext = new MvRestoreContext();
 
     // this lock is used for handling one backup or restore request at a time.
-    private ReentrantLock seqlock = new FairReentrantLock();
+    private ReentrantLock seqlock = new ReentrantLock();
 
     private boolean isInit = false;
 
