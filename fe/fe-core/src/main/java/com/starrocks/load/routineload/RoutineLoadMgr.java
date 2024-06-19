@@ -49,8 +49,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -95,13 +93,13 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
-    private ReentrantLock slotLock = new FairReentrantLock();
+    private ReentrantLock slotLock = new ReentrantLock();
 
     // routine load job meta
     private Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
     private Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
 
-    private ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
     private void writeLock() {
         lock.writeLock().lock();

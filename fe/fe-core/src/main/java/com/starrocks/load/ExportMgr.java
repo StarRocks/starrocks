@@ -49,7 +49,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -91,7 +90,7 @@ public class ExportMgr implements MemoryTrackable {
 
     public ExportMgr() {
         idToJob = Maps.newHashMap();
-        lock = new FairReentrantReadWriteLock();
+        lock = new ReentrantReadWriteLock(true);
     }
 
     public void readLock() {

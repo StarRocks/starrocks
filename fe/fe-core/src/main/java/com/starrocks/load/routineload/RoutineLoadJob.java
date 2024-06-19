@@ -63,7 +63,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
@@ -295,7 +294,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @SerializedName("os")
     protected OriginStatement origStmt;
 
-    protected ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
 
     // save the latest 3 error log urls
