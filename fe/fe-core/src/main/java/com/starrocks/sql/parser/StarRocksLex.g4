@@ -476,6 +476,12 @@ LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 LOW_PRIORITY: 'LOW_PRIORITY';
 DISK: 'DISK';
+<<<<<<< HEAD
+=======
+BEFORE: 'BEFORE';
+DOUBLE_DOLLAR: '$$';
+FIELD: 'FIELD';
+>>>>>>> 93f333ee97 ([Feature]Support add/drop field for struct column(part2) (#46619))
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -484,6 +490,7 @@ LTE : '<=';
 GT  : '>';
 GTE : '>=';
 EQ_FOR_NULL: '<=>';
+ARRAY_ELEMENT: '[*]';
 
 PLUS_SYMBOL: '+';
 MINUS_SYMBOL: '-';
