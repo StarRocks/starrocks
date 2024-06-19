@@ -58,6 +58,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
@@ -784,8 +785,12 @@ public class ShowExecutor {
 
             // create table catalogName.dbName.tableName (
             StringBuilder createTableSql = new StringBuilder();
-            createTableSql.append("CREATE TABLE ")
-                    .append("`").append(tableName).append("`")
+            if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+                createTableSql.append("CREATE EXTERNAL TABLE ");
+            } else {
+                createTableSql.append("CREATE TABLE ");
+            }
+            createTableSql.append("`").append(tableName).append("`")
                     .append(" (\n");
 
             // Columns

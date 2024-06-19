@@ -200,4 +200,22 @@ public class HiveMetastoreApiConverterTest {
         Assert.assertEquals("my_comment", table.getParameters().get("comment"));
         Assert.assertEquals("0", table.getParameters().get("numRows"));
     }
+
+    @Test
+    public void testToApiTableProperties() {
+        HiveTable hiveTable = HiveTable.builder()
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("hive_table")
+                .setPartitionColumnNames(Lists.newArrayList("p1"))
+                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setDataColumnNames(Lists.newArrayList("c1"))
+                .setTableLocation("table_location")
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE)
+                .build();
+        Map<String, String> properties = HiveMetastoreApiConverter.toApiTableProperties(hiveTable);
+        Assert.assertTrue(properties.containsKey("EXTERNAL"));
+        Assert.assertEquals("TRUE", properties.get("EXTERNAL"));
+    }
 }

@@ -150,6 +150,8 @@ public abstract class ConnectorPartitionTraits {
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames);
+
     /**
      * The max of refresh ts for all partitions
      */
@@ -239,6 +241,17 @@ public abstract class ConnectorPartitionTraits {
         public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
             Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
             List<String> partitionNames = getPartitionNames();
+            List<PartitionInfo> partitions = getPartitions(partitionNames);
+            Preconditions.checkState(partitions.size() == partitionNames.size(), "corrupted partition meta");
+            for (int index = 0; index < partitionNames.size(); ++index) {
+                partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
+            }
+            return partitionNameWithPartition;
+        }
+
+        @Override
+        public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+            Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
             List<PartitionInfo> partitions = getPartitions(partitionNames);
             Preconditions.checkState(partitions.size() == partitionNames.size(), "corrupted partition meta");
             for (int index = 0; index < partitionNames.size(); ++index) {
