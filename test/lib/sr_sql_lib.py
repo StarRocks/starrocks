@@ -52,6 +52,7 @@ from lib import data_delete_lib
 from lib import data_insert_lib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
+from lib.trino_lib import TrinoLib
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
 root_path = os.path.abspath(os.path.join(lib_path, "../"))
@@ -111,6 +112,7 @@ T_R_TABLE = "t_r_table"
 RESULT_FLAG = "-- result:"
 RESULT_END_FLAT = "-- !result"
 SHELL_FLAG = "shell: "
+TRINO_FLAG = "trino: "
 FUNCTION_FLAG = "function: "
 NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
@@ -129,6 +131,7 @@ class StarrocksSQLApiLib(object):
         super().__init__(*args, **kwargs)
         self.root_path = root_path
         self.mysql_lib = MysqlLib()
+        self.trino_lib = TrinoLib()
         self.be_num = 0
         self.mysql_host = ""
         self.mysql_port = ""
@@ -538,6 +541,27 @@ class StarrocksSQLApiLib(object):
                     raise Exception("execute sql result type unknown")
 
                 return {"status": True, "result": "\n".join(res_log), "msg": cursor._result.message}
+
+        except _mysql.Error as e:
+            return {"status": False, "msg": e.args}
+        except Exception as e:
+            print("unknown error", e)
+            raise
+
+    def trino_execute_sql(self, sql, ori=False):
+        """execute query"""
+        try:
+            print(sql)
+            self.trino_lib.connect()
+            cursor = self.trino_lib.connector.cursor()
+            cursor.execute(sql)
+            result = cursor.fetchall()
+
+            for i in range(len(result)):
+                row = [str(item) for item in result[i]]
+                result[i] = '\t'.join(row)
+
+            return {"status": True, "result": "\n".join(result), "msg": "OK"}
 
         except _mysql.Error as e:
             return {"status": False, "msg": e.args}
