@@ -400,6 +400,9 @@ class StarrocksSQLApiLib(object):
     def close_starrocks(self):
         self.mysql_lib.close()
 
+    def close_trino(self):
+        self.trino_lib.close()
+
     def create_database(self, database_name, tolerate_exist=False):
         """
         create starrocks database if tolerate exist

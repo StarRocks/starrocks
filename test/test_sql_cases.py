@@ -101,6 +101,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             res = self.save_r_into_db(self.case_info.file, self.case_info.name, self.res_log, self.version)
 
         self.close_starrocks()
+        self.close_trino()
 
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
