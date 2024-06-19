@@ -31,7 +31,6 @@ import java.util.Optional;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
 import static java.lang.Double.POSITIVE_INFINITY;
-import static java.lang.Math.max;
 
 public class BinaryPredicateStatisticCalculator {
     public static Statistics estimateColumnToConstantComparison(Optional<ColumnRefOperator> columnRefOperator,
@@ -113,17 +112,24 @@ public class BinaryPredicateStatisticCalculator {
                     .build();
 
             double predicateFactor;
+            Histogram hist = columnStatistic.getHistogram();
             Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
-            // If there is a constant key in mcv, the ratio in mcv is directly used for filtering estimation.
-            // If it does not hit, filter out the key that appears in mcv, and then use the cardinality estimation
+
+            // If there is a constant key in mcv, we use the mvc count to estimate the filter ratio.
+            // If it is not in mcv but in a bucket, we use the bucket count and bucket range to estimate
+            // the filter ratio.
+            // If it is not in mcv and not in any bucket, we use the (total row - bucket total rows)
+            // to estimate the filter ratio.
             if (histogramTopN.containsKey(constantOperator.toString())) {
                 double rowCountInHistogram = histogramTopN.get(constantOperator.toString());
-                predicateFactor = rowCountInHistogram / columnStatistic.getHistogram().getTotalRows();
+                predicateFactor = rowCountInHistogram / statistics.getOutputRowCount();
             } else {
-                Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
-                double f = 1 / max(columnStatistic.getDistinctValuesCount() - histogramTopN.size(), 1);
-                predicateFactor = (columnStatistic.getHistogram().getTotalRows() - mostCommonValuesCount)
-                        * f / columnStatistic.getHistogram().getTotalRows();
+                Optional<Long> rowCounts = hist.getRowCountInBucket(constantOperator, columnStatistic.getDistinctValuesCount());
+                if (rowCounts.isPresent()) {
+                    predicateFactor = rowCounts.get() / statistics.getOutputRowCount();
+                } else {
+                    predicateFactor = (statistics.getOutputRowCount() - hist.getTotalRows()) / statistics.getOutputRowCount();
+                }
             }
 
             double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;

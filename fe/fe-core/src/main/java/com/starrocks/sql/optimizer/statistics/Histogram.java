@@ -14,11 +14,19 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.statistic.StatisticUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class Histogram {
+
+    private static final Logger LOG = LogManager.getLogger(Histogram.class);
     private final List<Bucket> buckets;
     private final Map<String, Long> mcv;
 
@@ -56,5 +64,32 @@ public class Histogram {
                 .forEach(entry -> sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]"));
         sb.append("]");
         return sb.toString();
+    }
+
+    public Optional<Long> getRowCountInBucket(ConstantOperator constantOperator, double distinctValuesCount) {
+        Optional<Double> value = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(),
+                constantOperator.toString());
+        if (!value.isPresent()) {
+            return Optional.empty();
+        }
+
+        long rowCount = 1;
+        for (int i = 0; i < buckets.size(); i++) {
+            Bucket bucket = buckets.get(i);
+            if (bucket.getLower() <= value.get() && value.get() < bucket.getUpper()) {
+                rowCount = bucket.getCount() - bucket.getUpperRepeats();
+                if (i > 0) {
+                    rowCount = rowCount - buckets.get(i - 1).getCount();
+                }
+                if (constantOperator.getType().isFixedPointType()) {
+                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, (bucket.getUpper() - bucket.getLower()))));
+                } else {
+                    rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
+                }
+            } else if (bucket.getUpper() == value.get()) {
+                rowCount = bucket.getUpperRepeats();
+            }
+        }
+        return Optional.of(Math.max(1, rowCount));
     }
 }
