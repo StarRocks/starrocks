@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.iceberg;
+package com.starrocks.connector;
 
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
 
-public class IcebergFilter {
+public class PredicateSearchKey {
     private final String databaseName;
     private final String tableName;
     private final long snapshotId;
     private final ScalarOperator predicate;
 
-    public static IcebergFilter of(String databaseName, String tableName, long snapshotId, ScalarOperator predicate) {
-        return new IcebergFilter(databaseName, tableName, snapshotId, predicate == null ? ConstantOperator.TRUE : predicate);
+    public static PredicateSearchKey of(String databaseName, String tableName, long snapshotId, ScalarOperator predicate) {
+        return new PredicateSearchKey(databaseName, tableName, snapshotId, predicate == null ? ConstantOperator.TRUE : predicate);
     }
 
-    public IcebergFilter(String databaseName, String tableName, long snapshotId, ScalarOperator predicate) {
+    public PredicateSearchKey(String databaseName, String tableName, long snapshotId, ScalarOperator predicate) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.snapshotId = snapshotId;
@@ -53,7 +53,7 @@ public class IcebergFilter {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        IcebergFilter that = (IcebergFilter) o;
+        PredicateSearchKey that = (PredicateSearchKey) o;
         return snapshotId == that.snapshotId &&
                 Objects.equals(databaseName, that.databaseName) &&
                 Objects.equals(tableName, that.tableName) &&
@@ -67,12 +67,10 @@ public class IcebergFilter {
 
     @Override
     public String toString() {
-        final StringBuilder sb = new StringBuilder("IcebergFilter{");
-        sb.append("databaseName='").append(databaseName).append('\'');
-        sb.append(", tableName='").append(tableName).append('\'');
-        sb.append(", snapshotId=").append(snapshotId);
-        sb.append(", predicate=").append(predicate);
-        sb.append('}');
-        return sb.toString();
+        return "IcebergFilter{" + "databaseName='" + databaseName + '\'' +
+                ", tableName='" + tableName + '\'' +
+                ", snapshotId=" + snapshotId +
+                ", predicate=" + predicate +
+                '}';
     }
 }

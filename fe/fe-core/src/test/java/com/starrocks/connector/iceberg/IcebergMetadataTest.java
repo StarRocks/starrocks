@@ -39,6 +39,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.RemoteFileInfo;
@@ -761,7 +762,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(1, res.get(0).getFiles().get(0).getIcebergScanTasks().size());
         Assert.assertEquals(3, res.get(0).getFiles().get(0).getIcebergScanTasks().get(0).file().recordCount());
 
-        IcebergFilter filter = IcebergFilter.of("db", "table", 1, null);
+        PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1, null);
         Assert.assertEquals("IcebergFilter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
                 filter.toString());
     }
@@ -1048,12 +1049,12 @@ public class IcebergMetadataTest extends TableTestBase {
         newArguments.add(new ColumnRefOperator(22, Type.INT, "date_col", true));
         ScalarOperator newCallOperator = new CallOperator("date_trunc", Type.DATE, newArguments);
 
-        IcebergFilter filter = IcebergFilter.of("db", "table", 1L, callOperator);
-        IcebergFilter newFilter = IcebergFilter.of("db", "table", 1L, newCallOperator);
+        PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1L, callOperator);
+        PredicateSearchKey newFilter = PredicateSearchKey.of("db", "table", 1L, newCallOperator);
         Assert.assertEquals(filter, newFilter);
 
-        Assert.assertEquals(newFilter, IcebergFilter.of("db", "table", 1L, newCallOperator));
-        Assert.assertNotEquals(newFilter, IcebergFilter.of("db", "table", 1L, null));
+        Assert.assertEquals(newFilter, PredicateSearchKey.of("db", "table", 1L, newCallOperator));
+        Assert.assertNotEquals(newFilter, PredicateSearchKey.of("db", "table", 1L, null));
     }
 
     @Test
