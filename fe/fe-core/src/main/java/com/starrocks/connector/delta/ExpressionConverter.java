@@ -28,6 +28,8 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AstVisitor;
 import io.delta.kernel.expressions.And;
@@ -51,8 +53,11 @@ import io.delta.kernel.types.TimestampType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.sql.Time;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 
@@ -172,9 +177,10 @@ public class ExpressionConverter implements AstVisitor<Predicate, Void> {
             return Literal.ofDate((int) (ChronoUnit.DAYS.between(LocalDate.EPOCH,
                     LocalDate.parse(literalExpr.getStringValue()))));
         } else if (dataType instanceof TimestampType) {
-            return Literal.ofTimestamp(ChronoUnit.MICROS.between(LocalDate.EPOCH.atStartOfDay(),
-                    LocalDateTime.parse(literalExpr.getStringValue(),
-                            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
+            LocalDateTime localDateTime = DateUtils.parseUnixDateTime(literalExpr.getStringValue());
+            long timestamp = localDateTime.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond() * 1000 * 1000
+                    + localDateTime.getNano() / 1000;
+            return Literal.ofTimestamp(timestamp);
         } else {
             return null;
         }
