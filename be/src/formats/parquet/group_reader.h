@@ -127,7 +127,7 @@ public:
     Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
 
     StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
-    Status _fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk);
+    Status _fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk);
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
