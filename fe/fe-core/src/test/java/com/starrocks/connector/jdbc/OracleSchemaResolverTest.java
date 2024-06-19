@@ -55,15 +55,15 @@ public class OracleSchemaResolverTest {
         tableResult.addColumn("TABLE_NAME", Arrays.asList("tbl1", "tbl2", "tbl3"));
         columnResult = new MockResultSet("columns");
         columnResult.addColumn("DATA_TYPE", Arrays.asList(100, 101,
-                3, Types.CHAR, Types.VARCHAR, Types.BLOB, Types.CLOB, Types.DATE, Types.TIMESTAMP, -101, -102));
+                3, Types.CHAR, Types.VARCHAR, Types.BLOB, Types.CLOB, Types.DATE, Types.TIMESTAMP, -101, -102, 23));
         columnResult.addColumn("TYPE_NAME", Arrays.asList("BINARY_FLOAT", "BINARY_DOUBLE",
                 "NUMBER", "CHAR", "VARCHAR", "BLOB", "CLOB", "DATE", "TIMESTAMP",
-                "TIMESTAMP(6) WITH LOCAL TIME ZONE", "TIMESTAMP(6) WITH TIME ZONE"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(8, 16, 10, 10, 10, 4000, 4000, 8, 11, 11, 13));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
-        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"));
+                "TIMESTAMP(6) WITH LOCAL TIME ZONE", "TIMESTAMP(6) WITH TIME ZONE", "RAW"));
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(8, 16, 10, 10, 10, 4000, 4000, 8, 11, 11, 13, 2000));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
+        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"));
         columnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "NO", "NO", "NO", "YES", "NO",
-                "NO", "NO", "NO", "YES", "YES"));
+                "NO", "NO", "NO", "YES", "YES", "YES"));
         properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "oracle.jdbc.driver.OracleDriver");
         properties.put(JDBCResource.URI, "jdbc:oracle:thin:@127.0.0.1:1521:ORCL");
@@ -175,12 +175,13 @@ public class OracleSchemaResolverTest {
             Assert.assertTrue(table.getColumn("c").getType().isDecimalV3());
             Assert.assertTrue(table.getColumn("d").getType().isStringType());
             Assert.assertTrue(table.getColumn("e").getType().isStringType());
-            Assert.assertTrue(table.getColumn("f").getType().isStringType());
+            Assert.assertTrue(table.getColumn("f").getType().isBinaryType());
             Assert.assertTrue(table.getColumn("g").getType().isStringType());
             Assert.assertTrue(table.getColumn("h").getType().isDate());
             Assert.assertTrue(table.getColumn("i").getType().isStringType());
             Assert.assertTrue(table.getColumn("j").getType().isStringType());
             Assert.assertTrue(table.getColumn("k").getType().isStringType());
+            Assert.assertTrue(table.getColumn("l").getType().isBinaryType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
