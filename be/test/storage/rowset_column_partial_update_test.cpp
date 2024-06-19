@@ -451,7 +451,7 @@ static uint32_t calc_update_row_cnt(const ColumnPartialUpdateState& state) {
 static uint32_t find_upt_row_id(const ColumnPartialUpdateState& state, uint64_t src_rss_id) {
     std::map<uint64_t, uint32_t> m;
     for (const auto& each_rss : state.rss_rowid_to_update_rowid) {
-        for (const auto& each : each_rss) {
+        for (const auto& each : each_rss.second) {
             m[each_rss.first << 32 | each.first] = each.second;
         }
     }

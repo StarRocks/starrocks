@@ -81,8 +81,10 @@ struct ColumnPartialUpdateState {
                 insert_rowids.push_back(upt_row_id);
             }
         }
+#ifndef BE_TEST
         src_rss_rowids.clear();
         src_rss_rowids.shrink_to_fit();
+#endif
     }
 };
 
