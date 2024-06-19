@@ -73,7 +73,7 @@ public class Histogram {
             return Optional.empty();
         }
 
-        long rowCount = 1;
+        long rowCount;
         for (int i = 0; i < buckets.size(); i++) {
             Bucket bucket = buckets.get(i);
             if (bucket.getLower() <= value.get() && value.get() < bucket.getUpper()) {
@@ -86,10 +86,12 @@ public class Histogram {
                 } else {
                     rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount / buckets.size())));
                 }
+                return Optional.of(rowCount);
             } else if (bucket.getUpper() == value.get()) {
                 rowCount = bucket.getUpperRepeats();
+                return Optional.of(rowCount);
             }
         }
-        return Optional.of(Math.max(1, rowCount));
+        return Optional.empty();
     }
 }
