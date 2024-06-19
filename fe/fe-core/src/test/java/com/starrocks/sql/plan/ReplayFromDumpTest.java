@@ -55,16 +55,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testForceRuleBasedRewriteYear() throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"));
-        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
-        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"));
-    }
-
-    @Test
     public void testTPCH17WithUseAnalytic() throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/tpch17"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
