@@ -59,14 +59,4 @@ public abstract class SetOperationRelation extends QueryRelation {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitSetOp(this, context);
     }
-
-    @Override
-    public boolean needAuditEncryption() {
-        for (QueryRelation relation : relations) {
-            if (relation.needAuditEncryption()) {
-                return true;
-            }
-        }
-        return false;
-    }
 }

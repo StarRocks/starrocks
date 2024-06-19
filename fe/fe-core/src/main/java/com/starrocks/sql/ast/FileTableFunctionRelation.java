@@ -38,9 +38,4 @@ public class FileTableFunctionRelation extends TableRelation {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitFileTableFunction(this, context);
     }
-
-    @Override
-    public boolean needAuditEncryption() {
-        return true;
-    }
 }
