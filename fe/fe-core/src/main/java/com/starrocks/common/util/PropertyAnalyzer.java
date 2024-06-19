@@ -776,15 +776,11 @@ public class PropertyAnalyzer {
         Matcher m = r.matcher(noSpacesCompression);
         if (m.matches()) {
             String levelString = m.group(1);
-            try {
-                int number = Integer.parseInt(levelString);
-                if (number >= 1 && number <= 22) {
-                    properties.remove(PROPERTIES_COMPRESSION);
-                    return new Pair<TCompressionType, Integer>(TCompressionType.ZSTD, number);
-                } else {
-                    throw new AnalysisException("Invalid level for zstd compression type");
-                }
-            } catch (NumberFormatException e) {
+            int number = Integer.parseInt(levelString);
+            if (number >= 1 && number <= 22) {
+                properties.remove(PROPERTIES_COMPRESSION);
+                return number;
+            } else {
                 throw new AnalysisException("Invalid level for zstd compression type");
             }
         }
