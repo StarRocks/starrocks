@@ -141,6 +141,10 @@ public class FragmentInstanceExecState {
                                       TNetworkAddress address,
                                       long lastMissingHeartbeatTime) {
         this.jobSpec = jobSpec;
+        // fake fragment instance exec state
+        if (jobSpec == null) {
+            state = State.EXECUTING;
+        }
         this.fragmentId = fragmentId;
         this.fragmentIndex = fragmentIndex;
         this.instanceId = instanceId;
@@ -314,6 +318,7 @@ public class FragmentInstanceExecState {
             case CREATED:
             case FINISHED: // duplicate packet
             case FAILED:
+                LOG.info("state is {}, ignore the report status", state);
                 return false;
             case DEPLOYING:
             case EXECUTING:

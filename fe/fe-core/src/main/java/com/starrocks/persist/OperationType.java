@@ -691,6 +691,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_MUTABLE_BUCKET_NUM = 11141;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_ENABLE_LOAD_PROFILE = 11142;
+
     // external table analyze
 
     @IgnorableOnReplayFailed

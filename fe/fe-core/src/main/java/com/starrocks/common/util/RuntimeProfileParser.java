@@ -53,7 +53,7 @@ public class RuntimeProfileParser {
             Pattern.compile("^- (.*?)$");
 
     public static RuntimeProfile parseFrom(String content) {
-        LOG.debug("Parse runtime profile from content: {}", content);
+        LOG.info("Parse runtime profile from content: {}", content);
         BufferedReader bufferedReader = new BufferedReader(new StringReader(content));
         // (profile, profileIndent, counterStack(name, counter, counterIndent))
         LinkedList<ProfileTuple> profileStack = Lists.newLinkedList();

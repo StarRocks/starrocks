@@ -280,9 +280,19 @@ public class StreamLoadPlanner {
         queryOptions.setMem_limit(streamLoadInfo.getExecMemLimit());
         queryOptions.setLoad_mem_limit(streamLoadInfo.getLoadMemLimit());
 
-        if (connectContext.getSessionVariable().isEnableLoadProfile()) {
+        boolean enableLoadProfile = false;
+        enableLoadProfile |= destTable.enableLoadProfile();
+        enableLoadProfile |= connectContext.getSessionVariable().isEnableLoadProfile();
+        if (Config.load_profile_collect_interval_second > 0
+                && System.currentTimeMillis() - destTable.getLastCollectProfileTime()
+                        < Config.load_profile_collect_interval_second * 1000) {
+            enableLoadProfile = false;
+        }
+
+        if (enableLoadProfile) {
             queryOptions.setEnable_profile(true);
-            queryOptions.setLoad_profile_collect_second(Config.stream_load_profile_collect_second);
+            queryOptions.setLoad_profile_collect_second(Config.stream_load_profile_collect_threshold_second);
+            destTable.updateLastCollectProfileTime();
         }
 
         params.setQuery_options(queryOptions);
