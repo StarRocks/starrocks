@@ -2334,7 +2334,7 @@ public class StmtExecutor {
             return;
         }
         String sql;
-        if (!context.getState().isQuery() && parsedStmt.needAuditEncryption()) {
+        if (parsedStmt.needAuditEncryption()) {
             sql = AstToSQLBuilder.toSQL(parsedStmt);
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;

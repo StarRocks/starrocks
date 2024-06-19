@@ -388,4 +388,12 @@ public class InsertStmt extends DmlStmt {
         return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, targetMaxFileSize,
                 props);
     }
+
+    @Override
+    public boolean needAuditEncryption() {
+        if (tableFunctionAsTargetTable) {
+            return true;
+        }
+        return false;
+    }
 }
