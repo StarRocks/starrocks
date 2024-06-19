@@ -86,9 +86,9 @@ public class ConstantExpressionTest extends PlanTestBase {
         {
             String explainString = getFragmentPlan("select inspect_mv_plan('mv_from_view_1');");
             Assert.assertTrue(explainString,
-                    explainString.contains("LogicalViewScanOperator {table=\\'mv_base_table_9527_view_1\\'"));
-            Assert.assertTrue(explainString, explainString.contains("LogicalAggregation"));
-            Assert.assertTrue(explainString, explainString.contains("->  LogicalOlapScanOperator"));
+                    explainString.contains("1:Project\n" +
+                            "  |  <slot 2> : 'plan 0: \n" +
+                            "LogicalAggregation {type=GLOBAL ,aggrega...'"));
         }
 
         starRocksAssert.dropView("mv_base_table_9527_view_1");

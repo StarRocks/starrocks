@@ -51,8 +51,11 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
+
 public class StringLiteral extends LiteralExpr {
-    private String value;
+    protected String value;
+
+    protected String sqlStr;
 
     public StringLiteral() {
         super(NodePosition.ZERO);
@@ -136,14 +139,17 @@ public class StringLiteral extends LiteralExpr {
 
     @Override
     public String toSqlImpl() {
-        String sql = value;
-        if (value != null) {
-            if (value.contains("\\")) {
-                sql = value.replace("\\", "\\\\");
+        if (sqlStr == null) {
+            String sql = value;
+            if (value != null) {
+                if (value.contains("\\")) {
+                    sql = value.replace("\\", "\\\\");
+                }
+                sql = sql.replace("'", "\\'");
             }
-            sql = sql.replace("'", "\\'");
+            sqlStr =  "'" + sql + "'";
         }
-        return "'" + sql + "'";
+        return sqlStr;
     }
 
     @Override
@@ -278,5 +284,13 @@ public class StringLiteral extends LiteralExpr {
         byte[] bytes = new byte[strLen];
         data.get(bytes);
         value = new String(bytes);
+    }
+
+    public static StringLiteral create(String value) {
+        if (value.length() > LargeStringLiteral.LEN_LIMIT) {
+            return new LargeStringLiteral(value, NodePosition.ZERO);
+        } else {
+            return new StringLiteral(value);
+        }
     }
 }
