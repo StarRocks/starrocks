@@ -289,21 +289,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalOlapScan(LogicalOlapScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
-                node.getSelectedTabletId(),
                 node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
-                node.getSelectedTabletId(),
                 node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitLogicalBinlogScan(LogicalBinlogScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), Lists.newArrayList(),
-                Lists.newArrayList(),
                 node.getColRefToColumnMetaMap());
     }
 
@@ -329,13 +326,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalStreamScan(PhysicalStreamScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), Lists.newArrayList(),
-                Lists.newArrayList(),
                 node.getColRefToColumnMetaMap());
     }
 
     private Void computeOlapScanNode(Operator node, ExpressionContext context, Table table,
                                      Collection<Long> selectedPartitionIds,
-                                     Collection<Long> selectedTabletIds,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
         // 1. get table row count
