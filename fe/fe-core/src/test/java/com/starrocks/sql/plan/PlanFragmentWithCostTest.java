@@ -148,8 +148,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "PARTITION BY LIST (province) (\n" +
                 "   PARTITION p1 VALUES IN (\"beijing\",\"chongqing\"),\n" +
                 "   PARTITION p2 VALUES IN (\"shanghai\",\"tianjing\")\n" +
-                ")"+
-                "PROPERTIES (\"replication_num\" = \"1\")");
+                ") PROPERTIES (\"replication_num\" = \"1\")");
         starRocksAssert.withTable("CREATE TABLE t1_multi_col(\n" +
                 "    id bigint  ,\n" +
                 "    user_id  bigint  ,\n" +
