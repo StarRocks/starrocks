@@ -419,7 +419,6 @@ public class SchemaChangeHandler extends AlterHandler {
             Function<Map.Entry<Type, String>, Type> getFieldType = entry -> {
                 Type fieldType = entry.getKey();
                 String name = entry.getValue();
-                LOG.info("get field: " + name);
                 if (fieldType.isStructType()) {
                     StructField field = ((StructType) fieldType).getField(name);
                     if (field == null) {
@@ -587,8 +586,6 @@ public class SchemaChangeHandler extends AlterHandler {
             if (!oneCol.isPresent()) {
                 continue;
             } else {
-                LOG.info("modify column[{}] origin type {}, new type {}", modifyColumnName, oneCol.get().getType(),
-                         modifyColumn.getType());
                 int idx = modIndexSchema.indexOf(oneCol.get());
                 modIndexSchema.set(idx, modifyColumn);
             }
