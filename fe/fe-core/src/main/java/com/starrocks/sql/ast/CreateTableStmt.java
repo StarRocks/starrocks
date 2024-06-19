@@ -299,11 +299,6 @@ public class CreateTableStmt extends DdlStmt {
     }
 
     @Override
-    public boolean needAuditEncryption() {
-        return !Strings.isNullOrEmpty(engineName) && !isOlapEngine();
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableStatement(this, context);
     }

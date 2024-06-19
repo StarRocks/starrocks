@@ -158,11 +158,6 @@ public class ExportStmt extends StatementBase {
         return includeQueryId;
     }
 
-    @Override
-    public boolean needAuditEncryption() {
-        return brokerDesc != null;
-    }
-
     public void checkTable(GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(tblName.getDb());
         if (db == null) {

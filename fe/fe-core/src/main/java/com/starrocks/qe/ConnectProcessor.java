@@ -71,6 +71,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
@@ -230,7 +231,7 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
-        if (parsedStmt != null && parsedStmt.needAuditEncryption()) {
+        if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             // Some information like username, password in the stmt should not be printed.
             ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
         } else if (parsedStmt == null) {

@@ -92,11 +92,6 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
         return visitor.visitBaseCreateAlterUserStmt(this, context);
     }
 
-    @Override
-    public boolean needAuditEncryption() {
-        return true;
-    }
-
     @Deprecated
     public void setScramblePassword(byte[] scramblePassword) {
         this.scramblePassword = scramblePassword;

@@ -126,12 +126,6 @@ public abstract class StatementBase implements ParseNode {
         return origStmt;
     }
 
-    // Override this method and return true
-    // if the stmt contains some information which need to be encrypted in audit log
-    public boolean needAuditEncryption() {
-        return false;
-    }
-
     @Override
     public NodePosition getPos() {
         return pos;
