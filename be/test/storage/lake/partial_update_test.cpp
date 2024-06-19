@@ -766,8 +766,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
         auto sstable_meta = new_tablet_metadata->sstable_meta();
         for (auto& sstable : sstable_meta.sstables()) {
-            EXPECT_GT(sstable.version(), 0);
-            EXPECT_LE(sstable.version(), version);
+            EXPECT_GT(sstable.max_rss_rowid(), 0);
         }
     }
 }
