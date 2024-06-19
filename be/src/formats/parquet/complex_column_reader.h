@@ -187,7 +187,7 @@ public:
     Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                               const size_t& layer) override;
 
-    Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) override;
+    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                                  ColumnIOType type, bool active) override {

@@ -264,7 +264,7 @@ Status StructColumnReader::filter_dict_column(const ColumnPtr& column, Filter* f
                                                          layer + 1);
 }
 
-Status StructColumnReader::fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) {
+Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     StructColumn* struct_column_src = nullptr;
     StructColumn* struct_column_dst = nullptr;
     if (src->is_nullable()) {

@@ -435,7 +435,7 @@ StatusOr<bool> GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filt
     return true;
 }
 
-Status GroupReader::_fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk) {
+Status GroupReader::_fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk) {
     read_chunk->check_or_die();
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();

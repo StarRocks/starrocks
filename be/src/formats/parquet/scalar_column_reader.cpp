@@ -33,6 +33,7 @@ Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter
             _dict_code = ColumnHelper::create_column(
                     TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
         }
+        _ori_column = dst;
         dst = _dict_code;
         dst->reserve(range.span_size());
     }
@@ -74,7 +75,7 @@ bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
     }
 }
 
-Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) {
+Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     if (!_need_lazy_decode) {
         dst->swap_column(*src);
     } else {
@@ -102,6 +103,7 @@ Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, const ColumnPtr& src)
         }
 
         src->reset_column();
+        src = _ori_column;
     }
     return Status::OK();
 }
