@@ -39,9 +39,9 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
@@ -763,7 +763,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(3, res.get(0).getFiles().get(0).getIcebergScanTasks().get(0).file().recordCount());
 
         PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1, null);
-        Assert.assertEquals("IcebergFilter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
+        Assert.assertEquals("Filter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
                 filter.toString());
     }
 
