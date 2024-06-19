@@ -22,7 +22,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
@@ -282,7 +281,8 @@ public class PaimonMetadataTest {
         List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
-        Assert.assertEquals(2, result.get(0).getFiles().get(0).getPaimonSplitsInfo().getPaimonSplits().size());
+        PaimonRemoteFileDesc desc = (PaimonRemoteFileDesc) result.get(0).getFiles().get(0);
+        Assert.assertEquals(2, desc.getPaimonSplitsInfo().getPaimonSplits().size());
     }
 
     @Test
@@ -408,7 +408,7 @@ public class PaimonMetadataTest {
                                                            long snapshotId, ScalarOperator predicate, List<String> fieldNames,
                                                            long limit) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
-                        .setFiles(Lists.newArrayList(RemoteFileDesc.createPamonRemoteFileDesc(
+                        .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPamonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))
                         .build());
             }
