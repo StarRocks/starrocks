@@ -4,6 +4,7 @@ be/output
 be/build
 be/build_Release
 be/ut_build
+be/src/gen_cpp/build
 output
 docs/contents
 docs/.temp

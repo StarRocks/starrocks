@@ -71,6 +71,23 @@ set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
+set(REAL_GENSRC_DIR "${BASE_DIR}/../gensrc/build/")
+if(EXISTS ${GENSRC_DIR})
+    execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${GENSRC_DIR})
+    message(STATUS "Existing symlink or file ${GENSRC_DIR} removed.")
+endif()
+execute_process(
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${REAL_GENSRC_DIR} ${GENSRC_DIR}
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE error
+)
+if(result)
+    message(FATAL_ERROR "Failed to create symlink: ${error}")
+else()
+    message(STATUS "Symbolic link created: ${REAL_GENSRC_DIR} -> ${GENSRC_DIR}")
+endif()
+
 if (APPLE)
     set(MAKE_TEST "ON")
 else()
