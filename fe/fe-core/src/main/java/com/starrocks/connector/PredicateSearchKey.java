@@ -67,7 +67,7 @@ public class PredicateSearchKey {
 
     @Override
     public String toString() {
-        return "IcebergFilter{" + "databaseName='" + databaseName + '\'' +
+        return "Filter{" + "databaseName='" + databaseName + '\'' +
                 ", tableName='" + tableName + '\'' +
                 ", snapshotId=" + snapshotId +
                 ", predicate=" + predicate +
