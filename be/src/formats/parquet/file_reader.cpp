@@ -380,8 +380,7 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
     if (_scanner_ctx->runtime_filter_collector) {
         std::vector<SlotDescriptor*> min_max_slots(1);
 
-        const TupleDescriptor& tuple_desc = *(_scanner_ctx->tuple_desc);
-        const std::vector<SlotDescriptor*>& slots = tuple_desc.slots();
+        const std::vector<SlotDescriptor*>& slots = _scanner_ctx->slot_descs;
 
         for (auto& it : _scanner_ctx->runtime_filter_collector->descriptors()) {
             RuntimeFilterProbeDescriptor* rf_desc = it.second;
@@ -632,7 +631,6 @@ Status FileReader::_init_group_readers() {
     const HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
 
     // _group_reader_param is used by all group readers
-    _group_reader_param.tuple_desc = fd_scanner_ctx.tuple_desc;
     _group_reader_param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
     _group_reader_param.timezone = fd_scanner_ctx.timezone;
     _group_reader_param.stats = fd_scanner_ctx.stats;

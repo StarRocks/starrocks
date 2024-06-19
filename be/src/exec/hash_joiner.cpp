@@ -203,12 +203,18 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
     return Status::OK();
 }
 
-Status HashJoiner::build_ht(RuntimeState* state) {
+Status HashJoiner::build_ht(RuntimeState* state, bool mor_mode) {
     if (_phase == HashJoinPhase::BUILD) {
         RETURN_IF_ERROR(_hash_join_builder->build(state));
         size_t bucket_size = _hash_join_builder->hash_table().get_bucket_size();
-        COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
-        COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket()));
+
+        if (!mor_mode) {
+            COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
+            COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket()));
+        } else {
+            COUNTER_UPDATE(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
+            COUNTER_UPDATE(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket()));
+        }
     }
 
     return Status::OK();
