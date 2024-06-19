@@ -21,9 +21,14 @@ CREATE TABLE `t1` (
 DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3;
 
+-- add duplicated rows
 insert into t1 values 
     ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
-    ('2023-06-15', '2023-06-15 01:00:00', 'b', 'a', true,  2, 2, 2, 2, 2, 2.0, 2.0, 1.0),
+    ('2023-06-15', '2023-06-15 01:00:00', 'b', 'a', true,  1, 2, 2, 2, 2, 2.0, 2.0, 1.0),
+    ('2023-06-16', '2023-06-16 00:00:00', 'c', 'a', false, 3, 1, 3, 3, 3, 3.0, 3.0, 1.0),
+    ('2023-06-17', '2023-06-17 00:00:00', 'd', 'a', true,  4, 1, 4, 4, 4, 4.0, 4.0, 1.0),
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-15', '2023-06-15 01:00:00', 'b', 'a', true,  1, 2, 2, 2, 2, 2.0, 2.0, 1.0),
     ('2023-06-16', '2023-06-16 00:00:00', 'c', 'a', false, 3, 1, 3, 3, 3, 3.0, 3.0, 1.0),
     ('2023-06-17', '2023-06-17 00:00:00', 'd', 'a', true,  4, 1, 4, 4, 4, 4.0, 4.0, 1.0)
 ;
@@ -74,12 +79,18 @@ AS SELECT k1, k6, SUM(k7) as sum1, SUM(k9) as sum2, SUM(k8) as sum3 FROM t1 GROU
 
 refresh materialized view test_mv1 with sync mode;
 
-function: check_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k6 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k6 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k6, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT count(1) from t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT count(*) from t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT count(k6) from t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k6 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k6 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k6, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
 
+SELECT count(1) from t1;
+SELECT count(*) from t1;
+SELECT count(k6) from t1;
 SELECT k1, sum(case when k6 > 1 then k6 else 0 end) from t1 group by k1 order by k1;
 SELECT k1, sum(case when k6 > 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;
 SELECT k1, sum(case when k6 = 1 then k6 else 0 end) from t1 group by k1 order by k1;
