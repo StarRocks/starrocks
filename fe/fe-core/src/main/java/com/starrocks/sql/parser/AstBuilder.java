@@ -6330,7 +6330,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitProperty(StarRocksParser.PropertyContext context) {
         return new Property(
-                ((StringLiteral) visit(context.key)).getStringValue(),
+                ((StringLiteral) visit(context.key)).getStringValue().trim(),
                 ((StringLiteral) visit(context.value)).getStringValue(),
                 createPos(context));
     }
