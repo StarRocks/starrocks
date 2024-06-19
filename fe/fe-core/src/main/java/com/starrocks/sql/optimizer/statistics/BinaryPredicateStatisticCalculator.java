@@ -109,6 +109,7 @@ public class BinaryPredicateStatisticCalculator {
                     .build();
 
             double predicateFactor;
+            double rows;
             Histogram hist = columnStatistic.getHistogram();
             Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
 
@@ -119,22 +120,29 @@ public class BinaryPredicateStatisticCalculator {
             if (histogramTopN.containsKey(constantOperator.toString())) {
                 double rowCountInHistogram = histogramTopN.get(constantOperator.toString());
                 predicateFactor = rowCountInHistogram / columnStatistic.getHistogram().getTotalRows();
+                double estimatedRows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
+                        * predicateFactor;
+                rows = Math.min(rowCountInHistogram, estimatedRows);
             } else {
                 Optional<Long> rowCounts = hist.getRowCountInBucket(constantOperator, columnStatistic.getDistinctValuesCount());
                 if (rowCounts.isPresent()) {
                     predicateFactor = rowCounts.get() * 1.0 / columnStatistic.getHistogram().getTotalRows();
+                    double estimatedRows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
+                            * predicateFactor;
+                    rows = Math.min(rowCounts.get(), estimatedRows);
                 } else {
                     Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
                     double f = 1 / Math.max(columnStatistic.getDistinctValuesCount() - histogramTopN.size(),
                             hist.getBuckets().size());
                     predicateFactor = (columnStatistic.getHistogram().getTotalRows() - mostCommonValuesCount)
                             * f / columnStatistic.getHistogram().getTotalRows();
+                    rows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
+                            * predicateFactor;
                 }
             }
-            double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
-                            .setOutputRowCount(rowCount).addColumnStatistic(operator, estimatedColumnStatistic).build())
-                    .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+                            .setOutputRowCount(rows).addColumnStatistic(operator, estimatedColumnStatistic).build())
+                    .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rows).build());
         }
     }
 

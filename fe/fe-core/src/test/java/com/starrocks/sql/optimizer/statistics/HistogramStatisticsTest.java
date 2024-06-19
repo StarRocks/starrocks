@@ -241,6 +241,6 @@ public class HistogramStatisticsTest {
                 ConstantOperator.createBigint(35));
         estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(columnRefOperator),
                 columnStatistic, eq35, Optional.of(ConstantOperator.createBigint(35)), statistics);
-        Assert.assertEquals(2551.28205, estimated.getOutputRowCount(), 0.001);
+        Assert.assertEquals(961.53846, estimated.getOutputRowCount(), 0.001);
     }
 }
