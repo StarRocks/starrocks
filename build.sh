@@ -152,7 +152,7 @@ WITH_CLANG_TIDY=OFF
 WITH_BRPC_KEEPALIVE=OFF
 WITH_STARCACHE=ON
 USE_STAROS=OFF
-BUILD_JAVA_EXT=ON
+BUILD_JAVA_EXT=OFF
 OUTPUT_COMPILE_TIME=OFF
 MSG=""
 MSG_FE="Frontend"
@@ -541,6 +541,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
+    rm -f ${STARROCKS_OUTPUT}/fe/lib/hbase-protocol-shaded-2.4.18.jar
+    rm -f ${STARROCKS_OUTPUT}/fe/lib/htrace-core4-4.2.0-incubating.jar
+    rm -f ${STARROCKS_OUTPUT}/fe/lib/jackson-mapper-asl-1.9.13.jar
 
     MSG="${MSG} √ ${MSG_BE}"
 fi
