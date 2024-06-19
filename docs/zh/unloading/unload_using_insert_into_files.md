@@ -179,7 +179,7 @@ SELECT * FROM sales_records;
 
 ### 导出至 MinIO
 
-用于 MinIO 导出的参数与用于 AWS S3 刀出的参数不同。
+用于 MinIO 导出的参数与用于 AWS S3 导出的参数不同。
 
 ```SQL
 INSERT INTO 
