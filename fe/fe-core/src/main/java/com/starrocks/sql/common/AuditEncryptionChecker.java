@@ -59,6 +59,9 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     }
 
     public static boolean needEncrypt(StatementBase statement) {
+        if (statement == null) {
+            return false;
+        }
         return getInstance().visit(statement);
     }
 
