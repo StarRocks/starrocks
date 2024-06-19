@@ -557,6 +557,9 @@ private:
             }
 
             CHECK_EQ(rowsets.size(), iterators.size());
+            // If iterators only has one union_iterator, new_mask_merge_iterator will return a union_iterator directly.
+            // And in the following function `get_next`, the `source_masks` does not work actually because we only need
+            // to fetch data in order of segment.
             std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
             RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
