@@ -3858,11 +3858,13 @@ public class PlanFragmentBuilder {
 
             Preconditions.checkState(optExpr.getInputs().size() == mergeOperator.getChildOutputColumns().size());
 
+            // must add child before create new fragment, otherwise child's fragment won't change.
+            setOperationNode.addChild(leftChild.getPlanRoot());
+            setOperationNode.addChild(rightChild.getPlanRoot());
+
             // mergeOperationFragment's data partition is the same as the first child shuffle join 's data partition
             PlanFragment mergeOperationFragment = new PlanFragment(context.getNextFragmentId(), setOperationNode,
                     leftChild.getDataPartition());
-            setOperationNode.addChild(leftChild.getPlanRoot());
-            setOperationNode.addChild(rightChild.getPlanRoot());
 
             // left plan fragment is shuffle join, and right plan fragment can be broadcast join or exchange
             // we always need to merge these two child plan fragments with mergeOperationFragment

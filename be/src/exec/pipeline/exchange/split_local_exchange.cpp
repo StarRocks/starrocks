@@ -29,16 +29,17 @@ void SplitLocalExchanger::close(RuntimeState* state) {
 
 Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, SplitLocalExchangeSinkOperator* sink_op) {
     DCHECK(_split_expr_ctxs.size() > 1);
-    size_t original_chunk_size = chunk->num_rows();
-    Filter chunk_filter(original_chunk_size, 1);
+    size_t original_chunk_size;
     // split chunk into multiple chunks using split_expr_ctxs
     // cur_chunk is the chunk that is being split and has no overlap with the previous chunks
     auto& cur_chunk = chunk;
     size_t new_chunk_size;
     for (size_t i = 0; i < _split_expr_ctxs.size() - 1; i++) {
+        original_chunk_size = cur_chunk->num_rows();
+        Filter chunk_filter(cur_chunk->num_rows(), 1);
         auto& expr_ctx = _split_expr_ctxs[i];
         ASSIGN_OR_RETURN(new_chunk_size,
-                         ExecNode::eval_conjuncts_into_filter(_split_expr_ctxs, cur_chunk.get(), &chunk_filter));
+                         ExecNode::eval_conjuncts_into_filter({expr_ctx}, cur_chunk.get(), &chunk_filter));
 
         if (new_chunk_size == 0) {
             continue;
@@ -70,10 +71,14 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, SplitLocalExchange
     _current_accumulated_row_size += original_chunk_size;
     _current_memory_usage += cur_chunk->memory_usage();
     sink_op->update_counter(_current_memory_usage, _current_accumulated_row_size);
+    return Status::OK();
 }
 
 StatusOr<ChunkPtr> SplitLocalExchanger::pull_chunk(RuntimeState* state, int32_t consuemr_index) {
     std::unique_lock l(_mutex);
+    if (_buffer[consuemr_index].empty() && _opened_sink_number == 0) {
+        return Status::EndOfFile("split_local_exchanger eof");
+    }
     ChunkPtr chunk = _buffer[consuemr_index].front();
     _buffer[consuemr_index].pop();
     _current_accumulated_row_size -= chunk->num_rows();
@@ -83,6 +88,7 @@ StatusOr<ChunkPtr> SplitLocalExchanger::pull_chunk(RuntimeState* state, int32_t 
 
 bool SplitLocalExchanger::can_pull_chunk(int32_t consumer_index) const {
     std::unique_lock l(_mutex);
+    if (_opened_sink_number == 0) return true;
     return !(_buffer[consumer_index].empty());
 }
 

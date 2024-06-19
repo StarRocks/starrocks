@@ -939,7 +939,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             boolean hasGlobalRuntimeFilter = hashJoinNode.getBuildRuntimeFilters()
                     .stream().anyMatch(RuntimeFilterDescription::isHasRemoteTargets);
-            if (hashJoinNode.isBroadcast() && hasGlobalRuntimeFilter) {
+            if (hashJoinNode.isBroadcast() && hasGlobalRuntimeFilter && !localOffspringsPerChild.isEmpty()) {
                 localRightOffsprings.or(localOffspringsPerChild.get(1));
             }
         }
