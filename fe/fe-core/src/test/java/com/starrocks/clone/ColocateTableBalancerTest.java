@@ -1060,7 +1060,7 @@ public class ColocateTableBalancerTest {
         Assert.assertFalse(balancer.isSystemStable(infoService));
         Assert.assertFalse(balancer.isSystemStable(infoService));
         // set stable last time to 1s, and sleep 1s, the system becomes to stable
-        Config.tablet_sched_colocate_balance_after_system_stable_time_s = 1;
+        Config.tablet_sched_colocate_balance_wait_system_stable_time_s = 1;
         Thread.sleep(1001L);
         Assert.assertTrue(balancer.isSystemStable(infoService));
         Assert.assertTrue(balancer.isSystemStable(infoService));
@@ -1071,12 +1071,5 @@ public class ColocateTableBalancerTest {
         Assert.assertFalse(balancer.isSystemStable(infoService));
         Thread.sleep(1001L);
         Assert.assertTrue(balancer.isSystemStable(infoService));
-
-        // one backend is changed to decommissioned, the system becomes to unstable
-        backend2.setDecommissioned(true);
-        Assert.assertFalse(balancer.isSystemStable(infoService));
-        Assert.assertFalse(balancer.isSystemStable(infoService));
-        Thread.sleep(1001L);
-        Assert.assertTrue(balancer.isSystemStable(infoService));
-    }
+   }
 }

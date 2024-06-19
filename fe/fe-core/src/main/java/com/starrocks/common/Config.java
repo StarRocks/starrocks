@@ -1426,7 +1426,7 @@ public class Config extends ConfigBase {
     /**
      * Colocate balance is a very time-consuming operation,
      * and our system should try to avoid triggering colocate balance.
-     * In the BYOC environment, customers will stop all machines when the cluster is not in use to save machine resources.
+     * In the some situation, customers will stop all machines when the cluster is not in use to save machine resources.
      * When the machine is started again, unnecessary colocate balance
      * will be triggered due to the inconsistent start time of the machines.
      * To avoid this situation, we introduced the tablet_sched_colocate_balance_after_system_stable_time_s parameter.
@@ -1435,7 +1435,7 @@ public class Config extends ConfigBase {
      * Default value is 15min.
      */
     @ConfField(mutable = true)
-    public static long tablet_sched_colocate_balance_after_system_stable_time_s = 15 * 60;
+    public static long tablet_sched_colocate_balance_wait_system_stable_time_s = 15 * 60;
 
     /**
      * When setting to true, disable the overall balance behavior for colocate groups which treats all the groups
