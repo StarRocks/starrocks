@@ -77,7 +77,7 @@ public class RemoteFileDesc {
         return new RemoteFileDesc(null, null, 0, 0, null, null, tasks, null, null, null);
     }
 
-    public static RemoteFileDesc createPamonRemoteFileDesc(PaimonSplitsInfo paimonSplitsInfo) {
+    public static RemoteFileDesc createPaimonRemoteFileDesc(PaimonSplitsInfo paimonSplitsInfo) {
         return new RemoteFileDesc(null, null, 0, 0, null, null, null, paimonSplitsInfo, null, null);
     }
 
