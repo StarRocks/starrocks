@@ -48,9 +48,9 @@ public class StructType extends Type {
 
     private static final Logger LOG = LogManager.getLogger(StructType.class);
 
-    private final HashMap<String, StructField> fieldMap = Maps.newHashMap();
+    private HashMap<String, StructField> fieldMap = Maps.newHashMap();
     @SerializedName(value = "fields")
-    private final ArrayList<StructField> fields;
+    private ArrayList<StructField> fields;
 
     @SerializedName(value = "named")
     private final boolean isNamed;
@@ -178,6 +178,27 @@ public class StructType extends Type {
 
     public StructField getField(int pos) {
         return fields.get(pos);
+    }
+
+    public void updateFields(List<StructField> structFields) {
+        Preconditions.checkNotNull(structFields);
+        Preconditions.checkArgument(structFields.size() > 0);
+        fields.clear();
+        fieldMap.clear();
+        for (StructField field : structFields) {
+            LOG.info("field name " + field.getName());
+            String lowerFieldName = field.getName().toLowerCase();
+            if (fieldMap.containsKey(lowerFieldName)) {
+                throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
+            } else {
+                field.setPosition(fields.size());
+                fields.add(field);
+                // Store lowercase field name in fieldMap
+                fieldMap.put(lowerFieldName, field);
+            }
+        }
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
     }
 
     @Override
