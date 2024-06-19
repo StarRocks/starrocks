@@ -566,7 +566,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
     }
 
-    private void triggerIcebergPlanFilesIfNeeded(PredicateSearchKey key, IcebergTable table, ScalarOperator predicate, long limit) {
+    private void triggerIcebergPlanFilesIfNeeded(PredicateSearchKey key, IcebergTable table,
+                                                 ScalarOperator predicate, long limit) {
         triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit, null, ConnectContext.get());
     }
 
