@@ -6003,8 +6003,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitProperty(StarRocksParser.PropertyContext context) {
         return new Property(
+<<<<<<< HEAD
                 ((StringLiteral) visit(context.key)).getStringValue(),
                 ((StringLiteral) visit(context.value)).getStringValue());
+=======
+                ((StringLiteral) visit(context.key)).getStringValue().trim(),
+                ((StringLiteral) visit(context.value)).getStringValue(),
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitInlineProperty(StarRocksParser.InlinePropertyContext context) {
+        return new Property(
+                ((Identifier) visit(context.key)).getValue(),
+                ((StringLiteral) visit(context.value)).getStringValue(),
+                createPos(context));
+>>>>>>> 16cb9dbc19 ([BugFix] Fixed the bug that property key was not trim() (#47119))
     }
 
     @Override
