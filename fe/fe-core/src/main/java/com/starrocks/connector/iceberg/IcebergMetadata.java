@@ -42,6 +42,7 @@ import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteMetaSplit;
@@ -162,9 +163,9 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
-    private final Map<IcebergFilter, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
-    private final Set<IcebergFilter> scannedTables = new HashSet<>();
-    private final Set<IcebergFilter> preparedTables = ConcurrentHashMap.newKeySet();
+    private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
+    private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
+    private final Set<PredicateSearchKey> preparedTables = ConcurrentHashMap.newKeySet();
 
     // FileScanTaskSchema -> Pair<schema_string, partition_string>
     private final Map<FileScanTaskSchema, Pair<String, String>> fileScanTaskSchemas = new ConcurrentHashMap<>();
@@ -394,7 +395,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String dbName = table.getRemoteDbName();
         String tableName = table.getRemoteTableName();
 
-        IcebergFilter key = IcebergFilter.of(dbName, tableName, snapshotId, predicate);
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, predicate);
         triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit);
 
         List<FileScanTask> icebergScanTasks = splitTasks.get(key);
@@ -495,7 +496,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
-        IcebergFilter key;
+        PredicateSearchKey key;
         IcebergTable icebergTable;
         icebergTable = (IcebergTable) item.getTable();
         String dbName = icebergTable.getRemoteDbName();
@@ -505,7 +506,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return true;
         }
 
-        key = IcebergFilter.of(dbName, tableName, snapshot.get().snapshotId(), item.getPredicate());
+        key = PredicateSearchKey.of(dbName, tableName, snapshot.get().snapshotId(), item.getPredicate());
         if (!preparedTables.add(key)) {
             return true;
         }
@@ -565,11 +566,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
     }
 
-    private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {
+    private void triggerIcebergPlanFilesIfNeeded(PredicateSearchKey key, IcebergTable table,
+                                                 ScalarOperator predicate, long limit) {
         triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit, null, ConnectContext.get());
     }
 
-    private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate,
+    private void triggerIcebergPlanFilesIfNeeded(PredicateSearchKey key, IcebergTable table, ScalarOperator predicate,
                                                  long limit, Tracers tracers, ConnectContext connectContext) {
         if (!scannedTables.contains(key)) {
             tracers = tracers == null ? Tracers.get() : tracers;
@@ -588,7 +590,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return new ArrayList<>();
         }
 
-        IcebergFilter key = IcebergFilter.of(dbName, tableName, snapshot.get().snapshotId(), predicate);
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshot.get().snapshotId(), predicate);
         triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
 
         List<PartitionKey> partitionKeys = new ArrayList<>();
@@ -665,7 +667,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         long snapshotId = snapshot.get().snapshotId();
         String dbName = icebergTable.getRemoteDbName();
         String tableName = icebergTable.getRemoteTableName();
-        IcebergFilter key = IcebergFilter.of(dbName, tableName, snapshotId, predicate);
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, predicate);
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         traceIcebergMetricsConfig(nativeTbl);
@@ -860,7 +862,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return statisticsBuilder.build();
         }
 
-        IcebergFilter key = IcebergFilter.of(
+        PredicateSearchKey key = PredicateSearchKey.of(
                 icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), snapshotId, predicate);
 
         triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
@@ -880,7 +882,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(
-            FileScanTask fileScanTask, Expression icebergPredicate, IcebergFilter filter) {
+            FileScanTask fileScanTask, Expression icebergPredicate, PredicateSearchKey filter) {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
         DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
