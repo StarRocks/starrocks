@@ -70,6 +70,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -444,12 +445,19 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             locker.unLockDatabase(db, LockType.READ);
         }
 
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        ConnectContext ctx = Util.getOrCreateConnectContext();
+        ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
+
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
             if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
                 LOG.warn("db: {}({}) has been dropped, skip", db.getFullName(), db.getId());
                 return false;
             }
             try {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(ctx, dropPartitionClause);
+
                 GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 clearDropPartitionFailedMsg(tableName);
             } catch (DdlException e) {
@@ -462,9 +470,9 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         if (!skipAddPartition) {
             for (AddPartitionClause addPartitionClause : addPartitionClauses) {
                 try {
-                    WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                    ConnectContext ctx = Util.getOrCreateConnectContext();
-                    ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
+                    AlterTableClauseAnalyzer alterTableClauseVisitor = new AlterTableClauseAnalyzer(olapTable);
+                    alterTableClauseVisitor.analyze(ctx, addPartitionClause);
+
                     GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(ctx,
                             db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
@@ -544,6 +552,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.WRITE);
                 try {
+                    AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                    analyzer.analyze(new ConnectContext(), dropPartitionClause);
                     GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {
@@ -711,7 +721,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             }
         }
         LOG.info("finished to find all schedulable tables, cost: {}ms, " +
-                "dynamic partition tables: {}, ttl partition tables: {}, scheduler enabled: {}, scheduler interval: {}s",
+                        "dynamic partition tables: {}, ttl partition tables: {}, scheduler enabled: {}, scheduler interval: {}s",
                 System.currentTimeMillis() - start, dynamicPartitionTables, ttlPartitionTables,
                 Config.dynamic_partition_enable, Config.dynamic_partition_check_interval_seconds);
         lastFindingTime = System.currentTimeMillis();

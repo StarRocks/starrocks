@@ -322,6 +322,7 @@ public class OlapTable extends Table {
     public void copyOnlyForQuery(OlapTable olapTable) {
         olapTable.id = this.id;
         olapTable.name = this.name;
+        olapTable.type = this.type;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         nameToColumn.putAll(this.nameToColumn);
@@ -348,7 +349,9 @@ public class OlapTable extends Table {
         if (this.partitionInfo != null) {
             olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
         }
-        olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
+        if (this.defaultDistributionInfo != null) {
+            olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
+        }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
@@ -371,6 +374,14 @@ public class OlapTable extends Table {
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.sessionId = this.sessionId;
+
+        if (this.bfColumns != null) {
+            olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
+        }
+        olapTable.bfFpp = this.bfFpp;
+        if (this.curBinlogConfig != null) {
+            olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
+        }
     }
 
     public void addDoubleWritePartition(String sourcePartitionName, String tempPartitionName) {
@@ -1333,14 +1344,14 @@ public class OlapTable extends Table {
     public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
         Long partitionId = physicalPartitionIdToPartitionId.get(physicalPartitionId);
         if (partitionId == null) {
-            for (Partition partition : idToPartition.values()) {
+            for (Partition partition : tempPartitions.getAllPartitions()) {
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
                     if (subPartition.getId() == physicalPartitionId) {
                         return subPartition;
                     }
                 }
             }
-            for (Partition partition : tempPartitions.getAllPartitions()) {
+            for (Partition partition : idToPartition.values()) {
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
                     if (subPartition.getId() == physicalPartitionId) {
                         return subPartition;
@@ -2588,6 +2599,9 @@ public class OlapTable extends Table {
         if (partition != null) {
             partitionInfo.dropPartition(partition.getId());
             tempPartitions.dropPartition(partitionName, needDropTablet);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+            }
         }
     }
 
@@ -2730,11 +2744,17 @@ public class OlapTable extends Table {
 
     public void addTempPartition(Partition partition) {
         tempPartitions.addPartition(partition);
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+            physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
+        }
     }
 
     public void dropAllTempPartitions() {
         for (Partition partition : tempPartitions.getAllPartitions()) {
             partitionInfo.dropPartition(partition.getId());
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
+            }
         }
         tempPartitions.dropAll();
     }

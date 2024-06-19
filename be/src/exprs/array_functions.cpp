@@ -28,28 +28,31 @@ namespace starrocks {
 StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
-    Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
-    const size_t num_rows = arg0->size();
-
-    auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
-
-    auto col_result = Int32Column::create();
-    raw::make_room(&col_result->get_data(), num_rows);
-    DCHECK_EQ(num_rows, col_result->size());
-
-    const uint32_t* offsets = col_array->offsets().get_data().data();
-
-    int32_t* p = col_result->get_data().data();
-    for (size_t i = 0; i < num_rows; i++) {
-        p[i] = offsets[i + 1] - offsets[i];
-    }
-
-    if (arg0->has_null()) {
-        // Copy null flags.
-        return NullableColumn::create(std::move(col_result), down_cast<NullableColumn*>(arg0)->null_column());
-    } else {
+    const size_t num_rows = columns[0]->size();
+    auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+    if (columns[0]->is_constant()) {
+        auto col_result = Int32Column::create();
+        col_result->append(col_array->offsets().get_data().data()[1]);
+        col_result->assign(num_rows, 0);
         return col_result;
+    } else {
+        Column* arg0 = columns[0].get();
+        auto col_result = Int32Column::create();
+        raw::make_room(&col_result->get_data(), num_rows);
+        DCHECK_EQ(col_array->size(), col_result->size());
+
+        const uint32_t* offsets = col_array->offsets().get_data().data();
+        int32_t* p = col_result->get_data().data();
+        for (size_t i = 0; i < num_rows; i++) {
+            p[i] = offsets[i + 1] - offsets[i];
+        }
+
+        if (arg0->has_null()) {
+            // Copy null flags.
+            return NullableColumn::create(std::move(col_result), down_cast<NullableColumn*>(arg0)->null_column());
+        } else {
+            return col_result;
+        }
     }
 }
 
