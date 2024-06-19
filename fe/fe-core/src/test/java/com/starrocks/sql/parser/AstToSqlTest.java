@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -53,6 +54,25 @@ public class AstToSqlTest extends PlanTestBase {
         }
     }
 
+    @Test
+    void testLargeStringSQL() throws Exception {
+        StringBuilder largeString = new StringBuilder();
+        largeString.append("'");
+        for (int i = 0; i < 50; i++) {
+            largeString.append("^");
+        }
+        largeString.append("&");
+        largeString.append("'");
+        String sql = "select upper(" + largeString + ") from t0";
+        StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        Analyzer.analyze(stmt, connectContext);
+        String afterSql = AstToSQLBuilder.toSQL(stmt);
+        Assert.assertTrue(afterSql, afterSql.contains("^&"));
+
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("^..."));
+    }
+
 
     private static Stream<Arguments> testSqls() {
         List<Arguments> arguments = Lists.newArrayList();
@@ -75,7 +95,6 @@ public class AstToSqlTest extends PlanTestBase {
                         "/*+ SET_USER_VARIABLE(@b= (select max(k) from decimal_t), @ a = 1 + 1) */ * from t1, with_t_0",
                 "/*+ set_var(query_timeout = 1) */" +
                         " /*+ SET_USER_VARIABLE(@b= (select max(k) from decimal_t), @ a = 1 + 1) */"));
-
         return arguments.stream();
     }
 }
