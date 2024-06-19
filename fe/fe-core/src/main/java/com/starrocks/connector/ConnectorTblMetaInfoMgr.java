@@ -20,7 +20,6 @@ import com.google.common.collect.Table;
 import com.google.common.collect.TreeBasedTable;
 import com.google.gson.JsonObject;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,7 +37,7 @@ public class ConnectorTblMetaInfoMgr {
 
     public ConnectorTblMetaInfoMgr() {
         connectorTableMetaInfos = TreeBasedTable.create(Ordering.natural(), String.CASE_INSENSITIVE_ORDER);
-        lock = new FairReentrantReadWriteLock();
+        lock = new ReentrantReadWriteLock();
     }
 
     public ConnectorTableInfo getConnectorTableInfo(String catalog, String db, String tableIdentifier) {
