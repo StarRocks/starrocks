@@ -58,7 +58,7 @@ public:
 
     void clear();
 
-    const int64_t max_version() const { return _max_version; }
+    const int64_t max_rss_rowid() const { return _max_rss_rowid; }
 
 private:
     static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,
@@ -67,8 +67,8 @@ private:
 private:
     // The size can be up to 230K. The performance of std::map may be poor.
     phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>> _map;
-    int64_t _max_version{0};
     int64_t _keys_size{0};
+    uint64_t _max_rss_rowid{0};
 };
 
 } // namespace starrocks::lake

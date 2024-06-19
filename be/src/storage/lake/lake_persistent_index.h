@@ -39,8 +39,8 @@ using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class KeyValueMerger {
 public:
-    explicit KeyValueMerger(const std::string& key, sstable::TableBuilder* builder)
-            : _key(std::move(key)), _builder(builder) {}
+    explicit KeyValueMerger(const std::string& key, sstable::TableBuilder* builder, bool merge_base_level)
+            : _key(std::move(key)), _builder(builder), _merge_base_level(merge_base_level) {}
 
     Status merge(const std::string& key, const std::string& value);
 
@@ -53,6 +53,8 @@ private:
     std::string _key;
     sstable::TableBuilder* _builder;
     std::list<IndexValueWithVer> _index_value_vers;
+    // If do merge base level, that means we can delete NullIndexValue items safely.
+    bool _merge_base_level = false;
 };
 
 // LakePersistentIndex is not thread-safe.
@@ -125,6 +127,9 @@ public:
 
     size_t memory_usage() const override;
 
+    static void pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
+                                        std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
+
 private:
     Status flush_memtable();
 
@@ -153,9 +158,11 @@ private:
     // get sstable's iterator that need to compact and modify txn_log
     static Status prepare_merging_iterator(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log,
                                            std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-                                           std::unique_ptr<sstable::Iterator>* merging_iter_ptr);
+                                           std::unique_ptr<sstable::Iterator>* merging_iter_ptr,
+                                           bool* merge_base_level);
 
-    static Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
+    static Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder,
+                                 bool base_level_merge);
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
