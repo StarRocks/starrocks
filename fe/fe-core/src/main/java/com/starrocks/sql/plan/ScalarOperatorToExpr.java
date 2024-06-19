@@ -252,7 +252,8 @@ public class ScalarOperatorToExpr {
                     d.uncheckedCastTo(type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
-                    return new StringLiteral(literal.getVarchar());
+                    String str = literal.getVarchar();
+                    return StringLiteral.create(str);
                 } else if (type.isBinaryType()) {
                     return new VarBinaryLiteral(literal.getBinary());
                 } else {

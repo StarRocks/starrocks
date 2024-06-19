@@ -1109,6 +1109,6 @@ public class PipeManagerTest {
 
         String sql = "select inspect_all_pipes()";
         String plan = UtFrameUtils.getFragmentPlan(newCtx, sql);
-        Assert.assertTrue(plan.contains("p_inspect"));
+        Assert.assertTrue(plan.contains("name"));
     }
 }
