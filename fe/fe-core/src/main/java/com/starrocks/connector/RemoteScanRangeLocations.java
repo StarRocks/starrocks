@@ -24,6 +24,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.hudi.HudiRemoteFileDesc;
 import com.starrocks.datacache.DataCacheExprRewriter;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheOptions;
@@ -197,7 +198,7 @@ public class RemoteScanRangeLocations {
 
     private void createHudiScanRangeLocations(long partitionId,
                                               RemoteFileInfo partition,
-                                              RemoteFileDesc fileDesc,
+                                              HudiRemoteFileDesc fileDesc,
                                               boolean useJNIReader, DataCacheOptions dataCacheOptions) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -385,7 +386,8 @@ public class RemoteScanRangeLocations {
                 }
                 descTbl.addReferencedPartitions(table, partitionInfos.get(i));
                 for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
-                    if (fileDesc.getLength() == -1 && fileDesc.getHudiDeltaLogs().isEmpty()) {
+                    HudiRemoteFileDesc hudiFiledesc = (HudiRemoteFileDesc) fileDesc;
+                    if (fileDesc.getLength() == -1 && hudiFiledesc.getHudiDeltaLogs().isEmpty()) {
                         String message = "Error: get a empty hudi fileSlice";
                         throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
                     }
@@ -394,8 +396,8 @@ public class RemoteScanRangeLocations {
                         continue;
                     }
                     boolean useJNIReader =
-                            forceJNIReader || (morTable && snapshot && !fileDesc.getHudiDeltaLogs().isEmpty());
-                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                            forceJNIReader || (morTable && snapshot && !hudiFiledesc.getHudiDeltaLogs().isEmpty());
+                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), hudiFiledesc,
                             useJNIReader, dataCacheOptions);
                 }
             }
