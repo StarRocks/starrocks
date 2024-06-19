@@ -60,6 +60,13 @@ public:
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;
+<<<<<<< HEAD
+=======
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override;
+    // Union Iterator will read data in order of segment and we don't need to record the read segment record
+    // Add this function for compatibility
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
+>>>>>>> 28f1369361 ([BugFix] Primary key vertical compaction maybe failed. (#47192))
 
 private:
     std::vector<ChunkIteratorPtr> _children;
