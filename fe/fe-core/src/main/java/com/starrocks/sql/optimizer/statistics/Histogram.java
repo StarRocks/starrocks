@@ -16,8 +16,6 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Comparator;
 import java.util.List;
@@ -26,7 +24,6 @@ import java.util.Optional;
 
 public class Histogram {
 
-    private static final Logger LOG = LogManager.getLogger(Histogram.class);
     private final List<Bucket> buckets;
     private final Map<String, Long> mcv;
 
