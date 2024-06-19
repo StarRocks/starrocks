@@ -312,12 +312,4 @@ public class InsertStmt extends DmlStmt {
         List<Column> columns = collectSelectedFieldsFromQueryStatement();
         return new TableFunctionTable(columns, getTableFunctionProperties(), sessionVariable);
     }
-
-    @Override
-    public boolean needAuditEncryption() {
-        if (tableFunctionAsTargetTable) {
-            return true;
-        }
-        return false;
-    }
 }
