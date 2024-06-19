@@ -911,11 +911,14 @@ public class DefaultCoordinator extends Coordinator {
             return;
         }
 
+        LOG.info("execState: {} params: {}", execState, params);
+
         queryProfile.updateProfile(execState, params);
 
         lock();
         try {
             if (!execState.updateExecStatus(params)) {
+                LOG.info("execState: {} update status failed, status: {}", execState, params.status);
                 return;
             }
 

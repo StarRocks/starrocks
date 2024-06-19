@@ -79,6 +79,10 @@ public class ProfileManager implements MemoryTrackable {
     public static final String DEFAULT_DB = "Default Db";
     public static final String VARIABLES = "Variables";
     public static final String PROFILE_COLLECT_TIME = "Collect Profile Time";
+    public static final String LOAD_TYPE = "Load Type";
+
+    public static final String LOAD_TYPE_STREAM_LOAD = "STREAM_LOAD";
+    public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,

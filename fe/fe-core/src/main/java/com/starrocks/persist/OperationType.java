@@ -686,6 +686,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BUCKET_SIZE = 11140;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_ENABLE_LOAD_PROFILE = 11141;
+
     // external table analyze
 
     @IgnorableOnReplayFailed

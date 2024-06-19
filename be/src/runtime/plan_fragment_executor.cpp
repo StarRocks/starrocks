@@ -387,6 +387,7 @@ void PlanFragmentExecutor::cancel() {
         starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                 _runtime_state->fragment_instance_id());
     }
+    send_report(true);
     if (_stream_load_contexts.size() > 0) {
         for (const auto& stream_load_context : _stream_load_contexts) {
             if (stream_load_context->body_sink) {
