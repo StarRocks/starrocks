@@ -202,6 +202,7 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+        runCtx.setIsLastStmt(true);
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
