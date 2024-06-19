@@ -171,6 +171,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_MUTABLE_BUCKET_NUM = "mutable_bucket_num";
 
+    public static final String PROPERTIES_ENABLE_LOAD_PROFILE = "enable_load_profile";
+
     public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
 
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
@@ -443,6 +445,14 @@ public class PropertyAnalyzer {
         } else {
             throw new SemanticException("Mutable bucket num is not set");
         }
+    }
+
+    public static boolean analyzeEnableLoadProfile(Map<String, String> properties) {
+        boolean enableLoadProfile = false;
+        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_LOAD_PROFILE)) {
+            enableLoadProfile = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_LOAD_PROFILE));
+        }
+        return enableLoadProfile;
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {

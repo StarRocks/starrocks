@@ -823,6 +823,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_BUCKET_SIZE:
                 case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
+                case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -1732,6 +1733,10 @@ public class EditLog {
 
     public void logModifyMutableBucketNum(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, info);
+    }
+
+    public void logModifyEnableLoadProfile(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {

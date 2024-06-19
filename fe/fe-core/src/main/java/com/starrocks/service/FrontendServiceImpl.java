@@ -1650,20 +1650,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
 
-            if (plan.query_options.enable_profile) {
-                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
-                        getSyncSteamLoadTaskByTxnId(request.getTxnId());
-                if (streamLoadTask == null) {
-                    throw new UserException("can not find stream load task by txnId " + request.getTxnId());
-                }
-
-                streamLoadTask.setTUniqueId(request.getLoadId());
-
-                Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
-                streamLoadTask.setCoordinator(coord);
-
-                QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                    getSyncSteamLoadTaskByTxnId(request.getTxnId());
+            if (streamLoadTask == null) {
+                throw new UserException("can not find stream load task by txnId " + request.getTxnId());
             }
+
+            streamLoadTask.setTUniqueId(request.getLoadId());
+
+            Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
+            streamLoadTask.setCoordinator(coord);
+
+            QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
 
             plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
             // add table indexes to transaction state

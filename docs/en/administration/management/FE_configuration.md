@@ -4549,9 +4549,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
-##### stream_load_profile_collect_second
+##### load_profile_collect_threshold_second
 
-- Default: 10
+- Default: 0
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes

@@ -91,7 +91,7 @@ public class QueryRuntimeProfile {
     /**
      * True indicates that the profile has been reported.
      * <p> When {@link SessionVariable#isEnableLoadProfile()} is enabled,
-     * if the time costs of stream load is less than {@link Config#stream_load_profile_collect_second},
+     * if the time costs of stream load is less than {@link Config#stream_load_profile_collect_threshold_second},
      * the profile will not be reported to FE to reduce the overhead of profile under high-frequency import
      */
     private boolean profileAlreadyReported = false;
