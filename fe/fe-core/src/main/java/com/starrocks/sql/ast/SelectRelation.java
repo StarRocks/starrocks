@@ -311,4 +311,9 @@ public class SelectRelation extends QueryRelation {
     public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
         return generatedExprToColumnRef;
     }
+
+    @Override
+    public boolean needAuditEncryption() {
+        return relation.needAuditEncryption();
+    }
 }
