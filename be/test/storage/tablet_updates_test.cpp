@@ -1538,6 +1538,27 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+
+    {
+        _tablet2 = create_tablet(rand(), rand());
+        std::vector<std::vector<int64_t>> keys_by_segment;
+        keys_by_segment.resize(2);
+        for (int i = 0; i < 50; i++) {
+            keys_by_segment[0].emplace_back(i);
+        }
+        for (int i = 51; i < 100; i++) {
+            keys_by_segment[1].emplace_back(i);
+        }
+        auto rs1 = create_rowset_with_mutiple_segments(_tablet2, keys_by_segment);
+        rs1->rowset_meta()->set_segments_overlap_pb(NONOVERLAPPING);
+        ASSERT_TRUE(_tablet2->rowset_commit(2, rs1).ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet2->updates()->compaction(_compaction_mem_tracker.get()).ok());
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        ASSERT_EQ(_tablet2->updates()->num_rowsets(), 1);
+        ASSERT_EQ(_tablet2->updates()->version_history_count(), 3);
+    }
 }
 
 void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_persistent_index) {
