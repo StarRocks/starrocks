@@ -3506,6 +3506,7 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         // Disable fail point and reset error
         trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
         fp->setMode(trigger_mode);
+        _tablet->updates()->reset_update_state();
         _tablet->updates()->reset_error();
         _tablet->updates()->check_for_apply();
 
@@ -3552,15 +3553,18 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     // 14. get del_vec failed
     test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
 
-    fp_name = "tablet_apply_tablet_drop";
+    // 15. write meta failed
+    test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", 16, N / 2);
+
+    // 16. cache del vec failed
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp_name = "tablet_meta_manager_apply_rowset_manager_fake_ok";
     fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
     fp->setMode(trigger_mode);
-    auto rs1 = create_rowset(_tablet, keys, &deletes);
-    ASSERT_TRUE(_tablet->rowset_commit(16, rs1).ok());
-    ASSERT_EQ(16, _tablet->updates()->max_version());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(!_tablet->updates()->is_error());
+    test_fail_point("tablet_apply_cache_del_vec_failed", 17, N / 2);
+
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
 }
 
 TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}

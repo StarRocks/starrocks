@@ -905,7 +905,6 @@ DEFINE_FAIL_POINT(tablet_apply_index_replace_failed);
 DEFINE_FAIL_POINT(tablet_apply_index_commit_failed);
 DEFINE_FAIL_POINT(tablet_apply_get_pindex_meta_failed);
 DEFINE_FAIL_POINT(tablet_apply_get_del_vec_failed);
-DEFINE_FAIL_POINT(tablet_apply_write_meta_failed);
 DEFINE_FAIL_POINT(tablet_apply_cache_del_vec_failed);
 DEFINE_FAIL_POINT(tablet_apply_tablet_drop);
 DEFINE_FAIL_POINT(tablet_apply_load_compaction_state_failed);
@@ -954,9 +953,6 @@ void TabletUpdates::do_apply() {
         }
         LOG(INFO) << "apply status:" << apply_st;
         first = false;
-        if (_error) {
-            break;
-        }
         // submit a delay apply task to storage_engine
         if (config::enable_retry_apply && _is_tolerable(apply_st) && !apply_st.ok()) {
             auto time_point =
@@ -974,9 +970,10 @@ void TabletUpdates::do_apply() {
                                                       apply_st.to_string());
                 LOG(ERROR) << msg;
                 _set_error(msg);
-            }
-            if (version_info_apply->compaction) {
-                _compaction_running = false;
+                if (version_info_apply->compaction) {
+                    _compaction_running = false;
+                }
+                break;
             }
         }
     }
@@ -1628,6 +1625,12 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     StarRocksMetrics::instance()->update_del_vector_deletes_new.increment(new_del);
     int64_t t_delvec = MonotonicMillis();
 
+    // NOTE:
+    // If the apply fails at the following stages, an intolerable error must be returned right now.
+    // Because the metadata may have already been persisted.
+    // If you need to return a tolerable error, please make sure the following:
+    //   1. The latest meta should be roll back.
+    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
     {
         std::lock_guard wl(_lock);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_tablet_drop, { _edit_version_infos.clear(); });
@@ -1675,6 +1678,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         for (auto& delvec_pair : new_del_vecs) {
             tsid.segment_id = delvec_pair.first;
             st = manager->set_cached_del_vec(tsid, delvec_pair.second);
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_cache_del_vec_failed, {
+                st = Status::InternalError("inject tablet_apply_cache_del_vec_failed");
+                manager->clear_cached_del_vec({tsid});
+            });
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_rowset_commit error: set cached delvec failed: $0 $1",
                                                       st.to_string(), _debug_string(false));
@@ -5598,6 +5605,24 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
     }
+
+    // 3. reset rowset_stats
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        _rowset_stats.clear();
+        for (auto& [rsid, rowset] : _rowsets) {
+            auto stats = std::make_unique<RowsetStats>();
+            stats->num_segments = rowset->num_segments();
+            stats->num_rows = rowset->num_rows();
+            stats->byte_size = rowset->data_disk_size();
+            stats->num_dels = 0;
+            stats->partial_update_by_column = rowset->is_column_mode_partial_update();
+            DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
+            _calc_compaction_score(stats.get());
+            _rowset_stats.emplace(rsid, std::move(stats));
+        }
+    }
+    _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
 }
 
 } // namespace starrocks
