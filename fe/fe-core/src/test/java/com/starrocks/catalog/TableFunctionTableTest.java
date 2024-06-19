@@ -175,57 +175,6 @@ public class TableFunctionTableTest {
                         "'hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2'",
                 () -> new TableFunctionTable(properties));
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testIllegalDelimiter() throws DdlException {
-        {
-            Map<String, String> properties = newProperties();
-            properties.put("csv.row_delimiter", "0123456789012345678901234567890123456789012345678901234567890");
-            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
-                    () -> new TableFunctionTable(properties));
-            properties.put("csv.row_delimiter", "");
-            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
-                    () -> new TableFunctionTable(properties));
-        }
-
-        {
-            Map<String, String> properties = newProperties();
-            properties.put("csv.column_separator", "0123456789012345678901234567890123456789" +
-                    "012345678901234567890");
-            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "The valid bytes length for 'csv.column_separator' is [1, 50]",
-                    () -> new TableFunctionTable(properties));
-
-            properties.put("csv.column_separator", "");
-            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "The valid bytes length for 'csv.column_separator' is [1, 50]",
-                    () -> new TableFunctionTable(properties));
-        }
-    }
-
-    @Test
-    public void testIllegalCSVTrimSpace() throws DdlException {
-        new MockUp<HdfsUtil>() {
-            @Mock
-            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
-            }
-        };
-
-        Map<String, String> properties = newProperties();
-        properties.put("csv.trim_space", "FALSE");
-
-        ExceptionChecker.expectThrowsNoException(() -> new TableFunctionTable(properties));
-
-        properties.put("csv.trim_space", "FALS");
-
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "illegal value of csv.trim_space: FALS, only true/false allowed",
-                () -> new TableFunctionTable(properties));
-    }
 
     @Test
     public void testFilesCredentialDesensitization() {
@@ -240,5 +189,4 @@ public class TableFunctionTableTest {
                 "FROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
                 "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")", desensitizationSql);
     }
->>>>>>> 665ad0861a ([Enhancement] Files table function support credential desensitization (#46893))
 }
