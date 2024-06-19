@@ -355,7 +355,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     dbName, tableName, predicate);
         }
 
-        List<RemoteFileDesc> remoteFileDescs = Lists.newArrayList(RemoteFileDesc.createIcebergRemoteFileDesc(icebergScanTasks));
+        List<RemoteFileDesc> remoteFileDescs = Lists.newArrayList(
+                IcebergRemoteFileDesc.createIcebergRemoteFileDesc(icebergScanTasks));
         remoteFileInfo.setFiles(remoteFileDescs);
 
         return Lists.newArrayList(remoteFileInfo);

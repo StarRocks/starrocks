@@ -29,6 +29,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hudi.HudiRemoteFileDesc;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -267,7 +268,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             {
                 RemoteFileInfo fileInfo = hudiPartitions.get(i);
                 for (RemoteFileDesc desc : fileInfo.getFiles()) {
-                    HoodieInstant instant = desc.getHudiInstant();
+                    HudiRemoteFileDesc hudiDesc = (HudiRemoteFileDesc) desc;
+                    HoodieInstant instant = hudiDesc.getHudiInstant();
                     if (instant == null) {
                         continue;
                     }
