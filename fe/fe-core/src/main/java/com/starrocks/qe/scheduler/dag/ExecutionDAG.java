@@ -377,6 +377,8 @@ public class ExecutionDAG {
     private void connectFragmentToDestFragments(ExecutionFragment execFragment) throws SchedulerException {
         if (execFragment.getPlanFragment() instanceof MultiCastPlanFragment) {
             connectMultiCastFragmentToDestFragments(execFragment, (MultiCastPlanFragment) execFragment.getPlanFragment());
+        } else if (execFragment.getPlanFragment() instanceof SplitPlanFragment) {
+            connectSplitFragmentToDestFragments(execFragment, (SplitPlanFragment) execFragment.getPlanFragment());
         } else {
             connectNormalFragmentToDestFragments(execFragment);
         }
@@ -525,8 +527,8 @@ public class ExecutionDAG {
         SplitCastDataSink splitSink = (SplitCastDataSink) fragment.getSink();
 
         // set # of senders
-        int num_destinations = fragment.getDestFragmentList().size();
-        for (int i = 0; i < num_destinations; i++) {
+        int numDestinations = fragment.getDestFragmentList().size();
+        for (int i = 0; i < numDestinations; i++) {
             PlanFragment destFragment = fragment.getDestFragmentList().get(i);
 
             Preconditions.checkState(destFragment != null);

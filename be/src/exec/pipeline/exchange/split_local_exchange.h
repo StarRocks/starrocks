@@ -24,7 +24,10 @@ class SplitLocalExchangeSinkOperator;
 class SplitLocalExchanger {
 public:
     SplitLocalExchanger(int num_consumers, std::vector<ExprContext*>& split_expr_ctxs, size_t chunk_size)
-            : _split_expr_ctxs(std::move(split_expr_ctxs)), _buffer(num_consumers), _num_consumers(num_consumers) {}
+            : _split_expr_ctxs(std::move(split_expr_ctxs)),
+              _buffer(num_consumers),
+              _num_consumers(num_consumers),
+              _opened_source_opcount(num_consumers) {}
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state);
@@ -53,7 +56,7 @@ private:
     // every source can have dop operators
     std::vector<int32_t> _opened_source_opcount;
 
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
 };
 
 // ===== source op =====
