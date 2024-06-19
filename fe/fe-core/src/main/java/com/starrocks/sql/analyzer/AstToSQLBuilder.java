@@ -388,8 +388,6 @@ public class AstToSQLBuilder {
             if (insert.useTableFunctionAsTargetTable()) {
                 sb.append(visitFileTableFunction(
                         new FileTableFunctionRelation(insert.getTableFunctionProperties(), NodePosition.ZERO), context));
-            } else if (insert.useBlackHoleTableAsTargetTable()) {
-                sb.append("blackhole()");
             } else {
                 sb.append(insert.getTableName().toSql());
             }
