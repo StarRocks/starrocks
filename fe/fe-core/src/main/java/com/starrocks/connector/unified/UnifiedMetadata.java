@@ -36,6 +36,7 @@ import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -116,6 +117,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     private ConnectorMetadata metadataOfTable(String dbName, String tblName) {
         Table.TableType type = getTableType(dbName, tblName);
+        if (!metadataMap.containsKey(type)) {
+            throw new SemanticException("Unified catalog doesn't support " + type.name());
+        }
         return metadataMap.get(type);
     }
 
@@ -123,6 +127,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
         Table.TableType type = getTableType(table);
         if (table.isHiveView()) {
             type = HIVE;
+        }
+        if (!metadataMap.containsKey(type)) {
+            throw new SemanticException("Unified catalog doesn't support " + type.name());
         }
         return metadataMap.get(type);
     }
