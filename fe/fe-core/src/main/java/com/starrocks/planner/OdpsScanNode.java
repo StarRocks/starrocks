@@ -26,6 +26,7 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.odps.OdpsRemoteFileDesc;
 import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
@@ -89,7 +90,7 @@ public class OdpsScanNode extends ScanNode {
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 table.getCatalogName(), table, partitionKeys, -1, predicate, fieldNames, -1);
-        RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+        OdpsRemoteFileDesc remoteFileDesc = (OdpsRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         OdpsSplitsInfo splitsInfo = remoteFileDesc.getOdpsSplitsInfo();
         if (splitsInfo.isEmpty()) {
             LOG.warn("There is no odps splits on {}.{} and predicate: [{}]",

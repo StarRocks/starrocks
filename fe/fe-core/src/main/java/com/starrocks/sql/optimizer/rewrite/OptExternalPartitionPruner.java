@@ -34,10 +34,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
+import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
@@ -451,7 +451,7 @@ public class OptExternalPartitionPruner {
                 return;
             }
 
-            RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+            PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
             if (remoteFileDesc == null) {
                 return;
             }

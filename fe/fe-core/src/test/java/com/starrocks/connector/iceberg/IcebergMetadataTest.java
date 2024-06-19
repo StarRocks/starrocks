@@ -748,7 +748,8 @@ public class IcebergMetadataTest extends TableTestBase {
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
         List<RemoteFileInfo> res = metadata.getRemoteFileInfos(
                 icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 10);
-        Assert.assertEquals(7, res.get(0).getFiles().get(0).getIcebergScanTasks().stream()
+        IcebergRemoteFileDesc fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
+        Assert.assertEquals(7, fileDesc.getIcebergScanTasks().stream()
                 .map(x -> x.file().recordCount()).reduce(0L, Long::sum), 0.001);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert();
@@ -759,8 +760,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(2));
         res = metadata.getRemoteFileInfos(
                 icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 10);
-        Assert.assertEquals(1, res.get(0).getFiles().get(0).getIcebergScanTasks().size());
-        Assert.assertEquals(3, res.get(0).getFiles().get(0).getIcebergScanTasks().get(0).file().recordCount());
+        fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
+        Assert.assertEquals(1, fileDesc.getIcebergScanTasks().size());
+        Assert.assertEquals(3, fileDesc.getIcebergScanTasks().get(0).file().recordCount());
 
         PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1, null);
         Assert.assertEquals("Filter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
