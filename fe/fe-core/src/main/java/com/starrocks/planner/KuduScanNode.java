@@ -23,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.kudu.KuduRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -90,7 +91,7 @@ public class KuduScanNode extends ScanNode {
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 kuduTable.getCatalogName(), kuduTable, null, -1, predicate, fieldNames, -1);
-        RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+        KuduRemoteFileDesc remoteFileDesc = (KuduRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<KuduScanToken> tokens = remoteFileDesc.getKuduScanTokens();
         if (tokens.isEmpty()) {
             LOG.warn("There is no tokens on {}.{} and predicate: [{}]",

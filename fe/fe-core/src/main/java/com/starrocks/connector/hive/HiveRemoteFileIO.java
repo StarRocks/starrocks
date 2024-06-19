@@ -105,8 +105,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                     BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                     List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
                     RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
-                            locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs),
-                            ImmutableList.of());
+                            locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs));
                     if (expandWildCards) {
                         fileDesc.setFullPath(locatedFileStatus.getPath().toString());
                     }

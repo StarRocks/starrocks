@@ -40,7 +40,6 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
@@ -184,7 +183,7 @@ public class MockedBase {
         when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
 
         RemoteFileInfo fileInfo = new RemoteFileInfo();
-        fileInfo.setFiles(ImmutableList.of(RemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));
+        fileInfo.setFiles(ImmutableList.of(OdpsRemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));
         when(metadataMgr.getRemoteFileInfos(any(), any(), any(), anyLong(), any(), any(), anyLong())).thenReturn(
                 ImmutableList.of(fileInfo));
         when(odpsMetadata.getRemoteFileInfos(any(), any(), anyLong(), any(), any(), anyLong(), any())).thenReturn(

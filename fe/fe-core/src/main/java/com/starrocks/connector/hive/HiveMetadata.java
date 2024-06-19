@@ -278,8 +278,7 @@ public class HiveMetadata implements ConnectorMetadata {
             String locateName = fileStatus.getPath().toUri().getPath();
             String fileName = PartitionUtil.getSuffixName(paths.get(i).toUri().getPath(), locateName);
             RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", fileStatus.getLen(),
-                    fileStatus.getModificationTime(), ImmutableList.of(),
-                    ImmutableList.of());
+                    fileStatus.getModificationTime(), ImmutableList.of());
             RemoteFileInfo.Builder builder = RemoteFileInfo.builder()
                     .setFormat(partition.getInputFormat())
                     .setFullPath(partition.getFullPath())

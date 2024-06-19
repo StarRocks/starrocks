@@ -275,7 +275,7 @@ public class KuduMetadata implements ConnectorMetadata {
         addConstraintPredicates(nativeTable, builder, predicate);
         List<KuduScanToken> tokens = builder.build();
         List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                RemoteFileDesc.createKuduRemoteFileDesc(tokens));
+                KuduRemoteFileDesc.createKuduRemoteFileDesc(tokens));
         remoteFileInfo.setFiles(remoteFileDescs);
         return Lists.newArrayList(remoteFileInfo);
     }
