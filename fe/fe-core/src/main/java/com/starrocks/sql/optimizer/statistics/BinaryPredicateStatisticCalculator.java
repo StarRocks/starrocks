@@ -113,9 +113,9 @@ public class BinaryPredicateStatisticCalculator {
             Histogram hist = columnStatistic.getHistogram();
             Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
 
-            // If there is a constant key in mcv, we use the mvc count to estimate the row count.
-            // If it is not in mcv but in a bucket, we use the bucket info to estimate the row count.
-            // If it is not in mcv and not in any bucket, we combine hist row count, total row count and bucket number
+            // If there is a constant key in MCV, we use the MCV count to estimate the row count.
+            // If it is not in MCV but in a bucket, we use the bucket info to estimate the row count.
+            // If it is not in MCV and not in any bucket, we combine hist row count, total row count and bucket number
             // to estimate the row count.
             if (histogramTopN.containsKey(constantOperator.toString())) {
                 double rowCountInHistogram = histogramTopN.get(constantOperator.toString());
