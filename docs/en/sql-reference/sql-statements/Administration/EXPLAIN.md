@@ -22,8 +22,9 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 
 :::tip
 
-The level of detail in the execution plan: LOGICAL < EXPLAIN < VERBOSE < COSTS.<br> 
-Typically, using EXPLAIN is sufficient, the VERBOSE and COSTS will print a lot of internal information, mainly used for debugging the execution plan
+The level of execution plan detail returned: EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS.
+
+In most cases, using EXPLAIN is sufficient. EXPLAIN VERBOSE and EXPLAIN COSTS will print a lot of internal information, which is mainly used for debugging the execution plan.
 
 :::
 
@@ -32,8 +33,8 @@ Typically, using EXPLAIN is sufficient, the VERBOSE and COSTS will print a lot o
 | **Parameter** | **Description**                                            |
 | ------------- | ---------------------------------------------------------- |
 | LOGICAL       | Shows the simple logical execution plans.                  |
-| VERBOSE       | Shows the detailed logical execution plans of data types, nullable information, and optimization strategy. |
-| COSTS         | Shows the detailed logical execution plans of column statisitics. |
+| VERBOSE       | Shows the detailed logical execution plans, including data types, nullable information, and optimization strategy. |
+| COSTS         | Shows the detailed logical execution plans, including column statisitics. |
 | query         | The query statement whose execution plan you want to view. |
 
 ## Return value
