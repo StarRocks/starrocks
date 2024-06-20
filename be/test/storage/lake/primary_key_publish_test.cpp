@@ -988,7 +988,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_cloud_native_index_rebuild) {
                                                        .build());
             ASSERT_OK(delta_writer->open());
             ASSERT_OK(delta_writer->write(*chunk_vec[i], indexes_vec[i].data(), indexes_vec[i].size()));
-            auto txn_log_st = delta_writer->finish_with_txnlog();
+            auto txn_log_st = delta_writer->finish();
             ASSERT_OK(txn_log_st);
             delta_writer->close();
             // Publish version
