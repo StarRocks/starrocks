@@ -16,20 +16,21 @@
 # limitations under the License.
 ###########################################################################
 
-import trino
+from pyhive import hive
 
-class TrinoLib(object):
-    """TrinoLib class"""
+
+class HiveLib(object):
+    """HiveLib class"""
 
     def __init__(self):
         self.connector = None
 
     def connect(self, query_dict):
         if self.connector is None:
-            self.connector = trino.dbapi.connect(
+            self.connector = hive.Connection(
                 host=query_dict["host"],
                 port=query_dict["port"],
-                user=query_dict["user"],
+                username=query_dict["user"],
             )
 
     def close(self):

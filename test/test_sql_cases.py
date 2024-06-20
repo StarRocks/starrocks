@@ -84,6 +84,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """set up"""
         super().setUp()
         self.connect_starrocks()
+        self.connect_trino()
+        self.connect_hive()
 
     def tearDown(self):
         """tear down"""
@@ -102,6 +104,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         self.close_starrocks()
         self.close_trino()
+        self.close_hive()
 
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
@@ -164,6 +167,22 @@ Start to run: %s
 
                 actual_res = self.trino_execute_sql(sql)
                 self_print("[TRINO]: %s" % sql)
+
+                if record_mode:
+                    self.treatment_record_res(sql, actual_res)
+
+                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+                # pretreatment actual res
+                actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+            elif sql.startswith(sr_sql_lib.HIVE_FLAG):
+                sql = sql[len(sr_sql_lib.HIVE_FLAG):]
+                # analyse var set
+                var, sql = self.analyse_var(sql)
+
+                actual_res = self.hive_execute_sql(sql)
+                self_print("[HIVE]: %s" % sql)
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)

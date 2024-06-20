@@ -53,6 +53,7 @@ from lib import data_insert_lib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
 from lib.trino_lib import TrinoLib
+from lib.hive_lib import HiveLib
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
 root_path = os.path.abspath(os.path.join(lib_path, "../"))
@@ -113,6 +114,7 @@ RESULT_FLAG = "-- result:"
 RESULT_END_FLAT = "-- !result"
 SHELL_FLAG = "shell: "
 TRINO_FLAG = "trino: "
+HIVE_FLAG = "hive: "
 FUNCTION_FLAG = "function: "
 NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
@@ -132,6 +134,7 @@ class StarrocksSQLApiLib(object):
         self.root_path = root_path
         self.mysql_lib = MysqlLib()
         self.trino_lib = TrinoLib()
+        self.hive_lib = HiveLib()
         self.be_num = 0
         self.mysql_host = ""
         self.mysql_port = ""
@@ -143,6 +146,16 @@ class StarrocksSQLApiLib(object):
         self.cluster_path = ""
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
+
+        # trino client config
+        self.trino_host = ""
+        self.trino_port = ""
+        self.trino_user = ""
+
+        # hive client config
+        self.hive_host = ""
+        self.hive_port = ""
+        self.hive_user = ""
 
         # for t/r record
         self.case_info = None
@@ -373,6 +386,16 @@ class StarrocksSQLApiLib(object):
         self.host_password = config_parser.get("mysql-client", "host_password")
         self.cluster_path = config_parser.get("mysql-client", "cluster_path")
 
+        # parse trino config
+        self.trino_host = config_parser.get("trino-client", "host")
+        self.trino_port = config_parser.get("trino-client", "port")
+        self.trino_user = config_parser.get("trino-client", "user")
+
+        # parse hive config
+        self.hive_host = config_parser.get("hive-client", "host")
+        self.hive_port = config_parser.get("hive-client", "port")
+        self.hive_user = config_parser.get("hive-client", "user")
+
         # read replace info
         for rep_key, rep_value in config_parser.items("replace"):
             self.__setattr__(rep_key, rep_value)
@@ -397,11 +420,30 @@ class StarrocksSQLApiLib(object):
         }
         self.mysql_lib.connect(mysql_dict)
 
+    def connect_trino(self):
+        trino_dict = {
+            "host": self.trino_host,
+            "port": self.trino_port,
+            "user": self.trino_user,
+        }
+        self.trino_lib.connect(trino_dict)
+
+    def connect_hive(self):
+        hive_dict = {
+            "host": self.hive_host,
+            "port": self.hive_port,
+            "user": self.hive_user,
+        }
+        self.hive_lib.connect(hive_dict)
+
     def close_starrocks(self):
         self.mysql_lib.close()
 
     def close_trino(self):
         self.trino_lib.close()
+
+    def close_hive(self):
+        self.hive_lib.close()
 
     def create_database(self, database_name, tolerate_exist=False):
         """
@@ -551,12 +593,12 @@ class StarrocksSQLApiLib(object):
             print("unknown error", e)
             raise
 
-    def trino_execute_sql(self, sql, ori=False):
-        """execute query"""
+    def trino_execute_sql(self, sql):
+        """trino execute query"""
         try:
-            print(sql)
-            self.trino_lib.connect()
             cursor = self.trino_lib.connector.cursor()
+            if sql.endswith(";"):
+                sql = sql[:-1]
             cursor.execute(sql)
             result = cursor.fetchall()
 
@@ -566,8 +608,25 @@ class StarrocksSQLApiLib(object):
 
             return {"status": True, "result": "\n".join(result), "msg": "OK"}
 
-        except _mysql.Error as e:
-            return {"status": False, "msg": e.args}
+        except Exception as e:
+            print("unknown error", e)
+            raise
+
+    def hive_execute_sql(self, sql):
+        """hive execute query"""
+        try:
+            cursor = self.hive_lib.connector.cursor()
+            if sql.endswith(";"):
+                sql = sql[:-1]
+            cursor.execute(sql)
+            result = cursor.fetchall()
+
+            for i in range(len(result)):
+                row = [str(item) for item in result[i]]
+                result[i] = '\t'.join(row)
+
+            return {"status": True, "result": "\n".join(result), "msg": "OK"}
+
         except Exception as e:
             print("unknown error", e)
             raise
