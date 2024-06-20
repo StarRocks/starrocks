@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```SQL
-EXPLAIN <query>
+EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 -- 显示简要的逻辑执行计划
 EXPLAIN LOGICAL <query>
 -- 显示更详细（更多数据类型，nullable信息，优化策略）的逻辑执行计划
@@ -28,8 +28,9 @@ EXPLAIN COSTS <query>
 
 :::tip
 
-执行计划详细程度：LOGICAL < EXPLAIN < VERBOSE < COSTS. <br>
-通常使用 `EXPLAIN` 即可，VERBOSE 和 COSTS 会打印很多冗余信息，主要用于调试计划。
+执行计划详细程度：EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS。
+
+通常情况下使用 EXPLAIN 即可，EXPLAIN VERBOSE 和 EXPLAIN COSTS 会打印大量冗余信息，主要用于调试计划。
 
 :::
 
@@ -37,6 +38,9 @@ EXPLAIN COSTS <query>
 
 | **参数** | **说明**                                                   |
 | -------- | ---------------------------------------------------------- |
+| LOGICAL  | 显示简要的逻辑执行计划。                  |
+| VERBOSE  | 显示详细的逻辑执行计划，包括数据类型，nullable 信息，优化策略等。 |
+| COSTS    | 显示详细的逻辑执行计划，包括统计信息。 |
 | query    | 需要查看执行计划的查询语句。                                  |
 
 ## 返回
@@ -157,6 +161,7 @@ MySQL tpcds> explain select
 ```
 
 ### EXPLAIN LOGICAL
+
 ```Plain
 MySQL tpcds> explain logical select 
     sr_customer_sk as ctr_customer_sk, 
@@ -200,6 +205,7 @@ MySQL tpcds> explain logical select
 ```
 
 ### EXPLAIN VERBOSE
+
 ```Plain
 MySQL tpcds> explain verbose select 
     sr_customer_sk as ctr_customer_sk, 
@@ -313,6 +319,7 @@ MySQL tpcds> explain verbose select
 ```
 
 ### EXPLAIN COSTS
+
 ```Plain
 +---------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Explain String                                                                                                                                          |
