@@ -237,6 +237,8 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
         WriteCacheOptions options{};
         options.async = _enable_async_populate_mode;
         options.evict_probability = _datacache_evict_probability;
+        options.priority = _priority;
+        options.ttl_seconds = _ttl_seconds;
         const int64_t write_size = std::min(_block_size, write_end_offset - write_offset_cursor);
 
         SharedBufferPtr sb = nullptr;
@@ -431,6 +433,8 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         WriteCacheOptions options;
         options.async = _enable_async_populate_mode;
         options.evict_probability = _datacache_evict_probability;
+        options.priority = _priority;
+        options.ttl_seconds = _ttl_seconds;
         if (options.async) {
             auto cb = [sb](int code, const std::string& msg) {
                 // We only need to keep the shared buffer pointer
