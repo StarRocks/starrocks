@@ -284,7 +284,7 @@ Parameter description:
 - Collection type
   - FULL: indicates full collection.
   - SAMPLE: indicates sampled collection.
-  - If no collection type is specified, full collection is used by default.
+  - If no collection type is specified, sample collection is used by default.
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
