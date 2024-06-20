@@ -1071,5 +1071,5 @@ public class ColocateTableBalancerTest {
         Assert.assertFalse(balancer.isSystemStable(infoService));
         Thread.sleep(1001L);
         Assert.assertTrue(balancer.isSystemStable(infoService));
-   }
+    }
 }
