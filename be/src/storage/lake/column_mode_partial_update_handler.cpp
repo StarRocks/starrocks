@@ -72,8 +72,9 @@ void ColumnModePartialUpdateHandler::_release_upserts(uint32_t start_idx, uint32
     for (uint32_t idx = start_idx; idx < _upserts.size() && idx < end_idx; idx++) {
         if (_upserts[idx] != nullptr) {
             if (_upserts[idx]->is_last(idx)) {
-                _memory_usage -= _upserts[idx]->upserts->memory_usage();
-                _tracker->release(_upserts[idx]->upserts->memory_usage());
+                const auto upserts_memory_usage = _upserts[idx]->upserts->memory_usage();
+                _memory_usage -= upserts_memory_usage;
+                _tracker->release(upserts_memory_usage);
             }
             _upserts[idx].reset();
         }
@@ -154,8 +155,9 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
     // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
     // So we try build slice in advance in here to make sure the correctness of memory statistics
     header_ptr->upserts->raw_data();
-    _tracker->consume(header_ptr->upserts->memory_usage());
-    _memory_usage += header_ptr->upserts->memory_usage();
+    const auto upserts_memory_usage = header_ptr->upserts->memory_usage();
+    _tracker->consume(upserts_memory_usage);
+    _memory_usage += upserts_memory_usage;
 
     return Status::OK();
 }
