@@ -455,6 +455,9 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
+        rm -f ${STARROCKS_OUTPUT}/fe/lib/hbase-protocol-shaded-2.4.18.jar
+        rm -f ${STARROCKS_OUTPUT}/fe/lib/htrace-core4-4.2.0-incubating.jar
+        rm -f ${STARROCKS_OUTPUT}/fe/lib/jackson-mapper-asl-1.9.13.jar
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
@@ -541,9 +544,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
-    rm -f ${STARROCKS_OUTPUT}/fe/lib/hbase-protocol-shaded-2.4.18.jar
-    rm -f ${STARROCKS_OUTPUT}/fe/lib/htrace-core4-4.2.0-incubating.jar
-    rm -f ${STARROCKS_OUTPUT}/fe/lib/jackson-mapper-asl-1.9.13.jar
 
     MSG="${MSG} √ ${MSG_BE}"
 fi
