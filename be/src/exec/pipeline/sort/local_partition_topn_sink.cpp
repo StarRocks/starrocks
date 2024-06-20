@@ -39,6 +39,12 @@ Status LocalPartitionTopnSinkOperator::push_chunk(RuntimeState* state, const Chu
 
 Status LocalPartitionTopnSinkOperator::set_finishing(RuntimeState* state) {
     ONCE_DETECT(_set_finishing_once);
+    DeferOp op ([this]() { _is_finished = true; } );
+
+    if (state->is_cancelled()) {
+        return Status::Cancelled("runtime state is cancelled");
+    }
+
     RETURN_IF_ERROR(_partition_topn_ctx->transfer_all_chunks_from_partitioner_to_sorters(state));
     _partition_topn_ctx->sink_complete();
     _unique_metrics->add_info_string("IsPassThrough", _partition_topn_ctx->is_passthrough() ? "Yes" : "No");

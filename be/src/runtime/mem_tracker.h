@@ -148,6 +148,22 @@ public:
         }
     }
 
+    void release_single(int64_t bytes) {
+        if (bytes <= 0) {
+            if (bytes < 0) consume_single(-bytes);
+            return;
+        }
+        _consumption->add(-bytes);
+    }
+
+    void consume_single(int64_t bytes) {
+        if (bytes <= 0) {
+            if (bytes < 0 ) release_single(-bytes);
+            return;
+        }
+        _consumption->add(bytes);
+    }
+
     void consume(int64_t bytes) {
         if (bytes <= 0) {
             if (bytes < 0) release(-bytes);
