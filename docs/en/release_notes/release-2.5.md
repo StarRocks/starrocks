@@ -4,6 +4,22 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+## 2.5.22
+
+Release date: June 20, 2024
+
+### Improvements
+
+- Optimized a partition check logic used for building query execution plan, significantly reducing the time consumption of complex queries that involve multiple tables. [#46781](https://github.com/StarRocks/starrocks/pull/46781)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Function Call does not handle child errors correctly. [#42590](https://github.com/StarRocks/starrocks/pull/42590)
+- The internal data statistics were not cleaned up regularly, causing inaccurate estimated information and thereby inefficient query plans. This will cause a drop in query performance and a surge in memory usage. [#45839](https://github.com/StarRocks/starrocks/pull/45839)
+- Using a stale column histogram may lead to the Division by Zero exception. [#45614](https://github.com/StarRocks/starrocks/pull/45614)
+
 ## 2.5.21
 
 Release date: May 15, 2024

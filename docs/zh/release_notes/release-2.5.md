@@ -4,6 +4,22 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.5
 
+## 2.5.22
+
+发布日期：2024 年 6 月 20 日
+
+### 功能优化
+
+- 优化一个查询在建执行计划时的分区检查逻辑，对于涉及很多表的复杂查询，能减少较多时间。[#46781](https://github.com/StarRocks/starrocks/pull/46781)
+
+### 问题修复
+
+修复了如下问题：
+
+- 函数调用中没有处理内部子逻辑的错误。[#42590](https://github.com/StarRocks/starrocks/pull/42590)
+- 如果内部数据统计没有定期清理，将导致预估信息不准确，进而导致构建了不合理的查询计划，使得查询变慢、内存使用增加。[#45839](https://github.com/StarRocks/starrocks/pull/45839)
+- 使用非最新的直方图统计信息，可能会导致除零错误。（用户可以通过使用 Min/Max 的估计统计来避免）。[#45614](https://github.com/StarRocks/starrocks/pull/45614)
+
 ## 2.5.21
 
 发布日期：2024 年 5 月 15 日
