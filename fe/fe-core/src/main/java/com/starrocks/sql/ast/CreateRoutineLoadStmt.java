@@ -734,7 +734,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                                                      Map<String, String> customKafkaProperties,
                                                      List<Pair<Integer, Long>> kafkaPartitionOffsets)
             throws AnalysisException {
-        kafkaPartitionsString = kafkaPartitionsString.replaceAll(" ", "");
+        kafkaPartitionsString = kafkaPartitionsString.trim();
         if (kafkaPartitionsString.isEmpty()) {
             throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY + " could not be a empty string");
         }
@@ -747,6 +747,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
         String[] kafkaPartitionsStringList = kafkaPartitionsString.split(",");
         for (String s : kafkaPartitionsStringList) {
+            s = s.trim();
             try {
                 kafkaPartitionOffsets.add(
                         Pair.create(getIntegerValueFromString(s, KAFKA_PARTITIONS_PROPERTY),
@@ -761,7 +762,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static void analyzeKafkaOffsetProperty(String kafkaOffsetsString,
                                                   List<Pair<Integer, Long>> kafkaPartitionOffsets)
             throws AnalysisException {
-        kafkaOffsetsString = kafkaOffsetsString.replaceAll(" ", "");
+        kafkaOffsetsString = kafkaOffsetsString.trim();
         if (kafkaOffsetsString.isEmpty()) {
             throw new AnalysisException(KAFKA_OFFSETS_PROPERTY + " could not be a empty string");
         }
@@ -780,6 +781,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     // OFFSET_BEGINNING: -2
     // OFFSET_END: -1
     public static long getKafkaOffset(String offsetStr) throws AnalysisException {
+        offsetStr = offsetStr.trim();
         long offset = -1;
         try {
             offset = getLongValueFromString(offsetStr, "kafka offset");
@@ -972,7 +974,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         try {
             value = Long.valueOf(valueString);
         } catch (NumberFormatException e) {
-            throw new AnalysisException(propertyName + " must be a integer: " + valueString);
+            String errMsg = String.format("%s '%s' is invalid. It must be an integer, %s, or %s", propertyName, valueString,
+                    KafkaProgress.OFFSET_BEGINNING, KafkaProgress.OFFSET_END);
+            throw new AnalysisException(errMsg);
         }
         return value;
     }
