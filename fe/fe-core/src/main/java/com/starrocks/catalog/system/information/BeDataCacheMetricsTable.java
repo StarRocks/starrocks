@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog.system.information;
 
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -35,6 +36,7 @@ public class BeDataCacheMetricsTable {
         dirSpacesFields.add(new StructField("path", ScalarType.createVarcharType(MAX_FIELD_VARCHAR_LENGTH)));
         dirSpacesFields.add(new StructField("quota_bytes", ScalarType.createType(PrimitiveType.BIGINT)));
         StructType dirSpacesType = new StructType(dirSpacesFields);
+        ArrayType dirSpacesArrayType = new ArrayType(dirSpacesType);
 
         ArrayList<StructField> usedBytesDetailFields = new ArrayList<>(2);
         usedBytesDetailFields.add(new StructField("priority_1", ScalarType.createType(PrimitiveType.BIGINT)));
@@ -50,7 +52,7 @@ public class BeDataCacheMetricsTable {
                         .column("MEM_QUOTA_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("MEM_USED_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("META_USED_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("DIR_SPACES", dirSpacesType)
+                        .column("DIR_SPACES", dirSpacesArrayType)
                         .column("USED_BYTES_DETAIL", usedBytesDetailType)
                         .build(),
                 TSchemaTableType.SCH_BE_DATACACHE_METRICS);

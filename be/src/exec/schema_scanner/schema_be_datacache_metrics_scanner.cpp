@@ -1,19 +1,33 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-// Created by Smith on 2023/11/30.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 
-#include <agent/master_info.h>
-#include <block_cache/block_cache.h>
-#include <gutil/strings/substitute.h>
+#include "agent/master_info.h"
+#include "block_cache/block_cache.h"
+#include "column/datum.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/string_value.h"
 
 namespace starrocks {
 
 TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDescriptor::create_struct_type(
         {"priority_1", "priority_2"},
         {TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_BIGINT)});
-;
+TypeDescriptor SchemaBeDataCacheMetricsScanner::_dir_spaces_type = TypeDescriptor::create_array_type(
+        TypeDescriptor::create_struct_type({"path", "quota_bytes"}, {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                                     TypeDescriptor::from_logical_type(TYPE_BIGINT)}));
 
 SchemaScanner::ColumnDesc SchemaBeDataCacheMetricsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), false},
@@ -23,7 +37,7 @@ SchemaScanner::ColumnDesc SchemaBeDataCacheMetricsScanner::_s_columns[] = {
         {"MEM_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
         {"MEM_USED_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
         {"META_USED_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
-        {"DIR_SPACES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"DIR_SPACES", _dir_spaces_type, 16, true},
         {"USED_BYTES_DETAIL", _used_bytes_detail_type, 16, true}};
 
 SchemaBeDataCacheMetricsScanner::SchemaBeDataCacheMetricsScanner()
@@ -44,13 +58,13 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     DatumArray row{};
     std::string status{};
-    std::string dir_spaces_str{};
+    DataCacheMetrics metrics{};
 
     row.emplace_back(_be_id);
 
     if (config::datacache_enable) {
         const BlockCache* cache = BlockCache::instance();
-        const DataCacheMetrics& metrics = cache->cache_metrics(2);
+        metrics = cache->cache_metrics(2);
 
         switch (metrics.status) {
         case DataCacheStatus::NORMAL:
@@ -71,17 +85,12 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         row.emplace_back(metrics.meta_used_bytes);
 
         const auto& dir_spaces = metrics.disk_dir_spaces;
-        dir_spaces_str.append("[");
+        DatumArray dir_spaces_array{};
         for (size_t i = 0; i < dir_spaces.size(); i++) {
             const auto& dir_space = dir_spaces[i];
-            dir_spaces_str.append(
-                    strings::Substitute(R"({"Path":"$0","QuotaBytes":$1})", dir_space.path, dir_space.quota_bytes));
-            if (i < dir_spaces.size() - 1) {
-                dir_spaces_str.append(",");
-            }
+            dir_spaces_array.emplace_back(DatumStruct{Slice(dir_space.path), dir_space.quota_bytes});
         }
-        dir_spaces_str.append("]");
-        row.emplace_back(Slice(dir_spaces_str));
+        row.emplace_back(dir_spaces_array);
 
         // retrive different priority's used bytes from L2 metrics
         int64_t priority_0_used_bytes = 0;
