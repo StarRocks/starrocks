@@ -2792,4 +2792,18 @@ public class AggregateTest extends PlanTestBase {
                 "  |  5 <-> [5: avg, DECIMAL128(38,18), true]\n" +
                 "  |  cardinality: 1");
     }
+
+    @Test
+    public void testHavingAggregate() throws Exception {
+        String sql = "select * from (" +
+                "select sum(v1), f2, v3 from " +
+                "   (select v1, v2, v2 + 2 as f2, v3 from t0) cc " +
+                "group by v2, f2, v3 having (f2 + sum(v1)) > 0" +
+                ") xx ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: 2: v2, 3: v3\n" +
+                "  |  having: 2: v2 + 2 + 5: sum > 0");
+    }
 }
