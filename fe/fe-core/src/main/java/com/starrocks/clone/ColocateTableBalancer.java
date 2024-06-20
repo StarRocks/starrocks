@@ -90,6 +90,9 @@ public class ColocateTableBalancer extends FrontendDaemon {
 
     private static ColocateTableBalancer INSTANCE = null;
 
+    private Set<Long> aliveBackendIds = new HashSet<>();
+    private long systemStableStartTime = -1L;
+
     /**
      * Only for unit test purpose.
      */
@@ -246,11 +249,32 @@ public class ColocateTableBalancer extends FrontendDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        if (!Config.tablet_sched_disable_colocate_balance) {
+        if (!Config.tablet_sched_disable_colocate_balance && isSystemStable(GlobalStateMgr
+                .getCurrentState().getNodeMgr().getClusterInfo())) {
             relocateAndBalancePerGroup();
             relocateAndBalanceAllGroups();
         }
         matchGroups();
+    }
+
+    /**
+     * If the availableBackendIds can maintain unchanged within
+     * tablet_sched_colocate_balance_wait_system_stable_time_s, the system is considered stable.
+     */
+    protected boolean isSystemStable(SystemInfoService infoService) {
+        Set<Long> currentAliveBackendIds = new HashSet<>(infoService.getBackendIds(true));
+        if (!currentAliveBackendIds.equals(aliveBackendIds)) {
+            aliveBackendIds = currentAliveBackendIds;
+            systemStableStartTime = -1L;
+            return false;
+        }
+        if (systemStableStartTime == -1L) {
+            systemStableStartTime = System.currentTimeMillis();
+            return false;
+        }
+
+        return System.currentTimeMillis() - systemStableStartTime
+                > Config.tablet_sched_colocate_balance_wait_system_stable_time_s * 1000;
     }
 
     /*
