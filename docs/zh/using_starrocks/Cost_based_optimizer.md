@@ -281,7 +281,7 @@ CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) [PROPERTIES (
 - 采集类型
   - FULL：全量采集。
   - SAMPLE：抽样采集。
-  - 如果不指定采集类型，默认为全量采集。
+  - 如果不指定采集类型，默认为抽样采集。
 
 - `col_name`: 要采集统计信息的列，多列使用逗号 (,)分隔。如果不指定，表示采集整张表的信息。
 
