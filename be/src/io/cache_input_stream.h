@@ -73,6 +73,10 @@ public:
 
     void set_datacache_evict_probability(int32_t v) { _datacache_evict_probability = v; }
 
+    void set_priority(const int8_t priority) { _priority = priority; }
+
+    void set_ttl_seconds(const uint64_t ttl_seconds) { _ttl_seconds = ttl_seconds; }
+
     int64_t get_align_size() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
@@ -114,6 +118,8 @@ private:
     BlockCache* _cache = nullptr;
     int64_t _block_size = 0;
     std::unordered_map<int64_t, BlockBuffer> _block_map;
+    int8_t _priority = 0;
+    uint64_t _ttl_seconds = 0;
 };
 
 } // namespace starrocks::io
