@@ -3648,9 +3648,22 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     test_fail_point("tablet_apply_index_replace_failed", "tablet_apply_index_commit_failed");
     _tablet->updates()->reset_update_state();
 
-    // 10. normal apply
-    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_index_commit_failed");
+    // 10. write meta failed
+    test_fail_point("tablet_apply_index_commit_failed", "tablet_meta_manager_apply_rowset_manager_internal_error");
+
+    // 11. cache del vec failed
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp_name = "tablet_meta_manager_apply_rowset_manager_fake_ok";
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
+    fp->setMode(trigger_mode);
+    test_fail_point("tablet_meta_manager_apply_rowset_manager_internal_error", "tablet_apply_cache_del_vec_failed");
+
+    // 12. normal apply
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_cache_del_vec_failed");
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(fp_name);
     fp->setMode(trigger_mode);
 
     _tablet->updates()->reset_error();

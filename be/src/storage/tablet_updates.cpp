@@ -2381,6 +2381,10 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         for (auto& delvec_pair : delvecs) {
             tsid.segment_id = delvec_pair.first;
             st = manager->set_cached_del_vec(tsid, delvec_pair.second);
+            FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_cache_del_vec_failed, {
+                st = Status::InternalError("inject tablet_apply_cache_del_vec_failed");
+                manager->clear_cached_del_vec({tsid});
+            });
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_compaction_commit error: set cached delvec failed: $0 $1",
                                                       st.to_string(), _debug_string(false));
