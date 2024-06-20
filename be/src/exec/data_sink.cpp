@@ -311,8 +311,11 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
         // @TODO mem limit
+        // @TODO should analyze sink, if two sinks have dependecy, should make sure one must can cusome, e.g. local rf
+        // 1. spill 2. allow build side always pull data(cant't limit memory)
         // === create exchange ===
-        auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(runtime_state, sinks.size());
+        // auto mcast_local_exchanger = std::make_shared<InMemoryMultiCastLocalExchanger>(runtime_state, sinks.size());
+        auto mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size());
 
         // === create sink op ====
         auto* upstream = prev_operators.back().get();

@@ -360,7 +360,7 @@ void Chunk::check_or_die() {
         CHECK(_slot_id_to_index.empty());
     } else {
         for (const ColumnPtr& c : _columns) {
-            CHECK_EQ(num_rows(), c->size());
+            CHECK_EQ(num_rows(), c->size()) << ", " << (void*)this;
             c->check_or_die();
         }
     }

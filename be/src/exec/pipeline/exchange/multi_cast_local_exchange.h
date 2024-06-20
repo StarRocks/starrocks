@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <deque>
 #include <utility>
 
 #include "column/chunk.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/spill/dir_manager.h"
+#include "fs/fs.h"
 
 namespace starrocks::pipeline {
 
@@ -44,17 +47,34 @@ class MultiCastLocalExchangeSinkOperator;
 // ===== exchanger =====
 class MultiCastLocalExchanger {
 public:
-    MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int64_t memory_limit = INT64_MAX);
-    ~MultiCastLocalExchanger();
-    bool can_pull_chunk(int32_t mcast_consumer_index) const;
-    bool can_push_chunk() const;
+    virtual ~MultiCastLocalExchanger() = default;
+    virtual bool can_pull_chunk(int32_t mcast_consumer_index) const = 0;
+    virtual bool can_push_chunk() const = 0;
+    virtual Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequenc,
+                      MultiCastLocalExchangeSinkOperator* sink_operator) = 0;
+    virtual StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index) = 0;
+    virtual void open_source_operator(int32_t mcast_consumer_index) = 0; 
+    virtual void close_source_operator(int32_t mcast_consumer_index) = 0;
+    virtual void open_sink_operator() = 0;
+    virtual void close_sink_operator() = 0;
+    RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+protected:
+    std::unique_ptr<RuntimeProfile> _runtime_profile;
+};
+
+class InMemoryMultiCastLocalExchanger final: public MultiCastLocalExchanger {
+public:
+    InMemoryMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number);
+    ~InMemoryMultiCastLocalExchanger() override;
+    bool can_pull_chunk(int32_t mcast_consumer_index) const override;
+    bool can_push_chunk() const override;
     Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequenc,
-                      MultiCastLocalExchangeSinkOperator* sink_operator);
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index);
-    void open_source_operator(int32_t mcast_consumer_index);
-    void close_source_operator(int32_t mcast_consumer_index);
-    void open_sink_operator();
-    void close_sink_operator();
+                      MultiCastLocalExchangeSinkOperator* sink_operator) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index) override;
+    void open_source_operator(int32_t mcast_consumer_index) override;
+    void close_source_operator(int32_t mcast_consumer_index) override;
+    void open_sink_operator() override;
+    void close_sink_operator() override;
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
 
 private:
@@ -85,10 +105,98 @@ private:
     std::unique_ptr<RuntimeProfile> _runtime_profile;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
-
-    // max memory usage for exchanger.
-    int64_t _memory_limit = INT64_MAX;
 };
+
+class MemLimitedChunkQueue;
+class SpillableMultiCastLocalExchanger: public MultiCastLocalExchanger {
+public:
+    SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int64_t memory_limit = 1);
+    virtual ~SpillableMultiCastLocalExchanger();
+
+    bool can_pull_chunk(int32_t mcast_consumer_index) const override;
+    bool can_push_chunk() const override;
+    Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence, MultiCastLocalExchangeSinkOperator* sink_operator) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) override;
+    void open_source_operator(int32_t mcast_consumer_index) override;
+    void close_source_operator(int32_t mcast_consumer_index) override;
+    void open_sink_operator() override;
+    void close_sink_operator() override;
+
+private:
+    // queue ? cell->cell->cell
+    // cell in memory or on disk
+    // evcit
+    struct Cell {
+        ChunkPtr chunk = nullptr;
+        Cell* next = nullptr;
+        size_t memory_usage = 0;
+        size_t accumulated_row_size = 0;
+        int32_t used_count = 0;
+        // @TODO mark state, on_mem/flushing/on_disk
+        bool in_mem = true;
+        // disk info
+        size_t offset = 0;
+        size_t length = 0;
+        //@TODO should have a index
+    };
+    struct FlushContext;
+
+    // @TODO need a mapping ablout offset to spillBlock
+    struct ChunkBlock {
+        std::vector<ChunkPtr> chunks;
+        ChunkBlock* next = nullptr;
+        size_t memory_usage = 0;
+        bool in_mem = true;
+        size_t offset = 0;
+        size_t length = 0;
+    };
+    // @TODO we can use std::deque to store Cell, but if we remove from end, idnex may change?
+    // void _update_progress(std::deque<Cell>::iterator& fast);
+    // void _update_progress(size_t index);
+    void _update_progress(Cell* cell = nullptr);
+    void _close_consumer(int32_t mcast_consumer_index);
+
+    Status _create_file();
+    // we may need rand read
+    RuntimeState* _runtime_state = nullptr;
+    mutable std::mutex _mutex;
+    size_t _consumer_number;
+    size_t _current_accumulated_row_size = 0;
+    mutable size_t _current_memory_usage = 0;
+    size_t _current_row_size = 0;
+    std::deque<Cell> _cells;
+    Cell* _head = nullptr;
+    Cell* _tail = nullptr;
+    size_t _fast_accumulated_row_size = 0;
+    int32_t _opened_source_number = 0;
+    int32_t _opened_sink_number = 0;
+
+    size_t _last_index = 0;
+    size_t _head_index = 0;
+    // each consumsers offset
+    // next Cell that each consumer will consume
+    std::vector<Cell*> _progress;
+    // std::vector<std::deque<Cell>::iterator> _progress;
+
+    // std::vector<size_t> _progress;
+    std::vector<int32_t> _opened_source_opcount;
+    // std::atomic_bool on_flight_io;
+    // @TODO should buffer data
+    size_t _memory_limit = 1024 * 1024 * 16;
+    RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;
+
+    mutable std::unique_ptr<WritableFile> _file;
+    mutable bool _has_flush_io_task = false;
+    mutable std::vector<bool> _has_load_io_task;
+    mutable std::string _file_name;
+    mutable std::shared_ptr<spill::Dir> _dir;
+    // Cell* _flush_point = nullptr;
+    mutable Cell* _flush_point = nullptr;
+    std::shared_ptr<MemLimitedChunkQueue> _queue;
+};
+
+
 
 // ===== source op =====
 class MultiCastLocalExchangeSourceOperator final : public SourceOperator {

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include <glog/logging.h>
 
 #include "util/logging.h"
 
@@ -20,14 +21,14 @@ namespace starrocks::pipeline {
 
 static const size_t kBufferedRowSizeScaleFactor = 16;
 
-MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int64_t memory_limit)
+InMemoryMultiCastLocalExchanger::InMemoryMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number)
         : _runtime_state(runtime_state),
           _mutex(),
           _consumer_number(consumer_number),
           _progress(consumer_number),
-          _opened_source_opcount(consumer_number),
-          _memory_limit(memory_limit) {
+          _opened_source_opcount(consumer_number) {
     Cell* dummy = new Cell();
+    // dummy->used_count = consumer_number;
     _head = dummy;
     _tail = dummy;
     for (size_t i = 0; i < consumer_number; i++) {
@@ -41,7 +42,7 @@ MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, si
             "PeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
 }
 
-MultiCastLocalExchanger::~MultiCastLocalExchanger() {
+InMemoryMultiCastLocalExchanger::~InMemoryMultiCastLocalExchanger() {
     while (_head != nullptr) {
         auto* t = _head->next;
         _current_memory_usage -= _head->memory_usage;
@@ -50,22 +51,20 @@ MultiCastLocalExchanger::~MultiCastLocalExchanger() {
     }
 }
 
-bool MultiCastLocalExchanger::can_push_chunk() const {
+bool InMemoryMultiCastLocalExchanger::can_push_chunk() const {
     std::unique_lock l(_mutex);
     // if for the fastest consumer, the exchanger still has enough chunk to be consumed.
     // the exchanger does not need any input.
+    
     if ((_current_accumulated_row_size - _fast_accumulated_row_size) >
         _runtime_state->chunk_size() * kBufferedRowSizeScaleFactor) {
         return false;
     }
-    // @TODO current memory usage
-    if (_current_memory_usage >= _memory_limit) {
-        return false;
-    }
+
     return true;
 }
 
-Status MultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence,
+Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence,
                                            MultiCastLocalExchangeSinkOperator* sink_operator) {
     if (chunk->num_rows() == 0) return Status::OK();
 
@@ -85,6 +84,7 @@ Status MultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_d
         _tail->next = cell;
         _tail = cell;
         _current_accumulated_row_size += chunk->num_rows();
+        LOG(INFO) << "add chunk, mem: " << cell->memory_usage << ", new mem: " << _current_memory_usage << ", rows: " << cell->accumulated_row_size;
         _current_memory_usage += cell->memory_usage;
         _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
         _peak_memory_usage_counter->set(_current_memory_usage);
@@ -95,7 +95,7 @@ Status MultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_d
     return Status::OK();
 }
 
-bool MultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
+bool InMemoryMultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
     DCHECK(mcast_consumer_index < _consumer_number);
 
     std::unique_lock l(_mutex);
@@ -105,31 +105,44 @@ bool MultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const
     if (cell->next != nullptr) {
         return true;
     }
+    // LOG(INFO) << "can't pull_chunk, index:" << mcast_consumer_index << ", rows:" << cell->accumulated_row_size;
+    // LOG_EVERY_N(INFO, 10000000) << "can't pull_chunk, index:" << mcast_consumer_index << ", rows:" << cell->accumulated_row_size;
     return false;
 }
 
-StatusOr<ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) {
+StatusOr<ChunkPtr> InMemoryMultiCastLocalExchanger::pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) {
     DCHECK(mcast_consumer_index < _consumer_number);
 
     std::unique_lock l(_mutex);
     DCHECK(_progress[mcast_consumer_index] != nullptr);
     Cell* cell = _progress[mcast_consumer_index];
     if (cell->next == nullptr) {
-        if (_opened_sink_number == 0) return Status::EndOfFile("mcast_local_exchanger eof");
+        if (_opened_sink_number == 0) {
+            LOG(INFO) << "eof, index:" << mcast_consumer_index;
+            return Status::EndOfFile("mcast_local_exchanger eof");
+        }
         return Status::InternalError("unreachable in multicast local exchanger");
     }
     cell = cell->next;
     VLOG_FILE << "MultiCastLocalExchanger: return chunk to " << mcast_consumer_index
               << ", row = " << cell->chunk->debug_row(0) << ", size = " << cell->chunk->num_rows();
-
     _progress[mcast_consumer_index] = cell;
     cell->used_count += 1;
-
+    // LOG(INFO) << "pull_chunk, rows: " << cell->accumulated_row_size << ", used_count: " << cell->used_count << ", index:" << mcast_consumer_index;
+    // {
+    //     std::ostringstream oss;
+    //     oss << "process, ";
+    //     for (int32_t i = 0;i < _consumer_number; i++) {
+    //         auto c = _progress[i];
+    //         oss << " index " << i << ", rows: " << c->accumulated_row_size << ", used_count: " << c->used_count << std::endl;;
+    //     }
+    //     LOG(INFO) << oss.str();
+    // }
     _update_progress(cell);
     return cell->chunk;
 }
 
-void MultiCastLocalExchanger::open_source_operator(int32_t mcast_consumer_index) {
+void InMemoryMultiCastLocalExchanger::open_source_operator(int32_t mcast_consumer_index) {
     std::unique_lock l(_mutex);
     if (_opened_source_opcount[mcast_consumer_index] == 0) {
         _opened_source_number += 1;
@@ -137,7 +150,7 @@ void MultiCastLocalExchanger::open_source_operator(int32_t mcast_consumer_index)
     _opened_source_opcount[mcast_consumer_index] += 1;
 }
 
-void MultiCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index) {
+void InMemoryMultiCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index) {
     std::unique_lock l(_mutex);
     _opened_source_opcount[mcast_consumer_index] -= 1;
     if (_opened_source_opcount[mcast_consumer_index] == 0) {
@@ -146,27 +159,29 @@ void MultiCastLocalExchanger::close_source_operator(int32_t mcast_consumer_index
     }
 }
 
-void MultiCastLocalExchanger::open_sink_operator() {
+void InMemoryMultiCastLocalExchanger::open_sink_operator() {
     std::unique_lock l(_mutex);
     _opened_sink_number++;
 }
-void MultiCastLocalExchanger::close_sink_operator() {
+void InMemoryMultiCastLocalExchanger::close_sink_operator() {
     std::unique_lock l(_mutex);
     _opened_sink_number--;
 }
 
-void MultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
+void InMemoryMultiCastLocalExchanger::_closer_consumer(int32_t mcast_consumer_index) {
+    // LOG(INFO) << "_close consumer: " << mcast_consumer_index;
     Cell* now = _progress[mcast_consumer_index];
     now = now->next;
     while (now) {
         now->used_count += 1;
+        // LOG(INFO) << "used_count: " << now->used_count;
         now = now->next;
     }
     _progress[mcast_consumer_index] = nullptr;
     _update_progress();
 }
 
-void MultiCastLocalExchanger::_update_progress(Cell* fast) {
+void InMemoryMultiCastLocalExchanger::_update_progress(Cell* fast) {
     if (fast != nullptr) {
         _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, fast->accumulated_row_size);
     } else {
@@ -178,12 +193,36 @@ void MultiCastLocalExchanger::_update_progress(Cell* fast) {
             _fast_accumulated_row_size = std::max(_fast_accumulated_row_size, c->accumulated_row_size);
         }
     }
+    // if (_head) {
+    //     LOG(INFO) << "current head: " << _head->accumulated_row_size << ", use count: " << _head->used_count << ", next null:" << (_head->next == nullptr ? "yes": "no");
+    // }
+    // while (_head && _head->next) {
+    //     Cell* t = _head->next;
+    //     if (t->used_count != _consumer_number) {
+    //         // LOG(INFO) << "used_count: " <<  t->used_count << ", consumer_number: " << _consumer_number << ", rows:" << t->accumulated_row_size;
+    //         break;
+    //     }
+    //     if (_head->used_count == _consumer_number) {
+    //         // LOG(INFO) << "release chunk, mem: " << _head->memory_usage << ", new mem: " << _current_memory_usage - _head->memory_usage << ", rows: " << _head->accumulated_row_size;
+    //         _current_memory_usage -= _head->memory_usage;
+    //         delete _head;
+    //         _head = t;
+    //     } else {
+    //         // LOG(INFO) << "head used count: " << _head->used_count << ", consumer_number: " << _consumer_number <<", rows: " << _head->accumulated_row_size;
+    //         break;
+    //     }
+    //     // dummy, real
+    // }
+    // @TODO release head
+
     // release chunk if no one needs it.
     while (_head && _head->used_count == _consumer_number) {
         Cell* t = _head->next;
-        if (t == nullptr) break;
         _current_memory_usage -= _head->memory_usage;
+        // LOG(INFO) << "release chunk, mem: " << _head->memory_usage << ", new mem: " << _current_memory_usage - _head->memory_usage;
+        // @TODO free here
         delete _head;
+        if (t == nullptr) break;
         _head = t;
     }
     if (_head != nullptr) {
