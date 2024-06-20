@@ -951,7 +951,6 @@ void TabletUpdates::do_apply() {
             LOG(ERROR) << msg;
             _set_error(msg);
         }
-        LOG(INFO) << "apply status:" << apply_st;
         first = false;
         // submit a delay apply task to storage_engine
         if (config::enable_retry_apply && _is_tolerable(apply_st) && !apply_st.ok()) {
@@ -5622,7 +5621,7 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             _rowset_stats.emplace(rsid, std::move(stats));
         }
     }
-    _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
+    _update_total_stats(version_info_apply.rowsets, nullptr, nullptr);
 }
 
 } // namespace starrocks
