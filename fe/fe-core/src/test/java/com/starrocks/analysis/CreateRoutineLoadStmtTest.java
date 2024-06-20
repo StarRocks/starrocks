@@ -525,7 +525,6 @@ public class CreateRoutineLoadStmtTest {
 
     @Test
     public void testKafkaOffset() {
-
         String jobName = "job1";
         String dbName = "db1";
         String tableNameString = "table1";
@@ -543,7 +542,7 @@ public class CreateRoutineLoadStmtTest {
         // 1. kafka_offsets
         // 1 -> OFFSET_BEGINNING, 2 -> OFFSET_END
         Map<String, String> customProperties = getCustomProperties();
-        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, " 1, 2 ");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, " 1 , 2 ");
         customProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, " OFFSET_BEGINNING , OFFSET_END ");
         LabelName labelName = new LabelName(dbName, jobName);
         CreateRoutineLoadStmt createRoutineLoadStmt = new CreateRoutineLoadStmt(
@@ -612,7 +611,7 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadStmt finalCreateRoutineLoadStmt = createRoutineLoadStmt;
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "kafka_partitions must be a number string with comma-separated",
+                "kafka_partitions ' 1 2 3 ' must be a number string with comma-separated",
                 () -> CreateRoutineLoadAnalyzer.analyze(finalCreateRoutineLoadStmt, connectContext));
 
         // 6. invalid offset a

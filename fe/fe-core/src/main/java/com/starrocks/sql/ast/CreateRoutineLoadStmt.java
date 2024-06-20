@@ -734,8 +734,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                                                      Map<String, String> customKafkaProperties,
                                                      List<Pair<Integer, Long>> kafkaPartitionOffsets)
             throws AnalysisException {
-        kafkaPartitionsString = kafkaPartitionsString.trim();
-        if (kafkaPartitionsString.isEmpty()) {
+        String trimedKafkaPartitionsStr = kafkaPartitionsString.trim();
+        if (trimedKafkaPartitionsStr.isEmpty()) {
             throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY + " could not be a empty string");
         }
 
@@ -745,7 +745,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             kafkaDefaultOffset = getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
         }
 
-        String[] kafkaPartitionsStringList = kafkaPartitionsString.split(",");
+        String[] kafkaPartitionsStringList = trimedKafkaPartitionsStr.split(",");
         for (String s : kafkaPartitionsStringList) {
             s = s.trim();
             try {
@@ -753,8 +753,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                         Pair.create(getIntegerValueFromString(s, KAFKA_PARTITIONS_PROPERTY),
                                 kafkaDefaultOffset == null ? KafkaProgress.OFFSET_END_VAL : kafkaDefaultOffset));
             } catch (AnalysisException e) {
-                throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY
-                        + " must be a number string with comma-separated");
+                throw new AnalysisException(String.format("%s '%s' must be a number string with comma-separated",
+                        KAFKA_PARTITIONS_PROPERTY, kafkaPartitionsString));
             }
         }
     }
