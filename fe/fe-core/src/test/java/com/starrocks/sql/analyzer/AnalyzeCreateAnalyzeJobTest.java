@@ -25,6 +25,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
@@ -77,4 +78,21 @@ public class AnalyzeCreateAnalyzeJobTest {
         Assert.assertEquals(table.getId(), analyzeStmt.getTableId());
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateAnalyzeJob() throws Exception {
+        String sql = "create analyze table db.tbl";
+        CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
+
+        DDLStmtExecutor.execute(analyzeStmt, starRocksAssert.getCtx());
+        Assert.assertEquals(1,
+                starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
+
+        sql = "create analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
+        analyzeFail(sql, "External table hive0.tpch.customer don't support SAMPLE analyze.");
+
+    }
+>>>>>>> fb99da1c2a ([BugFix] Fix an issue that create analyze job default behavior is inconsistent with documentation. (#47068))
 }
