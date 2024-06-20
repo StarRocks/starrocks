@@ -18,8 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
 import org.junit.Assert;
@@ -40,7 +40,7 @@ public class StatisticExecutorTest extends PlanTestBase {
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
-        Assert.assertThrows(AnalysisException.class,
+        Assert.assertThrows(SemanticException.class,
                 () -> statisticExecutor.queryStatisticSync(
                         StatisticUtils.buildConnectContext(), db.getId(), olapTable.getId(), Lists.newArrayList("foo", "bar")));
     }

@@ -40,10 +40,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.backup.mv.MvRestoreContext;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -155,7 +152,7 @@ public class OlapTableTest {
         olapTable.copyOnlyForQuery(copied);
 
         Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
-        Assert.assertEquals(olapTable.hasForbitGlobalDict(), copied.hasForbitGlobalDict());
+        Assert.assertEquals(olapTable.hasForbiddenGlobalDict(), copied.hasForbiddenGlobalDict());
         Assert.assertEquals(olapTable, copied);
     }
 

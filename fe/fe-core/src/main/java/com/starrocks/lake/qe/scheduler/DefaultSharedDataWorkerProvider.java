@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -62,8 +63,9 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultSharedDataWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
-                                                                       boolean preferComputeNode,
-                                                                       int numUsedComputeNodes) {
+                                       boolean preferComputeNode,
+                                       int numUsedComputeNodes,
+                                       ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
             if (LOG.isDebugEnabled()) {

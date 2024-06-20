@@ -114,6 +114,8 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
+
 /**
  * Routine load job is a function which stream load data from streaming medium to starrocks.
  * This function is suitable for streaming load job which loading data continuously
@@ -226,23 +228,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @SerializedName("mb")
     protected long maxBatchSizeBytes = Config.max_routine_load_batch_size;
 
-    /**
-     * RoutineLoad support json data.
-     * Require Params:
-     * 1) format = "json"
-     * 2) jsonPath = "$.XXX.xxx"
-     */
-    private static final String PROPS_FORMAT = "format";
-    private static final String PROPS_STRIP_OUTER_ARRAY = "strip_outer_array";
-    private static final String PROPS_JSONPATHS = "jsonpaths";
-    private static final String PROPS_JSONROOT = "json_root";
-
     private String confluentSchemaRegistryUrl;
-
-    // for csv
-    protected boolean trimspace = false;
-    protected byte enclose = 0;
-    protected byte escape = 0;
 
     protected int currentTaskConcurrentNum;
     @SerializedName("p")
@@ -370,36 +356,36 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put(LoadStmt.MERGE_CONDITION, stmt.getMergeConditionStr());
         }
         if (Strings.isNullOrEmpty(stmt.getFormat()) || stmt.getFormat().equals("csv")) {
-            jobProperties.put(PROPS_FORMAT, "csv");
-            jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "false");
-            jobProperties.put(PROPS_JSONPATHS, "");
-            jobProperties.put(PROPS_JSONROOT, "");
-            this.trimspace = stmt.isTrimspace();
-            this.enclose = stmt.getEnclose();
-            this.escape = stmt.getEscape();
+            jobProperties.put(CreateRoutineLoadStmt.FORMAT, "csv");
+            jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "false");
+            jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
+            jobProperties.put(CreateRoutineLoadStmt.JSONROOT, "");
+            jobProperties.put(CreateRoutineLoadStmt.TRIMSPACE, stmt.isTrimspace() ? "true" : "false");
+            jobProperties.put(CreateRoutineLoadStmt.ENCLOSE, Byte.toString(stmt.getEnclose()));
+            jobProperties.put(CreateRoutineLoadStmt.ESCAPE, Byte.toString(stmt.getEscape()));
         } else if (stmt.getFormat().equals("json")) {
-            jobProperties.put(PROPS_FORMAT, "json");
+            jobProperties.put(CreateRoutineLoadStmt.FORMAT, "json");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
-                jobProperties.put(PROPS_JSONPATHS, stmt.getJsonPaths());
+                jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, stmt.getJsonPaths());
             } else {
-                jobProperties.put(PROPS_JSONPATHS, "");
+                jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
             }
             if (!Strings.isNullOrEmpty(stmt.getJsonRoot())) {
-                jobProperties.put(PROPS_JSONROOT, stmt.getJsonRoot());
+                jobProperties.put(CreateRoutineLoadStmt.JSONROOT, stmt.getJsonRoot());
             } else {
-                jobProperties.put(PROPS_JSONROOT, "");
+                jobProperties.put(CreateRoutineLoadStmt.JSONROOT, "");
             }
             if (stmt.isStripOuterArray()) {
-                jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "true");
+                jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "true");
             } else {
-                jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "false");
+                jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "false");
             }
         } else if (stmt.getFormat().equals("avro")) {
-            jobProperties.put(PROPS_FORMAT, "avro");
+            jobProperties.put(CreateRoutineLoadStmt.FORMAT, "avro");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
-                jobProperties.put(PROPS_JSONPATHS, stmt.getJsonPaths());
+                jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, stmt.getJsonPaths());
             } else {
-                jobProperties.put(PROPS_JSONPATHS, "");
+                jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
             }
             this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
         } else {
@@ -472,15 +458,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public boolean isTrimspace() {
-        return trimspace;
+        return Boolean.parseBoolean(jobProperties.getOrDefault(CreateRoutineLoadStmt.TRIMSPACE, "false"));
     }
 
     public byte getEnclose() {
-        return enclose;
+        return Byte.parseByte(jobProperties.getOrDefault(CreateRoutineLoadStmt.ENCLOSE, "0"));
     }
 
     public byte getEscape() {
-        return escape;
+        return Byte.parseByte(jobProperties.getOrDefault(CreateRoutineLoadStmt.ESCAPE, "0"));
     }
 
     public String getName() {
@@ -642,7 +628,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public String getFormat() {
-        String value = jobProperties.get(PROPS_FORMAT);
+        String value = jobProperties.get(CreateRoutineLoadStmt.FORMAT);
         if (value == null) {
             return "csv";
         }
@@ -654,11 +640,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public boolean isStripOuterArray() {
-        return Boolean.valueOf(jobProperties.get(PROPS_STRIP_OUTER_ARRAY));
+        return Boolean.parseBoolean(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
     }
 
     public String getJsonPaths() {
-        String value = jobProperties.get(PROPS_JSONPATHS);
+        String value = jobProperties.get(CreateRoutineLoadStmt.JSONPATHS);
         if (value == null) {
             return "";
         }
@@ -666,7 +652,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public String getJsonRoot() {
-        String value = jobProperties.get(PROPS_JSONROOT);
+        String value = jobProperties.get(CreateRoutineLoadStmt.JSONROOT);
         if (value == null) {
             return "";
         }
@@ -779,7 +765,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     // remove all of task in jobs and change job state to paused
                     updateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                    "current error rows of job is more than max error num"),
+                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
                             isReplay);
                 }
             }
@@ -801,13 +787,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     .add("current_total_rows", currentTotalRows)
                     .add("current_error_rows", currentErrorRows)
                     .add("max_error_num", maxErrorNum)
-                    .add("msg", "current error rows is more than max error rows, begin to pause job")
+                    .add("msg", "current error rows is more than max error num, begin to pause job")
                     .build());
             if (!isReplay) {
                 // remove all of task in jobs and change job state to paused
                 updateState(JobState.PAUSED,
                         new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                "current error rows is more than max error num"),
+                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
                         isReplay);
             }
             // reset currentTotalNum and currentErrorNum
@@ -1562,8 +1548,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
         } else {
-            jobProperties.put("columnSeparator", columnSeparator == null ? "\t" : columnSeparator.toString());
-            jobProperties.put("rowDelimiter", rowDelimiter == null ? "\t" : rowDelimiter.toString());
+            jobProperties.put("columnSeparator", columnSeparator == null ? "\t" : columnSeparator.getOriSeparator());
+            jobProperties.put("rowDelimiter", rowDelimiter == null ? "\n" : rowDelimiter.getOriDelimiter());
         }
         jobProperties.put("maxErrorNum", String.valueOf(maxErrorNum));
         jobProperties.put("maxFilterRatio", String.valueOf(maxFilterRatio));
@@ -1632,10 +1618,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         sb.append(Boolean.toString(isTrimspace())).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.ENCLOSE).append("\"=\"");
-        sb.append(StringEscapeUtils.escapeJava(String.valueOf(enclose))).append("\",\n");
+        sb.append(StringEscapeUtils.escapeJava(String.valueOf(getEnclose()))).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.ESCAPE).append("\"=\"");
-        sb.append(StringEscapeUtils.escapeJava(String.valueOf(escape))).append("\",\n");
+        sb.append(StringEscapeUtils.escapeJava(String.valueOf(getEscape()))).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.LOG_REJECTED_RECORD_NUM_PROPERTY).append("\"=\"");
         sb.append(String.valueOf(getLogRejectedRecordNum())).append("\"\n");

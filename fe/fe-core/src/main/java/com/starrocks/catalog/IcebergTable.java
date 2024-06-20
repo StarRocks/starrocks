@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -62,6 +63,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -97,18 +99,21 @@ public class IcebergTable extends Table {
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
+    private Set<Integer> identifierFieldIds = Sets.newHashSet();
+
     public IcebergTable() {
         super(TableType.ICEBERG);
     }
 
     public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
-                        String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
-                        Map<String, String> icebergProperties) {
+                        String remoteTableName, String comment, List<Column> schema,
+                        org.apache.iceberg.Table nativeTable, Map<String, String> icebergProperties) {
         super(id, srTableName, TableType.ICEBERG, schema);
         this.catalogName = catalogName;
         this.resourceName = resourceName;
         this.remoteDbName = remoteDbName;
         this.remoteTableName = remoteTableName;
+        this.comment =  comment;
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
     }
@@ -170,6 +175,17 @@ public class IcebergTable extends Table {
             allPartitionColumns.add(partitionCol);
         }
         return allPartitionColumns;
+    }
+
+    public boolean isAllPartitionColumnsAlwaysIdentity() {
+        // now we are sure we have never applied transformation,
+        // we check if all partition columns are identity.
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public PartitionField getPartitionField(String partitionColumnName) {
@@ -309,6 +325,10 @@ public class IcebergTable extends Table {
         this.refreshSnapshotTime = refreshSnapshotTime;
     }
 
+    public void setIdentifierFieldIds(Set<Integer> identifierFieldIds) {
+        this.identifierFieldIds = identifierFieldIds;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
@@ -324,12 +344,18 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
-        if (nativeTable.schema().identifierFieldIds().size() > 0) {
-            tIcebergTable.setIceberg_equal_delete_schema(IcebergApiConverter.getTIcebergSchema(
-                    new Schema(nativeTable.schema().identifierFieldIds().stream()
-                            .map(id -> nativeTable.schema().findField(id)).collect(Collectors.toList()))));
+
+        Set<Integer> identifierIds = nativeTable.schema().identifierFieldIds();
+        if (identifierIds.isEmpty()) {
+            identifierIds = this.identifierFieldIds;
         }
 
+        if (!identifierIds.isEmpty()) {
+            tIcebergTable.setIceberg_equal_delete_schema(IcebergApiConverter.getTIcebergSchema(
+                    new Schema(identifierIds.stream()
+                            .map(id -> nativeTable.schema().findField(id))
+                            .collect(Collectors.toList()))));
+        }
 
         if (!partitions.isEmpty()) {
             TPartitionMap tPartitionMap = new TPartitionMap();
@@ -449,6 +475,8 @@ public class IcebergTable extends Table {
         private String resourceName;
         private String remoteDbName;
         private String remoteTableName;
+
+        private String comment;
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
@@ -468,6 +496,12 @@ public class IcebergTable extends Table {
 
         public Builder setCatalogName(String catalogName) {
             this.catalogName = catalogName;
+            return this;
+        }
+
+
+        public Builder setComment(String comment) {
+            this.comment = comment;
             return this;
         }
 
@@ -503,7 +537,7 @@ public class IcebergTable extends Table {
 
         public IcebergTable build() {
             return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
-                    fullSchema, nativeTable, icebergProperties);
+                    comment, fullSchema, nativeTable, icebergProperties);
         }
     }
 }

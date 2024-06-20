@@ -89,6 +89,15 @@ public class ReplicationMgr extends FrontendDaemon {
                             + Config.replication_max_parallel_table_count);
         }
 
+        // Limit replication replica count
+        long replicationReplicaCount = getReplicatingReplicaCount();
+        if (replicationReplicaCount >= Config.replication_max_parallel_replica_count) {
+            throw new RuntimeException("The replicating replica count in all running replication jobs "
+                    + replicationReplicaCount
+                    + " exceeds replication_max_parallel_replica_count: "
+                    + Config.replication_max_parallel_replica_count);
+        }
+
         // Limit replication data size
         long replicatingDataSizeMB = getReplicatingDataSize() / 1048576;
         if (replicatingDataSizeMB >= Config.replication_max_parallel_data_size_mb) {
@@ -176,6 +185,14 @@ public class ReplicationMgr extends FrontendDaemon {
         } else {
             runningJobs.put(replicationJob.getTableId(), replicationJob);
         }
+    }
+
+    private long getReplicatingReplicaCount() {
+        long replicatingReplicaCount = 0;
+        for (ReplicationJob job : runningJobs.values()) {
+            replicatingReplicaCount += job.getReplicationReplicaCount();
+        }
+        return replicatingReplicaCount;
     }
 
     private long getReplicatingDataSize() {

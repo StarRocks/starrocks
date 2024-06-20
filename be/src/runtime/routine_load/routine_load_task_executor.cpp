@@ -441,13 +441,8 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             break;
         }
 
-        std::vector<RdKafka::TopicPartition*> topic_partitions;
-        for (auto& kv : ctx->kafka_info->cmt_offset) {
-            RdKafka::TopicPartition* tp1 = RdKafka::TopicPartition::create(ctx->kafka_info->topic, kv.first, kv.second);
-            topic_partitions.push_back(tp1);
-        }
-
-        st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->commit(topic_partitions);
+        st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->commit(ctx->kafka_info->topic,
+                                                                           ctx->kafka_info->cmt_offset);
         if (!st.ok()) {
             // Kafka Offset Commit is idempotent, Failure should not block the normal process
             // So just print a warning
@@ -455,12 +450,6 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         }
         _data_consumer_pool.return_consumer(consumer);
 
-        // delete TopicPartition finally
-        auto tp_deleter = [&topic_partitions]() {
-            std::for_each(topic_partitions.begin(), topic_partitions.end(),
-                          [](RdKafka::TopicPartition* tp1) { delete tp1; });
-        };
-        DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
     } break;
     case TLoadSourceType::PULSAR: {
         for (auto& kv : ctx->pulsar_info->ack_offset) {

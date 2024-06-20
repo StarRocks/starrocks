@@ -40,6 +40,7 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
@@ -60,6 +61,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -156,7 +158,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean enablePersistentIndex = false;
 
     // Only meaningful when enablePersistentIndex = true.
-    TPersistentIndexType persistendIndexType;
+    TPersistentIndexType persistentIndexType;
 
     private int primaryIndexCacheExpireSec = 0;
 
@@ -196,13 +198,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "hasDelete")
     private boolean hasDelete = false;
     @SerializedName(value = "hasForbitGlobalDict")
-    private boolean hasForbitGlobalDict = false;
+    private boolean hasForbiddenGlobalDict = false;
 
     @SerializedName(value = "storageInfo")
     private StorageInfo storageInfo;
 
-    // partitionId -> binlogAvailabeVersion
-    private Map<Long, Long> binlogAvailabeVersions = new HashMap<>();
+    // partitionId -> binlogAvailableVersion
+    private Map<Long, Long> binlogAvailableVersions = new HashMap<>();
 
     private BinlogConfig binlogConfig;
 
@@ -216,6 +218,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean useFastSchemaEvolution;
 
     private PeriodDuration dataCachePartitionDuration;
+
+    private Multimap<String, String> location;
 
     public TableProperty() {
         this(Maps.newLinkedHashMap());
@@ -239,7 +243,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
             Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
         }
         newTableProperty.hasDelete = this.hasDelete;
-        newTableProperty.hasForbitGlobalDict = this.hasForbitGlobalDict;
+        newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
+        if (this.storageInfo != null) {
+            newTableProperty.storageInfo =
+                    new StorageInfo(this.storageInfo.getFilePathInfo(), this.storageInfo.getCacheInfo());
+        }
         return newTableProperty;
     }
 
@@ -291,6 +299,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 buildPartitionLiveNumber();
                 buildDataCachePartitionDuration();
+                buildLocation();
+                buildStorageCoolDownTTL();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -344,11 +354,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildBinlogAvailableVersion() {
-        binlogAvailabeVersions = new HashMap<>();
+        binlogAvailableVersions = new HashMap<>();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(BINLOG_PARTITION)) {
                 long partitionId = Long.parseLong(entry.getKey().split("_")[2]);
-                binlogAvailabeVersions.put(partitionId, Long.parseLong(entry.getValue()));
+                binlogAvailableVersions.put(partitionId, Long.parseLong(entry.getValue()));
             }
         }
         return this;
@@ -398,17 +408,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildExcludedTriggerTables() {
         String excludedRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, null);
         List<TableName> tables = Lists.newArrayList();
-        if (excludedRefreshConf == null) {
-            excludedTriggerTables = tables;
-        } else {
+        if (excludedRefreshConf != null) {
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
                     .splitToList(excludedRefreshConf);
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
                 tables.add(tableName);
             }
-            excludedTriggerTables = tables;
         }
+        excludedTriggerTables = tables;
         return this;
     }
 
@@ -416,6 +424,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         String sortKeys = properties.get(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS);
         this.mvSortKeys = analyzeMvSortKeys(sortKeys);
         return this;
+    }
+
+    public void putMvSortKeys() {
+        if (CollectionUtils.isNotEmpty(mvSortKeys)) {
+            String value = Joiner.on(",").join(mvSortKeys);
+            this.properties.put(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS, value);
+        }
     }
 
     public static List<String> analyzeMvSortKeys(String value) {
@@ -492,8 +507,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildCompressionType() {
-        compressionType = TCompressionType.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
-                TCompressionType.LZ4_FRAME.name()));
+        String compression = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
+                TCompressionType.LZ4_FRAME.name());
+        for (TCompressionType type : TCompressionType.values()) {
+            if (type.name().equalsIgnoreCase(compression)) {
+                compressionType = type;
+                return this;
+            }
+        }
+        compressionType = TCompressionType.LZ4_FRAME;
         return this;
     }
 
@@ -532,7 +554,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildPersistentIndexType() {
         String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
         if (type.equals("LOCAL")) {
-            persistendIndexType = TPersistentIndexType.LOCAL;
+            persistentIndexType = TPersistentIndexType.LOCAL;
         }
         return this;
     }
@@ -548,7 +570,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 return "UNKNOWN";
         }
     }
-
 
     public TableProperty buildConstraint() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
@@ -594,6 +615,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildStorageType() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
             storageType = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE);
+        }
+        return this;
+    }
+
+    public TableProperty buildLocation() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            String locationStr = properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            if (locationStr.isEmpty()) {
+                properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+                location = null;
+            } else {
+                location = PropertyAnalyzer.analyzeLocationStringToMap(
+                        properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION));
+            }
+        } else {
+            location = null;
         }
         return this;
     }
@@ -703,15 +740,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public String getPersistentIndexTypeString() {
-        return persistentIndexTypeToString(persistendIndexType);
+        return persistentIndexTypeToString(persistentIndexType);
     }
 
     public TPersistentIndexType getPersistentIndexType() {
-        return persistendIndexType;
+        return persistentIndexType;
     }
 
     public String storageType() {
         return storageType;
+    }
+
+    public Multimap<String, String> getLocation() {
+        return location;
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -742,12 +783,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.hasDelete = hasDelete;
     }
 
-    public boolean hasForbitGlobalDict() {
-        return hasForbitGlobalDict;
+    public boolean hasForbiddenGlobalDict() {
+        return hasForbiddenGlobalDict;
     }
 
-    public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
-        this.hasForbitGlobalDict = hasForbitGlobalDict;
+    public void setHasForbiddenGlobalDict(boolean hasForbiddenGlobalDict) {
+        this.hasForbiddenGlobalDict = hasForbiddenGlobalDict;
     }
 
     public void setStorageInfo(StorageInfo storageInfo) {
@@ -778,8 +819,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.foreignKeyConstraints = foreignKeyConstraints;
     }
 
-    public Map<Long, Long> getBinlogAvailaberVersions() {
-        return binlogAvailabeVersions;
+    public Map<Long, Long> getBinlogAvailableVersions() {
+        return binlogAvailableVersions;
     }
 
     public PeriodDuration getDataCachePartitionDuration() {
@@ -791,7 +832,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public void clearBinlogAvailableVersion() {
-        binlogAvailabeVersions.clear();
+        binlogAvailableVersions.clear();
         for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<String, String> entry = it.next();
             if (entry.getKey().startsWith(BINLOG_PARTITION)) {
@@ -844,5 +885,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildUseFastSchemaEvolution();
         buildStorageType();
         buildMvProperties();
+        buildLocation();
     }
 }

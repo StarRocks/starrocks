@@ -82,6 +82,8 @@ public class StreamLoadInfo {
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
+    private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
+
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
         this.txnId = txnId;
@@ -231,6 +233,10 @@ public class StreamLoadInfo {
 
     public TCompressionType getTransmisionCompressionType() {
         return compressionType;
+    }
+
+    public TCompressionType getPayloadCompressionType() {
+        return payloadCompressionType;
     }
 
     public boolean getEnableReplicatedStorage() {
@@ -428,6 +434,13 @@ public class StreamLoadInfo {
 
         if (request.isSetPartial_update_mode()) {
             partialUpdateMode = request.getPartial_update_mode();
+        }
+
+        if (request.isSetPayload_compression_type()) {
+            payloadCompressionType = CompressionUtils.findTCompressionByName(request.getPayload_compression_type());
+            if (payloadCompressionType == null) {
+                throw new UserException("unsupported compression type: " + request.getPayload_compression_type());
+            }
         }
     }
 

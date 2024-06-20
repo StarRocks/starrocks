@@ -52,6 +52,14 @@ struct ByteBuffer {
         return ptr;
     }
 
+    static ByteBufferPtr reallocate(const ByteBufferPtr& old_ptr, size_t new_size) {
+        if (new_size <= old_ptr->capacity) return old_ptr;
+
+        ByteBufferPtr ptr(new ByteBuffer(new_size));
+        ptr->put_bytes(old_ptr->ptr, old_ptr->pos);
+        return ptr;
+    }
+
     ~ByteBuffer() { delete[] ptr; }
 
     void put_bytes(const char* data, size_t size) {

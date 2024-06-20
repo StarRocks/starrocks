@@ -280,7 +280,9 @@ public class AstToStringBuilder {
                 if (setVar instanceof SystemVariable) {
                     SystemVariable systemVariable = (SystemVariable) setVar;
                     String setVarSql = "";
-                    setVarSql += systemVariable.getType().toString() + " ";
+                    if (systemVariable.getType() != null) {
+                        setVarSql += systemVariable.getType().toString() + " ";
+                    }
                     setVarSql += "`" + systemVariable.getVariable() + "`";
                     setVarSql += " = ";
                     setVarSql += visit(systemVariable.getResolvedExpression());
@@ -760,16 +762,7 @@ public class AstToStringBuilder {
             StringBuilder sb = new StringBuilder();
             sb.append(FileTableFunctionRelation.IDENTIFIER);
             sb.append("(");
-            boolean first = true;
-            for (Map.Entry<String, String> entry : node.getProperties().entrySet()) {
-                if (!first) {
-                    sb.append(",");
-                }
-                first = false;
-                sb.append("'").append(entry.getKey()).append("'");
-                sb.append("=");
-                sb.append("'").append((entry.getValue())).append("'");
-            }
+            sb.append(new PrintableMap<String, String>(node.getProperties(), "=", true, false, true));
             sb.append(")");
             return sb.toString();
         }

@@ -273,7 +273,7 @@ public class HiveMetastoreOperationsTest {
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Database 'db' location is not set",
+                "Failed to find location in database 'db'",
                 () -> hmsOps.getDefaultLocation("db", "table"));
 
         new MockUp<HiveWriteUtils>() {

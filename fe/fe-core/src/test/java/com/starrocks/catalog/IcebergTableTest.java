@@ -38,7 +38,7 @@ public class IcebergTableTest extends TableTestBase {
     public void testValidateIcebergColumnType() throws DdlException {
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
         IcebergTable oTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
-                "resource_name", "iceberg_db", "iceberg_table", columns, mockedNativeTableB, Maps.newHashMap());
+                "resource_name", "iceberg_db", "iceberg_table", "", columns, mockedNativeTableB, Maps.newHashMap());
         List<Column> inputColumns = Lists.newArrayList(new Column("k1", INT, true));
         IcebergTableFactory.validateIcebergColumnType(inputColumns, oTable);
     }

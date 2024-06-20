@@ -39,6 +39,7 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testVariableReference() {
         Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         double min = 0.0;
         double max = 100.0;
         double distinctValue = 100;
@@ -399,6 +400,7 @@ public class ExpressionStatisticsCalculatorTest {
         Statistics.Builder builder = Statistics.builder();
         ColumnStatistic leftStatistic = new ColumnStatistic(-100, 100, 0, 0, 100);
         ColumnStatistic rightStatistic = new ColumnStatistic(100, 200, 0, 0, 100);
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
 
@@ -506,6 +508,7 @@ public class ExpressionStatisticsCalculatorTest {
         builder = Statistics.builder();
         leftStatistic = new ColumnStatistic(-100, -10, 0, 0, 20);
         rightStatistic = new ColumnStatistic(-2, 0, 0, 0, 1);
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(left, leftStatistic);
         builder.addColumnStatistic(right, rightStatistic);
         callOperator = new CallOperator(FunctionSet.MULTIPLY, Type.BIGINT, Lists.newArrayList(left, right));
@@ -525,6 +528,7 @@ public class ExpressionStatisticsCalculatorTest {
         CastOperator callOperator = new CastOperator(Type.VARCHAR, columnRefOperator);
 
         Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(columnRefOperator, new ColumnStatistic(-100, 100, 0, 0, 100));
 
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
@@ -558,6 +562,7 @@ public class ExpressionStatisticsCalculatorTest {
         CallOperator callOperator = new CallOperator(FunctionSet.FROM_DAYS, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
 
         Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100);
         builder.addColumnStatistic(columnRefOperator, new ColumnStatistic(Double.NEGATIVE_INFINITY,
                 Double.POSITIVE_INFINITY, 0, 0, 100));
 

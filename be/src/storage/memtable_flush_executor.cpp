@@ -158,6 +158,11 @@ Status MemTableFlushExecutor::init_for_lake_table(const std::vector<DataDir*>& d
             .build(&_flush_pool);
 }
 
+// Calculate max thread number for lake table
+// If lake_flush_thread_num_per_store > 0, return lake_flush_thread_num_per_store * data_dirs.size()
+// If lake_flush_thread_num_per_store == 0, return 2 * cpu_cores * data_dirs.size()
+// If lake_flush_thread_num_per_store < 0, return |lake_flush_thread_num_per_store| * cpu_cores * data_dirs.size()
+// data_dirs.size() is limited in [1, 8]
 int MemTableFlushExecutor::calc_max_threads_for_lake_table(const std::vector<DataDir*>& data_dirs) {
     int threads = config::lake_flush_thread_num_per_store;
     if (threads == 0) {
@@ -165,9 +170,11 @@ int MemTableFlushExecutor::calc_max_threads_for_lake_table(const std::vector<Dat
     }
     if (threads <= 0) {
         threads = -threads;
-        threads = CpuInfo::num_cores() * threads;
+        threads *= CpuInfo::num_cores();
     }
     int data_dir_num = static_cast<int>(data_dirs.size());
+    data_dir_num = std::max(1, data_dir_num);
+    data_dir_num = std::min(8, data_dir_num);
     return data_dir_num * threads;
 }
 

@@ -98,6 +98,7 @@ public class TransactionChecker {
             if (table == null || table.isCloudNativeTableOrMaterializedView()) {
                 continue;
             }
+
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                 long partitionId = partitionCommitInfo.getPartitionId();
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -106,7 +107,8 @@ public class TransactionChecker {
                 }
                 PartitionChecker partitionChecker = new PartitionChecker(partitionId, partitionCommitInfo.getVersion(),
                         table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum()));
-                List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableCommitInfo.getTableId(), partition);
+                List<MaterializedIndex> allIndices =
+                        txn.getPartitionLoadedTblIndexes(tableCommitInfo.getTableId(), partition);
                 for (MaterializedIndex index : allIndices) {
                     for (Tablet tablet : index.getTablets()) {
                         partitionChecker.tablets.add((LocalTablet) tablet);

@@ -57,6 +57,8 @@ import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.OpenCSVSerde;
 import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.table.HoodieTableConfig;
@@ -123,11 +125,18 @@ public class HiveMetastoreApiConverter {
         return sd.getLocation();
     }
 
-    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
+    public static String toComment(Map<String, String> tableParams) {
+        if (tableParams != null && tableParams.containsKey("comment")) {
+            return tableParams.getOrDefault("comment", "");
+        }
+        return "";
+    }
+
+    public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database, String dbName) {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
         }
-        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), database.getName(),
+        return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName.toLowerCase(),
                 database.getLocationUri());
     }
 
@@ -158,6 +167,7 @@ public class HiveMetastoreApiConverter {
                         .map(FieldSchema::getName)
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
+                .setComment(toComment(table.getParameters()))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setProperties(toHiveProperties(table,
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name())))
@@ -304,7 +314,8 @@ public class HiveMetastoreApiConverter {
                 .setResourceName(toResourceName(catalogName, "hudi"))
                 .setHiveDbName(table.getDbName())
                 .setHiveTableName(table.getTableName())
-                .setFullSchema(toFullSchemasForHudiTable(hudiSchema))
+                .setFullSchema(toFullSchemasForHudiTable(table, hudiSchema))
+                .setComment(toComment(table.getParameters()))
                 .setPartitionColNames(partitionColumnNames)
                 .setDataColNames(toDataColumnNamesForHudiTable(hudiSchema, partitionColumnNames))
                 .setHudiProperties(toHudiProperties(table, metaClient, hudiSchema))
@@ -316,11 +327,15 @@ public class HiveMetastoreApiConverter {
 
     public static Partition toPartition(StorageDescriptor sd, Map<String, String> params) {
         requireNonNull(sd, "StorageDescriptor is null");
+        Map<String, String> textFileParameters = Maps.newHashMap();
+        textFileParameters.putAll(sd.getSerdeInfo().getParameters());
+        // "skip.header.line.count" is set in TBLPROPERTIES
+        textFileParameters.putAll(params);
         Partition.Builder partitionBuilder = Partition.builder()
                 .setParams(params)
                 .setFullPath(sd.getLocation())
                 .setInputFormat(toRemoteFileInputFormat(sd.getInputFormat()))
-                .setTextFileFormatDesc(toTextFileFormatDesc(sd.getSerdeInfo().getParameters()))
+                .setTextFileFormatDesc(toTextFileFormatDesc(textFileParameters))
                 .setSplittable(RemoteFileInputFormat.isSplittable(sd.getInputFormat()));
 
         return partitionBuilder.build();
@@ -429,10 +444,12 @@ public class HiveMetastoreApiConverter {
         return fullSchema;
     }
 
-    public static List<Column> toFullSchemasForHudiTable(Schema hudiSchema) {
+    public static List<Column> toFullSchemasForHudiTable(Table table, Schema hudiSchema) {
         List<Schema.Field> allHudiColumns = hudiSchema.getFields();
+        List<FieldSchema> allFieldSchemas = getAllFieldSchemas(table);
         List<Column> fullSchema = Lists.newArrayList();
-        for (Schema.Field fieldSchema : allHudiColumns) {
+        for (int i = 0; i < allHudiColumns.size(); i++) {
+            Schema.Field fieldSchema = allHudiColumns.get(i);
             Type type;
             try {
                 type = fromHudiType(fieldSchema.schema());
@@ -440,7 +457,7 @@ public class HiveMetastoreApiConverter {
                 LOG.error("Failed to convert hudi type {}", fieldSchema.schema().getType().getName(), e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(fieldSchema.name(), type, true);
+            Column column = new Column(fieldSchema.name(), type, true, allFieldSchemas.get(i).getComment());
             fullSchema.add(column);
         }
         return fullSchema;
@@ -537,7 +554,7 @@ public class HiveMetastoreApiConverter {
         return RemoteFileInputFormat.fromHdfsInputFormatClass(inputFormat);
     }
 
-    public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> serdeParams) {
+    public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> parameters) {
         final String DEFAULT_FIELD_DELIM = "\001";
         final String DEFAULT_COLLECTION_DELIM = "\002";
         final String DEFAULT_MAPKEY_DELIM = "\003";
@@ -551,28 +568,32 @@ public class HiveMetastoreApiConverter {
         // There is a typo in Hive 2.x version, and fixed in Hive 3.x version.
         // https://issues.apache.org/jira/browse/HIVE-16922
         String collectionDelim;
-        if (serdeParams.containsKey("colelction.delim")) {
-            collectionDelim = serdeParams.getOrDefault("colelction.delim", "");
+        if (parameters.containsKey("colelction.delim")) {
+            collectionDelim = parameters.getOrDefault("colelction.delim", "");
         } else {
-            collectionDelim = serdeParams.getOrDefault("collection.delim", "");
+            collectionDelim = parameters.getOrDefault(serdeConstants.COLLECTION_DELIM, "");
         }
 
-        String fieldDelim = serdeParams.getOrDefault("field.delim", "");
+        String fieldDelim = parameters.getOrDefault(serdeConstants.FIELD_DELIM, "");
         if (fieldDelim.isEmpty()) {
             // Support for hive org.apache.hadoop.hive.serde2.OpenCSVSerde
             // https://cwiki.apache.org/confluence/display/hive/csv+serde
-            fieldDelim = serdeParams.getOrDefault("separatorChar", "");
+            fieldDelim = parameters.getOrDefault(OpenCSVSerde.SEPARATORCHAR, "");
         }
-        String lineDelim = serdeParams.getOrDefault("line.delim", "");
-        String mapkeyDelim = serdeParams.getOrDefault("mapkey.delim", "");
+        String lineDelim = parameters.getOrDefault(serdeConstants.LINE_DELIM, "");
+        String mapkeyDelim = parameters.getOrDefault(serdeConstants.MAPKEY_DELIM, "");
+        int skipHeaderLineCount = Integer.parseInt(parameters.getOrDefault(serdeConstants.HEADER_COUNT, "0"));
+        if (skipHeaderLineCount < 0) {
+            skipHeaderLineCount = 0;
+        }
 
-        // check is empty
-        fieldDelim = fieldDelim.isEmpty() ? DEFAULT_FIELD_DELIM : fieldDelim;
-        lineDelim = lineDelim.isEmpty() ? DEFAULT_LINE_DELIM : lineDelim;
-        collectionDelim = collectionDelim.isEmpty() ? DEFAULT_COLLECTION_DELIM : collectionDelim;
-        mapkeyDelim = mapkeyDelim.isEmpty() ? DEFAULT_MAPKEY_DELIM : mapkeyDelim;
+        // check delim is empty, if it's empty, we convert it to null
+        fieldDelim = fieldDelim.isEmpty() ? null : fieldDelim;
+        lineDelim = lineDelim.isEmpty() ? null : lineDelim;
+        collectionDelim = collectionDelim.isEmpty() ? null : collectionDelim;
+        mapkeyDelim = mapkeyDelim.isEmpty() ? null : mapkeyDelim;
 
-        return new TextFileFormatDesc(fieldDelim, lineDelim, collectionDelim, mapkeyDelim);
+        return new TextFileFormatDesc(fieldDelim, lineDelim, collectionDelim, mapkeyDelim, skipHeaderLineCount);
     }
 
     public static HiveCommonStats toHiveCommonStats(Map<String, String> params) {

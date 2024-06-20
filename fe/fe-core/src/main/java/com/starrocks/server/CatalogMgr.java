@@ -117,7 +117,7 @@ public class CatalogMgr {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
             CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
             if (null == connector) {
-                LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+                LOG.error("{} connector [{}] create failed", type, catalogName);
                 throw new DdlException("connector create failed");
             }
             long id = isResourceMappingCatalog(catalogName) ?
@@ -260,7 +260,7 @@ public class CatalogMgr {
 
         CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
         if (catalogConnector == null) {
-            LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+            LOG.error("{} connector [{}] create failed.", type, catalogName);
             throw new DdlException("connector create failed");
         }
 
@@ -516,15 +516,15 @@ public class CatalogMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try {
-            int serializedCatalogsSize = reader.readInt();
-            for (int i = 0; i < serializedCatalogsSize; ++i) {
-                Catalog catalog = reader.readJson(Catalog.class);
+        int serializedCatalogsSize = reader.readInt();
+        for (int i = 0; i < serializedCatalogsSize; ++i) {
+            Catalog catalog = reader.readJson(Catalog.class);
+            try {
                 replayCreateCatalog(catalog);
+            } catch (Exception e) {
+                LOG.error("Failed to load catalog {}, ignore the error, continue load", catalog.getName(), e);
             }
-            loadResourceMappingCatalog();
-        } catch (DdlException e) {
-            throw new IOException(e);
         }
+        loadResourceMappingCatalog();
     }
 }

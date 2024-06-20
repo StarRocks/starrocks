@@ -151,7 +151,7 @@ select max(c0- 2.8665963056616452*(lt - 3.062472673706541)) as adjust_lt from (s
 -- !result
 select avg(c0- 2.8665963056616452*(lt - 3.062472673706541)) as adjust_lt from (select c0, array_sum(c1) lt, c2 from avg_test) t group by c2;
 -- result:
--291.2137392418358345703798959387468
+-291.213739241835834570
 -- !result
 select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ max(lt- 2.8665963056616452*(c2 - 3.062472673706541)) as adjust_lt from (select c0, array_sum(c1) lt, c2 from avg_test) t group by c0;
 -- result:

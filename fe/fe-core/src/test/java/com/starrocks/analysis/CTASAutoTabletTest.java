@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import org.jetbrains.annotations.TestOnly;
@@ -89,8 +90,8 @@ public class CTASAutoTabletTest {
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(bucketNum1, 6);
+        Assert.assertEquals(bucketNum1, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
         Assert.assertEquals(bucketNum2, 3);
-        Assert.assertEquals(bucketNum3, 6);
+        Assert.assertEquals(bucketNum3, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
     }
 }

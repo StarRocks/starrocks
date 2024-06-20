@@ -161,19 +161,19 @@ public class GlueMetastoreClientDelegate {
     public void createDatabase(org.apache.hadoop.hive.metastore.api.Database database) throws TException {
         checkNotNull(database, "database cannot be null");
 
-        if (StringUtils.isEmpty(database.getLocationUri())) {
-            database.setLocationUri(wh.getDefaultDatabasePath(database.getName()).toString());
-        } else {
+        Path dbPath = null;
+        boolean makeDir = false;
+        if (!StringUtils.isEmpty(database.getLocationUri())) {
             database.setLocationUri(wh.getDnsPath(new Path(database.getLocationUri())).toString());
+            dbPath = new Path(database.getLocationUri());
+            makeDir = MetastoreClientUtils.makeDirs(wh, dbPath);
         }
-        Path dbPath = new Path(database.getLocationUri());
-        boolean madeDir = MetastoreClientUtils.makeDirs(wh, dbPath);
 
         try {
             DatabaseInput catalogDatabase = GlueInputConverter.convertToDatabaseInput(database);
             glueMetastore.createDatabase(catalogDatabase);
         } catch (AmazonServiceException e) {
-            if (madeDir) {
+            if (makeDir) {
                 wh.deleteDir(dbPath, true, database);
             }
             throw CatalogToHiveConverter.wrapInHiveException(e);

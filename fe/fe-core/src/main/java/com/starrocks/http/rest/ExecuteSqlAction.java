@@ -39,6 +39,7 @@ import com.google.gson.reflect.TypeToken;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
@@ -237,9 +238,9 @@ public class ExecuteSqlAction extends RestBaseAction {
 
         context.setConnectScheduler(connectScheduler);
         // mark as registered
-        boolean registered = connectScheduler.registerConnection(context);
-        if (!registered) {
-            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, "Reach limit of connections");
+        Pair<Boolean, String> result = connectScheduler.registerConnection(context);
+        if (!result.first) {
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, result.second);
         }
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);

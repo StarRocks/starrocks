@@ -585,7 +585,8 @@ public class ConnectProcessorTest extends DDLTestBase {
                 ");";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
-        processor.addRunningQueryDetail(statementBase);
+        processor.executor = new StmtExecutor(ctx, statementBase);
+        processor.executor.addRunningQueryDetail(statementBase);
 
         Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }

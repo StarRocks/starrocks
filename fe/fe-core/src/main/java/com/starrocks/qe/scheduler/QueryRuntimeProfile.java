@@ -99,6 +99,8 @@ public class QueryRuntimeProfile {
     private Supplier<RuntimeProfile> topProfileSupplier;
     private ExecPlan execPlan;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
+    // whether this profile is belong to short-circuit query
+    private final boolean isShortCircuit;
 
     // ------------------------------------------------------------------------------------
     // Fields for load.
@@ -122,9 +124,11 @@ public class QueryRuntimeProfile {
 
     public QueryRuntimeProfile(ConnectContext connectContext,
                                JobSpec jobSpec,
-                               int numFragments) {
+                               int numFragments,
+                               boolean isShortCircuit) {
         this.connectContext = connectContext;
         this.jobSpec = jobSpec;
+        this.isShortCircuit = isShortCircuit;
 
         this.queryProfile = new RuntimeProfile("Execution");
         this.fragmentProfiles = new ArrayList<>(numFragments);
@@ -221,6 +225,15 @@ public class QueryRuntimeProfile {
         if (EXECUTOR.getQueue().size() > Config.profile_process_blocking_queue_size) {
             return false;
         }
+
+        // short circuit point query will get profile from be synchronously, so just submit task here
+        if (isShortCircuit) {
+            EXECUTOR.submit(() -> {
+                task.accept(true);
+            });
+            return true;
+        }
+
         // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
         profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
             task.accept(true);
@@ -232,9 +245,6 @@ public class QueryRuntimeProfile {
         boolean res = false;
         try {
             res = profileDoneSignal.await(timeout, unit);
-            if (!res) {
-                LOG.warn("failed to get profile within {} seconds", timeout);
-            }
         } catch (InterruptedException e) { // NOSONAR
             LOG.warn("profile signal await error", e);
         }
@@ -267,15 +277,17 @@ public class QueryRuntimeProfile {
         long lastTime = lastRuntimeProfileUpdateTime.get();
         Supplier<RuntimeProfile> topProfileSupplier = this.topProfileSupplier;
         ExecPlan plan = execPlan;
-        if (topProfileSupplier != null && plan != null && connectContext != null &&
-                connectContext.isProfileEnabled() &&
+        if (topProfileSupplier != null && plan != null && (connectContext != null &&
+                // broker load is async job, we can't get the job running time through the session start time,
+                // so we put the judgment logic in BE
+                connectContext.isProfileEnabled() || jobSpec.isBrokerLoad()) &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
                 // Interval * 0.95 * 1000 to allow a certain range of deviation
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
+            profile.addChild(buildQueryProfile(connectContext.needMergeProfile() || jobSpec.isBrokerLoad()));
             ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
             saveRunningProfile(profilingPlan, profile);
             LOG.debug("update profile, profilingPlan: {}, profile: {}", profilingPlan, profile);

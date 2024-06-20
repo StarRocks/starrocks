@@ -219,10 +219,13 @@ public class MvRewritePreprocessor {
     }
 
     public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
         // MV Rewrite will be used when cbo is enabled.
-        if (context.getOptimizerConfig().isRuleBased()) {
+        if (context.getOptimizerConfig().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
+                !sessionVariable.isEnableMaterializedViewRewrite()) {
             return;
         }
+
         try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
             // MV Rewrite will be used when cbo is enabled.
             if (context.getOptimizerConfig().isRuleBased()) {
@@ -458,22 +461,21 @@ public class MvRewritePreprocessor {
 
     private List<MvWithPlanContext> getMVWithContext(MaterializedView mv) {
         if (!mv.isActive()) {
-            logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "inactive");
             return null;
         }
 
         List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
                 connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
         if (CollectionUtils.isEmpty(mvPlanContexts)) {
-            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
-                    mv.getName());
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan");
             return null;
         }
         List<MvWithPlanContext> mvWithPlanContexts = Lists.newArrayList();
         for (int i = 0; i < mvPlanContexts.size(); i++) {
             MvPlanContext mvPlanContext = mvPlanContexts.get(i);
             if (!mvPlanContext.isValidMvPlan()) {
-                logMVPrepare(connectContext, mv, "MV plan is not valid({}/{}): {}",
+                OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "invalid query plan {}/{}: {}",
                         i, mvPlanContexts.size(), mvPlanContext.getInvalidReason());
                 continue;
             }
@@ -511,11 +513,12 @@ public class MvRewritePreprocessor {
                                                   MaterializedView mv,
                                                   Set<Table> queryTables) {
         if (!mv.isActive())  {
-            logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
             return false;
         }
         // if mv is a subset of query tables, it can be used for rewrite.
         if (!canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
             return false;
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
@@ -526,6 +529,10 @@ public class MvRewritePreprocessor {
                     planContexts.stream().noneMatch(mvPlanContext -> mvPlanContext.isValidMvPlan())) {
                 logMVPrepare(connectContext, "MV {} has not a valid plan from {} plan contexts",
                         mv.getName(), planContexts.size());
+                String message = planContexts.stream()
+                        .map(MvPlanContext::getInvalidReason)
+                        .collect(Collectors.joining(";"));
+                OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
                 return false;
             }
         }
@@ -738,8 +745,7 @@ public class MvRewritePreprocessor {
 
         Set<String> partitionNamesToRefresh = Sets.newHashSet();
         if (!mv.getPartitionNamesToRefreshForMv(partitionNamesToRefresh, true)) {
-            logMVPrepare(connectContext, mv, "MV {} cannot be used for rewrite, " +
-                    "stale partitions {}", mv.getName(), partitionNamesToRefresh);
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", partitionNamesToRefresh);
             return;
         }
         PartitionInfo partitionInfo = mv.getPartitionInfo();

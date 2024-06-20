@@ -23,6 +23,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -301,5 +303,81 @@ public class StatisticsSQLTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "table_id IN (4, 5, 6)");
         assertCContains(plan, "partition_id NOT IN (1, 2, 3)");
+    }
+
+    @Test
+    public void testCacheQueryColumnStatics() {
+        String sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(1L, 2L, Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(Type.INT, Type.INT));
+        assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
+        Assert.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(1L, 2L,
+                Lists.newArrayList("col1", "col2", "col3"),
+                Lists.newArrayList(Type.INT, Type.BIGINT, Type.LARGEINT));
+        assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col3\")");
+        Assert.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(1L, 2L,
+                Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
+                Lists.newArrayList(Type.INT, Type.BIGINT, Type.LARGEINT, Type.STRING, Type.VARCHAR, Type.ARRAY_DATE,
+                        Type.DATE));
+        assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col3\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col4\", \"col5\", \"col6\")");
+        assertContains(sql, "table_id = 2 and column_name in (\"col7\")");
+        Assert.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(1L, 2L,
+                Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
+                Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 3),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 8, 3),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 6),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
+        assertContains(sql, "table_id = 2 and column_name in (\"col1\", \"col2\")");
+        Assert.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
+    }
+
+    @Test
+    public void testCacheExternalQueryColumnStatics() {
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(Type.INT, Type.INT));
+        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col1\", \"col2\")");
+        Assert.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
+                Lists.newArrayList("col1", "col2", "col3"),
+                Lists.newArrayList(Type.INT, Type.BIGINT, Type.LARGEINT));
+        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col3\")");
+        Assert.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
+                Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
+                Lists.newArrayList(Type.INT, Type.BIGINT, Type.LARGEINT, Type.STRING, Type.VARCHAR, Type.ARRAY_DATE,
+                        Type.DATE));
+        assertContains(sql, "column_name in (\"col1\", \"col2\")");
+        assertContains(sql, "column_name in (\"col3\")");
+        assertContains(sql, "column_name in (\"col4\", \"col5\", \"col6\")");
+        assertContains(sql, "column_name in (\"col7\")");
+        Assert.assertEquals(3, StringUtils.countMatches(sql, "UNION ALL"));
+
+        sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
+                Lists.newArrayList("col1", "col2", "col3", "col4", "col5", "col6", "col7"),
+                Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 3),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 3),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 8, 3),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 6),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 22, 7),
+                        ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 23, 8)));
+        assertContains(sql, "column_name in (\"col1\", \"col2\")");
+        Assert.assertEquals(5, StringUtils.countMatches(sql, "UNION ALL"));
     }
 }

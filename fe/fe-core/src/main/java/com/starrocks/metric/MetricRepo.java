@@ -635,7 +635,7 @@ public final class MetricRepo {
                 "The count of running task_run") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getRunningTaskRunCount();
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunScheduler().getRunningTaskCount();
             }
         };
         runningTaskRunCount.addLabel(new MetricLabel("type", "running_task_run_count"));
@@ -645,7 +645,7 @@ public final class MetricRepo {
                 "The count of pending task_run") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getPendingTaskRunCount();
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunScheduler().getPendingQueueCount();
             }
         };
         pendingTaskRunCount.addLabel(new MetricLabel("type", "pending_task_run_count"));
@@ -655,7 +655,8 @@ public final class MetricRepo {
                 "The count of history task_run") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getHistoryTaskRunCount();
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
+                        .getTaskRunHistory().getTaskRunCount();
             }
         };
         historyTaskRunCount.addLabel(new MetricLabel("type", "history_task_run_count"));

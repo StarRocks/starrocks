@@ -43,6 +43,7 @@ public:
               _file_format(std::move(file_format)),
               _compression_codec(std::move(compression_codec)),
               _cloud_conf(cloud_conf),
+              _fragment_ctx(fragment_ctx),
               _iceberg_table(iceberg_table),
               _parquet_file_schema(std::move(schema)),
               _output_expr(output_expr_ctxs),
@@ -84,6 +85,7 @@ private:
     std::string _file_format;
     TCompressionType::type _compression_codec;
     TCloudConfiguration _cloud_conf;
+    FragmentContext* _fragment_ctx;
 
     IcebergTableDescriptor* _iceberg_table;
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;

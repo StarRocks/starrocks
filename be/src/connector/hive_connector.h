@@ -76,9 +76,9 @@ public:
     int64_t io_time_spent() const override;
     int64_t estimated_mem_usage() const override;
     bool can_estimate_mem_usage() const override { return true; }
-    void _init_chunk(ChunkPtr* chunk, size_t n) override;
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
+    Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) override;
 
 private:
     const HiveDataSourceProvider* _provider;
@@ -108,6 +108,7 @@ private:
     bool _enable_populate_datacache = false;
     bool _enable_datacache_aync_populate_mode = false;
     bool _enable_datacache_io_adaptor = false;
+    int32_t _datacache_evict_probability = 0;
     bool _use_file_metacache = false;
     bool _enable_split_tasks = false;
 

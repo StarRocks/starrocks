@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,6 +33,7 @@ import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -324,8 +326,8 @@ public class MockTpchStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
-        return rowCountStats.get(tableId);
+    public Map<Long, TableStatistic> getTableStatistics(Long tableId, Collection<Partition> partitions) {
+        return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> rowCountStats.get(tableId)));
     }
 
     @Override

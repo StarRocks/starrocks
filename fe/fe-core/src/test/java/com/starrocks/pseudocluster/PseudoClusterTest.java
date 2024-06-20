@@ -119,10 +119,20 @@ public class PseudoClusterTest {
             stmt.execute("execute stmt1 using @i");
             stmt.execute("execute stmt3");
             stmt.execute("select * from test where pk = ?", 1);
-            try {
-                stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
-                Assert.fail("expected exception was not occured.");
-            } catch (SQLException e) {
+
+            {
+                SQLException e = Assert.assertThrows(SQLException.class,
+                        () -> stmt.execute("prepare stmt2 from insert overwrite test values (1,2)"));
+                Assert.assertEquals("Getting analyzing error. Detail message: This command is not " +
+                        "supported in the prepared statement protocol yet.", e.getMessage());
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
+            }
+            {
+                SQLException e = Assert.assertThrows(SQLException.class,
+                        () -> stmt.execute("prepare stmt2 from ALTER USER 'root'@'%' IDENTIFIED BY 'XXXXX' "));
+                Assert.assertEquals("Getting analyzing error. Detail message: This command is not " +
+                        "supported in the prepared statement protocol yet.", e.getMessage());
                 Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
                 Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }

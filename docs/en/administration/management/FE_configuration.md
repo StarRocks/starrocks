@@ -1070,6 +1070,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
 - Introduced in: v3.3.0
 
+##### enable_legacy_compatibility_for_replication
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
+- Introduced in: v3.1.10, v3.2.6
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -1194,6 +1203,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - Introduced in: v3.2.3
+
+##### enable_materialized_view_metrics_collect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect monitoring metrics for asynchronous materialized views by default.
+- Introduced in: v3.1.11, v3.2.5
+
+##### enable_materialized_view_text_based_rewrite
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable text-based query rewrite by default. If this item is set to `true`, the system builds the abstract syntax tree while creating an asynchronous materialized view.
+- Introduced in: v3.2.5
 
 ##### enable_mv_automatic_active_check
 
@@ -2179,7 +2206,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### task_check_interval_second
 
-- Default: 4 * 3600
+- Default: 3600
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
@@ -2450,16 +2477,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 -->
 
-<!--
 ##### tablet_sched_be_down_tolerate_time_s
 
 - Default: 900
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
+- Description: The maximum duration the scheduler allows for a BE node to remain inactive. After the time threshold is reached, tablets on that BE node will be migrated to other active BE nodes.
+- Introduced in: v2.5.7
 
 <!--
 ##### tablet_sched_colocate_be_down_tolerate_time_s
@@ -2985,6 +3010,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
 - Introduced in: v3.2.0
+
+##### lake_compaction_disable_tables
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
+- Introduced in: v3.1.11
 
 ### Other
 

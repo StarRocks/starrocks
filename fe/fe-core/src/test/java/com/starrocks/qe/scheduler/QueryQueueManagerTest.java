@@ -1113,12 +1113,14 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+                .until(() -> coords.stream()
+                        .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, after CPU usage doesn't exceed cpuUsagePermilleLimit.
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 1, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+                .until(() -> coords.stream()
+                        .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1160,12 +1162,14 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+                .until(() -> coords.stream()
+                        .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, after mem usage doesn't exceed cpuUsagePermilleLimit.
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 0, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+                .until(() -> coords.stream()
+                        .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1286,14 +1290,16 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+                .until(() -> coords.stream()
+                        .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, because the overloaded BE doesn't report in resourceUsageIntervalMs.
         GlobalVariable.setQueryQueueResourceUsageIntervalMs(1000);
         Thread.sleep(2000);
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 0, 0, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+                .until(() -> coords.stream()
+                        .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1335,13 +1341,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+                .until(() -> coords.stream()
+                        .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, because the overloaded BE becomes dead.
         backends.get(0).setAlive(false);
         GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+                .until(() -> coords.stream()
+                        .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
     }
 

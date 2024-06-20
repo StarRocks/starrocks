@@ -163,12 +163,9 @@ public class QueryTransformer {
     }
 
     private OptExprBuilder planFrom(Relation node, CTETransformerContext cteContext) {
-        // This must be a copy of the context, because the new Relation may contain cte with the same name,
-        // and the internal cte with the same name will overwrite the original mapping
-        CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         TransformerContext transformerContext = new TransformerContext(
                 columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                newCteContext, inlineView, optToAstMap);
+                cteContext, inlineView, optToAstMap);
         return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 

@@ -265,7 +265,7 @@ int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
 }
 
 template <typename T>
-void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
+void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     buf->push_null();
 }
 

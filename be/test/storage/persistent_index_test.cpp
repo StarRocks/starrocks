@@ -1469,17 +1469,36 @@ void build_persistent_index_from_tablet(size_t N) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-TEST_P(PersistentIndexTest, test_build_from_tablet) {
+TEST_P(PersistentIndexTest, test_build_from_tablet_snapshot) {
     auto manager = StorageEngine::instance()->update_manager();
     config::l0_max_mem_usage = 104857600;
     manager->mem_tracker()->set_limit(-1);
     // dump snapshot
-    build_persistent_index_from_tablet(100000);
+    build_persistent_index_from_tablet(1000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_wal) {
+    auto manager = StorageEngine::instance()->update_manager();
+    config::l0_max_mem_usage = 104857600;
+    manager->mem_tracker()->set_limit(-1);
     // write wal
     build_persistent_index_from_tablet(250000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_flush) {
+    auto manager = StorageEngine::instance()->update_manager();
+    manager->mem_tracker()->set_limit(-1);
     // flush l1
     config::l0_max_mem_usage = 1000000;
     build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_flush_advance) {
+    auto manager = StorageEngine::instance()->update_manager();
+    manager->mem_tracker()->set_limit(-1);
     // flush one tmp l1
     config::l0_max_mem_usage = 18874368;
     build_persistent_index_from_tablet(1000000);
@@ -1704,7 +1723,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 500000;
+    const int N = 50000;
     vector<Key> keys(N);
     vector<Slice> key_slices;
     vector<IndexValue> values;
@@ -1733,7 +1752,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
-        const int N = 10000;
+        const int N = 5000;
         ASSERT_OK(index.prepare(EditVersion(1, 0), N));
         for (int i = 0; i < 50; i++) {
             vector<Key> keys(N);
@@ -1774,7 +1793,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
     {
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
-        const int N = 100000;
+        const int N = 5000;
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
         for (int i = 0; i < 5; i++) {
             vector<IndexValue> values;
@@ -1796,7 +1815,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
     {
         // reload persistent index
-        const int N = 100000;
+        const int N = 5000;
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         std::vector<IndexValue> get_values(N);
@@ -1821,7 +1840,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 500000;
+    const int N = 50000;
     vector<Key> keys(N);
     vector<Slice> key_slices;
     vector<IndexValue> values;
@@ -1896,7 +1915,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         CHECK(index._has_l1);
-        const int N = 100000;
+        const int N = 10000;
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
         for (int i = 0; i < 5; i++) {
             vector<IndexValue> values;
@@ -1918,7 +1937,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 
     {
         // reload persistent index
-        const int N = 100000;
+        const int N = 1000;
         PersistentIndex index(kPersistentIndexDir);
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(true);
         ASSERT_OK(index.load(index_meta));
@@ -1933,7 +1952,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     {
         // memory usage is too high
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(false);
-        const int N = 100000;
+        const int N = 10000;
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         std::vector<IndexValue> get_values(N);
@@ -2569,6 +2588,8 @@ TEST_P(PersistentIndexTest, test_index_keep_delete) {
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
         ASSERT_EQ(0, index.kv_num_in_immutable_index());
+        ASSERT_EQ(0, index.kv_stat_in_estimate_stats().first);
+        ASSERT_EQ(0, index.kv_stat_in_estimate_stats().second);
 
         ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
         // erase non-exist keys
@@ -2581,6 +2602,31 @@ TEST_P(PersistentIndexTest, test_index_keep_delete) {
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
         ASSERT_EQ(N, index.kv_num_in_immutable_index());
+        ASSERT_EQ(N, index.kv_stat_in_estimate_stats().second);
+        ASSERT_EQ(index.usage(), index.kv_stat_in_estimate_stats().first);
+
+        std::vector<IndexValue> old_values2(keys.size(), IndexValue(NullIndexValue));
+        ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
+        // flush advance
+        config::l0_max_mem_usage = 1024;
+        ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values2.data()).ok());
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+        ASSERT_EQ(N, index.kv_num_in_immutable_index());
+        ASSERT_EQ(N, index.kv_stat_in_estimate_stats().second);
+        ASSERT_EQ(index.usage(), index.kv_stat_in_estimate_stats().first);
+
+        vector<IndexValue> erase_old_values2(erase_keys.size());
+        ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
+        ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values2.data()).ok());
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+        ASSERT_EQ(0, index.kv_num_in_immutable_index());
+        ASSERT_EQ(0, index.kv_stat_in_estimate_stats().first);
+        ASSERT_EQ(0, index.kv_stat_in_estimate_stats().second);
+
+        index.clear_kv_stat();
+        ASSERT_FALSE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
     }
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
@@ -2947,30 +2993,31 @@ TEST_P(PersistentIndexTest, pindex_compaction_disk_limit) {
     TabletSharedPtr tablet3 = create_tablet(rand(), rand());
     config::pindex_major_compaction_limit_per_disk = 1;
     PersistentIndexCompactionManager mgr;
-    ASSERT_FALSE(mgr.disk_limit(tablet.get()));
-    mgr.mark_running(tablet.get());
-    ASSERT_TRUE(mgr.is_running(tablet.get()));
-    ASSERT_FALSE(mgr.is_running(tablet2.get()));
-    ASSERT_FALSE(mgr.is_running(tablet3.get()));
-    ASSERT_TRUE(mgr.disk_limit(tablet.get()));
-    ASSERT_TRUE(mgr.disk_limit(tablet2.get()));
-    ASSERT_TRUE(mgr.disk_limit(tablet3.get()));
+    ASSERT_FALSE(mgr.disk_limit(tablet->data_dir()));
+    mgr.mark_running(tablet->tablet_id(), tablet->data_dir());
+    ASSERT_TRUE(mgr.is_running(tablet->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet2->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet3->tablet_id()));
+    ASSERT_TRUE(mgr.disk_limit(tablet->data_dir()));
+    ASSERT_TRUE(mgr.disk_limit(tablet2->data_dir()));
+    ASSERT_TRUE(mgr.disk_limit(tablet3->data_dir()));
     config::pindex_major_compaction_limit_per_disk = 2;
-    ASSERT_FALSE(mgr.disk_limit(tablet2.get()));
-    mgr.mark_running(tablet2.get());
-    ASSERT_TRUE(mgr.is_running(tablet.get()));
-    ASSERT_TRUE(mgr.is_running(tablet2.get()));
-    ASSERT_FALSE(mgr.is_running(tablet3.get()));
-    ASSERT_TRUE(mgr.disk_limit(tablet3.get()));
+    ASSERT_FALSE(mgr.disk_limit(tablet2->data_dir()));
+    mgr.mark_running(tablet2->tablet_id(), tablet2->data_dir());
+    ASSERT_TRUE(mgr.is_running(tablet->tablet_id()));
+    ASSERT_TRUE(mgr.is_running(tablet2->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet3->tablet_id()));
+    ASSERT_TRUE(mgr.disk_limit(tablet3->data_dir()));
 
-    mgr.unmark_running(tablet.get());
-    ASSERT_FALSE(mgr.is_running(tablet.get()));
-    ASSERT_TRUE(mgr.is_running(tablet2.get()));
-    ASSERT_FALSE(mgr.is_running(tablet3.get()));
-    ASSERT_FALSE(mgr.disk_limit(tablet3.get()));
+    mgr.unmark_running(tablet->tablet_id(), tablet->data_dir());
+    ASSERT_FALSE(mgr.is_running(tablet->tablet_id()));
+    ASSERT_TRUE(mgr.is_running(tablet2->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet3->tablet_id()));
+    ASSERT_FALSE(mgr.disk_limit(tablet3->data_dir()));
 }
 
 TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
+    config::pindex_major_compaction_schedule_interval_seconds = 0;
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     ASSERT_OK(tablet->init());
     TabletSharedPtr tablet2 = create_tablet(rand(), rand());
@@ -2981,11 +3028,27 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
     ASSERT_OK(mgr.init());
     mgr.schedule([&]() {
         std::vector<TabletAndScore> ret;
-        ret.emplace_back(tablet, 1.0);
-        ret.emplace_back(tablet2, 2.0);
-        ret.emplace_back(tablet3, 3.0);
+        ret.emplace_back(tablet->tablet_id(), 1.0);
+        ret.emplace_back(tablet2->tablet_id(), 2.0);
+        ret.emplace_back(tablet3->tablet_id(), 3.0);
         return ret;
     });
+}
+
+TEST_P(PersistentIndexTest, pindex_compaction_schedule_with_migration) {
+    config::pindex_major_compaction_schedule_interval_seconds = 0;
+    TabletSharedPtr tablet = create_tablet(rand(), rand());
+    ASSERT_OK(tablet->init());
+    tablet->set_is_migrating(true);
+    PersistentIndexCompactionManager mgr;
+    ASSERT_OK(mgr.init());
+    mgr.schedule([&]() {
+        std::vector<TabletAndScore> ret;
+        ret.emplace_back(tablet->tablet_id(), 1.0);
+        return ret;
+    });
+    sleep(2);
+    ASSERT_FALSE(mgr.is_running(tablet->tablet_id()));
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
@@ -3042,7 +3105,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
         auto update_key = [&](int step) {
             for (int i = 0; i < M; i++) {
                 keys[i] = "test_varlen_" + std::to_string(i + step * M);
-                values[i] = i + step * M + (i % 2 == 0) ? 111 : 222;
+                values[i] = i + step * M + ((i % 2 == 0) ? 111 : 222);
                 key_slices[i] = keys[i];
             }
         };
@@ -3078,7 +3141,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
         for (int i = 0; i < N; i++) {
             keys[i] = "test_varlen_" + std::to_string(i);
             if (i < N - M * 2) {
-                values.emplace_back(i + (i % 2 == 0) ? 111 : 222);
+                values.emplace_back(i + ((i % 2 == 0) ? 111 : 222));
             } else {
                 values.emplace_back(i);
             }

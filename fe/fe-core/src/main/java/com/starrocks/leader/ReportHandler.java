@@ -53,7 +53,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.LocalTablet.TabletStatus;
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -65,6 +65,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -78,6 +79,7 @@ import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -123,6 +125,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
 import org.apache.thrift.TException;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -212,8 +215,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             beId = backend.getId();
         } else {
             ComputeNode computeNode = null;
-            // Compute node only reports resource usage.
-            if (request.isSetResource_usage()) {
+            // Compute node only reports resource usage or tasks.
+            if (request.isSetResource_usage() || request.isSetTasks()) {
                 computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
             }
 
@@ -747,6 +750,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
         }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
+        List<Long> deleteTablets = new ArrayList<>();
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
             Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
@@ -833,10 +837,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         break DB_TRAVERSE;
                     } else if (diskInfo == null) {
                         LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
-                                tableId, backendId, replica.getPathHash());
+                                replica.getPathHash(), tabletId, backendId);
                     } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
                         LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
-                                tableId, backendId, replica.getPathHash());
+                                replica.getPathHash(), tabletId, backendId);
                     }
 
                     ReplicaState state = replica.getState();
@@ -923,12 +927,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                         // remove replica related tasks
                         AgentTaskQueue.removeReplicaRelatedTasks(backendId, tabletId);
-
-                        // write edit log
-                        ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(dbId, tableId, partitionId,
-                                indexId, tabletId, backendId);
-
-                        GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info);
+                        deleteTablets.add(tabletId);
                         LOG.warn("delete replica[{}] with state[{}] in tablet[{}] from meta. backend[{}]," +
                                         " report version: {}, current report version: {}",
                                 replica.getId(), replica.getState().name(), tabletId, backendId, backendReportVersion,
@@ -946,6 +945,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 db.writeUnlock();
             }
         } // end for dbs
+
+        if (deleteTablets.size() > 0) {
+            // no need to be protected by db lock, if the related meta is dropped, the replay code will ignore that tablet
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logBatchDeleteReplica(new BatchDeleteReplicaInfo(backendId, deleteTablets));
+        }
 
         if (Config.recover_with_empty_tablet && createReplicaBatchTask.getTaskNum() > 0) {
             // must add to queue, so that when task finish report, the task can be found in queue.
@@ -1751,9 +1756,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 int tabletOrderIdx = materializedIndex.getTabletOrderIdx(tabletId);
                 Preconditions.checkState(tabletOrderIdx != -1);
                 Set<Long> backendsSet = colocateTableIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
-                TabletStatus status =
-                        tablet.getColocateHealthStatus(visibleVersion, replicationNum, backendsSet);
-                if (status == TabletStatus.HEALTHY) {
+                TabletHealthStatus status =
+                        TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion, replicationNum, backendsSet);
+                if (status == TabletHealthStatus.HEALTHY) {
                     throw new MetaNotFoundException("colocate tablet [" + tabletId + "] is healthy");
                 } else {
                     return;
@@ -1761,10 +1766,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             }
 
             List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
-            Pair<TabletStatus, TabletSchedCtx.Priority> status = tablet.getHealthStatusWithPriority(infoService,
-                    visibleVersion, replicationNum, aliveBeIdsInCluster);
+            Pair<TabletHealthStatus, TabletSchedCtx.Priority> status = TabletChecker.getTabletHealthStatusWithPriority(
+                    tablet, infoService, visibleVersion, replicationNum, aliveBeIdsInCluster, olapTable.getLocation());
 
-            if (status.first == TabletStatus.VERSION_INCOMPLETE || status.first == TabletStatus.REPLICA_MISSING) {
+            if (status.first == TabletHealthStatus.VERSION_INCOMPLETE || status.first == TabletHealthStatus.REPLICA_MISSING) {
                 long lastFailedVersion = -1L;
 
                 boolean initPartitionCreateByOldVersionStarRocks =

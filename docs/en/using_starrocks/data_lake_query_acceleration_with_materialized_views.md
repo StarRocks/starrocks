@@ -106,6 +106,34 @@ You can still choose to tolerate a certain level of data inconsistency by settin
 
 Please note that if you need to refresh by partition, the partitioning keys of the materialized view must be included in that of the base table.
 
+From v3.2.3, StarRocks supports creating partitioned materialized views upon Iceberg tables with [Partition Transforms](https://iceberg.apache.org/spec/#partition-transforms), and the materialized views are partitioned by the column after the transformation. Currently, only Iceberg tables with the `identity`, `year`, `month`, `day`, or `hour` transforms are supported.
+
+The following example shows the definition of an Iceberg table with the `day` partition transform and creates a materialized view with aligned partitions upon it:
+
+```SQL
+-- Iceberg table definition.
+CREATE TABLE spark_catalog.test.iceberg_sample_datetime_day (
+  id         BIGINT,
+  data       STRING,
+  category   STRING,
+  ts         TIMESTAMP)
+USING iceberg
+PARTITIONED BY (days(ts))
+
+-- Create a materialized view upon the Iceberg table.
+CREATE MATERIALIZED VIEW `test_iceberg_datetime_day_mv` (`id`, `data`, `category`, `ts`)
+PARTITION BY (`ts`)
+DISTRIBUTED BY HASH(`id`)
+REFRESH MANUAL
+AS 
+SELECT 
+  `iceberg_sample_datetime_day`.`id`, 
+  `iceberg_sample_datetime_day`.`data`, 
+  `iceberg_sample_datetime_day`.`category`, 
+  `iceberg_sample_datetime_day`.`ts`
+FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
+```
+
 For Hive catalogs, you can enable the Hive metadata cache refresh feature to allow StarRocks to detect data changes at the partition level. When this feature is enabled, StarRocks periodically accesses the Hive Metastore Service (HMS) or AWS Glue to check the metadata information of recently queried hot data.
 
 To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md):

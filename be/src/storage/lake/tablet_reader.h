@@ -60,6 +60,8 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
 
+    void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
+
     Status prepare();
 
     // Precondition: the last method called must have been `prepare()`.
@@ -74,7 +76,10 @@ public:
 
 protected:
     Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override;
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                       std::vector<uint64_t>* rssid_rowids) override;
 
 private:
     using PredicateList = std::vector<const ColumnPredicate*>;
@@ -114,6 +119,8 @@ private:
 
     MemPool _mempool;
     ObjectPool _obj_pool;
+
+    bool _is_asc_hint = true;
 
     // used for vertical compaction
     bool _is_vertical_merge = false;

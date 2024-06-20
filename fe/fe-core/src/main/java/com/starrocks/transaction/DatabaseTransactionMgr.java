@@ -97,6 +97,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -405,10 +406,11 @@ public class DatabaseTransactionMgr {
             LOG.debug("transaction is already committed: {}", transactionId);
             return waiter;
         }
-        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        // For compatible reason, the default behavior of empty load is still returning
+        // "No partitions have data available for loading" and abort transaction.
         if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                 && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
-            throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+            throw new TransactionCommitFailedException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
         }
         if (transactionState.getWriteEndTimeMs() < 0) {
             transactionState.setWriteEndTimeMs(System.currentTimeMillis());
@@ -456,7 +458,6 @@ public class DatabaseTransactionMgr {
             // after state transform
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
-        transactionState.prepareFinishChecker(db);
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
         Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
@@ -506,9 +507,10 @@ public class DatabaseTransactionMgr {
             LOG.debug("transaction is already prepared: {}", transactionId);
             return;
         }
-        // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
+        // For compatible reason, the default behavior of empty load is still returning
+        // "No partitions have data available for loading" and abort transaction.
         if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
-            throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+            throw new TransactionCommitFailedException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
         }
 
         // update transaction state extra if exists
@@ -941,24 +943,26 @@ public class DatabaseTransactionMgr {
         db.writeLock();
         try {
             boolean hasError = false;
+            Set<Long> droppedTableIds = Sets.newHashSet();
             for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
                 long tableId = tableCommitInfo.getTableId();
                 OlapTable table = (OlapTable) db.getTable(tableId);
                 // table maybe dropped between commit and publish, ignore this error
                 if (table == null) {
-                    transactionState.removeTable(tableId);
+                    droppedTableIds.add(tableId);
                     LOG.warn("table {} is dropped, skip version check and remove it from transaction state {}",
                             tableId,
                             transactionState);
                     continue;
                 }
+                Set<Long> droppedPartitionIds = Sets.newHashSet();
                 PartitionInfo partitionInfo = table.getPartitionInfo();
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
                     PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     // partition maybe dropped between commit and publish version, ignore this error
                     if (partition == null) {
-                        tableCommitInfo.removePartition(partitionId);
+                        droppedPartitionIds.add(partitionId);
                         LOG.warn("partition {} is dropped, skip version check and remove it from transaction state {}",
                                 partitionId,
                                 transactionState);
@@ -1060,6 +1064,12 @@ public class DatabaseTransactionMgr {
                         }
                     }
                 }
+                for (Long droppedPartitionId : droppedPartitionIds) {
+                    tableCommitInfo.removePartition(droppedPartitionId);
+                }
+            }
+            for (Long droppedTableId : droppedTableIds) {
+                transactionState.removeTable(droppedTableId);
             }
             if (hasError) {
                 return;

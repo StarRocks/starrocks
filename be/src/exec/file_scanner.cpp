@@ -226,8 +226,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                         error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                                   << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                         // TODO(meegoo): support other file format
-                        _state->append_rejected_record_to_file(src->rebuild_csv_row(i, ","), error_msg.str(),
-                                                               src->source_filename());
+                        _state->append_rejected_record_to_file(src->rebuild_csv_row(i, ","), error_msg.str(), "");
                     }
 
                     // avoid print too many debug log

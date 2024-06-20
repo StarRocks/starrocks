@@ -837,13 +837,17 @@ alterClause
     | addBackendClause
     | dropBackendClause
     | decommissionBackendClause
-    | modifyBackendHostClause
+    | modifyBackendClause
     | addComputeNodeClause
     | dropComputeNodeClause
     | modifyBrokerClause
     | alterLoadErrorUrlClause
     | createImageClause
     | cleanTabletSchedQClause
+    | decommissionDiskClause
+    | cancelDecommissionDiskClause
+    | disableDiskClause
+    | cancelDisableDiskClause
 
     //Alter table clause
     | createIndexClause
@@ -902,8 +906,9 @@ decommissionBackendClause
    : DECOMMISSION BACKEND string (',' string)*
    ;
 
-modifyBackendHostClause
+modifyBackendClause
    : MODIFY BACKEND HOST string TO string
+   | MODIFY BACKEND string SET propertyList
    ;
 
 addComputeNodeClause
@@ -930,6 +935,22 @@ createImageClause
 
 cleanTabletSchedQClause
     : CLEAN TABLET SCHEDULER QUEUE
+    ;
+
+decommissionDiskClause
+    : DECOMMISSION DISK string (',' string)* ON BACKEND string
+    ;
+
+cancelDecommissionDiskClause
+    : CANCEL DECOMMISSION DISK string (',' string)* ON BACKEND string
+    ;
+
+disableDiskClause
+    : DISABLE DISK string (',' string)* ON BACKEND string
+    ;
+
+cancelDisableDiskClause
+    : CANCEL DISABLE DISK string (',' string)* ON BACKEND string
     ;
 
 // ---------Alter table clause---------
@@ -1413,7 +1434,7 @@ showProcStatement
     ;
 
 showProcesslistStatement
-    : SHOW FULL? PROCESSLIST
+    : SHOW FULL? PROCESSLIST (FOR string)?
     ;
 
 showProfilelistStatement
@@ -2364,7 +2385,7 @@ explainDesc
     ;
 
 optimizerTrace
-    : TRACE (ALL | LOGS | TIMES | VALUES) identifier?
+    : TRACE (ALL | LOGS | TIMES | VALUES | REASON) identifier?
     ;
 
 partitionDesc
@@ -2648,7 +2669,7 @@ nonReserved
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
+    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
@@ -2664,7 +2685,7 @@ nonReserved
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
     | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
-    | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
+    | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING
     | SAMPLE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START

@@ -44,6 +44,21 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testHiveView() throws Exception {
+        String mvName = "test_mv_view_1";
+        starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW " + mvName + " " +
+                "REFRESH MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as select c_custkey,c_name from hive0.tpch.customer_view");
+
+        starRocksAssert.query("select c_custkey,c_name from hive0.tpch.customer").explainContains(mvName);
+        starRocksAssert.query("select c_custkey,c_name from hive0.tpch.customer_view").explainContains(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
     public void testHiveJoinMvRewrite() throws Exception {
         createAndRefreshMv("create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +

@@ -1069,7 +1069,7 @@ When an alias is needed, you can simply add an AS clause after the table, column
 
 If an alias or other identifier has the same name as an internal [StarRocks keyword](../keywords.md), you need to enclose the name in a pair of backticks, for example, `rank`.
 
-Aliases are case sensitive.
+Aliases are case-sensitive, but column aliases and expression aliases are not case-sensitive.
 
 Examples:
 

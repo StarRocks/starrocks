@@ -70,8 +70,11 @@ import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -665,8 +668,7 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assert.fail(e.getMessage());
         } finally {
             Preconditions.checkState(!Strings.isNullOrEmpty(mvName));
             try {
@@ -755,6 +757,29 @@ public class StarRocksAssert {
             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
             taskRun.executeTaskRun();
             waitingTaskFinish(taskRun);
+        }
+        return this;
+    }
+
+    public StarRocksAssert refreshMV(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+        TableName mvName = refreshMaterializedViewStatement.getMvName();
+        Database db = GlobalStateMgr.getCurrentState().getDb(mvName.getDb());
+        Table table = db.getTable(mvName.getTbl());
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        getCtx().executeSql(sql);
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        Task task = tm.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        TaskRunManager taskRunManager = tm.getTaskRunManager();
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
+        while (taskRun != null) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
+            taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
         }
         return this;
     }

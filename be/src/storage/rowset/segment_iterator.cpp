@@ -109,7 +109,12 @@ public:
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
+    Status do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) override;
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                       std::vector<uint64_t>* rssid_rowids) override {
+        return do_get_next(chunk, rssid_rowids);
+    }
 
 private:
     struct ScanContext {
@@ -411,10 +416,16 @@ Status SegmentIterator::_init() {
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
-    RETURN_IF_ERROR(_apply_del_vector());
+    bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
+    if (!apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    if (apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -980,6 +991,32 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
     do {
         st = _do_get_next(chunk, rowid);
     } while (st.ok() && chunk->num_rows() == 0);
+    return st;
+}
+
+Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) {
+    if (!_inited) {
+        RETURN_IF_ERROR(_init());
+        _inited = true;
+    }
+
+    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+
+    DCHECK_EQ(0, chunk->num_rows());
+
+    Status st;
+    vector<uint32_t> rowids;
+    do {
+        st = _do_get_next(chunk, &rowids);
+    } while (st.ok() && chunk->num_rows() == 0);
+    if (st.ok()) {
+        // encode rssid with rowid
+        // | rssid (32bit) | rowid (32bit) |
+        uint64_t rssid_shift = (uint64_t)(_opts.rowset_id + segment_id()) << 32;
+        for (uint32_t rowid : rowids) {
+            rssid_rowids->push_back(rssid_shift | rowid);
+        }
+    }
     return st;
 }
 

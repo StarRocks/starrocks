@@ -207,6 +207,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
         });
+        _config_callback.emplace("sys_log_level", [&]() { update_logging(); });
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_cache_thread_num", [&]() {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size", value).empty()) {

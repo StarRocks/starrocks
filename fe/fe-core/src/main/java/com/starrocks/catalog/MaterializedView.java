@@ -607,7 +607,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         if (partitionRefTableExprs.get(0).getType() == Type.INVALID) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            partitionRefTableExprs.get(0).setType(expressionRangePartitionInfo.getPartitionExprs().get(0).getType());
+            Type partitionColType = expressionRangePartitionInfo.getPartitionColumns().get(0).getType();
+            partitionRefTableExprs.get(0).setType(partitionColType);
         }
         return partitionRefTableExprs.get(0);
     }
@@ -1148,6 +1149,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String name = entry.getKey();
             String value = entry.getValue();
+
+            // It's invisible
+            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS)) {
+                continue;
+            }
             if (!first) {
                 sb.append(",\n");
             }
@@ -1609,15 +1615,44 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
+        // only range partition need to recover partitionRefTableExprs
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        // only one partition column is supported now.
+        Preconditions.checkState(expressionRangePartitionInfo.getPartitionColumns().size() == 1);
+        Column partitionCol = expressionRangePartitionInfo.getPartitionColumns().get(0);
+
+        // for single ref base table, recover from serializedPartitionRefTableExprs
         partitionRefTableExprs = new ArrayList<>();
         if (serializedPartitionRefTableExprs != null) {
-            for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
-                if (expressionSql != null) {
-                    partitionRefTableExprs.add(
-                            SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+            for (GsonUtils.ExpressionSerializedObject serializedObject : serializedPartitionRefTableExprs) {
+                Expr partitionExpr = parsePartitionExpr(serializedObject.expressionSql, partitionCol);
+                if (partitionExpr == null) {
+                    LOG.warn("parse partition expr failed, sql: {}", serializedObject.expressionSql);
+                    continue;
                 }
+                partitionRefTableExprs.add(partitionExpr);
             }
         }
+    }
+
+    /**
+     * Parse partition expr from sql
+     * @param sql serialized partition expr sql
+     * @param partitionCol materialized view's partition column
+     * @return parsed and unanalyzed partition expr
+     */
+    private Expr parsePartitionExpr(String sql, Column partitionCol) {
+        if (Strings.isNullOrEmpty(sql)) {
+            return null;
+        }
+        Expr partitionExpr = SqlParser.parseSqlToExpr(sql, SqlModeHelper.MODE_DEFAULT);
+        if (partitionExpr.getType() == Type.INVALID) {
+            partitionExpr.setType(partitionCol.getType());
+        }
+        return partitionExpr;
     }
 
     public String inspectMeta() {

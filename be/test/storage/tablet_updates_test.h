@@ -797,6 +797,8 @@ public:
     void test_compaction_score_enough_normal(bool enable_persistent_index);
     void test_horizontal_compaction(bool enable_persistent_index);
     void test_vertical_compaction(bool enable_persistent_index);
+    void test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index);
+    void test_vertical_compaction_with_rows_mapper(bool enable_persistent_index);
     void test_compaction_with_empty_rowset(bool enable_persistent_index, bool vertical, bool multi_column_pk);
     void test_link_from(bool enable_persistent_index);
     void test_convert_from(bool enable_persistent_index);
@@ -839,6 +841,7 @@ public:
     void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
     void test_pk_dump(size_t rowset_cnt);
     void update_and_recover(bool enable_persistent_index);
+    void test_recover_rowset_sorter();
 
 protected:
     TabletSharedPtr _tablet;

@@ -45,6 +45,8 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunManager;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OptimizeClause;
@@ -287,6 +289,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             rewriteTask.setPartitionName(partitionName);
             rewriteTask.setTempPartitionName(tmpPartitionName);
             rewriteTask.setLastVersion(partitionLastVersion.get(i));
+            // use half of the alter timeout as rewrite task timeout
+            rewriteTask.getProperties().put("session.query_timeout", String.valueOf(timeoutMs / 2000));
             rewriteTasks.add(rewriteTask);
         }
 
@@ -341,14 +345,16 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // wait insert tasks finished
         boolean allFinished = true;
         int progress = 0;
+        TaskRunManager taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         for (OptimizeTask rewriteTask : rewriteTasks) {
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                     || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
                 progress += 100 / rewriteTasks.size();
                 continue;
             }
-            TaskRun taskRun = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                    .getRunnableTaskRun(rewriteTask.getId());
+
+            TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(rewriteTask.getId());
             if (taskRun != null) {
                 if (taskRun.getStatus() != null) {
                     progress += taskRun.getStatus().getProgress() / rewriteTasks.size();

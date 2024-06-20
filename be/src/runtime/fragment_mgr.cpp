@@ -235,7 +235,8 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     Status exec_status = update_status(status);
 
     Status coord_status;
-    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, &coord_status);
+    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, config::thrift_rpc_timeout_ms,
+                                    &coord_status);
     if (!coord_status.ok()) {
         std::stringstream ss;
         ss << "couldn't get a client for " << _coord_addr;
@@ -325,7 +326,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
             coord->reportExecStatus(res, params);
         } catch (TTransportException& e) {
             LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-            rpc_status = coord.reopen();
+            rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
 
             if (!rpc_status.ok()) {
                 // we need to cancel the execution of this fragment
@@ -699,7 +700,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             Status fe_connection_status;
 
             FrontendServiceConnection fe_connection(fragment_exec_state->exec_env()->frontend_client_cache(),
-                                                    fragment_exec_state->coord_addr(), &fe_connection_status);
+                                                    fragment_exec_state->coord_addr(), config::thrift_rpc_timeout_ms,
+                                                    &fe_connection_status);
             if (!fe_connection_status.ok()) {
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
@@ -753,7 +755,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                     fe_connection->batchReportExecStatus(res, report_batch);
                 } catch (TTransportException& e) {
                     LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-                    rpc_status = fe_connection.reopen();
+                    rpc_status = fe_connection.reopen(config::thrift_rpc_timeout_ms);
                     if (!rpc_status.ok()) {
                         continue;
                     }

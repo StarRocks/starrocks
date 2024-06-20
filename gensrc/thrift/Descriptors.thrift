@@ -100,6 +100,8 @@ struct TTextFileDesc {
     
     // escape character
     8: optional i8 escape
+
+    9: optional i32 skip_header_line_count
 }
 
 enum TSchemaTableType {
@@ -436,6 +438,8 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
+
+    7: optional i64 target_max_file_size
 }
 
 struct TIcebergSchema {

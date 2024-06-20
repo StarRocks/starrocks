@@ -192,6 +192,9 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             builder.setOutputRowCount(info.rowCount);
             for (ColumnRefOperator columnRefOperator : columns.keySet()) {
                 ColumnStatistic columnStatistic = info.columnStatsMap.get(columnRefOperator.getName());
+                if (columnStatistic == null) {
+                    columnStatistic = ColumnStatistic.unknown();
+                }
                 builder.addColumnStatistic(columnRefOperator, columnStatistic);
             }
             return builder.build();

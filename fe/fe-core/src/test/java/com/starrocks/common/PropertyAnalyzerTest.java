@@ -46,10 +46,13 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -58,6 +61,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class PropertyAnalyzerTest {
 
@@ -256,7 +260,7 @@ public class PropertyAnalyzerTest {
         Assert.assertEquals(false, ret.first);
         Assert.assertEquals(true, ret.second);
         Config.enable_persistent_index_by_default = true;
-        
+
         // non primary key
         Map<String, String> property7 = new HashMap<>();
         ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property7, false);
@@ -312,5 +316,34 @@ public class PropertyAnalyzerTest {
         Map<String, String> props = new HashMap<>();
         props.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "true");
         Assert.assertEquals(PropertyAnalyzer.analyzeUseFastSchemaEvolution(props), true);
+    }
+
+    @Test
+    public void testAnalyzeVersionInfo() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_VERSION_INFO, "1000");
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Does not support the table property \"version_info\" in share data mode, please remove " +
+                        "it from the statement", () -> {
+                    PropertyAnalyzer.analyzeVersionInfo(properties);
+                });
+    }
+
+    @Test
+    public void testSingleLocationLabel() throws AnalysisException {
+        String[] testLocs = {"*", "a:*", "bcd_123:*", "123bcd_:val_123", "invalidFormat",
+                ":", "aa_123:*", "*:123", "a:b,c:d", "a: b", "  a  :  b  ", "   ", "a:b*"};
+        Boolean[] analyzeSuccess = {true, true, true, true, false, false, true, false, false, true, true, false, false};
+        int i = 0;
+        for (String loc : testLocs) {
+            String regex = PropertyAnalyzer.SINGLE_LOCATION_LABEL_REGEX;
+            Assert.assertEquals(Pattern.compile(regex).matcher(loc).matches(), analyzeSuccess[i++]);
+        }
     }
 }

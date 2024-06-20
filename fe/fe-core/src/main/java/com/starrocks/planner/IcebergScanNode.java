@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.google.common.collect.BiMap;
@@ -327,6 +328,10 @@ public class IcebergScanNode extends ScanNode {
             scanRangeLocations.addToLocations(scanRangeLocation);
 
             result.add(scanRangeLocations);
+        }
+
+        if (!currentEqualityIds.isEmpty()) {
+            icebergTable.setIdentifierFieldIds(ImmutableSet.copyOf(currentEqualityIds));
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());

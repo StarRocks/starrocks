@@ -71,9 +71,8 @@ public class StatisticExecutor {
         return executeStatisticDQL(context, sql);
     }
 
-    public List<TStatisticData> queryStatisticSync(ConnectContext context,
-                                                   Long dbId, Long tableId, List<String> columnNames)
-            throws AnalysisException {
+    public List<TStatisticData> queryStatisticSync(ConnectContext context, Long dbId, Long tableId,
+                                                   List<String> columnNames) {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {

@@ -31,6 +31,7 @@ Status OlapTableSinkOperator::prepare(RuntimeState* state) {
     _sink->set_nonblocking_send_chunk(true);
     _automatic_partition_chunk.reset();
 
+    _sink->set_profile(_unique_metrics.get());
     RETURN_IF_ERROR(_sink->prepare(state));
 
     RETURN_IF_ERROR(_sink->try_open(state));
@@ -39,9 +40,6 @@ Status OlapTableSinkOperator::prepare(RuntimeState* state) {
 }
 
 void OlapTableSinkOperator::close(RuntimeState* state) {
-    _unique_metrics->copy_all_info_strings_from(_sink->profile());
-    _unique_metrics->copy_all_counters_from(_sink->profile());
-
     Operator::close(state);
 }
 

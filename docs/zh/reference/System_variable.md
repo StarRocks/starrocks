@@ -93,17 +93,40 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### 设置变量在单个查询语句中生效
 
-在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (hint) 在查询中设置仅在单个语句内生效的会话变量。举例：
+在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (Hint) 在查询中设置仅在单个语句内生效的会话变量。
+
+当前，StarRocks 支持在以下语句中使用 `SET_VAR` Hint：
+
+- SELECT
+- INSERT（自 v3.1.12 和 v3.2.0 起支持）
+- UPDATE（自 v3.1.12 和 v3.2.0 起支持）
+- DELETE（自 v3.1.12 和 v3.2.0 起支持）
+
+`SET_VAR` 只能跟在以上关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
+
+举例：
 
 ```sql
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
-```
 
-> **注意**
->
-> `SET_VAR` 只能跟在 SELECT 关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
+UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+
+DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
+FROM my_table PARTITION p1
+WHERE k1 = 3;
+
+INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
+```
 
 StarRocks 同时支持在单个语句中设置多个变量，参考如下示例：
 
@@ -190,65 +213,78 @@ SELECT /*+ SET_VAR
 
 ### enable_sync_materialized_view_rewrite
 
-* 描述：是否启用同步物化视图自动改写。
+* 描述：是否启用基于同步物化视图的查询改写。
 * 默认值：true
-* 引入版本：v3.1
+* 引入版本：v3.1.11，v3.2.5
+
+### enable_datacache_async_populate_mode
+
+* 描述：是否使用异步方式进行 Data Cache 填充。系统默认使用同步方式进行填充，即在查询数据时同步填充进行缓存填充。
+* 默认值：false
+* 引入版本：v3.2.7
 
 ### query_including_mv_names
 
-* 描述：指定用于物化视图自动改写包含的物化视图名称，以减少相关物化视图数量，并减少优化器用于重写的时间。
-* 默认值：empty string
+* 描述：指定需要在查询执行过程中包含的异步物化视图的名称。您可以使用此变量来限制候选物化视图的数量，并提高优化器中的查询改写性能。此项优先于 `query_excluding_mv_names` 生效。
+* 默认值：空字符串
 * 类型：String
-* 引入版本：v3.1
+* 引入版本：v3.1.11，v3.2.5
 
 ### query_excluding_mv_names
 
-* 描述：指定用于物化视图自动改写排除的物化视图名称，以减少相关物化视图数量，并减少优化器用于重写的时间。
-* 默认值：empty string
+* 描述：指定需要在查询执行过程中排除的异步物化视图的名称。您可以使用此变量来限制候选物化视图的数量，并提高优化器中的查询改写性能。`query_including_mv_names` 优先于此项生效。
+* 默认值：空字符串
 * 类型：String
-* 引入版本：v3.1
+* 引入版本：v3.1.11，v3.2.5
 
 ### optimizer_materialized_view_timelimit
 
-* 描述：在一个 Query改写中，指定一个物化视图自动改写规则最大耗时时间，超过该时间后，不会再使用改规则进行自动改写。
-* 默认值：1000 (ms)
+* 描述：指定一个物化视图改写规则可消耗的最大时间。当达到阈值时，将不再使用该规则进行查询改写。
+* 默认值：1000
 * 单位：毫秒
 * 类型：Long
 
 ### enable_materialized_view_text_match_rewrite
 
-* 描述：是否启用基于文本的物化视图重写。如果设置为true，则优化器将比较查询和创建的物化视图，如果物化视图的定义查询AST树与输入查询或其子查询相同，则将进行重写。
+* 描述：是否启用基于文本的物化视图改写。当此项设置为 `true` 时，优化器将查询与现有的物化视图进行比较。如果物化视图定义的抽象语法树与查询或其子查询的抽象语法树匹配，则会对查询进行改写。
 * 默认值：true
-* 引入版本：v3.2.5, v3.3.0
+* 引入版本：v3.2.5，v3.3.0
 
 ### materialized_view_subuqery_text_match_max_count
 
-* 描述：指定检查一个查询中，递归匹配子查询与定义的物化视图匹配的最大次数。
+* 描述：指定系统比对查询的子查询是否与物化视图定义匹配的最大次数。
 * 默认值：4
-* 引入版本：v3.2.5, v3.3.0
+* 引入版本：v3.2.5，v3.3.0
 
 ### enable_view_based_mv_rewrite
 
-* 描述：是否启用基于视图的重写。如果设置为true，则将逻辑视图视为统一节点进行重写，而不是内联它，以便更好地进行重写。
+* 描述：是否为基于逻辑视图创建的物化视图启用查询改写。如果此项设置为 `true`，则逻辑视图被用作统一节点进行查询改写，从而获得更好的性能。如果此项设置为 `false`，则系统将针对逻辑视图的查询展开变为针对物理表或物化视图的查询，然后进行改写。
 * 默认值：false
-* 引入版本：v3.1.9, v3.2.5
+* 引入版本：v3.1.9，v3.2.5，v3.3.0
 
 ### enable_materialized_view_union_rewrite
 
-* 描述：是否启用物化视图 Union Rewrite： 如果设置为true，则在物化视图的谓词不能满足查询的谓词时，尝试使用 UNION ALL 进行补偿。
+* 描述：是否启用物化视图 UNION 改写。如果此项设置为 true，则系统在物化视图的谓词不能满足查询的谓词时，会尝试使用 UNION ALL 来补偿谓词。
 * 默认值：true
-* 引入版本：v2.5
+* 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
+
+### enable_materialized_view_plan_cache
+
+* 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是 `true`，即开启物化视图查询计划缓存。
+* 默认值：true
+* 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
 
 ### follower_query_forward_mode
 
-* 描述：用于控制将查询路由到 FE Leader/Follower的标志。
+* 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。
+
   有效值:
-  * `default`: 将查询语句路由到 Leader/Follower，由 Follower 的回放进度决定。
-  * `leader`: 将查询语句路由到 Leader。
-  * `follower`: 将查询语句路由到 Follower。
+  * `default`: 将查询语句路由到 Leader FE 或 Follower FE 节点，取决于 Follower FE 节点的回放进度。如果 Follower FE 节点未完成回放，查询将会被路由至 Leader FE 节点。反之，查询会被优先路由至 Follower FE 节点。
+  * `leader`: 将查询语句路由到 Leader FE 节点。
+  * `follower`: 将查询语句路由到 Follower FE 节点。
 * 默认值：default
 * 类型：String
-* 引入版本：v2.5
+* 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
 
 ### character_set_database（global）
 
@@ -356,8 +392,7 @@ SELECT /*+ SET_VAR
 
 ### enable_short_circuit
 
-* 描述：是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当表为[行列混存表](../table_design/hybrid_table.md)，并且[查询满足条件](../table_design/hybrid_table.md#查询数据)
-（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径，直接查询按行存储的数据。
+* 描述：是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当[查询满足条件](../table_design/hybrid_table.md#查询数据)（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径。
 * 默认值：false
 * 引入版本：v3.2.3
 

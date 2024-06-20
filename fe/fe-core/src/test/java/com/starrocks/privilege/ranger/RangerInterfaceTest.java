@@ -29,7 +29,9 @@ import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
@@ -246,9 +248,19 @@ public class RangerInterfaceTest {
             authorizerMockedStatic.when(() -> Authorizer.getColumnMaskingPolicy(Mockito.any(),
                     Mockito.any(), Mockito.any())).thenReturn(exprHashMap);
 
-            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser("select * from t1 t", connectContext);
-            QueryStatement queryStatement = (QueryStatement) stmt;
+            StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse("select * from t1 t",
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
 
+            QueryStatement queryStatement = (QueryStatement) stmt;
             Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
         }
     }

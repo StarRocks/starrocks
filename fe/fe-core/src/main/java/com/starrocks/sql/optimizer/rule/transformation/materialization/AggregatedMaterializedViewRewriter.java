@@ -29,6 +29,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -148,7 +149,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             boolean queryHasDistinctAggFunc = 
                     queryAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
             if (mvHasDistinctAggFunc && queryHasDistinctAggFunc) {
-                logMVRewrite(mvRewriteContext, "Rollup aggregate cannot contain distinct aggregate functions," +
+                OptimizerTraceUtil.logMVRewriteFailReason(
+                        mvRewriteContext.getMaterializationContext().getMv().getName(),
+                        "Rollup aggregate cannot contain distinct aggregate functions," +
                         "mv:{}, query:{}", mvAggOp.getAggregations().values(), queryAggOp.getAggregations().values());
                 return null;
             }
@@ -198,7 +201,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
             if (rewritten == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite projection with aggregate group-by/agg expr " +
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite projection with aggregate group-by/agg expr " +
                         "failed: {}", scalarOp.toString());
                 return null;
             }
@@ -219,7 +223,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
                 if (rewritten == null) {
-                    logMVRewrite(mvRewriteContext, "Rewrite aggregate with having expr failed: {}", scalarOp.toString());
+                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                            "Rewrite aggregate with having expr failed: {}", scalarOp.toString());
                     return null;
                 }
                 queryColumnRefToScalarMap.put(entry.getKey(), rewritten);
@@ -231,7 +236,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
                 if (rewritten == null) {
-                    logMVRewrite(mvRewriteContext, "mapping grouping key failed: {}", groupKey.toString());
+                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                            "Mapping grouping key failed: {}", groupKey.toString());
                     return null;
                 }
                 queryColumnRefToScalarMap.put(groupKey, rewritten);
@@ -240,8 +246,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             ScalarOperator aggPredicate = queryAggregationOperator.getPredicate();
             ScalarOperator rewrittenPred = rewriter.rewrite(aggPredicate);
             if (rewrittenPred == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite aggregate wth having failed, " +
-                        "cannot compensate aggregate having predicates: {}", queryAggregationOperator.getPredicate().toString());
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite aggregate with having failed, cannot compensate aggregate having predicates: {}",
+                        queryAggregationOperator.getPredicate().toString());
                 return null;
             }
             LogicalScanOperator scanOperator = mvOptExpr.getOp().cast();
@@ -385,7 +392,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 queryGroupingKeys, equationRewriter, rewriteContext.getOutputMapping(),
                 new ColumnRefSet(rewriteContext.getQueryColumnSet()));
         if (newQueryGroupKeys == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite rollup aggregate failed: cannot rewrite group by keys");
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    "Rewrite rollup aggregate failed, cannot rewrite group by keys: {}",
+                    queryGroupingKeys);
             return null;
         }
         List<ColumnRefOperator> queryGroupKeys = queryAggOp.getGroupingKeys();
@@ -413,7 +422,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 new ColumnRefSet(rewriteContext.getQueryColumnSet()), queryColumnRefToScalarMap,
                 newProjection, !newQueryGroupKeys.isEmpty(), rewriteContext);
         if (newAggregations == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite rollup aggregate failed: cannot rewrite aggregate functions");
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    "Rewrite rollup aggregate failed: cannot rewrite aggregate functions");
             return null;
         }
 
@@ -478,8 +488,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         LogicalAggregationOperator queryAgg = (LogicalAggregationOperator) rewriteContext.getQueryExpression().getOp();
         if (queryAgg.getProjection() != null) {
             // if query has projection, is not supported now
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate with union failed: aggregate with projection is " +
-                    "still not supported");
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    "Rewrite aggregate with union failed: aggregate with projection is still not supported");
             return null;
         }
         List<ColumnRefOperator> originalGroupKeys = queryAgg.getGroupingKeys();
@@ -499,7 +509,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         Map<ColumnRefOperator, CallOperator> newAggregations = rewriteAggregatesForUnion(
                 queryAgg.getAggregations(), columnMapping, aggregateMapping, newProjection, !originalGroupKeys.isEmpty());
         if (newAggregations == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate with union failed: rewrite aggregate for union failed");
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    "Rewrite aggregate with union failed: rewrite aggregate for union failed");
             return null;
         }
         OptExpression result = createNewAggregate(rewriteContext, queryAgg, newAggregations, aggregateMapping,
@@ -611,12 +622,14 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         for (ScalarOperator key : groupKeys) {
             ScalarOperator newGroupByKey = equationRewriter.replaceExprWithTarget(key);
             if (key.isVariable() && key == newGroupByKey) {
-                logMVRewrite(mvRewriteContext, "Rewrite group by key {} failed", key.toString());
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite group by key failed: {}", key.toString());
                 return null;
             }
             if (newGroupByKey == null || !isAllExprReplaced(newGroupByKey, queryColumnSet)) {
                 // it means there is some column that can not be rewritten by outputs of mv
-                logMVRewrite(mvRewriteContext, "Rewrite group by key {} failed: partially rewrite", key.toString());
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite group by key failed: {}", key.toString());
                 return null;
             }
             newGroupByKeys.add(newGroupByKey);
@@ -645,7 +658,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             // Aggregate must be CallOperator
             CallOperator newAggregate = getRollupAggregate(equationRewriter, queryColumnSet, aggCall);
             if (newAggregate == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: cannot get rollup aggregate",
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite aggregate function failed, cannot get rollup function: {}",
                         aggCall.toString());
                 return null;
             }
@@ -699,27 +713,29 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         ScalarOperator targetColumn = pair.first;
         if (targetColumn == null || !isAllExprReplaced(targetColumn, queryColumnSet)) {
             // it means there is some column that can not be rewritten by outputs of mv
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: partially rewrite", aggCall.toString());
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    "Rewrite aggregate rollup {} failed with equivalent", aggCall.toString());
             return null;
         }
         EquivalentShuttleContext shuttleContext = pair.second;
         if (shuttleContext.isRewrittenByEquivalent()) {
             Preconditions.checkState(targetColumn instanceof CallOperator);
             return (CallOperator) targetColumn;
+        } else {
+            if (!targetColumn.isColumnRef()) {
+                logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: only column-ref is supported after rewrite",
+                        aggCall.toString());
+                return null;
+            }
+            // Aggregate must be CallOperator
+            CallOperator newAggregate = getRollupAggregate(aggCall, (ColumnRefOperator) targetColumn);
+            if (newAggregate == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: cannot get rollup aggregate",
+                        aggCall.toString());
+                return null;
+            }
+            return newAggregate;
         }
-        if (!targetColumn.isColumnRef()) {
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: only column-ref is supported after rewrite",
-                    aggCall.toString());
-            return null;
-        }
-        // Aggregate must be CallOperator
-        CallOperator newAggregate = getRollupAggregate(aggCall, (ColumnRefOperator) targetColumn);
-        if (newAggregate == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: cannot get rollup aggregate",
-                    aggCall.toString());
-            return null;
-        }
-        return newAggregate;
     }
 
     private Map<ColumnRefOperator, CallOperator> rewriteAggregatesForUnion(
@@ -734,15 +750,15 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             CallOperator aggCall = entry.getValue();
             ColumnRefOperator targetColumn = mapping.get(entry.getKey());
             if (targetColumn == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite aggregate {} for union failed: target column is null",
-                        aggCall.toString());
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite aggregate {} for union failed: target column is null", aggCall.toString());
                 return null;
             }
             // Aggregate must be CallOperator
             CallOperator newAggregate = getRollupAggregate(aggCall, targetColumn);
             if (newAggregate == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite aggregate {} failed: cannot get rollup aggregate",
-                        aggCall.toString());
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                        "Rewrite aggregate {} failed: cannot get rollup aggregate", aggCall.toString());
                 return null;
             }
             ColumnRefOperator oldColRef = (ColumnRefOperator) aggregateMapping.get(entry.getKey());

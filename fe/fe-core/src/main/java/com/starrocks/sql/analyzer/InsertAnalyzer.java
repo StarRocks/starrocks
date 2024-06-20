@@ -207,7 +207,8 @@ public class InsertAnalyzer {
         }
 
         if (query.getRelationFields().size() != mentionedColumnSize) {
-            throw new SemanticException("Column count doesn't match value count");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INSERTED_COLUMN_MISMATCH, mentionedColumnSize,
+                    query.getRelationFields().size());
         }
         // check default value expr
         if (query instanceof ValuesRelation) {

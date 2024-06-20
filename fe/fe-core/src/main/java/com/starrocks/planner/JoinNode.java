@@ -36,9 +36,11 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
@@ -293,34 +295,95 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, childIdx), childIdx, false);
     }
 
+    private Optional<Boolean> pushDownRuntimeFilterBilaterally(DescriptorTable descTbl, RuntimeFilterDescription rfDesc,
+                                                                      Expr probeExpr,
+                                                                      List<Expr> partitionByExprs) {
+        if (joinOp.isCrossJoin() || joinOp.isNullAwareLeftAntiJoin() || eqJoinConjuncts.isEmpty()) {
+            return Optional.empty();
+        }
+
+        if (!(probeExpr instanceof SlotRef)) {
+            return Optional.empty();
+        }
+        SlotRef probeSlotRefExpr = probeExpr.cast();
+        int slotId = probeSlotRefExpr.getSlotId().asInt();
+        boolean probeExprIsNotJoinColumn = eqJoinConjuncts.stream()
+                .filter(conj -> conj.getOp().equals(BinaryType.EQ))
+                .noneMatch(conj -> conj.getUsedSlotIds().contains(slotId));
+
+        if (probeExprIsNotJoinColumn) {
+            return Optional.empty();
+        }
+
+        // for join types except null-aware-left-anti-join and cross join
+        // runtime-filer probe expr uses join column, it can always be push down to both side of the join.
+        boolean hasPushedDown = pushDownRuntimeFiltersForChild(descTbl, rfDesc, probeExpr, partitionByExprs, 0);
+        hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, rfDesc, probeExpr, partitionByExprs, 1);
+        return Optional.of(hasPushedDown);
+    }
+
+
+    private Optional<Boolean> pushDownRuntimeFilterUnilaterally(DescriptorTable descTbl,
+                                                                RuntimeFilterDescription rfDesc,
+                                                                Expr probeExpr,
+                                                                List<Expr> partitionByExprs) {
+        List<Integer> sides = ImmutableList.of();
+        if (joinOp.isLeftAntiJoin() || joinOp.isLeftOuterJoin()) {
+            sides = ImmutableList.of(0);
+        } else if (joinOp.isRightAntiJoin() || joinOp.isRightOuterJoin()) {
+            sides = ImmutableList.of(1);
+        } else if (joinOp.isInnerJoin() || joinOp.isSemiJoin() || joinOp.isCrossJoin()) {
+            sides = ImmutableList.of(0, 1);
+        }
+
+        boolean result = false;
+        Optional<List<List<Expr>>> optCandidatePartitionByExprs =
+                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+        if (!optCandidatePartitionByExprs.isPresent()) {
+            return Optional.of(false);
+        }
+        List<List<Expr>> candidatePartitionByExprs = optCandidatePartitionByExprs.get();
+        for (Integer side : sides) {
+            if (candidatePartitionByExprs.isEmpty()) {
+                result = getChild(side).pushDownRuntimeFilters(descTbl, rfDesc, probeExpr, Lists.newArrayList());
+            } else {
+                for (List<Expr> partByExprs : candidatePartitionByExprs) {
+                    result = getChild(side).pushDownRuntimeFilters(descTbl, rfDesc, probeExpr, partByExprs);
+                    if (result) {
+                        break;
+                    }
+                }
+            }
+            if (result) {
+                break;
+            }
+        }
+        return Optional.of(result);
+    }
+
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription rfDesc, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
 
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
-            boolean hasPushedDown = false;
-            // If probeExpr is SlotRef(a) and an equalJoinConjunct SlotRef(a)=SlotRef(b) exists in SemiJoin
-            // or InnerJoin, then the rf also can be pushed down to both sides of HashJoin because SlotRef(a) and
-            // SlotRef(b) are equivalent.
-            boolean isInnerOrSemiJoin = joinOp.isSemiJoin() || joinOp.isInnerJoin();
-            if ((probeExpr instanceof SlotRef) && isInnerOrSemiJoin) {
-                hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, description, probeExpr, partitionByExprs, 0);
-                hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, description, probeExpr, partitionByExprs, 1);
+
+            Optional<Boolean> pushDownResult = pushDownRuntimeFilterBilaterally(descTbl, rfDesc, probeExpr, partitionByExprs);
+            if (!pushDownResult.isPresent()) {
+                pushDownResult = pushDownRuntimeFilterUnilaterally(descTbl, rfDesc, probeExpr, partitionByExprs);
             }
-            // fall back to PlanNode.pushDownRuntimeFilters for HJ if rf cannot be pushed down via equivalent
-            // equalJoinConjuncts
-            if (hasPushedDown || super.pushDownRuntimeFilters(descTbl, description, probeExpr, partitionByExprs)) {
+
+            if (pushDownResult.isPresent() && pushDownResult.get()) {
                 return true;
             }
 
             // use runtime filter at this level if rf can not be pushed down to children.
-            if (description.canProbeUse(this)) {
-                description.addProbeExpr(id.asInt(), probeExpr);
-                description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
-                probeRuntimeFilters.add(description);
+            if (rfDesc.canProbeUse(this)) {
+                rfDesc.addProbeExpr(id.asInt(), probeExpr);
+                rfDesc.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
+                probeRuntimeFilters.add(rfDesc);
                 return true;
             }
         }

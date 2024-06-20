@@ -191,6 +191,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -353,6 +354,9 @@ public class PlanFragmentBuilder {
         }
         Collections.reverse(fragments);
 
+        for (PlanFragment fragment : fragments) {
+            fragment.removeRfOnRightOffspringsOfBroadcastJoin();
+        }
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -1833,6 +1837,10 @@ public class PlanFragmentBuilder {
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
+            if (MapUtils.isEmpty(aggregations) && CollectionUtils.isEmpty(groupBys)) {
+                throw new StarRocksPlannerException(INTERNAL_ERROR, "invalid agg operator " +
+                        "without any group by key or agg function. OptExpression:\n%s", optExpr.debugString(5));
+            }
             List<ColumnRefOperator> partitionBys = node.getPartitionByColumns();
             boolean hasRemovedDistinct = node.hasRemovedDistinctFunc();
 

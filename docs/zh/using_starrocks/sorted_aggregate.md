@@ -22,6 +22,7 @@ set enable_sort_aggregate=true;
 
 ## 使用限制
 
+- StarRocks 存算分离集群不支持 sorted streaming aggregate。
 - GROUP BY 里的 key 需要是做好排序的:
   比如表的排序列是 `k1,k2,k3`，那么:
   - `GROUP BY k1` 和 `GROUP BY k1, k2` 是可以的。

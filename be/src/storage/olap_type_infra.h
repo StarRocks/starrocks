@@ -144,6 +144,7 @@ auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args&&... args) 
         _TYPE_DISPATCH_CASE(TYPE_ARRAY)
         _TYPE_DISPATCH_CASE(TYPE_MAP)
         _TYPE_DISPATCH_CASE(TYPE_STRUCT)
+        _TYPE_DISPATCH_CASE(TYPE_UNSIGNED_SMALLINT)
     default:
         CHECK(false) << "unknown type " << ftype;
         __builtin_unreachable();

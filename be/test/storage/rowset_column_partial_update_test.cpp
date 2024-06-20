@@ -147,7 +147,8 @@ public:
                                           std::vector<int32_t>& column_indexes, std::function<int16_t(int64_t)> v1_func,
                                           std::function<int32_t(int64_t)> v2_func,
                                           const std::shared_ptr<TabletSchema>& partial_schema, int segment_num,
-                                          PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_MODE) {
+                                          PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_MODE,
+                                          bool spilt_keys = false) {
         // create partial rowset
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -185,8 +186,20 @@ public:
                 idx++;
             }
         }
-        for (int i = 0; i < segment_num; i++) {
-            CHECK_OK(writer->flush_chunk(*chunk));
+        if (spilt_keys) {
+            for (int i = 0; i < segment_num; i++) {
+                auto tmp_chunk = ChunkHelper::new_chunk(schema, keys.size() / segment_num);
+                std::vector<uint32_t> indexes;
+                for (int j = i; j < chunk->num_rows(); j += segment_num) {
+                    indexes.push_back(j);
+                }
+                tmp_chunk->append_selective(*chunk, indexes.data(), 0, indexes.size());
+                CHECK_OK(writer->flush_chunk(*tmp_chunk));
+            }
+        } else {
+            for (int i = 0; i < segment_num; i++) {
+                CHECK_OK(writer->flush_chunk(*chunk));
+            }
         }
         RowsetSharedPtr partial_rowset = *writer->build();
         partial_rowset->set_schema(tablet->tablet_schema());
@@ -994,6 +1007,56 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_limit_
     // check data
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+    }));
+    tracker->set_limit(old_limit);
+    final_check(tablet, rowsets);
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_memory_limit) {
+    const int N = 100;
+    // generate M upt files in each partial rowset
+    const int M = 2;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(2 * N);
+    std::vector<int64_t> partial_keys(N);
+    for (int i = 0; i < 2 * N; i++) {
+        keys[i] = i;
+        if (i % 2 == 0) {
+            partial_keys[i / 2] = i;
+        }
+    }
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(20);
+    // write full rowset first
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(tablet, keys));
+    }
+    std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+    // partial update v1 and v2 one by one
+    for (int i = 0; i < 10; i++) {
+        std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
+        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        rowsets.emplace_back(create_partial_rowset(tablet, partial_keys, column_indexes, v1_func, v2_func,
+                                                   partial_schemas[i], M, PartialUpdateMode::COLUMN_UPDATE_MODE, true));
+        ASSERT_EQ(rowsets.back()->num_update_files(), M);
+    }
+
+    MemTracker* tracker = StorageEngine::instance()->update_manager()->mem_tracker();
+    const int64_t old_limit = tracker->limit();
+    tracker->set_limit(1);
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    // check data
+    ASSERT_TRUE(check_tablet(tablet, version, 2 * N, [](int64_t k1, int64_t v1, int32_t v2) {
+        if (k1 % 2 == 0) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+        } else {
+            return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+        }
     }));
     tracker->set_limit(old_limit);
     final_check(tablet, rowsets);

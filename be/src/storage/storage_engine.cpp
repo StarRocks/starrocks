@@ -58,6 +58,7 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
@@ -129,6 +130,9 @@ StorageEngine::StorageEngine(const EngineOptions& options)
         return _unused_rowsets.size();
     })
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
+#ifdef USE_STAROS
+    _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
+#endif
 }
 
 StorageEngine::~StorageEngine() {
@@ -239,6 +243,10 @@ Status StorageEngine::_open(const EngineOptions& options) {
     REGISTER_THREAD_POOL_METRICS(segment_replicate, _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
+
+#ifdef USE_STAROS
+    RETURN_IF_ERROR_WITH_WARN(_local_pk_index_manager->init(), "init LocalPkIndexManager failed");
+#endif
 
     return Status::OK();
 }
@@ -473,7 +481,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     {
         std::lock_guard<std::mutex> l(_store_lock);
         for (auto& it : _store_map) {
-            if (it.second->is_used()) {
+            if (it.second->get_state() == DiskState::ONLINE) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
                     if (!it.second->capacity_limit_reached(0)) {
                         stores.push_back(it.second);
@@ -528,6 +536,18 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
         }
     }
     return nullptr;
+}
+
+bool StorageEngine::enable_light_pk_compaction_publish() {
+    if (!config::enable_light_pk_compaction_publish) {
+        return false;
+    }
+    // Skip light pk compaction if there is no local disk to store temp rows mapper files.
+    auto stores = get_stores<false>();
+    if (stores.empty()) {
+        return false;
+    }
+    return true;
 }
 
 // maybe nullptr if as cn
@@ -1550,6 +1570,40 @@ void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) 
         }
         return dcg_keys;
     }());
+}
+
+void StorageEngine::disable_disks(const std::vector<string>& disabled_disks) {
+    std::lock_guard<std::mutex> l(_store_lock);
+
+    for (auto& it : _store_map) {
+        if (std::find(disabled_disks.begin(), disabled_disks.end(), it.second->path()) != disabled_disks.end()) {
+            it.second->set_state(DiskState::DISABLED);
+            LOG(INFO) << "disk " << it.second->path() << " is set to DISABLED";
+        } else {
+            if (it.second->get_state() == DiskState::DISABLED) {
+                it.second->set_state(DiskState::ONLINE);
+                LOG(INFO) << "disk " << it.second->path() << " is recovered to ONLINE, previous state is DISABLED";
+            }
+        }
+    }
+}
+
+void StorageEngine::decommission_disks(const std::vector<string>& decommission_disks) {
+    std::lock_guard<std::mutex> l(_store_lock);
+
+    for (auto& it : _store_map) {
+        if (std::find(decommission_disks.begin(), decommission_disks.end(), it.second->path()) !=
+            decommission_disks.end()) {
+            it.second->set_state(DiskState::DECOMMISSIONED);
+            LOG(INFO) << "disk " << it.second->path() << " is set to DECOMMISSIONED";
+        } else {
+            if (it.second->get_state() == DiskState::DECOMMISSIONED) {
+                it.second->set_state(DiskState::ONLINE);
+                LOG(INFO) << "disk " << it.second->path()
+                          << " is recovered to ONLINE, previous state is DECOMMISSIONED";
+            }
+        }
+    }
 }
 
 } // namespace starrocks

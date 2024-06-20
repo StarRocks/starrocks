@@ -29,7 +29,9 @@ import org.junit.Test;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionMgrTest {
@@ -43,40 +45,41 @@ public class CompactionMgrTest {
         PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
 
+        Set<Long> excludeTables = new HashSet<>();
         for (int i = 1; i <= Config.lake_compaction_simple_selector_threshold_versions - 1; i++) {
             compactionManager.handleLoadingFinished(partition1, i, System.currentTimeMillis(), null);
             compactionManager.handleLoadingFinished(partition2, i, System.currentTimeMillis(), null);
-            Assert.assertEquals(0, compactionManager.choosePartitionsToCompact().size());
+            Assert.assertEquals(0, compactionManager.choosePartitionsToCompact(excludeTables).size());
         }
         compactionManager.handleLoadingFinished(partition1, Config.lake_compaction_simple_selector_threshold_versions,
                 System.currentTimeMillis(), null);
-        List<PartitionIdentifier> compactionList = compactionManager.choosePartitionsToCompact();
+        List<PartitionIdentifier> compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition1, compactionList.get(0));
 
-        Assert.assertEquals(compactionList, compactionManager.choosePartitionsToCompact());
+        Assert.assertEquals(compactionList, compactionManager.choosePartitionsToCompact(excludeTables));
 
         compactionManager.handleLoadingFinished(partition2, Config.lake_compaction_simple_selector_threshold_versions,
                 System.currentTimeMillis(), null);
 
-        compactionList = compactionManager.choosePartitionsToCompact();
+        compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(2, compactionList.size());
         Assert.assertTrue(compactionList.contains(partition1));
         Assert.assertTrue(compactionList.contains(partition2));
 
-        compactionList = compactionManager.choosePartitionsToCompact(Collections.singleton(partition1));
+        compactionList = compactionManager.choosePartitionsToCompact(Collections.singleton(partition1), excludeTables);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition2, compactionList.get(0));
 
         compactionManager.enableCompactionAfter(partition1, 5000);
         compactionManager.enableCompactionAfter(partition2, 5000);
-        compactionList = compactionManager.choosePartitionsToCompact();
+        compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(0, compactionList.size());
 
         compactionManager.enableCompactionAfter(partition1, 0);
         compactionManager.enableCompactionAfter(partition2, 0);
         compactionManager.removePartition(partition1);
-        compactionList = compactionManager.choosePartitionsToCompact();
+        compactionList = compactionManager.choosePartitionsToCompact(excludeTables);
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition2, compactionList.get(0));
     }
@@ -112,7 +115,7 @@ public class CompactionMgrTest {
         CompactionScheduler compactionScheduler =
                 new CompactionScheduler(compactionManager,
                         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
         compactionManager.setCompactionScheduler(compactionScheduler);
         new MockUp<CompactionScheduler>() {
             @Mock

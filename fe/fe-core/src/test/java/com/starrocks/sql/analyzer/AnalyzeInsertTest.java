@@ -23,17 +23,26 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
+
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeInsertTest {
@@ -54,9 +63,9 @@ public class AnalyzeInsertTest {
     @Test
     public void testInsert() {
         analyzeFail("insert into t0 select v4,v5 from t1",
-                "Column count doesn't match value count");
-        analyzeFail("insert into t0 select 1,2", "Column count doesn't match value count");
-        analyzeFail("insert into t0 values(1,2)", "Column count doesn't match value count");
+                "Inserted target column count: 3 doesn't match select/value column count: 2");
+        analyzeFail("insert into t0 select 1,2", "Inserted target column count: 3 doesn't match select/value column count: 2");
+        analyzeFail("insert into t0 values(1,2)", "Inserted target column count: 3 doesn't match select/value column count: 2");
 
         analyzeFail("insert into tnotnull(v1) values(1)",
                 "must be explicitly mentioned in column permutation");
@@ -80,7 +89,8 @@ public class AnalyzeInsertTest {
 
         analyzeSuccess("insert into tmc values (1,2)");
         analyzeSuccess("insert into tmc (id,name) values (1,2)");
-        analyzeFail("insert into tmc values (1,2,3)", "Column count doesn't match value count");
+        analyzeFail("insert into tmc values (1,2,3)",
+                "Inserted target column count: 2 doesn't match select/value column count: 3");
         analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
     }
 
@@ -127,7 +137,7 @@ public class AnalyzeInsertTest {
             }
         };
         analyzeFail("insert into iceberg_catalog.db.tbl values (1)",
-                "Column count doesn't match value count");
+                "Inserted target column count: 0 doesn't match select/value column count: 1");
 
         new Expectations(metadata) {
             {
@@ -358,5 +368,34 @@ public class AnalyzeInsertTest {
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
+    }
+
+    @Test
+    public void testInsertFailAbortTransaction() throws Exception {
+        StarRocksAssert starRocksAssert = getStarRocksAssert();
+        ConnectContext connectContext = getConnectContext();
+        starRocksAssert.withDatabase("insert_fail").withTable("create table insert_fail.t1 (k1 int, k2 int) " +
+                "distributed by hash(k1) buckets 1 properties ('replication_num' = '1')");
+
+        String insertSql = "insert into insert_fail.t1 values (1)";
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        StatementBase statement = SqlParser.parseSingleStatement(insertSql, connectContext.getSessionVariable().getSqlMode());
+        try {
+            new StmtExecutor(connectContext, statement).execute();
+        } catch (Exception e) {
+            Assert.assertTrue(
+                    e.getMessage().contains("Inserted target column count: 2 doesn't match select/value column count: 1"));
+        }
+
+        List<List<String>> results = starRocksAssert.show("show proc '/transactions/insert_fail'");
+        Assert.assertEquals(2, results.size());
+        for (List<String> row : results) {
+            Assert.assertEquals(2, row.size());
+            if (row.get(0).equals("running")) {
+                Assert.assertEquals("0", row.get(1));
+            } else if (row.get(0).equals("finished")) {
+                Assert.assertEquals("1", row.get(1));
+            }
+        }
     }
 }

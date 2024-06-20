@@ -98,6 +98,7 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
+    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
@@ -219,4 +220,8 @@ add_library(Storage STATIC
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
+    lake/lake_primary_key_compaction_conflict_resolver.cpp
+    rows_mapper.cpp
+    primary_key_compaction_conflict_resolver.cpp
+    local_primary_key_compaction_conflict_resolver.cpp
     primary_key_dump.cpp)

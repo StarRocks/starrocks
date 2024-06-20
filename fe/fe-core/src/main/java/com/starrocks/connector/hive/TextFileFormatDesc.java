@@ -30,11 +30,19 @@ public class TextFileFormatDesc {
     // For example, {"smith": age} mapkey_delimiter is ':'.
     private final String mapkeyDelim;
 
+    private final int skipHeaderLineCount;
+
     public TextFileFormatDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim) {
+        this(fieldDelim, lineDelim, collectionDelim, mapkeyDelim, 0);
+    }
+
+    public TextFileFormatDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim,
+                              int skipHeaderLineCount) {
         this.fieldDelim = fieldDelim;
         this.lineDelim = lineDelim;
         this.collectionDelim = collectionDelim;
         this.mapkeyDelim = mapkeyDelim;
+        this.skipHeaderLineCount = skipHeaderLineCount;
     }
 
     public String getFieldDelim() {
@@ -53,12 +61,25 @@ public class TextFileFormatDesc {
         return mapkeyDelim;
     }
 
+    public int getSkipHeaderLineCount() {
+        return skipHeaderLineCount;
+    }
+
     public TTextFileDesc toThrift() {
         TTextFileDesc desc = new TTextFileDesc();
-        desc.field_delim = fieldDelim;
-        desc.line_delim = lineDelim;
-        desc.collection_delim = collectionDelim;
-        desc.mapkey_delim = mapkeyDelim;
+        if (fieldDelim != null) {
+            desc.setField_delim(fieldDelim);
+        }
+        if (lineDelim != null) {
+            desc.setLine_delim(lineDelim);
+        }
+        if (collectionDelim != null) {
+            desc.setCollection_delim(collectionDelim);
+        }
+        if (mapkeyDelim != null) {
+            desc.setMapkey_delim(mapkeyDelim);
+        }
+        desc.setSkip_header_line_count(skipHeaderLineCount);
         return desc;
     }
 
@@ -69,6 +90,7 @@ public class TextFileFormatDesc {
         sb.append(", lineDelim='").append(lineDelim).append('\'');
         sb.append(", collectionDelim='").append(collectionDelim).append('\'');
         sb.append(", mapkeyDelim='").append(mapkeyDelim).append('\'');
+        sb.append(", skipHeaderLineCount='").append(skipHeaderLineCount).append('\'');
         sb.append('}');
         return sb.toString();
     }

@@ -12,7 +12,7 @@ You can use Lateral Join with UNNEST to implement common conversions, for exampl
 
 From v2.5, UNNEST can take a variable number of array parameters. The arrays can vary in type and length (number of elements). If the arrays have different lengths, the largest length prevails, which means nulls will be added to arrays that are less than this length. See [Example 2](#example-2-unnest-takes-multiple-parameters) for more information.
 
-From v3.2.6, UNNEST can be used with LEFT JOIN ON TRUE, which is to retain all rows in the left table even if the corresponding rows in the right table are empty or have null values. NULLs are returned for such empty or NULL rows. See [Example 3](#example-3-unnest-left-join-on-true) for more information.
+From v3.2.7, UNNEST can be used with LEFT JOIN ON TRUE, which is to retain all rows in the left table even if the corresponding rows in the right table are empty or have null values. NULLs are returned for such empty or NULL rows. See [Example 3](#example-3-unnest-with-left-join-on-true) for more information.
 
 ## Syntax
 

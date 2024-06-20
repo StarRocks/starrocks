@@ -231,7 +231,15 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
         auto tablet_id = tablet_ids[row_indexes[from]];
         auto it = _delta_writers.find(tablet_id);
-        DCHECK(it != _delta_writers.end());
+        if (it == _delta_writers.end()) {
+            LOG(WARNING) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                         << " not found tablet_id: " << tablet_id;
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(
+                    fmt::format("Failed to add_chunk since tablet_id {} not exists, txn_id: {}, load_id: {}", tablet_id,
+                                _txn_id, print_id(request.id())));
+            return;
+        }
         auto& delta_writer = it->second;
 
         // back pressure OlapTableSink since there are too many memtables need to flush
@@ -621,7 +629,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.ptable_schema_param = params.schema();
+        options.ptable_schema_param = &(params.schema());
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -663,11 +671,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     if (_is_replicated_storage) {
         std::stringstream ss;
         ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open "
-           << _delta_writers.size() << " delta writer: ";
-        for (auto& [tablet_id, delta_writer] : _delta_writers) {
-            ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
-        }
-        ss << " " << failed_tablet_ids.size() << " failed_tablets: ";
+           << _delta_writers.size() << " delta writers, " << failed_tablet_ids.size() << " failed_tablets: ";
         for (auto& tablet_id : failed_tablet_ids) {
             ss << tablet_id << ",";
         }
@@ -815,6 +819,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
+        options.ptable_schema_param = &(params.schema());
         options.immutable_tablet_size = params.immutable_tablet_size();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {

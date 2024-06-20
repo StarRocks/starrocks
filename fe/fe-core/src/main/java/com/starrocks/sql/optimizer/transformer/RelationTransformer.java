@@ -131,7 +131,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -140,6 +139,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMapping> {
@@ -389,7 +389,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         root = addOrderByLimit(root, setOperationRelation);
-        return new LogicalPlan(root, outputColumns, null);
+        return new LogicalPlan(root, outputColumns, ImmutableList.of());
     }
 
     private OptExprBuilder addOrderByLimit(OptExprBuilder root, QueryRelation relation) {
@@ -455,7 +455,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder valuesOpt = new OptExprBuilder(new LogicalValuesOperator(valuesOutputColumns, values),
                 Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), valuesOutputColumns));
-        return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
+        return new LogicalPlan(valuesOpt, valuesOutputColumns, ImmutableList.of());
     }
 
     private DistributionSpec getTableDistributionSpec(TableRelation node,
@@ -624,7 +624,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 new LogicalProjectOperator(outputVariables.stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
 
-        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, null);
+        return new LogicalPlan(scanBuilder.withNewRoot(projectOperator), outputVariables, ImmutableList.of());
     }
 
     @Override
@@ -639,27 +639,14 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         int cteId = cteContext.getCurrentCteRef(node.getCteMouldId());
-        ExpressionMapping expressionMapping = cteContext.getCteExpressions().get(cteId);
-        Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
+
         LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
-
-        Preconditions.checkState(childPlan.getOutputColumn().size() == expressionMapping.getFieldMappings().size());
-
-        for (int i = 0; i < expressionMapping.getFieldMappings().size(); i++) {
-            ColumnRefOperator childColumn = childPlan.getOutputColumn().get(i);
-            ColumnRefOperator produceColumn = expressionMapping.getFieldMappings().get(i);
-
-            Preconditions.checkState(childColumn.getType().equals(produceColumn.getType()));
-            Preconditions.checkState(childColumn.isNullable() == produceColumn.isNullable());
-
-            cteOutputColumnRefMap.put(childColumn, produceColumn);
-        }
-
+        Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = checkCtePlanOutput(cteId, childPlan, node);
         LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
         OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
                 new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
 
-        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), null);
+        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), ImmutableList.of());
     }
 
     @Override
@@ -703,7 +690,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns);
             OptExprBuilder scanBuilder = new OptExprBuilder(viewScanOperator, Collections.emptyList(),
                     new ExpressionMapping(node.getScope(), newOutputColumns));
-            return new LogicalPlan(scanBuilder, newOutputColumns, null);
+            return new LogicalPlan(scanBuilder, newOutputColumns, ImmutableList.of());
         }
     }
 
@@ -790,7 +777,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     .setNeedOutputRightChildColumns(true).build();
             return new LogicalPlan(
                     new OptExprBuilder(root, Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
-                            expressionMapping), expressionMapping.getFieldMappings(), null);
+                            expressionMapping), expressionMapping.getFieldMappings(), ImmutableList.of());
         }
 
         LogicalPlan leftPlan = visit(node.getLeft());
@@ -831,7 +818,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalProjectOperator(expressionMapping.getFieldMappings().stream().distinct()
                             .collect(Collectors.toMap(Function.identity(), Function.identity())));
             return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                    expressionMapping.getFieldMappings(), null);
+                    expressionMapping.getFieldMappings(), ImmutableList.of());
         }
 
         ExpressionMapping outputExpressionMapping;
@@ -877,7 +864,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 new LogicalProjectOperator(outputExpressionMapping.getFieldMappings().stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
         return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                outputExpressionMapping.getFieldMappings(), null);
+                outputExpressionMapping.getFieldMappings(), ImmutableList.of());
     }
 
     @Override
@@ -918,7 +905,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         Operator root = new LogicalTableFunctionOperator(outputColumns, node.getTableFunction(), projectMap);
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
-                null, null);
+                null, ImmutableList.of());
     }
 
     @Override
@@ -1098,6 +1085,38 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         return usingLeftRelation;
+    }
+
+    private Map<ColumnRefOperator, ColumnRefOperator> checkCtePlanOutput(int cteId, LogicalPlan childPlan, CTERelation cte) {
+        Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = Maps.newHashMap();
+        ExpressionMapping expressionMapping = cteContext.getCteExpressions().get(cteId);
+        if (expressionMapping == null) {
+            throw new StarRocksPlannerException(INTERNAL_ERROR, "CTE %s not found in cteExpressions", cte.getName());
+        }
+
+        if (childPlan.getOutputColumn().size() != expressionMapping.getFieldMappings().size()) {
+            throw new StarRocksPlannerException(INTERNAL_ERROR,
+                    "CTE %s output column size mismatch. plan output: %s, cte definition output: %s",
+                    cte.getName(), childPlan.getOutputColumn(), expressionMapping.getFieldMappings());
+        }
+
+        for (int i = 0; i < expressionMapping.getFieldMappings().size(); i++) {
+            ColumnRefOperator childColumn = childPlan.getOutputColumn().get(i);
+            ColumnRefOperator produceColumn = expressionMapping.getFieldMappings().get(i);
+            if (!childColumn.getType().equals(produceColumn.getType())) {
+                throw new StarRocksPlannerException(INTERNAL_ERROR,
+                        "CTE %s output column type mismatch. plan output: %s, cte definition output: %s",
+                        cte.getName(), childColumn, produceColumn);
+            }
+
+            if (childColumn.isNullable() != produceColumn.isNullable()) {
+                throw new StarRocksPlannerException(INTERNAL_ERROR,
+                        "CTE %s output column nullable mismatch. plan output: %s, cte definition output: %s",
+                        cte.getName(), childColumn, produceColumn);
+            }
+            cteOutputColumnRefMap.put(childColumn, produceColumn);
+        }
+        return cteOutputColumnRefMap;
     }
 
     private static SelectRelation extractSubqueryRelation(List<Subquery> subqueries) {

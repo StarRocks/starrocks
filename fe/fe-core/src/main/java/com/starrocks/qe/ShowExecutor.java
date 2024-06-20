@@ -575,7 +575,7 @@ public class ShowExecutor {
         if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             TaskManager taskManager = globalStateMgr.getTaskManager();
-            mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
+            mvNameTaskMap = taskManager.listMVRefreshedTaskRunStatus(dbName);
         }
         for (MaterializedView mvTable : materializedViews) {
             long mvId = mvTable.getId();
@@ -696,7 +696,7 @@ public class ShowExecutor {
         List<List<String>> rowSet = Lists.newArrayList();
 
         List<ConnectContext.ThreadInfo> threadInfos = connectContext.getConnectScheduler()
-                .listConnection(connectContext.getQualifiedUser());
+                .listConnection(connectContext.getQualifiedUser(), showStmt.getForUser());
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
             List<String> row = info.toRow(nowMs, showStmt.showFull());
@@ -1102,7 +1102,7 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
+        } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase() && Strings.isNullOrEmpty(db.getCatalogName())) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
@@ -2519,7 +2519,7 @@ public class ShowExecutor {
                             olapTable.getDefaultReplicationNum() : RunMode.defaultReplicationNum();
                     rows.add(Lists.newArrayList(
                             tableName,
-                            String.valueOf(dynamicPartitionProperty.getEnable()),
+                            String.valueOf(dynamicPartitionProperty.isEnabled()),
                             dynamicPartitionProperty.getTimeUnit().toUpperCase(),
                             String.valueOf(dynamicPartitionProperty.getStart()),
                             String.valueOf(dynamicPartitionProperty.getEnd()),
@@ -2536,7 +2536,8 @@ public class ShowExecutor {
                             dynamicPartitionScheduler
                                     .getRuntimeInfo(tableName, DynamicPartitionScheduler.CREATE_PARTITION_MSG),
                             dynamicPartitionScheduler
-                                    .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG)));
+                                    .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG),
+                                String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
                 }
             } finally {
                 db.readUnlock();

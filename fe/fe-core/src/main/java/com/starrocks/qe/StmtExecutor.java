@@ -40,6 +40,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
@@ -116,6 +117,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.Field;
@@ -217,6 +219,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 // Do one COM_QUERY process.
@@ -224,6 +227,8 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 // second: Do handle function for statement.
 public class StmtExecutor {
     private static final Logger LOG = LogManager.getLogger(StmtExecutor.class);
+    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
+    private static final Gson GSON = new Gson();
 
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
@@ -235,7 +240,7 @@ public class StmtExecutor {
     private Coordinator coord = null;
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
-    private final boolean isProxy;
+    private boolean isProxy;
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
@@ -269,6 +274,10 @@ public class StmtExecutor {
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
+    }
+
+    public void setProxy() {
+        isProxy = true;
     }
 
     public Coordinator getCoordinator() {
@@ -447,6 +456,12 @@ public class StmtExecutor {
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
 
+        // Only add the last running stmt for multi statement,
+        // because the audit log will only show the last stmt.
+        if (context.getIsLastStmt()) {
+            addRunningQueryDetail(parsedStmt);
+        }
+
         // if use http protocal, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
@@ -624,10 +639,23 @@ public class StmtExecutor {
                             isAsync = tryProcessProfileAsync(execPlan, i);
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                if (coord.isShortCircuit()) {
+                                    throw new UserException(
+                                            "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                    "you can set it off by using  set enable_short_circuit=false");
+                                }
                                 handleExplainStmt(ExplainAnalyzer.analyze(
                                         ProfilingExecPlan.buildFrom(execPlan), profile, null));
                             }
                         }
+
+                        if (context.getState().isError()) {
+                            RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+                            Tracers.toRuntimeProfile(plannerProfile);
+                            LOG.warn("Query {} failed. Planner profile : {}",
+                                    context.getQueryId().toString(), plannerProfile);
+                        }
+
                         if (isAsync) {
                             QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
                                     context.getSessionVariable().getProfileTimeout() * 1000L);
@@ -888,13 +916,33 @@ public class StmtExecutor {
                 summaryProfile.addInfoString(ProfileManager.RETRY_TIMES, Integer.toString(retryIndex + 1));
             }
 
-            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
+            ProfilingExecPlan profilingPlan;
+            if (coord.isShortCircuit()) {
+                profilingPlan = null;
+            } else {
+                profilingPlan = plan == null ? null : plan.getProfilingPlan();
+            }
             String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
             if (queryDetail != null) {
                 queryDetail.setProfile(profileContent);
             }
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+            if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
+                String jsonString = GSON.toJson(queryDetail);
+                if (Config.enable_profile_log_compress) {
+                    byte[] jsonBytes;
+                    try {
+                        jsonBytes = CompressionUtils.gzipCompressString(jsonString);
+                        PROFILE_LOG.info(jsonBytes);
+                    } catch (IOException e) {
+                        LOG.warn("Compress queryDetail string failed, length: {}, reason: {}",
+                                jsonString.length(), e.getMessage());
+                    }
+                } else {
+                    PROFILE_LOG.info(jsonString);
+                }
+            }
         };
         return coord.tryProcessProfileAsync(task);
     }
@@ -1202,12 +1250,17 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleAnalyzeProfileStmt() throws IOException {
+    private void handleAnalyzeProfileStmt() throws IOException, UserException {
         AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
         String queryId = analyzeProfileStmt.getQueryId();
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         Preconditions.checkNotNull(profileElement, "query not exists");
+        if (coord.isShortCircuit()) {
+            throw new UserException(
+                    "short circuit point query doesn't suppot analyze profile stmt, " +
+                            "you can set it off by using  set enable_short_circuit=false");
+        }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
                 RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
                 planNodeIds));
@@ -1589,6 +1642,8 @@ public class StmtExecutor {
                 explainString += Tracers.printTiming();
             } else if (parsedStmt.getTraceMode() == Tracers.Mode.LOGS) {
                 explainString += Tracers.printLogs();
+            } else if (parsedStmt.getTraceMode() == Tracers.Mode.REASON) {
+                explainString += Tracers.printReasons();
             } else {
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
             }
@@ -1679,8 +1734,7 @@ public class StmtExecutor {
         serializer.writeInt1(0);
         // warning_count
         serializer.writeInt2(0);
-        // metadata follows
-        serializer.writeInt1(1);
+
         context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
 
         if (numParams > 0) {
@@ -1691,6 +1745,8 @@ public class StmtExecutor {
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            // send EOF
+            serializer.reset();
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
             eofPacket.writeTo(serializer);
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
@@ -1702,6 +1758,8 @@ public class StmtExecutor {
                 serializer.writeField(field.getName(), field.getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            // send EOF
+            serializer.reset();
             MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
             eofPacket.writeTo(serializer);
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
@@ -2037,12 +2095,11 @@ public class StmtExecutor {
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
                 GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-                String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
                     if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable ||
                             targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
                         // schema table and iceberg table does not need txn
-                        mgr.abortTransaction(database.getId(), transactionId, errorMsg,
+                        mgr.abortTransaction(database.getId(), transactionId, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                                 Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();
@@ -2269,5 +2326,33 @@ public class StmtExecutor {
 
     public List<ByteBuffer> getProxyResultBuffer() {
         return proxyResultBuffer;
+    }
+
+    protected void addRunningQueryDetail(StatementBase parsedStmt) {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
+        String sql;
+        if (parsedStmt.needAuditEncryption()) {
+            sql = AstToSQLBuilder.toSQL(parsedStmt);
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+
+        boolean isQuery = parsedStmt instanceof QueryStatement;
+        QueryDetail queryDetail = new QueryDetail(
+                DebugUtil.printId(context.getQueryId()),
+                isQuery,
+                context.connectionId,
+                context.getMysqlChannel() != null ? context.getMysqlChannel().getRemoteIp() : "System",
+                context.getStartTime(), -1, -1,
+                QueryDetail.QueryMemState.RUNNING,
+                context.getDatabase(),
+                sql,
+                context.getQualifiedUser(),
+                Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""));
+        context.setQueryDetail(queryDetail);
+        // copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addQueryDetail(queryDetail.copy());
     }
 }

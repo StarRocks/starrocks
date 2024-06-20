@@ -189,6 +189,7 @@ import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -615,7 +616,7 @@ public class GlobalStateMgr {
         return nodeMgr.getClusterInfo();
     }
 
-    private HeartbeatMgr getHeartbeatMgr() {
+    public HeartbeatMgr getHeartbeatMgr() {
         return heartbeatMgr;
     }
 
@@ -2369,17 +2370,16 @@ public class GlobalStateMgr {
                 EditLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
-                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
-                            replayedJournalId.incrementAndGet(),
-                            entity == null ? null : GsonUtils.GSON.toJson(entity.getData()),
-                            e);
+                    LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
+                            replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
                     if (!readSucc) {
                         cursor.skipNext();
                     }
                     continue;
                 }
                 // handled in outer loop
-                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                LOG.warn("catch exception when replaying journal, id: {}, data: {},",
+                        replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
                 throw e;
             }
 
@@ -2415,6 +2415,19 @@ public class GlobalStateMgr {
             return true;
         }
         return false;
+    }
+
+    private String journalEntityToReadableString(JournalEntity entity) {
+        if (entity == null) {
+            return "null";
+        }
+        Writable data = entity.getData();
+        try {
+            return GsonUtils.GSON.toJson(data);
+        } catch (Exception e) {
+            // In older version, data may not be json, here we just return the class name.
+            return data.getClass().getName();
+        }
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
@@ -2759,6 +2772,16 @@ public class GlobalStateMgr {
                         .append(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)
                         .append("\" = \"")
                         .append(olapTable.getAutomaticBucketSize()).append("\"");
+            }
+
+            // locations
+            if (olapTable.getLocation() != null) {
+                String locations = PropertyAnalyzer.convertLocationMapToString(olapTable.getLocation());
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)
+                        .append("\" = \"")
+                        .append(locations)
+                        .append("\"");
             }
 
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
@@ -3153,6 +3176,10 @@ public class GlobalStateMgr {
 
     public void replayDeleteReplica(ReplicaPersistInfo info) {
         localMetastore.replayDeleteReplica(info);
+    }
+
+    public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        localMetastore.replayBatchDeleteReplica(info);
     }
 
     public void replayAddFrontend(Frontend fe) {
@@ -3651,8 +3678,8 @@ public class GlobalStateMgr {
         localMetastore.modifyTableConstraint(db, tableName, properties);
     }
 
-    public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
-        localMetastore.setHasForbitGlobalDict(dbName, tableName, isForbit);
+    public void setHasForbiddenGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
+        localMetastore.setHasForbiddenGlobalDict(dbName, tableName, isForbit);
     }
 
     public void replayModifyHiveTableColumn(short opCode, ModifyTableColumnOperationLog info) {

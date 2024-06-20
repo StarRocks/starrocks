@@ -42,7 +42,7 @@ public class ShowStreamLoadTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;

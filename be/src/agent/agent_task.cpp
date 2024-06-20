@@ -270,15 +270,17 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
     std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,
                                                      agent_task_req->task_req.base_tablet_id);
     LOG(INFO) << alter_msg_head << "get alter table task, signature: " << agent_task_req->signature;
-    bool is_task_timeout = false;
+    bool is_task_req_expired = false;
     if (agent_task_req->isset.recv_time) {
         int64_t time_elapsed = time(nullptr) - agent_task_req->recv_time;
         if (time_elapsed > config::report_task_interval_seconds * 20) {
-            LOG(INFO) << "task elapsed " << time_elapsed << " seconds since it is inserted to queue, it is timeout";
-            is_task_timeout = true;
+            // task have been in queue for a long time, this task may already be cancelled by FE
+            // so just ignore this task, cause if it's not cancelled, FE will resend a new one
+            LOG(INFO) << alter_msg_head << " ignore expired task request " << time_elapsed << "s since enqueue";
+            is_task_req_expired = true;
         }
     }
-    if (!is_task_timeout) {
+    if (!is_task_req_expired) {
         TFinishTaskRequest finish_task_request;
         TTaskType::type task_type = agent_task_req->task_type;
         if (task_type == TTaskType::ALTER) {

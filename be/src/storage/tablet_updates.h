@@ -335,6 +335,8 @@ public:
 
     double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
+    void set_pk_index_write_amp_score(double score) { _pk_index_write_amp_score.store(score); }
+
     Status pk_index_major_compaction();
 
     // get the max rowset creation time for largest major version
@@ -353,6 +355,8 @@ public:
     }
 
     Status generate_pk_dump_if_in_error_state();
+
+    RowsetSharedPtr get_rowset(uint32_t rowset_id);
 
 private:
     friend class Tablet;
@@ -398,8 +402,6 @@ private:
     void _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
 
     void _apply_compaction_commit(const EditVersionInfo& version_info);
-
-    RowsetSharedPtr _get_rowset(uint32_t rowset_id);
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
@@ -479,6 +481,12 @@ private:
     std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
+
+    bool _use_light_apply_compaction(Rowset* rowset);
+
+    Status _light_apply_compaction_commit(const EditVersion& version, Rowset* output_rowset, PrimaryIndex* index,
+                                          size_t* total_deletes, size_t* total_rows,
+                                          vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
 
 private:
     Tablet& _tablet;

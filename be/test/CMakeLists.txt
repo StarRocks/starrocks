@@ -67,6 +67,7 @@ set(EXEC_FILES
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
+        ./exec/jni_scanner_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
         ./exec/json_scanner_test.cpp
@@ -152,6 +153,8 @@ set(EXEC_FILES
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
+        ./formats/json/struct_column_test.cpp
+        ./formats/json/map_column_test.cpp
         ./formats/avro/binary_column_test.cpp
         ./formats/avro/numeric_column_test.cpp
         ./formats/avro/nullable_column_test.cpp
@@ -245,6 +248,7 @@ set(EXEC_FILES
         ./storage/rowset/block_bloom_filter_test.cpp
         ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
         ./storage/rowset/column_reader_writer_test.cpp
+        ./storage/rowset/dict_page_test.cpp
         ./storage/rowset/encoding_info_test.cpp
         ./storage/rowset/frame_of_reference_page_test.cpp
         ./storage/rowset/map_column_rw_test.cpp
@@ -266,7 +270,7 @@ set(EXEC_FILES
         ./storage/tablet_meta_manager_test.cpp
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
-        ./storage/table_schema_test.cpp
+        ./storage/tablet_schema_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/tablet_updates_schema_change_test.cpp
         ./storage/update_manager_test.cpp
@@ -415,6 +419,7 @@ set(EXEC_FILES
         ./service/service_be/internal_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
         ./storage/delta_writer_test.cpp
+        ./storage/rows_mapper_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

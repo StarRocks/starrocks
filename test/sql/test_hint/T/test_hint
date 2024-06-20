@@ -144,3 +144,23 @@ set @test= (select cast(50 as boolean));
 select @test;
 
 set @test= (select cast(50 as time));
+
+set @test= ["{\"m\":{\"cal\":[{\"thur\":{\"use\":true,\"shift\":{\"begin\":0,\"end\":36}},\"id\":\"ID1\"}]}}", "{\"\\a\"}"];
+select @test = ["{\"m\":{\"cal\":[{\"thur\":{\"use\":true,\"shift\":{\"begin\":0,\"end\":36}},\"id\":\"ID1\"}]}}", "{\"\\a\"}"];
+
+set @test= concat(upper('a'), '\\', '"', '\'', 'b');
+select @test = concat(upper('a'), '\\', '"', '\'', 'b');
+
+set @test = ["abc\\"];
+select @test = ["abc\\"];
+
+set @test = ["abc'"];
+select @test = ["abc'"];
+
+set @test = ["abc\\'"];
+select @test = ["abc\\'"];
+
+
+
+
+

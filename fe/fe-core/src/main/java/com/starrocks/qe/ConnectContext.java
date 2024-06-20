@@ -187,7 +187,7 @@ public class ConnectContext {
     // isLastStmt is true when original stmt is single stmt
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
-    protected boolean isLastStmt;
+    protected boolean isLastStmt = true;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 

@@ -46,6 +46,7 @@
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/column_mapping.h"
 #include "storage/compaction_utils.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -109,9 +110,18 @@ public:
 
     virtual Status add_chunk(const Chunk& chunk) { return Status::NotSupported("RowsetWriter::add_chunk"); }
 
+    virtual Status add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) {
+        return Status::NotSupported("RowsetWriter::add_chunk");
+    }
+
     // Used for vertical compaction
     // |Chunk| contains partial columns data corresponding to |column_indexes|.
     virtual Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
+        return Status::NotSupported("RowsetWriter::add_columns");
+    }
+
+    virtual Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key,
+                               const std::vector<uint64_t>& rssid_rowids) {
         return Status::NotSupported("RowsetWriter::add_columns");
     }
 
@@ -199,6 +209,8 @@ protected:
     FlushChunkState _flush_chunk_state = FlushChunkState::UNKNOWN;
 
     DictColumnsValidMap _global_dict_columns_valid_info;
+
+    std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
 };
 
 class VerticalRowsetWriter;
@@ -210,6 +222,8 @@ public:
     ~HorizontalRowsetWriter() override;
 
     Status add_chunk(const Chunk& chunk) override;
+
+    Status add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) override;
 
     Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr) override;
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info) override;
@@ -246,6 +260,9 @@ public:
     ~VerticalRowsetWriter() override;
 
     Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) override;
+
+    Status add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key,
+                       const std::vector<uint64_t>& rssid_rowids) override;
 
     Status flush_columns() override;
 

@@ -79,6 +79,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergApiConverter.PARTITION_NULL_VALUE;
 import static org.apache.hadoop.hive.common.FileUtils.escapePathName;
 import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
@@ -637,7 +638,8 @@ public class PartitionUtil {
 
             // currently starrocks date literal only support local datetime
             org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
-            if (partitionField.transform().isIdentity() && icebergType.equals(Types.TimestampType.withZone())) {
+            if (!value.equals(PARTITION_NULL_VALUE) && partitionField.transform().isIdentity() &&
+                    icebergType.equals(Types.TimestampType.withZone())) {
                 value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
                         getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();
             }

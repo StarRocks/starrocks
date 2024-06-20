@@ -254,7 +254,7 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.MapExpr;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
@@ -2760,8 +2760,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
+        String forUser = null;
+        if (context.FOR() != null) {
+            forUser =  ((StringLiteral) visit(context.string())).getValue();
+        }
         boolean isShowFull = context.FULL() != null;
-        return new ShowProcesslistStmt(isShowFull, createPos(context));
+        return new ShowProcesslistStmt(isShowFull, forUser, createPos(context));
     }
 
     @Override
@@ -3238,7 +3242,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.systemVariable() != null) {
             VariableExpr variableDesc = (VariableExpr) visit(context.systemVariable());
             Expr expr = (Expr) visit(context.setExprOrDefault());
-            return new SystemVariable(variableDesc.getSetType(), variableDesc.getName(), expr, pos);
+            return new SystemVariable(variableDesc.getSetType() == null ? SetType.SESSION : variableDesc.getSetType(),
+                    variableDesc.getName(), expr, pos);
         } else {
             Expr expr = (Expr) visit(context.setExprOrDefault());
             String variable = ((Identifier) visit(context.identifier())).getValue();
@@ -3494,10 +3499,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitModifyBackendHostClause(StarRocksParser.ModifyBackendHostClauseContext context) {
-        List<String> clusters =
+    public ParseNode visitModifyBackendClause(StarRocksParser.ModifyBackendClauseContext context) {
+        List<String> strings =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1), createPos(context));
+        if (context.HOST() != null) {
+            return new ModifyBackendClause(strings.get(0), strings.get(1), createPos(context));
+        } else {
+            String backendHostPort = strings.get(0);
+            Map<String, String> properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+            return new ModifyBackendClause(backendHostPort, properties, createPos(context));
+        }
     }
 
     @Override
@@ -4020,6 +4035,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return Tracers.Mode.TIMER;
         } else if (context.ALL() != null) {
             return Tracers.Mode.TIMING;
+        } else if (context.REASON() != null) {
+            return Tracers.Mode.REASON;
         } else {
             return Tracers.Mode.NONE;
         }
@@ -6614,7 +6631,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitProperty(StarRocksParser.PropertyContext context) {
         return new Property(
-                ((StringLiteral) visit(context.key)).getStringValue(),
+                ((StringLiteral) visit(context.key)).getStringValue().trim(),
                 ((StringLiteral) visit(context.value)).getStringValue(),
                 createPos(context));
     }
@@ -6749,6 +6766,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Parameter parameter = new Parameter(placeHolderSlotId++);
         parameters.add(parameter);
         return parameter;
+    }
+
+    @Override
+    public ParseNode visitDecommissionDiskClause(StarRocksParser.DecommissionDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitCancelDecommissionDiskClause(StarRocksParser.CancelDecommissionDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitDisableDiskClause(StarRocksParser.DisableDiskClauseContext context) {
+        throw new SemanticException("not support");
+    }
+
+    @Override
+    public ParseNode visitCancelDisableDiskClause(StarRocksParser.CancelDisableDiskClauseContext context) {
+        throw new SemanticException("not support");
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

@@ -136,6 +136,8 @@ public class Config extends ConfigBase {
     public static String audit_log_roll_interval = "DAY";
     @ConfField
     public static String audit_log_delete_age = "30d";
+    @ConfField(mutable = true)
+    public static boolean audit_log_json_format = false;
 
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
@@ -259,13 +261,16 @@ public class Config extends ConfigBase {
     @ConfField
     public static String profile_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField
-    public static int profile_log_roll_num = 10;
+    public static int profile_log_roll_num = 5;
     @ConfField
     public static String profile_log_roll_interval = "DAY";
     @ConfField
-    public static String profile_log_delete_age = "7d";
+    public static String profile_log_delete_age = "1d";
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
+
+    @ConfField
+    public static boolean enable_profile_log_compress = false;
 
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
@@ -336,7 +341,7 @@ public class Config extends ConfigBase {
      * It will run every *task_check_interval_second* to do background job.
      */
     @ConfField
-    public static int task_check_interval_second = 4 * 3600; // 4 hours
+    public static int task_check_interval_second = 1 * 3600; // 1 hour
 
     /**
      * for task set expire time
@@ -1145,7 +1150,7 @@ public class Config extends ConfigBase {
      * Maximal number of connections per FE.
      */
     @ConfField
-    public static int qe_max_connection = 1024;
+    public static int qe_max_connection = 4096;
 
     /**
      * Maximal number of thread in connection-scheduler-pool.
@@ -1388,18 +1393,18 @@ public class Config extends ConfigBase {
      * k8s control place will schedule a new pod and attach the pvc to it which will
      * restore the replica to a {@link Replica.ReplicaState#NORMAL} state immediately. But normally
      * the {@link com.starrocks.clone.TabletScheduler} of Starrocks will start to schedule
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
+     * {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
      * After new pod scheduling is completed, {@link com.starrocks.clone.TabletScheduler} has
      * to delete the redundant healthy replica which cause resource waste and may also affect
      * the loading process.
      *
      * <p>When a backend is considered to be dead, this configuration specifies how long the
      * {@link com.starrocks.clone.TabletScheduler} should wait before starting to schedule
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
+     * {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
      * the external scheduler like k8s to handle the repair process before internal scheduler kicks in
      * or for the system administrator to restart and put the backend online in time.
      * To be noticed, it only affects the dead backend situation, the scheduler
-     * may still schedule {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks because of
+     * may still schedule {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks because of
      * other reasons, like manually setting a replica as bad, actively decommission a backend etc.
      *
      * <p>Currently this configuration only works for non-colocate tables, for colocate tables,
@@ -1804,6 +1809,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean statistic_check_expire_partition = true;
+
+    /**
+     * Clear stale partition statistics data job work interval
+     */
+    @ConfField(mutable = true)
+    public static long clear_stale_stats_interval_sec = 12 * 60 * 60L; // 12 hour
 
     /**
      * The collect thread work interval
@@ -2385,7 +2396,7 @@ public class Config extends ConfigBase {
     public static boolean enable_password_reuse = true;
     /**
      * If set to false, when the load is empty, success is returned.
-     * Otherwise, `all partitions have no load data` is returned.
+     * Otherwise, `No partitions have data available for loading` is returned.
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
@@ -2453,6 +2464,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
+
+    // e.g. "tableId1;tableId2"
+    @ConfField(mutable = true)
+    public static String lake_compaction_disable_tables = "";
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
@@ -2562,6 +2577,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String profile_info_format = "default";
+
+    /**
+     * When the session variable `enable_profile` is set to `false` and `big_query_profile_threshold` is set to 0,
+     * the amount of time taken by a load exceeds the default_big_load_profile_threshold_second,
+     * a profile is generated for that load.
+     */
+    @ConfField(mutable = true)
+    public static long default_big_load_profile_threshold_second = 300;
 
     /**
      * Max number of roles that can be granted to user including all direct roles and all parent roles
@@ -2729,6 +2752,19 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
 
+    @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
+    public static int max_mv_check_base_table_change_retry_times = 10;
+
+    @ConfField(mutable = true, comment = "The max retry times for materialized view refresh retry times when failed")
+    public static int max_mv_refresh_failure_retry_times = 1;
+
+    @ConfField(mutable = true, comment = "The max retry times when materialized view refresh try lock " +
+            "timeout failed")
+    public static int max_mv_refresh_try_lock_failure_retry_times = 3;
+
+    @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
+    public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
+
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
@@ -2835,11 +2871,13 @@ public class Config extends ConfigBase {
      * Replication config
      */
     @ConfField
-    public static int replication_interval_ms = 10;
+    public static int replication_interval_ms = 100;
     @ConfField(mutable = true)
     public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_max_parallel_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_replica_count = 10240; // 10240
+    @ConfField(mutable = true)
+    public static int replication_max_parallel_data_size_mb = 1048576; // 1T
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
     @ConfField(mutable = true)

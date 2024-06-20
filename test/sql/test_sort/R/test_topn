@@ -206,3 +206,282 @@ select c1,c0 from t2 order by c1,c0 asc limit 10;
 9	9
 10	10
 -- !result
+create table t3 (
+    c0 INT,
+    c1 BIGINT
+) UNIQUE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series + 3 FROM TABLE(generate_series(1,  81920));
+-- result:
+-- !result
+insert into t3 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t3 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c1 from t3 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+11
+12
+13
+-- !result
+select c1,c0 from t3 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+select c0,c1 from t3 where c1 < 10 order by c0 desc limit 10;
+-- result:
+7	9
+6	8
+5	7
+4	6
+3	5
+2	4
+1	3
+-- !result
+select c1 from t3 order by c1 desc limit 10;
+-- result:
+81923
+81922
+81921
+81920
+81919
+81918
+81917
+81916
+81915
+81914
+-- !result
+select c1,c0 from t3 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+create table t4 (
+    c0 INT,
+    c1 BIGINT REPLACE
+) UNIQUE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series + 3 FROM TABLE(generate_series(1,  81920));
+-- result:
+-- !result
+insert into t4 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t4 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c1 from t4 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+11
+12
+13
+-- !result
+select c1,c0 from t4 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+select c0,c1 from t4 where c1 < 10 order by c0 desc limit 10;
+-- result:
+7	9
+6	8
+5	7
+4	6
+3	5
+2	4
+1	3
+-- !result
+select c1 from t4 order by c1 desc limit 10;
+-- result:
+81923
+81922
+81921
+81920
+81919
+81918
+81917
+81916
+81915
+81914
+-- !result
+select c1,c0 from t4 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result
+create table t5 (
+    c0 INT,
+    c1 BIGINT
+) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series + 1 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series + 3 FROM TABLE(generate_series(1,  81920));
+-- result:
+-- !result
+insert into t5 SELECT generate_series, generate_series + 2 FROM TABLE(generate_series(1,  7));
+-- result:
+-- !result
+select c0 from t5 order by c0 asc limit 10;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+select c1 from t5 order by c1 asc limit 10;
+-- result:
+3
+4
+5
+6
+7
+8
+9
+11
+12
+13
+-- !result
+select c1,c0 from t5 where c1 < 10 order by c1,c0 asc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+-- !result
+select c0,c1 from t5 order by c0 desc limit 10;
+-- result:
+81920	81923
+81919	81922
+81918	81921
+81917	81920
+81916	81919
+81915	81918
+81914	81917
+81913	81916
+81912	81915
+81911	81914
+-- !result
+select c1 from t5 order by c1 desc limit 10;
+-- result:
+81923
+81922
+81921
+81920
+81919
+81918
+81917
+81916
+81915
+81914
+-- !result
+select c1,c0 from t5 order by c1,c0 desc limit 10;
+-- result:
+3	1
+4	2
+5	3
+6	4
+7	5
+8	6
+9	7
+11	8
+12	9
+13	10
+-- !result

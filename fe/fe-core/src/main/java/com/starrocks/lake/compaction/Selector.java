@@ -17,9 +17,10 @@ package com.starrocks.lake.compaction;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import javax.validation.constraints.NotNull;
 
 public interface Selector {
     @NotNull
-    List<PartitionStatistics> select(@NotNull Collection<PartitionStatistics> statistics);
+    List<PartitionStatistics> select(@NotNull Collection<PartitionStatistics> statistics, @NotNull Set<Long> excludeTables);
 }

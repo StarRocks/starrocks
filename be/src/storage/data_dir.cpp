@@ -72,7 +72,6 @@ DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, T
           _available_bytes(0),
           _disk_capacity_bytes(0),
           _storage_medium(storage_medium),
-          _is_used(false),
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
           _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
@@ -99,13 +98,12 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
     RETURN_IF_ERROR_WITH_WARN(init_persistent_index_dir(), "_init_persistent_index_dir failed");
 
-    _is_used = true;
+    _state = DiskState::ONLINE;
     return Status::OK();
 }
 
 void DataDir::stop_bg_worker() {
     _stop_bg_worker = true;
-    _cv.notify_one();
 }
 
 Status DataDir::_init_data_dir() {
@@ -150,14 +148,25 @@ Status DataDir::set_cluster_id(int32_t cluster_id) {
 }
 
 void DataDir::health_check() {
+    const int retry_times = 10;
     // check disk
-    if (_is_used) {
-        Status res = _read_and_write_test_file();
-        if (!res.ok()) {
-            LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path << ", res=" << res.to_string();
-            if (is_io_error(res)) {
-                _is_used = false;
+    if (_state != DiskState::DECOMMISSIONED && _state != DiskState::DISABLED) {
+        bool all_failed = true;
+        for (int i = 0; i < retry_times; i++) {
+            Status res = _read_and_write_test_file();
+            if (res.ok() || !is_io_error(res)) {
+                all_failed = false;
+                break;
+            } else {
+                LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path
+                             << ", res=" << res.to_string();
             }
+        }
+        if (all_failed) {
+            LOG(WARNING) << "store test failed " << retry_times << " times, set _state to OFFLINE. path=" << _path;
+            _state = DiskState::OFFLINE;
+        } else {
+            _state = DiskState::ONLINE;
         }
     }
 }
@@ -469,8 +478,7 @@ Status DataDir::load() {
 // gc unused tablet schemahash dir
 void DataDir::perform_path_gc_by_tablet() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_tablet_schemahash_paths.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_tablet_schemahash_paths.empty()) {
         return;
     }
     LOG(INFO) << "start to path gc by tablet schema hash.";
@@ -555,8 +563,7 @@ static bool is_delta_column_file(const std::string& path) {
 
 void DataDir::perform_delta_column_files_gc() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_dcg_files.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_check_dcg_files.empty()) {
         return;
     }
     LOG(INFO) << "start to do delta column files gc.";
@@ -588,8 +595,7 @@ void DataDir::perform_path_gc_by_rowsetid() {
     // init the set of valid path
     // validate the path in data dir
     std::unique_lock<std::mutex> lck(_check_path_mutex);
-    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_paths.empty(); });
-    if (_stop_bg_worker) {
+    if (_stop_bg_worker || _all_check_paths.empty()) {
         return;
     }
     LOG(INFO) << "start to path gc by rowsetid.";
@@ -687,7 +693,6 @@ void DataDir::perform_path_scan() {
         LOG(INFO) << "scan data dir path:" << _path << " finished. path size:" << _all_check_paths.size()
                   << " dcg file size: " << _all_check_dcg_files.size();
     }
-    _cv.notify_one();
 }
 
 void DataDir::_process_garbage_path(const std::string& path) {

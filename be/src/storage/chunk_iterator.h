@@ -69,6 +69,21 @@ public:
         return st;
     }
 
+    // like get_next(Chunk* chunk), but also returns each row's rssid + rowid (after encode)
+    [[nodiscard]] Status get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+        Status st = do_get_next(chunk, rssid_rowids);
+        DCHECK_CHUNK(chunk);
+        return st;
+    }
+
+    // like get_next(Chunk* chunk), but also returns each row's rssid + rowid (after encode)
+    [[nodiscard]] Status get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                                  std::vector<uint64_t>* rssid_rowids) {
+        Status st = do_get_next(chunk, source_masks, rssid_rowids);
+        DCHECK_CHUNK(chunk);
+        return st;
+    }
+
     // Release resources associated with this iterator, e.g, deallocate memory.
     // This routine can be called at most once.
     virtual void close() = 0;
@@ -124,11 +139,24 @@ protected:
     virtual Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
         return Status::NotSupported("Chunk* chunk, vector<uint32_t>* rowid) not supported");
     }
+    virtual Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+        return Status::NotSupported("Chunk* chunk, vector<uint64_t>* rssid_rowids) not supported");
+    }
     virtual Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
         if (source_masks == nullptr) {
             return do_get_next(chunk);
         } else {
             return Status::NotSupported("get chunk with sources not supported");
+        }
+    }
+    virtual Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                               std::vector<uint64_t>* rssid_rowids) {
+        if (source_masks == nullptr) {
+            return do_get_next(chunk, rssid_rowids);
+        } else {
+            return Status::NotSupported(
+                    "Chunk* chunk, std::vector<RowSourceMask>* source_masks, vector<uint64_t>* rssid_rowids) not "
+                    "supported");
         }
     }
 

@@ -40,7 +40,6 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -102,6 +101,9 @@ public class StatisticUtils {
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
+        context.getSessionVariable().setCboCteReuse(true);
+        context.getSessionVariable().setCboCTERuseRatio(0);
+
         context.setStatisticsContext(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -531,12 +533,12 @@ public class StatisticUtils {
         return colName;
     }
 
-    public static Type getQueryStatisticsColumnType(Table table, String column) throws AnalysisException {
+    public static Type getQueryStatisticsColumnType(Table table, String column) {
         String[] parts = column.split("\\.");
         Preconditions.checkState(parts.length >= 1);
         Column base = table.getColumn(parts[0]);
         if (base == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, column);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column);
         }
 
         Type baseColumnType = base.getType();

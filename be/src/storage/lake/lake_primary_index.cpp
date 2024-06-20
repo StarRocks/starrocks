@@ -170,4 +170,25 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     return Status::OK();
 }
 
+double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
+    if (!_enable_persistent_index) {
+        return 0.0;
+    }
+    auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
+    if (local_persistent_index != nullptr) {
+        return local_persistent_index->get_write_amp_score();
+    }
+    return 0.0;
+}
+
+void LakePrimaryIndex::set_local_pk_index_write_amp_score(double score) {
+    if (!_enable_persistent_index) {
+        return;
+    }
+    auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
+    if (local_persistent_index != nullptr) {
+        local_persistent_index->set_write_amp_score(score);
+    }
+}
+
 } // namespace starrocks::lake

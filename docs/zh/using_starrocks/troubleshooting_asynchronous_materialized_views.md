@@ -25,6 +25,7 @@ displayed_sidebar: "Chinese"
 
 有关返回的其他字段的详细信息，请参阅 [SHOW MATERIALIZED VIEWS - 返回](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md#返回)。
 
+
 示例：
 
 ```Plain
@@ -245,7 +246,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
   除了 SQL 语句之外，这两种物化视图之间的主要区别在于，异步物化视图支持 StarRocks 提供的所有查询语法，而同步物化视图只支持有限的聚合函数。
 
-- **检查是否指定了正确的 `Partition By` 列。**
+- **检查是否指定了正确的 `PARTITION BY` 列。**
 
   在创建异步物化视图时，您可以为其指定分区策略，从而在更细粒度的级别上刷新物化视图。
 
@@ -270,32 +271,41 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
   - 为物化视图指定分区策略，实现细粒度的刷新。
   - 为刷新任务启用中间结果落盘功能。从 v3.1 版本开始，StarRocks 支持将物化视图刷新任务的部分中间结果落盘。执行以下语句启用中间结果落盘功能：
 
-    ```SQL
-    SET enable_spill = true;
-    ```
+  ```SQL
+  -- 在创建物化视图时定义属性。
+  CREATE MATERIALIZED VIEW mv1 
+  REFRESH ASYNC
+  PROPERTIES ( 'session.enable_spill'='true' )
+  AS <query>;
 
-- **检查刷新任务是否超时。**
+  -- 为已有物化视图添加属性。
+  ALTER MATERIALIZED VIEW mv2 SET ('session.enable_spill' = 'true');
+  ```
 
-  较大的物化视图可能因为刷新任务超过超时时间而无法刷新。要解决这个问题，您可以：
+### 物化视图刷新超时
 
-  - 为物化视图指定分区策略，实现细粒度的刷新。
-  - 增加超时时间。
+较大的物化视图可能因为刷新任务超过超时时间而无法刷新，通常有以下几种解决方案。
 
-从 v3.0 版本开始，您可以在创建物化视图时定义以下属性（Session Variable），或者使用 ALTER MATERIALIZED VIEW 命令进行添加：
+- **为物化视图指定分区策略，实现细粒度的刷新**
 
-示例：
+  如 [创建分区物化视图](./create_partitioned_materialized_view.md) 所描述，对物化视图进行分区可以实现增量构建与刷新，能够规避在初始刷新时占用太多资源的问题。
 
-```SQL
--- 在创建物化视图时定义属性。
-CREATE MATERIALIZED VIEW mv1 
-REFRESH ASYNC
-PROPERTIES ( 'session.enable_spill'='true' )
-AS <query>;
+- **设置更大的超时时间**
 
--- 添加属性。
-ALTER MATERIALIZED VIEW mv2 
-    SET ('session.enable_spill' = 'true');
-```
+  v3.2 之前版本中，物化视图刷新任务的默认超时时间为 5 分钟，v3.2 版本之后默认为 1 小时。当遇到超时异常时，可以尝试修改超时时间：
+
+  ```SQL
+  ALTER MATERIALIZED VIEW mv2 SET ( 'session.query_timeout' = '4000' );
+  ```
+
+- **分析物化视图性能瓶颈**
+
+  如果物化视图计算复杂，其本身计算耗时就会很久。您可以通过 Query Profile 分析性能瓶颈，并进行优化：
+
+  1. 通过查询 `information_schema.task_runs` 获取刷新任务的 `query_id`。
+  2. 通过上述的 `query_id`，获取并分析其 Query Profile。
+     - [GET_QUERY_PROFILE](../sql-reference/sql-functions/utility-functions/get_query_profile.md): 根据 `query_id` 获取原始 Query Profile。
+     - [ANALYZE PROFILE](../sql-reference/sql-statements/Administration/ANALYZE_PROFILE.md): 以 Fragment 为单位分析 Query Profile，并以树形结构展示。
 
 ### 物化视图不可用
 
@@ -331,18 +341,37 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   ALTER MATERIALIZED VIEW mv1 INACTIVE;
   ```
 
-- 使用 SHOW PROCESSLIST 和 KILL 语句终止正在运行的刷新任务：
+- 通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 终止正在运行的刷新任务。
 
   ```SQL
-  -- 获取正在运行的刷新任务的 ConnectionId。
-  SHOW PROCESSLIST;
-  -- 终止正在运行的刷新任务。
-  KILL QUERY <ConnectionId>;
+  CANCEL REFRESH MATERIALIZED VIEW mv1;
   ```
+
 
 ### 物化视图无法改写查询
 
 如果物化视图无法改写相关查询，您可以从以下几个方面着手解决：
+
+- **通过 TRACE 诊断改写失败原因**
+
+  StarRocks 提供了 TRACE 命令来诊断物化视图无法改写的原因：
+
+  - `TRACE LOGS MV <query>` : v3.2 之后版本提供，用于分析详细的改写过程和改写失败的原因。
+  - `TRACE REASON MV <query>`: v3.2.8 之后版本提供，提供精简的改写失败原因。
+
+  示例：
+  ```SQL
+  MySQL > TRACE REASON MV SELECT sum(c1) FROM `glue_ice`.`iceberg_test`.`ice_test3`
+  +----------------------------------------------------------------------------------------------------------------------+
+  | Explain String                                                                                                       |
+  +----------------------------------------------------------------------------------------------------------------------+
+  |     MV rewrite fail for mv1: Rewrite aggregate rollup sum(1: c1) failed: only column-ref is supported after rewrite  |
+  |     MV rewrite fail for mv1: Rewrite aggregate function failed, cannot get rollup function: sum(1: c1)               |
+  |     MV rewrite fail for mv1: Rewrite rollup aggregate failed: cannot rewrite aggregate functions                     |
+  +----------------------------------------------------------------------------------------------------------------------+
+  ```
+
+
 
 - **检查物化视图和查询是否匹配。**
 

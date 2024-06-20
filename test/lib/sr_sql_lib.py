@@ -28,6 +28,7 @@ import configparser
 import datetime
 import json
 import logging
+import mysql.connector
 import os
 import re
 import subprocess
@@ -946,10 +947,10 @@ class StarrocksSQLApiLib(object):
 
         # get records
         query_sql = """
-        select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",") 
+        select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",")
         from (
             select * from %s.%s where version=\"%s\" and log_type="R" order by sequence
-        ) a 
+        ) a
         group by file, log_type, name;
         """ % (
             T_R_DB,
@@ -1078,6 +1079,7 @@ class StarrocksSQLApiLib(object):
 
     def wait_load_finish(self, label, time_out=300):
         times = 0
+        load_state = ""
         while times < time_out:
             result = self.execute_sql('show load where label = "' + label + '"', True)
             log.info('show load where label = "' + label + '"')
@@ -1087,13 +1089,13 @@ class StarrocksSQLApiLib(object):
                 log.info(load_state)
                 if load_state == "CANCELLED":
                     log.info(result)
-                    return False
+                    break
                 elif load_state == "FINISHED":
                     log.info(result)
-                    return True
+                    break
             time.sleep(1)
             times += 1
-        tools.assert_less(times, time_out, "load failed, timeout 300s")
+        tools.assert_true(load_state in ("FINISHED", "CANCELLED"), "wait load finish error, timeout 300s")
 
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
@@ -1166,25 +1168,81 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
+    def wait_materialized_view_cancel(self, check_count=60):
         """
-        wait async materialized view job finish and return status
+        wait materialized view job cancel and return status
         """
         status = ""
-        show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
+        show_sql = "SHOW ALTER MATERIALIZED VIEW"
         count = 0
-        num = 0
         while count < check_count:
             res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][12]
-            if status != "SUCCESS":
+            status = res["result"][-1][8]
+            if status != "CANCELLED":
                 time.sleep(1)
             else:
                 # sleep another 5s to avoid FE's async action.
                 time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
+        tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
+
+    def wait_async_materialized_view_finish(self, mv_name, check_count=None):
+        """
+        wait async materialized view job finish and return status
+        """
+        current_db_sql = "select database();"
+        res = self.execute_sql(current_db_sql, True)
+        if not res["status"]:
+            tools.assert_true(False, "acquire current database error")
+        current_db = res["result"][0][-1]
+
+        show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
+        print(show_sql)
+
+        def is_all_finished(results):
+            for res in results:
+                if res[0] != "SUCCESS":
+                    return False
+            return True
+        def get_success_count(results):
+            cnt = 0
+            for res in results:
+                if res[0] == "SUCCESS":
+                    cnt += 1
+            return cnt 
+        
+        MAX_LOOP_COUNT = 60 
+        is_all_ok = False
+        count = 0
+        if check_count is None:
+            while count < MAX_LOOP_COUNT:
+                res = self.execute_sql(show_sql, True)
+                if not res["status"]:
+                    tools.assert_true(False, "show mv state error")
+
+                is_all_ok = is_all_finished(res["result"])
+                if is_all_ok:
+                    # sleep another 5s to avoid FE's async action.
+                    time.sleep(3)
+                    break
+                time.sleep(3)
+                count += 1
+        else:
+            while count < MAX_LOOP_COUNT:
+                res = self.execute_sql(show_sql, True)
+                if not res["status"]:
+                    tools.assert_true(False, "show mv state error")
+
+                success_cnt = get_success_count(res["result"])
+                if success_cnt >= check_count:
+                    is_all_ok = True
+                    # sleep to avoid FE's async action.
+                    time.sleep(2)
+                    break
+                time.sleep(2)
+                count += 1
+        tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
@@ -1683,3 +1741,75 @@ class StarrocksSQLApiLib(object):
                 time.sleep(0.5)
             else:
                 break
+
+    def assert_explain_contains(self, query, *expects):
+        """
+        assert explain result contains expect string
+        """
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect {} is not found in plan {}".format(expect, res['result']))
+
+    def assert_explain_not_contains(self, query, *expects):
+        """
+        assert explain result contains expect string
+        """
+        sql = "explain %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) == -1, "assert expect %s is found in plan" % (expect))
+
+    def assert_explain_costs_contains(self, query, *expects):
+        """
+        assert explain costs result contains expect string
+        """
+        sql = "explain costs %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_trace_values_contains(self, query, *expects):
+        """
+        assert trace values result contains expect string
+        """
+        sql = "trace values %s" % (query)
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan, error msg is %s" % (expect, str(res["result"])))
+
+    def assert_prepare_execute(self, db, query, params=()):
+        conn = mysql.connector.connect(
+            host=self.mysql_host,
+            user=self.mysql_user,
+            password="",
+            port=self.mysql_port,
+            database=db
+        )
+        cursor = conn.cursor(prepared=True)
+
+        try:
+            if params:
+                cursor.execute(query, ['2'])
+            else:
+                cursor.execute(query)
+            cursor.fetchall()
+        except mysql.connector.Error as e:
+            tools.assert_true(1 == 0, e)
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def assert_clear_stale_stats(self, query, expect_num):
+        timeout = 300
+        num = 0;
+        while timeout > 0:
+            res = self.execute_sql(query)
+            num = res["result"]
+            if int(num) < expect_num:
+                break;
+            time.sleep(10)
+            timeout -= 10
+        else:
+            tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)

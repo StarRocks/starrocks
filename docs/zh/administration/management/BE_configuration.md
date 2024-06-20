@@ -340,8 +340,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：INFO
 - 类型：String
 - 单位：-
-- 是否动态：否
-- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。
+- 是否动态：是（自 v3.3.0、v3.2.7 及 v3.1.12 起）
+- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。自 v3.3.0、v3.2.7 及 v3.1.12 起，该参数变为动态参数。
 - 引入版本：-
 
 ##### sys_log_roll_mode
@@ -2161,6 +2161,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+##### query_pool_spill_mem_limit_threshold
+
+- 默认值：1.0
+- 类型：Double
+- 单位：-
+- 是否动态：否
+- 描述：如果开启自动落盘功能, 当所有查询使用的内存超过 `query_pool memory limit * query_pool_spill_mem_limit_threshold` 时，系统触发中间结果落盘。
+- 引入版本：3.2.7
+
 ##### result_buffer_cancelled_interval_time
 
 - 默认值：300
@@ -2958,7 +2967,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值：false
 - 类型：Boolean
 - 单位：-
-- 是否动态：是
+- 是否动态：否
 - 描述：是否开启 RFC-3986 编码。从 Google GCS 查询数据时，如果 Object.key 包含特殊字符（例如 `=`，`$`），由于 result URL 未解析这些字符，会导致认证失败。开启 RFC-3986 编码能确保字符正确编码。该特性对于 Hive 分区表非常重要。如果使用 OBS 或 KS3 对象存储，需要在 `be.conf` 开启该参数，不然访问不通。
 - 引入版本：v3.1
 
@@ -3242,11 +3251,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### starlet_use_star_cache
 
-- 默认值：true
+- 默认值：false（v3.1）true（v3.2.3 起）
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。
+- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
 - 引入版本：v3.1
 
 <!--

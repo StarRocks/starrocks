@@ -2782,4 +2782,14 @@ public class AggregateTest extends PlanTestBase {
                 "  |  having: CAST(14: multi_distinct_sum AS DOUBLE) / CAST(13: multi_distinct_count AS DOUBLE) = 2.0\n" +
                 "  |  limit: 10");
     }
+
+    @Test
+    public void testAvgDecimalScale() throws Exception {
+        String sql = "select avg(v2 - 1.86659630566164 * (v3 - 3.062175673706)) from t0 group by v1;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> [5: avg, DECIMAL128(38,18), true]\n" +
+                "  |  cardinality: 1");
+    }
 }

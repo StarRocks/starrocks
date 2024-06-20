@@ -11,11 +11,11 @@ Before contributing, please read this article carefully to quickly understand th
 3. Images: Images must first be put into the **assets** folder. When inserting images into the documentation, please use the relative path, such as `![test image](../../assets/test.png)`.
 4. Links: For internal links (links to documentation on our official website), please use the relative path of the document, such as `[test md](./data_source/catalog/hive_catalog.md)`. For external links,  the format must be `[link text](link URL)`.
 5. Code blocks: You must add a language identifier for code blocks, for example, `sql`.
-6. Currently, special symbols are not  supported.
+6. Currently, special symbols are not supported.
 
 ## Writing Process
 
-1. **Writing phase**: Write the topic (in Markdown) according to the following template, and add the topic's index to the TOC file if the topic is newly added.
+1. **Writing phase**: Write the topic (in Markdown) according to templates, and add the topic's index to the `sidebars.json` file if the topic is newly added.
 
     > - *Because the documentation is written in Markdown, we recommend that you use markdown-lint to check whether the documentation conforms to the Markdown syntax.*
     > - *When adding the topic index, please pay attention to* *its category* *in the TOC file.* *For* *example, the* ***Stream Load*** *topic* *belongs to the* ***Loading*** *chapter.*
@@ -65,10 +65,11 @@ Before contributing, please read this article carefully to quickly understand th
     The review phase includes automatic checks and manual review.
 
     - Automatic checks: whether the submitter has signed the Contributor License Agreement (CLA) and whether the documentation conforms to the Markdown syntax.
-    - Manual review: Committers will read and communicate with you about the documentation. It will be merged into StarRocks documentation repository and updated on the official website.
+    - Manual review: Committers will read and communicate with you about the documentation. It will be merged into the StarRocks documentation repository and updated on the official website.
 
 ## Documentation template
 
-- [Functions](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)
-- [SQL command template](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-statements/SQL_command_template.md)
-- [Loading data template](https://github.com/StarRocks/starrocks/blob/main/docs/loading/Loading_data_template.md)
+- [SQL function template](../docs/en/sql-reference/How_to_Write_Functions_Documentation.md)
+- [SQL command template](../docs/en/sql-reference//SQL_command_template.md)
+- [FE/BE config and variable temple](../docs/en/sql-reference/template_for_config.md)
+- [Loading data template](../docs/en/loading/Loading_data_template.md)

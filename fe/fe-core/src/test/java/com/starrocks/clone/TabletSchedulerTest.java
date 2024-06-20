@@ -62,7 +62,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.starrocks.catalog.KeysType.DUP_KEYS;
 
@@ -223,7 +222,7 @@ public class TabletSchedulerTest {
         backendDisks1.put("/path11", td11);
         backendDisks1.put("/path12", td12);
         Backend be1 = new Backend(1, "192.168.0.1", 9030);
-        be1.setIsAlive(new AtomicBoolean(true));
+        be1.setAlive(true);
         be1.updateDisks(backendDisks1);
         systemInfoService.addBackend(be1);
 
@@ -236,7 +235,7 @@ public class TabletSchedulerTest {
         backendDisks2.put("/path22", td22);
         Backend be2 = new Backend(2, "192.168.0.2", 9030);
         be2.updateDisks(backendDisks2);
-        be2.setIsAlive(new AtomicBoolean(true));
+        be2.setAlive(true);
         systemInfoService.addBackend(be2);
 
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
@@ -314,7 +313,7 @@ public class TabletSchedulerTest {
             ctx.setColocateGroupId(v);
             ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
             if (k == 104L) {
-                ctx.setTabletStatus(LocalTablet.TabletStatus.VERSION_INCOMPLETE);
+                ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
             }
             Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
         });
@@ -335,11 +334,12 @@ public class TabletSchedulerTest {
         replicas.add(new Replica(4, 3003, -3, Replica.ReplicaState.NORMAL));
 
         LocalTablet localTablet = new LocalTablet(5001, replicas);
-        Pair<LocalTablet.TabletStatus, TabletSchedCtx.Priority> result = localTablet.getHealthStatusWithPriority(
-                systemInfoService, 1, 3, Arrays.asList(1001L, 1002L, 1003L));
+        Pair<LocalTablet.TabletHealthStatus, TabletSchedCtx.Priority> result = TabletChecker.getTabletHealthStatusWithPriority(
+                localTablet, systemInfoService, 1, 3,
+                Arrays.asList(1001L, 1002L, 1003L), null);
         System.out.println(result);
 
-        Assert.assertEquals(LocalTablet.TabletStatus.FORCE_REDUNDANT, result.first);
+        Assert.assertEquals(LocalTablet.TabletHealthStatus.FORCE_REDUNDANT, result.first);
 
         Config.recover_with_empty_tablet = false;
     }

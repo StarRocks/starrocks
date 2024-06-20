@@ -346,14 +346,28 @@ public enum ErrorCode {
      */
 
     /**
+     * 5400 - 5499: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5400, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated"),
+
+    /**
      * 5600 - 5699: DML operation failure
      */
     ERR_NO_FILES_FOUND(5600, new byte[] {'5', '8', '0', '3', '0'},
             "No files were found matching the pattern(s) or path(s): '%s'"),
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
-    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'")
-    ;
+    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+    ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
+            "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
+                    "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
+                    "to ensure such load jobs can succeed"),
+    ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
+            "Inserted target column count: %d doesn't match select/value column count: %d"),
+    ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
+    ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
+            "Current error rows: %d is more than max error num: %d. Check the 'TrackingSQL' field for detailed information");
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
