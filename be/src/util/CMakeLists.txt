@@ -79,6 +79,7 @@ set(UTIL_FILES
   slice.cpp
   sm3.cpp
   frame_of_reference_coding.cpp
+  random_utf8.cpp
   utf8_check.cpp
   path_util.cpp
   monotime.cpp
