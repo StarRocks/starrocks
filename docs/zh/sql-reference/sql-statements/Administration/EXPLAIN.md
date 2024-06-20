@@ -18,12 +18,6 @@ displayed_sidebar: "Chinese"
 
 ```SQL
 EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
--- 显示简要的逻辑执行计划
-EXPLAIN LOGICAL <query>
--- 显示更详细（更多数据类型，nullable信息，优化策略）的逻辑执行计划
-EXPLAIN VERBOSE <query>
--- 显示更详细（统计信息）的逻辑执行计划
-EXPLAIN COSTS <query>
 ```
 
 :::tip
