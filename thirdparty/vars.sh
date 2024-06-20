@@ -247,10 +247,10 @@ FLATBUFFERS_SOURCE=flatbuffers-1.10.0
 FLATBUFFERS_MD5SUM="f7d19a3f021d93422b0bc287d7148cd2"
 
 # arrow
-ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/apache-arrow-5.0.0.tar.gz"
-ARROW_NAME="arrow-apache-arrow-5.0.0.tar.gz"
-ARROW_SOURCE="arrow-apache-arrow-5.0.0"
-ARROW_MD5SUM="9caf5dbd36ef4972c3a591bcfeaf59c8"
+ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-16.1.0.tar.gz"
+ARROW_NAME="arrow-apache-arrow-16.1.0.tar.gz"
+ARROW_SOURCE="arrow-apache-arrow-16.1.0"
+ARROW_MD5SUM="d9d019aaef586bd1a7493416d78954b9"
 
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
