@@ -35,7 +35,7 @@ private:
 class ColumnModePartialUpdateHandler {
 public:
     ColumnModePartialUpdateHandler(int64_t base_version, int64_t txn_id, MemTracker* tracker);
-    ~ColumnModePartialUpdateHandler() {}
+    ~ColumnModePartialUpdateHandler();
 
     Status execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder);
 
@@ -58,6 +58,8 @@ private:
     int64_t _base_version = 0;
     int64_t _txn_id = 0;
     MemTracker* _tracker = nullptr;
+    // Used for release memory to tracker when meet failure.
+    int64_t _memory_usage = 0;
 
     std::vector<BatchPKsPtr> _upserts;
 
