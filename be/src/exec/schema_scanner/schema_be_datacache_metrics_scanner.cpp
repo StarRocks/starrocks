@@ -22,12 +22,13 @@
 
 namespace starrocks {
 
-TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDescriptor::create_struct_type(
-        {"priority_1", "priority_2"},
-        {TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_BIGINT)});
 TypeDescriptor SchemaBeDataCacheMetricsScanner::_dir_spaces_type = TypeDescriptor::create_array_type(
         TypeDescriptor::create_struct_type({"path", "quota_bytes"}, {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
                                                                      TypeDescriptor::from_logical_type(TYPE_BIGINT)}));
+
+TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDescriptor::create_struct_type(
+        {"priority_0", "priority_1"},
+        {TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_BIGINT)});
 
 SchemaScanner::ColumnDesc SchemaBeDataCacheMetricsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), false},
@@ -64,6 +65,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     if (config::datacache_enable) {
         const BlockCache* cache = BlockCache::instance();
+        // retrive different priority's used bytes from level = 2 metrics
         metrics = cache->cache_metrics(2);
 
         switch (metrics.status) {
@@ -92,7 +94,6 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         }
         row.emplace_back(dir_spaces_array);
 
-        // retrive different priority's used bytes from L2 metrics
         int64_t priority_0_used_bytes = 0;
         int64_t priority_1_used_bytes = 0;
         const auto& l2_metrics = metrics.detail_l2;

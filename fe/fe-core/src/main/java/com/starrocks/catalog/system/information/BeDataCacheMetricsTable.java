@@ -39,8 +39,8 @@ public class BeDataCacheMetricsTable {
         ArrayType dirSpacesArrayType = new ArrayType(dirSpacesType);
 
         ArrayList<StructField> usedBytesDetailFields = new ArrayList<>(2);
+        usedBytesDetailFields.add(new StructField("priority_0", ScalarType.createType(PrimitiveType.BIGINT)));
         usedBytesDetailFields.add(new StructField("priority_1", ScalarType.createType(PrimitiveType.BIGINT)));
-        usedBytesDetailFields.add(new StructField("priority_2", ScalarType.createType(PrimitiveType.BIGINT)));
         StructType usedBytesDetailType = new StructType(usedBytesDetailFields);
 
         return new SystemTable(SystemId.BE_DATACACHE_METRICS, "be_datacache_metrics", Table.TableType.SCHEMA,
