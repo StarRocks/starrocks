@@ -21,7 +21,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
@@ -47,7 +46,7 @@ public class PipeManager {
 
     private static final Logger LOG = LogManager.getLogger(PipeManager.class);
 
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     @SerializedName(value = "pipes")
     private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();

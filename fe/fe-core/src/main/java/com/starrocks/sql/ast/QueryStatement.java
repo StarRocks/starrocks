@@ -163,9 +163,4 @@ public class QueryStatement extends StatementBase {
         }
         return null;
     }
-
-    @Override
-    public boolean needAuditEncryption() {
-        return queryRelation.needAuditEncryption();
-    }
 }
