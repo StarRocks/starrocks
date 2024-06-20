@@ -175,6 +175,6 @@ SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHE
 -- result:
 true	
 -- !result
-drop database db_${uuid0};
+[UC]drop database db_${uuid0} force;
 -- result:
 -- !result
