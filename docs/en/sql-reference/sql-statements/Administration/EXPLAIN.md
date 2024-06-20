@@ -18,12 +18,6 @@ This operation does not require privileges.
 
 ```SQL
 EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
--- show the simple logical execution plans
-EXPLAIN LOGICAL <query>
--- show the detailed logical execution plans, including data types, nullable information, and optimization strategy
-EXPLAIN VERBOSE <query>
--- show the detailed logical execution plans, including column statisitics
-EXPLAIN COSTS <query>
 ```
 
 :::tip
