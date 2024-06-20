@@ -53,7 +53,6 @@ PARTITION p20201022 VALUES [("2020-10-22"), ("2020-10-23"))
 )
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3;
 
-
 INSERT INTO t2 VALUES
     ('2020-10-10','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
     ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
@@ -70,6 +69,7 @@ select * from t1
 union all
 select * from t2;
 function: wait_async_materialized_view_finish("test_mv1")
+refresh materialized view  test_mv1 with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
 drop materialized view test_mv1;
 
@@ -169,6 +169,8 @@ select * from t1
 union all
 select * from t2;
 function: wait_async_materialized_view_finish("test_mv1")
+refresh materialized view  test_mv1 with sync mode;
+
 select k1, count(1) from test_mv1 group by k1 order by k1;
 drop materialized view test_mv1;
 
