@@ -33,6 +33,7 @@ public:
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
+    static TypeDescriptor _used_bytes_detail_type;
     static SchemaScanner::ColumnDesc _s_columns[];
 
     bool _is_fetched = false;

@@ -10,15 +10,21 @@
 
 namespace starrocks {
 
+TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDescriptor::create_struct_type(
+        {"priority_1", "priority_2"},
+        {TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_BIGINT)});
+;
+
 SchemaScanner::ColumnDesc SchemaBeDataCacheMetricsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64), false},
-        {"STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DISK_QUOTA_BYTES", TYPE_BIGINT, sizeof(int64), true},
-        {"DISK_USED_BYTES", TYPE_BIGINT, sizeof(int64), true},
-        {"MEM_QUOTA_BYTES", TYPE_BIGINT, sizeof(int64), true},
-        {"MEM_USED_BYTES", TYPE_BIGINT, sizeof(int64), true},
-        {"META_USED_BYTES", TYPE_BIGINT, sizeof(int64), true},
-        {"DIR_SPACES", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), false},
+        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DISK_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
+        {"DISK_USED_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
+        {"MEM_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
+        {"MEM_USED_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
+        {"META_USED_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
+        {"DIR_SPACES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"USED_BYTES_DETAIL", _used_bytes_detail_type, 16, true}};
 
 SchemaBeDataCacheMetricsScanner::SchemaBeDataCacheMetricsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(ColumnDesc)) {}
@@ -44,7 +50,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     if (config::datacache_enable) {
         const BlockCache* cache = BlockCache::instance();
-        const DataCacheMetrics& metrics = cache->cache_metrics();
+        const DataCacheMetrics& metrics = cache->cache_metrics(2);
 
         switch (metrics.status) {
         case DataCacheStatus::NORMAL:
@@ -69,16 +75,31 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         for (size_t i = 0; i < dir_spaces.size(); i++) {
             const auto& dir_space = dir_spaces[i];
             dir_spaces_str.append(
-                    strings::Substitute("{\"Path\":\"$0\",\"QuotaBytes\":$1}", dir_space.path, dir_space.quota_bytes));
+                    strings::Substitute(R"({"Path":"$0","QuotaBytes":$1})", dir_space.path, dir_space.quota_bytes));
             if (i < dir_spaces.size() - 1) {
                 dir_spaces_str.append(",");
             }
         }
         dir_spaces_str.append("]");
         row.emplace_back(Slice(dir_spaces_str));
+
+        // retrive different priority's used bytes from L2 metrics
+        int64_t priority_0_used_bytes = 0;
+        int64_t priority_1_used_bytes = 0;
+        const auto& l2_metrics = metrics.detail_l2;
+        if (l2_metrics != nullptr) {
+            if (l2_metrics->prior_item_bytes.contains(0)) {
+                priority_0_used_bytes = l2_metrics->prior_item_bytes[0];
+            }
+            if (l2_metrics->prior_item_bytes.contains(1)) {
+                priority_1_used_bytes = l2_metrics->prior_item_bytes[1];
+            }
+        }
+        row.emplace_back(DatumStruct{priority_0_used_bytes, priority_1_used_bytes});
     } else {
         status = "Disabled";
         row.emplace_back(Slice(status));
+        row.emplace_back(kNullDatum);
         row.emplace_back(kNullDatum);
         row.emplace_back(kNullDatum);
         row.emplace_back(kNullDatum);
