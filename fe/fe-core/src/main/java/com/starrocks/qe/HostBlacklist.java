@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -37,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class HostBlacklist {
@@ -52,7 +52,7 @@ public class HostBlacklist {
     // by timeline, thread unsafe
     public final LinkedList<DisconnectEvent> eventHistory = new LinkedList<>();
     // lock history
-    private final ReadWriteLock rwLock = new FairReentrantReadWriteLock();
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public void disableAutoUpdate() {
         enableUpdateBlacklistThread.set(false);

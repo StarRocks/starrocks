@@ -606,7 +606,7 @@ public class GlobalStateMgr {
         this.exportMgr = new ExportMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
-        this.lock = new QueryableReentrantLock();
+        this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
         this.deleteMgr = new DeleteMgr();
