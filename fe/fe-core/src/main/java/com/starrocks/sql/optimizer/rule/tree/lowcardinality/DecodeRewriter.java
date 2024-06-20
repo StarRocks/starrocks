@@ -93,6 +93,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         DecodeInfo decodeInfo = context.operatorDecodeInfo.getOrDefault(optExpression.getOp(), DecodeInfo.EMPTY);
 
         fragmentUsedDictExprs.union(decodeInfo.outputStringColumns);
+        fragmentUsedDictExprs.union(decodeInfo.usedStringColumns);
         ColumnRefSet childFragmentUsedDictExpr = optExpression.getOp() instanceof PhysicalDistributionOperator ?
                 new ColumnRefSet() : fragmentUsedDictExprs;
 
