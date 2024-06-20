@@ -37,11 +37,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.Warehouse;
->>>>>>> 5762c1e5c8 ([BugFix] fix storage volume parameters validation (#47088))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -120,7 +116,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    TStatusCode stCode = TStatusCode.findByValue(response.getStatus().getStatusCode());
+                    TStatusCode stCode = TStatusCode.findByValue(response.status.statusCode);
                     LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
 
                     // ignore INVALID_ARGUMENT error, treat it as success
