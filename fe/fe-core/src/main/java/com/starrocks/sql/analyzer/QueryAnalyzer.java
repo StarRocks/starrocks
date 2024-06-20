@@ -213,7 +213,8 @@ public class QueryAnalyzer {
                 throw unsupportedException("Table function must be used with lateral join");
             }
             selectRelation.setRelation(resolvedRelation);
-            guessScanColumns(selectRelation, resolvedRelation);
+            //for avoid init column meta, try to prune unused columns
+            pruneScanColumns(selectRelation, resolvedRelation);
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
 
@@ -252,7 +253,7 @@ public class QueryAnalyzer {
         }
 
         // for reduce meta initialization, only support simple query relation, like: select x1, x2 from t;
-        private void guessScanColumns(SelectRelation selectRelation, Relation fromRelation) {
+        private void pruneScanColumns(SelectRelation selectRelation, Relation fromRelation) {
             if (!session.getSessionVariable().isEnableAnalyzePhasePruneColumns() ||
                     !(fromRelation instanceof TableRelation) ||
                     !Objects.isNull(selectRelation.getGroupByClause()) ||
@@ -274,7 +275,7 @@ public class QueryAnalyzer {
                 }
                 scanColumns.add(((SlotRef) item.getExpr()).getColumnName().toLowerCase());
             }
-            ((TableRelation) fromRelation).setGuessScanColumns(scanColumns);
+            ((TableRelation) fromRelation).setPruneScanColumns(scanColumns);
         }
 
         private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
@@ -444,28 +445,28 @@ public class QueryAnalyzer {
                 List<Column> fullSchema = table.getFullSchema();
                 Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
 
-                List<String> guessScanColumns = node.getGuessScanColumns();
-                boolean needGuessScanColumns = guessScanColumns != null && !guessScanColumns.isEmpty();
-                if (needGuessScanColumns) {
+                List<String> pruneScanColumns = node.getPruneScanColumns();
+                boolean needPruneScanColumns = pruneScanColumns != null && !pruneScanColumns.isEmpty();
+                if (needPruneScanColumns) {
                     Set<String> fullColumnNames = new HashSet<>(fullSchema.size());
                     for (Column column : fullSchema) {
                         if (column.isGeneratedColumn()) {
-                            needGuessScanColumns = false;
+                            needPruneScanColumns = false;
                             break;
                         }
                         fullColumnNames.add(column.getName().toLowerCase());
                     }
-                    needGuessScanColumns &= fullColumnNames.containsAll(guessScanColumns);
+                    needPruneScanColumns &= fullColumnNames.containsAll(pruneScanColumns);
                 }
 
                 Set<String> bucketColumns = table.getDistributionColumnNames();
                 List<String> partitionColumns = table.getPartitionColumnNames();
                 for (Column column : fullSchema) {
                     // TODO: avoid analyze visible or not each time, cache it in schema
-                    if (needGuessScanColumns && !column.isKey() &&
+                    if (needPruneScanColumns && !column.isKey() &&
                             !bucketColumns.contains(column.getName()) &&
                             !partitionColumns.contains(column.getName()) &&
-                            !guessScanColumns.contains(column.getName().toLowerCase())) {
+                            !pruneScanColumns.contains(column.getName().toLowerCase())) {
                         // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
                         continue;
                     }

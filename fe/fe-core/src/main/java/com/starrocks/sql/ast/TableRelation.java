@@ -54,7 +54,7 @@ public class TableRelation extends Relation {
 
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
-    private List<String> guessScanColumns = Collections.emptyList();
+    private List<String> pruneScanColumns = Collections.emptyList();
 
     private long gtid = 0;
 
@@ -121,12 +121,12 @@ public class TableRelation extends Relation {
         this.columns = columns;
     }
 
-    public List<String> getGuessScanColumns() {
-        return guessScanColumns;
+    public List<String> getPruneScanColumns() {
+        return pruneScanColumns;
     }
 
-    public void setGuessScanColumns(List<String> guessScanColumns) {
-        this.guessScanColumns = guessScanColumns;
+    public void setPruneScanColumns(List<String> pruneScanColumns) {
+        this.pruneScanColumns = pruneScanColumns;
     }
 
     public Map<Field, Column> getColumns() {
