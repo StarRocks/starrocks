@@ -48,7 +48,6 @@ set(EXPR_FILES
   array_element_expr.cpp
   array_expr.cpp
   array_functions.cpp
-  arrow_function_call.cpp
   binary_predicate.cpp
   bitmap_functions.cpp
   case_expr.cpp
