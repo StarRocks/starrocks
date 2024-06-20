@@ -127,7 +127,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
                     TStatusCode stCode = TStatusCode.findByValue(response.getStatus().getStatusCode());
-                    LOG.info("StatusCode: {}, failedTablets is {}", stCode, response.failedTablets);
+                    LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
 
                     // ignore INVALID_ARGUMENT error, treat it as success
                     if (stCode != TStatusCode.INVALID_ARGUMENT) {
