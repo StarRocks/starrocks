@@ -73,4 +73,4 @@ SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHE
 ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
 
-drop database db_${uuid0};
+[UC]drop database db_${uuid0} force;
