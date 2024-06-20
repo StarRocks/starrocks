@@ -140,6 +140,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                 masterFeNodeName = frontend.getNodeName();
             }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
                     GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
             hbResponses.add(executor.submit(handler));
         }
@@ -346,10 +347,12 @@ public class HeartbeatMgr extends FrontendDaemon {
     // frontend heartbeat
     public static class FrontendHeartbeatHandler implements Callable<HeartbeatResponse> {
         private final Frontend fe;
+        private final int clusterId;
         private final String token;
 
-        public FrontendHeartbeatHandler(Frontend fe, String token) {
+        public FrontendHeartbeatHandler(Frontend fe, int clusterId, String token) {
             this.fe = fe;
+            this.clusterId = clusterId;
             this.token = token;
         }
 
@@ -369,7 +372,7 @@ public class HeartbeatMgr extends FrontendDaemon {
 
             String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(fe.getHost(), Config.http_port);
             String url = "http://" + accessibleHostPort
-                    + "/api/bootstrap?token=" + token;
+                    + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
             try {
                 String result = Util.getResultForUrl(url, null,
                         Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);

@@ -41,6 +41,13 @@
         }                              \
     } while (0)
 
+#define ARROW_ASSIGN_OR_RETURN(lhs, rhs) ARROW_ASSIGN_OR_RETURN_IMPL(VARNAME_LINENUM(value_or_err), lhs, rhs)
+
+#define ARROW_ASSIGN_OR_RETURN_IMPL(varname, lhs, rhs) \
+    auto&& varname = (rhs);                            \
+    RETURN_IF_ARROW_ERROR(varname.status());           \
+    lhs = std::move(varname).ValueOrDie();
+
 namespace starrocks {
 
 using ArrowFlightClient = arrow::flight::FlightClient;
@@ -67,12 +74,13 @@ private:
 Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDescriptor& func_desc,
                                std::shared_ptr<PyWorker> process) {
     using namespace arrow::flight;
-    Location location;
-    RETURN_IF_ARROW_ERROR(location.Parse(uri_string, &location));
-    RETURN_IF_ARROW_ERROR(ArrowFlightClient::Connect(location, &_arrow_client));
+    ARROW_ASSIGN_OR_RETURN(auto location, Location::Parse(uri_string));
+    ARROW_ASSIGN_OR_RETURN(_arrow_client, ArrowFlightClient::Connect(location));
     ASSIGN_OR_RETURN(auto command, func_desc.to_json_string());
     FlightDescriptor descriptor = FlightDescriptor::Command(command);
-    RETURN_IF_ARROW_ERROR(_arrow_client->DoExchange(descriptor, &_writer, &_reader));
+    ARROW_ASSIGN_OR_RETURN(auto result, _arrow_client->DoExchange(descriptor));
+    _reader = std::move(result.reader);
+    _writer = std::move(result.writer);
     _process = std::move(process);
     return Status::OK();
 }
@@ -85,7 +93,7 @@ StatusOr<std::shared_ptr<arrow::RecordBatch>> ArrowFlightWithRW::rpc(arrow::Reco
         }
         RETURN_IF_ARROW_ERROR(_writer->WriteRecordBatch(batch));
         arrow::flight::FlightStreamChunk stream_chunk;
-        RETURN_IF_ARROW_ERROR(_reader->Next(&stream_chunk));
+        ARROW_ASSIGN_OR_RETURN(stream_chunk, _reader->Next());
         return stream_chunk.data;
     };
     auto result_with_st = do_rpc(batch);
