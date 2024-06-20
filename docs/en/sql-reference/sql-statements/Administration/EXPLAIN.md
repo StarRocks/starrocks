@@ -17,7 +17,7 @@ This operation does not require privileges.
 ## Syntax
 
 ```SQL
-EXPLAIN <query>
+EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 -- show the simple logical execution plans
 EXPLAIN LOGICAL <query>
 -- show the detailed logical execution plans, including data types, nullable information, and optimization strategy
@@ -37,6 +37,9 @@ Typically, using EXPLAIN is sufficient, the VERBOSE and COSTS will print a lot o
 
 | **Parameter** | **Description**                                            |
 | ------------- | ---------------------------------------------------------- |
+| LOGICAL       | Shows the simple logical execution plans.                  |
+| VERBOSE       | Shows the detailed logical execution plans of data types, nullable information, and optimization strategy. |
+| COSTS         | Shows the detailed logical execution plans of column statisitics. |
 | query         | The query statement whose execution plan you want to view. |
 
 ## Return value
@@ -52,7 +55,7 @@ Returns the execution plan of the input query statement.
 | rollup         | The Rollup materialized view that is used.                                       |
 | preaggregation | The status of preaggregation.                                                    |
 | predicates     | Predicates in the query.                                                         |
-| column statistics | the statictics of column，sequence: MIN,MAX,NULL numbers，average size，cardinality |
+| column statistics | The statictics of the column，sequence: MIN, MAX, NULL numbers，average size，and cardinality. |
 
 ## Examples
 
