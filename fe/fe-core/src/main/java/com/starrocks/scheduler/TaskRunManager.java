@@ -47,7 +47,7 @@ public class TaskRunManager implements MemoryTrackable {
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
 
-    private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock();
+    private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock(true);
 
     public SubmitResult submitTaskRun(TaskRun taskRun, ExecuteOption option) {
         LOG.info("submit task run:{}", taskRun);
