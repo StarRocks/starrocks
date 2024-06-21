@@ -92,6 +92,7 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* close_serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* close_compress_timer = nullptr;
     RuntimeProfile::Counter* close_call_rpc_timer = nullptr;
+    RuntimeProfile::Counter* close_write_txn_log_timer = nullptr;
     RuntimeProfile::Counter* serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* wait_response_timer = nullptr;
     RuntimeProfile::Counter* compress_timer = nullptr;

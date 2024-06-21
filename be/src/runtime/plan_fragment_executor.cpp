@@ -220,12 +220,12 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
     {
         SCOPED_TIMER(profile()->total_time_counter());
         RETURN_IF_ERROR(_plan->open(_runtime_state));
-    }
 
-    if (_sink == nullptr) {
-        return Status::OK();
+        if (_sink == nullptr) {
+            return Status::OK();
+        }
+        RETURN_IF_ERROR(_sink->open(runtime_state()));
     }
-    RETURN_IF_ERROR(_sink->open(runtime_state()));
 
     // If there is a sink, do all the work of driving it here, so that
     // when this returns the query has actually finished

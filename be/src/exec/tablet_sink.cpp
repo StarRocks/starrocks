@@ -180,6 +180,8 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
     _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
+    _profile->add_info_string("ColocateMvIndex", fmt::format("{}", _colocate_mv_index));
+    _profile->add_info_string("WriteTxnLog", fmt::format("{}", _write_txn_log));
 
     _ts_profile = state->obj_pool()->add(new TabletSinkProfile());
     _ts_profile->runtime_profile = _profile;
@@ -188,6 +190,7 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
     _ts_profile->open_timer = ADD_TIMER(_profile, "OpenTime");
     _ts_profile->close_timer = ADD_TIMER(_profile, "CloseWaitTime");
+    _ts_profile->close_write_txn_log_timer = ADD_CHILD_TIMER(_profile, "CloseWriteTxnLogTime", "CloseWaitTime");
     _ts_profile->close_wait_response_timer = ADD_CHILD_TIMER(_profile, "CloseWaitResponseTime", "CloseWaitTime");
     _ts_profile->close_send_rpc_timer = ADD_CHILD_TIMER(_profile, "CloseSendRpcTime", "CloseWaitTime");
     _ts_profile->close_serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "CloseSerializeChunkTime", "CloseSendRpcTime");
@@ -844,9 +847,9 @@ bool OlapTableSink::is_close_done() {
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
+    SCOPED_TIMER(_profile->total_time_counter());
+    SCOPED_TIMER(_ts_profile->close_timer);
     if (close_status.ok()) {
-        SCOPED_TIMER(_profile->total_time_counter());
-        SCOPED_TIMER(_ts_profile->close_timer);
         do {
             close_status = try_close(state);
             if (!close_status.ok()) break;
