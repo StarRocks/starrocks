@@ -19,17 +19,19 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeMap;
+import com.google.common.collect.TreeRangeMap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.RangeUtils;
@@ -37,7 +39,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -48,7 +49,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -63,6 +63,7 @@ import java.util.stream.Collectors;
 public class PartitionDiffer {
 
     private static final Logger LOG = LogManager.getLogger(PartitionDiffer.class);
+    private static final String INTERSECTED_PARTITION_PREFIX = "_intersected_";
 
     private Range<PartitionKey> rangeToInclude;
     private int partitionTTLNumber;
@@ -210,20 +211,6 @@ public class PartitionDiffer {
         return result;
     }
 
-    public static Map<String, Range<PartitionKey>> diffRange(List<PartitionRange> srcRanges,
-                                                             List<PartitionRange> dstRanges) {
-        if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
-            List<PrimitiveType> srcTypes = srcRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
-            List<PrimitiveType> dstTypes = dstRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
-            Preconditions.checkArgument(Objects.equals(srcTypes, dstTypes), "types must be identical");
-        }
-        List<PartitionRange> diffs = ListUtils.subtract(srcRanges, dstRanges);
-        return diffs.stream()
-                .collect(Collectors.toMap(PartitionRange::getPartitionName,
-                        diff -> SyncPartitionUtils.convertToDatePartitionRange(diff).getPartitionKeyRange()
-                ));
-    }
-
     /**
      * Check whether `range` is included in `rangeToInclude`. Here we only want to
      * create partitions which is between `start` and `end` when executing
@@ -241,43 +228,42 @@ public class PartitionDiffer {
     }
 
     /**
-     * Compute the partition difference between materialized view and all ref base tables.
-     * @param db: the database of materialized view
-     * @param materializedView: the materialized view to check
-     * @param partitionRange: <partition start, partition end> pair
-     * @return MvPartitionDiffResult: the result of partition difference
+     * Collect the ref base table's partition range map.
+     * @param mv the materialized view to compute diff
+     * @param extBTMVPartitionNameMap the external base table's partition name map which to be updated
+     * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
      */
-    public static MvPartitionDiffResult computePartitionRangeDiff(Database db,
-                                                                  MaterializedView materializedView,
-                                                                  Pair<String, String> partitionRange) {
-        Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
-        Map<Table, Column> partitionTableAndColumn = materializedView.getRelatedPartitionTableAndColumn();
-        Preconditions.checkArgument(!partitionTableAndColumn.isEmpty());
+    private static Map<Table, Map<String, Range<PartitionKey>>> collectRBTPartitionKeyMap(
+            Database db,
+            MaterializedView mv,
+            Expr mvPartitionExpr,
+            Map<Table, Map<String, Set<String>>> extBTMVPartitionNameMap) {
+        Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
+        if (partitionTableAndColumn.isEmpty()) {
+            return Maps.newHashMap();
+        }
 
+        // TODO: lock base tables or use snapshot tables to avoid the partition change during the process.
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
-        Map<String, Range<PartitionKey>> mvRangePartitionMap = materializedView.getRangePartitionMap();
         Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
-        Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap = Maps.newHashMap();
-
-        Map<String, Range<PartitionKey>> allRefTablePartitionKeyMap = Maps.newHashMap();
         try {
             for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
-                Table refBaseTable = entry.getKey();
-                Column refBaseTablePartitionColumn = entry.getValue();
+                Table refBT = entry.getKey();
+                Column refBTPartitionColumn = entry.getValue();
                 // Collect the ref base table's partition range map.
                 Map<String, Range<PartitionKey>> refTablePartitionKeyMap =
-                        PartitionUtil.getPartitionKeyRange(refBaseTable, refBaseTablePartitionColumn, partitionExpr);
-                refBaseTablePartitionMap.put(refBaseTable, refTablePartitionKeyMap);
+                        PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumn,
+                                mvPartitionExpr);
+                refBaseTablePartitionMap.put(refBT, refTablePartitionKeyMap);
 
                 // To solve multi partition columns' problem of external table, record the mv partition name to all the same
                 // partition names map here.
-                if (!refBaseTable.isNativeTableOrMaterializedView()) {
-                    refBaseTableMVPartitionMap.put(refBaseTable,
-                            PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
-                                    refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable)));
+                if (!refBT.isNativeTableOrMaterializedView()) {
+                    extBTMVPartitionNameMap.put(refBT,
+                            PartitionUtil.getMVPartitionNameMapOfExternalTable(refBT,
+                                    refBTPartitionColumn, PartitionUtil.getPartitionNames(refBT)));
                 }
-                allRefTablePartitionKeyMap.putAll(refTablePartitionKeyMap);
             }
         } catch (UserException | SemanticException e) {
             LOG.warn("Partition differ collects ref base table partition failed.", e);
@@ -285,19 +271,100 @@ public class PartitionDiffer {
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
+        return refBaseTablePartitionMap;
+    }
+
+    /**
+     * Merge all ref base tables' partition range map to avoid intersected partitions.
+     * @param basePartitionMap all ref base tables' partition range map
+     * @return merged partition range map: <partition name, partition range>
+     */
+    private static Map<String, Range<PartitionKey>> mergeRBTPartitionKeyMap(
+            Expr mvPartitionExpr,
+            Map<Table, Map<String, Range<PartitionKey>>> basePartitionMap) {
+
+        if (basePartitionMap.size() == 1) {
+            return basePartitionMap.values().iterator().next();
+        }
+        RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
+        for (Map<String, Range<PartitionKey>> tRangMap : basePartitionMap.values()) {
+            for (Map.Entry<String, Range<PartitionKey>> add : tRangMap.entrySet()) {
+                // TODO: we may implement a new `merge` method in `TreeRangeMap` to merge intersected partitions later.
+                Map<Range<PartitionKey>, String> intersectedRange =
+                        addRanges.subRangeMap(add.getValue()).asMapOfRanges();
+                if (intersectedRange.isEmpty()) {
+                    addRanges.put(add.getValue(), add.getKey());
+                } else {
+                    // To be compatible old version, skip to rename partition name if the intersected partition is the same.
+                    if (intersectedRange.size() == 1) {
+                        Range<PartitionKey> existingRange = intersectedRange.keySet().iterator().next();
+                        if (existingRange.equals(add.getValue())) {
+                            continue;
+                        }
+                    }
+                    addRanges.merge(add.getValue(), add.getKey(), (o, n) -> {
+                        return String.format("%s_%s_%s", INTERSECTED_PARTITION_PREFIX, o, n);
+                    });
+                }
+            }
+        }
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        for (Map.Entry<Range<PartitionKey>, String> entry : addRanges.asMapOfRanges().entrySet()) {
+            if (entry.getValue().startsWith(INTERSECTED_PARTITION_PREFIX)) {
+                String mvPartitionName = SyncPartitionUtils.getMVPartitionName(mvPartitionExpr, entry.getKey());
+                result.put(mvPartitionName, entry.getKey());
+            } else {
+                result.put(entry.getValue(), entry.getKey());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Compute the partition difference between materialized view and all ref base tables.
+     * @param mv: the materialized view to check
+     * @param partitionRange: <partition start, partition end> pair
+     * @return MvPartitionDiffResult: the result of partition difference
+     */
+    public static MvPartitionDiffResult computePartitionRangeDiff(Database db,
+                                                                  MaterializedView mv,
+                                                                  Pair<String, String> partitionRange) {
+        Expr mvPartitionExpr = mv.getFirstPartitionRefTableExpr();
+        Map<Table, Column> refBaseTableAndColumns = mv.getRelatedPartitionTableAndColumn();
+        Preconditions.checkArgument(!refBaseTableAndColumns.isEmpty());
+
+        // get the materialized view's partition range map
+        Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
+        // collect all ref base table's partition range map
+        Map<Table, Map<String, Set<String>>> extRBTMVPartitionNameMap = Maps.newHashMap();
+        Map<Table, Map<String, Range<PartitionKey>>> rBTPartitionMap = collectRBTPartitionKeyMap(db, mv, mvPartitionExpr,
+                extRBTMVPartitionNameMap);
+        // merge all ref base tables' partition range map to avoid intersected partitions
+        Map<String, Range<PartitionKey>> mergedRBTPartitionKeyMap = mergeRBTPartitionKeyMap(mvPartitionExpr, rBTPartitionMap);
+        if (mergedRBTPartitionKeyMap == null) {
+            LOG.warn("Merge materialized view {} with base tables failed.", mv.getName());
+            return null;
+        }
+
+        // only used for checking unaligned partitions in unit test
+        if (FeConstants.runningUnitTest) {
+            try {
+                // Check unaligned partitions, unaligned partitions may cause uncorrected result which is not supported for now.
+                List<RangePartitionDiff> rangePartitionDiffList = Lists.newArrayList();
+                for (Map.Entry<Table, Column> entry : refBaseTableAndColumns.entrySet()) {
+                    Table refBaseTable = entry.getKey();
+                    PartitionDiffer differ = PartitionDiffer.build(mv, partitionRange);
+                    rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(mvPartitionExpr,
+                            rBTPartitionMap.get(refBaseTable), mvRangePartitionMap, differ));
+                }
+                RangePartitionDiff.checkRangePartitionAligned(rangePartitionDiffList);
+            } catch (AnalysisException e) {
+                LOG.warn("Materialized view compute partition difference with base table failed.", e);
+                return null;
+            }
+        }
 
         try {
-            // Check unaligned partitions, unaligned partitions may cause uncorrected result which is not supported for now.
-            List<RangePartitionDiff> rangePartitionDiffList = Lists.newArrayList();
-            for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
-                Table refBaseTable = entry.getKey();
-                PartitionDiffer differ = PartitionDiffer.build(materializedView, partitionRange);
-                rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(partitionExpr,
-                        refBaseTablePartitionMap.get(refBaseTable), mvRangePartitionMap, differ));
-            }
-            // UnionALL MV may generate multiple PartitionDiff, needs to be merged into one PartitionDiff
-            RangePartitionDiff.checkRangePartitionAligned(rangePartitionDiffList);
-
             // NOTE: Use all refBaseTables' partition range to compute the partition difference between MV and refBaseTables.
             // Merge all deletes of each refBaseTab's diff may cause dropping needed partitions, the deletes should use
             // `bigcap` rather than `bigcup`.
@@ -306,14 +373,14 @@ public class PartitionDiffer {
             //
             // Diff_{deletes} = P_{MV} \setminus P_{\bigcup_{baseTables}^{}} \\
             //                = \bigcap_{baseTables} P_{MV}\setminus P_{baseTable}
-            PartitionDiffer differ = PartitionDiffer.build(materializedView, partitionRange);
-            RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, allRefTablePartitionKeyMap,
+            PartitionDiffer differ = PartitionDiffer.build(mv, partitionRange);
+            RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(mvPartitionExpr, mergedRBTPartitionKeyMap,
                     mvRangePartitionMap, differ);
             if (rangePartitionDiff == null) {
                 LOG.warn("Materialized view compute partition difference with base table failed: rangePartitionDiff is null.");
                 return null;
             }
-            return new MvPartitionDiffResult(mvRangePartitionMap, refBaseTablePartitionMap, refBaseTableMVPartitionMap,
+            return new MvPartitionDiffResult(mvRangePartitionMap, rBTPartitionMap, extRBTMVPartitionNameMap,
                     rangePartitionDiff);
         } catch (AnalysisException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);

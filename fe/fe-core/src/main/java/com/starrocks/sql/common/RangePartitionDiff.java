@@ -92,4 +92,14 @@ public class RangePartitionDiff {
             diff.getAdds().forEach((key, value) -> addRanges.put(value, key));
         }
     }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("RangePartitionDiff{");
+        sb.append("adds=").append(adds);
+        sb.append(", deletes=").append(deletes);
+        sb.append('}');
+        return sb.toString();
+    }
 }

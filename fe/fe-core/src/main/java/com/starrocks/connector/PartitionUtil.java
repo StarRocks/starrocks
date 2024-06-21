@@ -560,14 +560,6 @@ public class PartitionUtil {
         return mvPartitionRangeMap;
     }
 
-    private static void putRangeToMvPartitionRangeMap(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
-                                                      String lastPartitionName,
-                                                      PartitionKey lastPartitionKey,
-                                                      PartitionKey upperBound) {
-        Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-        mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, upperBound));
-    }
-
     private static void putRangeToMvPartitionRangeMapForJDBCTable(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
                                                                   String partitionName,
                                                                   PartitionKey lastPartitionKey,
