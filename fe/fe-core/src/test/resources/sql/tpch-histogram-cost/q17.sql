@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 [sql]
 select
         sum(l_extendedprice) / 7.0 as avg_yearly
@@ -17,9 +16,6 @@ where
     where
             l_partkey = p_partkey
 ) ;
-=======
-
->>>>>>> e2cc32878c ([Enhancement] optimize partition column statistics calculating (#47213))
 [fragment statistics]
 PLAN FRAGMENT 0(F04)
 Output Exprs:49: expr

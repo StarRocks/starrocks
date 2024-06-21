@@ -27,11 +27,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
->>>>>>> e2cc32878c ([Enhancement] optimize partition column statistics calculating (#47213))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
@@ -652,19 +648,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (CollectionUtils.isEmpty(selectedPartitionId)) {
             return;
         }
-<<<<<<< HEAD
-        int selectedPartitionsSize = selectedPartitionId.size();
-        int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
-        if (selectedPartitionsSize != allNoEmptyPartitionsSize) {
-            if (olapTable.getPartitionColumnNames().size() != 1) {
-                return null;
-            }
-            String partitionColumn = olapTable.getPartitionColumnNames().get(0);
-            ColumnStatistic partitionColumnStatistic =
-                    GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
-=======
->>>>>>> e2cc32878c ([Enhancement] optimize partition column statistics calculating (#47213))
-
         Map<String, ColumnRefOperator> colNameMap = Maps.newHashMap();
         colRefToColumnMetaMap.entrySet().stream()
                 .forEach(e -> colNameMap.put(e.getValue().getName(), e.getKey()));
