@@ -126,6 +126,7 @@ import com.starrocks.lake.RecycleLakeRangePartitionInfo;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.load.loadv2.BrokerLoadJob;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
@@ -351,7 +352,8 @@ public class GsonUtils {
                     .registerSubtype(MiniLoadTxnCommitAttachment.class, "MiniLoadTxnCommitAttachment")
                     .registerSubtype(RLTaskTxnCommitAttachment.class, "RLTaskTxnCommitAttachment")
                     .registerSubtype(StreamLoadTxnCommitAttachment.class, "StreamLoadTxnCommitAttachment")
-                    .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment");
+                    .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment")
+                    .registerSubtype(CompactionTxnCommitAttachment.class, "CompactionTxnCommitAttachment");
 
     public static final RuntimeTypeAdapterFactory<RoutineLoadProgress> ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(RoutineLoadProgress.class, "clazz")

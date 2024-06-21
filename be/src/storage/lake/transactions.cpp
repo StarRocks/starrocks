@@ -216,14 +216,27 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     // txn logs have been deleted.
     int txn_offset = base_version - ori_base_version;
     for (size_t i = txn_offset, sz = txns.size(); i < sz; i++) {
+        bool ignore_txn_log = false;
         auto txn_log_st = load_txn_log(tablet_mgr, tablet_id, txns[i]);
 
         if (txn_log_st.status().is_not_found()) {
             if (i == 0) {
-                // this may happen in two situations
+                // this may happen in two situations, in every situation,
+                // needs take compaction(force_publish=true) into consideration
                 // 1. duplicate publish in mode single
                 if (txns.size() == 1) {
-                    return new_version_metadata_or_error(txn_log_st.status());
+                    auto res = tablet_mgr->get_tablet_metadata(tablet_id, new_version);
+                    if (!res.ok() && res.status().is_not_found()) {
+                        if (!txns[i].force_publish()) {
+                            return txn_log_st.status();
+                        } else {
+                            ignore_txn_log = true;
+                        }
+                    } else if (res.ok()) {
+                        return res;
+                    } else {
+                        return txn_log_st.status();
+                    }
                 }
 
                 // 2. when converting from single publish to batch for txn log has been deleted,
@@ -235,10 +248,14 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                 // txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped just apply txn_log of txn4 and txn5.
                 auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(tablet_id, base_version + 1);
                 if (missig_txn_log_meta.status().is_not_found()) {
-                    // this should't happen
-                    LOG(WARNING) << "txn_log of txn: " << txns[i].txn_id()
-                                 << " not found, and can not find the tablet_meta";
-                    return Status::InternalError("Both txn_log and corresponding tablet_meta missing");
+                    if (txns[i].force_publish()) {
+                        // can not change `base_metadata` below, just use old one
+                        ignore_txn_log = true;
+                    } else {
+                        LOG(WARNING) << "txn_log of txn: " << txns[i].txn_id()
+                                     << " not found, and can not find the tablet_meta";
+                        return Status::InternalError("Both txn_log and corresponding tablet_meta missing");
+                    }
                 } else if (!missig_txn_log_meta.status().ok()) {
                     LOG(WARNING) << "txn_log of txn: " << txns[i].txn_id() << " not found, find the tablet_meta error: "
                                  << missig_txn_log_meta.status().to_string();
@@ -247,20 +264,17 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                     base_metadata = std::move(missig_txn_log_meta).value();
                     continue;
                 }
+            } else if (txns[i].force_publish()) {
+                ignore_txn_log = true;
             } else {
                 return new_version_metadata_or_error(txn_log_st.status());
             }
         }
 
-        if (!txn_log_st.ok()) {
+        if (!txn_log_st.ok() && !ignore_txn_log) {
             LOG(WARNING) << "Fail to get txn log: " << txn_log_st.status() << " tablet_id=" << tablet_id
                          << " txn=" << txns[i].DebugString();
             return txn_log_st.status();
-        }
-
-        auto& txn_log = txn_log_st.value();
-        if (txn_log->has_op_schema_change()) {
-            alter_version = txn_log->op_schema_change().alter_version();
         }
 
         if (log_applier == nullptr) {
@@ -294,6 +308,19 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                     return init_st;
                 }
             }
+        }
+
+        // txn log not found and can be ignored, only compaction will reach here, do nothing
+        if (ignore_txn_log) {
+            LOG(INFO) << "txn_log of txn: " << txns[i].txn_id() << " for tablet: " << tablet_id
+                      << " not found, force publish is on, ignore txn log";
+            log_applier->observe_empty_compaction(); // record empty compaction
+            continue;
+        }
+
+        auto& txn_log = txn_log_st.value();
+        if (txn_log->has_op_schema_change()) {
+            alter_version = txn_log->op_schema_change().alter_version();
         }
 
         auto st = log_applier->apply(*txn_log);
