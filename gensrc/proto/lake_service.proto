@@ -85,6 +85,7 @@ message CompactRequest {
     optional int64 txn_id = 2;
     optional int64 version = 3;
     optional int64 timeout_ms = 4;
+    optional bool allow_partial_success = 5;
 }
 
 message CompactResponse {
