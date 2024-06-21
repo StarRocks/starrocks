@@ -192,6 +192,10 @@ public class MetricCalculator extends TimerTask {
             MetricRepo.updateMemoryUsageMetrics();
         }
 
+        if (Config.emr_serverless_warehouse_mapping_metrics_enable) {
+            MetricRepo.updateWarehouseMetrics();
+        }
+
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
     }
 }

@@ -81,8 +81,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -248,6 +250,9 @@ public final class MetricRepo {
     public static List<GaugeMetricImpl<Long>> GAUGE_MEMORY_USAGE_STATS;
     public static List<GaugeMetricImpl<Long>> GAUGE_OBJECT_COUNT_STATS;
 
+    // EMR feature: metrics represent warehouse to compute node mappings
+    public static List<GaugeMetric<Long>> GAUGE_WAREHOUSE_MAPPINGS;
+
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
@@ -263,6 +268,7 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
         GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
         GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
+        GAUGE_WAREHOUSE_MAPPINGS = new ArrayList<>();
 
         // 1. gauge
         // load jobs
@@ -989,6 +995,39 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
     }
 
+    public static void updateWarehouseMetrics() {
+        if (!RunMode.isSharedDataMode()) {
+            return;
+        }
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> computeNodeIds = clusterInfoService.getComputeNodeIds(false);
+        if (computeNodeIds == null || computeNodeIds.size() == 0) {
+            return;
+        }
+
+        List<GaugeMetric<Long>> warehouseMetrics = new ArrayList<>();
+        for (Long computeNodeId : computeNodeIds) {
+            ComputeNode computeNode = clusterInfoService.getComputeNode(computeNodeId);
+            if (computeNode == null) {
+                continue;
+            }
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouse(computeNode.getWarehouseId());
+            GaugeMetric<Long> gauge = new GaugeMetric<Long>("warehouse",
+                    MetricUnit.NOUNIT, "warehouse to compute node mapping") {
+                @Override
+                public Long getValue() {
+                    return 1L;
+                }
+            };
+            gauge.addLabel(new MetricLabel("name", warehouse.getName()))
+                    .addLabel(new MetricLabel("compute_node", computeNode.getHost()));
+            warehouseMetrics.add(gauge);
+        }
+        GAUGE_WAREHOUSE_MAPPINGS = warehouseMetrics;
+    }
+
+
     public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
         if (!hasInit) {
             return "";
@@ -1062,6 +1101,9 @@ public final class MetricRepo {
 
         // collect brpc pool metrics
         collectBrpcMetrics(visitor);
+        if (Config.emr_serverless_warehouse_mapping_metrics_enable) {
+            collectWarehouseMetrics(visitor);
+        }
 
         // collect merge commit metrics
         MergeCommitMetricRegistry.getInstance().visit(visitor);
@@ -1074,6 +1116,16 @@ public final class MetricRepo {
     // update some metrics to make a ready to be visited
     private static void updateMetrics() {
         SYSTEM_METRICS.update();
+    }
+
+    // EMR feature: metrics represent warehouse to compute node mappings
+    private static void collectWarehouseMetrics(MetricVisitor visitor) {
+        if (!RunMode.isSharedDataMode()) {
+            return;
+        }
+        for (GaugeMetric<Long> metric : GAUGE_WAREHOUSE_MAPPINGS) {
+            visitor.visit(metric);
+        }
     }
 
     // collect table-level metrics

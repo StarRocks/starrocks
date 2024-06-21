@@ -3278,6 +3278,12 @@ public class Config extends ConfigBase {
     public static String emr_serverless_full_domain = "";
 
     /**
+     * If set to true, emr warehouse mapping metrics collection will open
+     */
+    @ConfField(mutable = true)
+    public static boolean emr_serverless_warehouse_mapping_metrics_enable = true;
+
+    /**
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
