@@ -104,7 +104,27 @@ public class CatalogMgr {
         writeLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
+<<<<<<< HEAD
             connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+=======
+            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            if (serviceName == null || serviceName.isEmpty()) {
+                if (Config.access_control.equals("ranger")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                }
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+            }
+
+            // TODO：please keep connector and catalog create together, they need keep in consistent asap.
+            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            if (null == connector) {
+                LOG.error("{} connector [{}] create failed", type, catalogName);
+                throw new DdlException("connector create failed");
+            }
+>>>>>>> 2cf96cb785 ([BugFix]keep connector/catalog map in consistent as much as possible (#46995))
             long id = isResourceMappingCatalog(catalogName) ?
                     ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                     GlobalStateMgr.getCurrentState().getNextId();
@@ -198,7 +218,34 @@ public class CatalogMgr {
             readUnlock();
         }
 
+<<<<<<< HEAD
         connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+=======
+        Map<String, String> properties = catalog.getConfig();
+        String serviceName = properties.get("ranger.plugin.hive.service.name");
+        if (serviceName == null || serviceName.isEmpty()) {
+            if (Config.access_control.equals("ranger")) {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+            }
+        } else {
+            Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+        }
+
+        // TODO：please keep connector and catalog create together, they need keep in consistent asap.
+        try {
+            CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+            if (catalogConnector == null) {
+                LOG.error("{} connector [{}] create failed.", type, catalogName);
+                throw new DdlException("connector create failed");
+            }
+        } catch (StarRocksConnectorException e) {
+            LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
+            throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
+        }
+
+>>>>>>> 2cf96cb785 ([BugFix]keep connector/catalog map in consistent as much as possible (#46995))
         writeLock();
         try {
             catalogs.put(catalogName, catalog);
