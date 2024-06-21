@@ -15,6 +15,7 @@
 package com.starrocks.catalog.system.information;
 
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -38,10 +39,8 @@ public class BeDataCacheMetricsTable {
         StructType dirSpacesType = new StructType(dirSpacesFields);
         ArrayType dirSpacesArrayType = new ArrayType(dirSpacesType);
 
-        ArrayList<StructField> usedBytesDetailFields = new ArrayList<>(2);
-        usedBytesDetailFields.add(new StructField("priority_0", ScalarType.createType(PrimitiveType.BIGINT)));
-        usedBytesDetailFields.add(new StructField("priority_1", ScalarType.createType(PrimitiveType.BIGINT)));
-        StructType usedBytesDetailType = new StructType(usedBytesDetailFields);
+        MapType usedBytesDetailType =
+                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.BIGINT));
 
         return new SystemTable(SystemId.BE_DATACACHE_METRICS, "be_datacache_metrics", Table.TableType.SCHEMA,
                 SystemTable.builder()

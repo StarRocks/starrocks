@@ -26,9 +26,8 @@ TypeDescriptor SchemaBeDataCacheMetricsScanner::_dir_spaces_type = TypeDescripto
         TypeDescriptor::create_struct_type({"path", "quota_bytes"}, {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
                                                                      TypeDescriptor::from_logical_type(TYPE_BIGINT)}));
 
-TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDescriptor::create_struct_type(
-        {"priority_0", "priority_1"},
-        {TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_BIGINT)});
+TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDescriptor::create_map_type(
+        TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT));
 
 SchemaScanner::ColumnDesc SchemaBeDataCacheMetricsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), false},
@@ -94,18 +93,16 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         }
         row.emplace_back(dir_spaces_array);
 
-        int64_t priority_0_used_bytes = 0;
-        int64_t priority_1_used_bytes = 0;
+        DatumMap datum_map{};
         const auto& l2_metrics = metrics.detail_l2;
         if (l2_metrics != nullptr) {
-            if (l2_metrics->prior_item_bytes.contains(0)) {
-                priority_0_used_bytes = l2_metrics->prior_item_bytes[0];
-            }
-            if (l2_metrics->prior_item_bytes.contains(1)) {
-                priority_1_used_bytes = l2_metrics->prior_item_bytes[1];
+            std::map<int32_t, int64_t> sorted_map{l2_metrics->prior_item_bytes.begin(),
+                                                  l2_metrics->prior_item_bytes.end()};
+            for (const auto& pair : sorted_map) {
+                datum_map.emplace(pair.first, pair.second);
             }
         }
-        row.emplace_back(DatumStruct{priority_0_used_bytes, priority_1_used_bytes});
+        row.emplace_back(datum_map);
     } else {
         status = "Disabled";
         row.emplace_back(Slice(status));
