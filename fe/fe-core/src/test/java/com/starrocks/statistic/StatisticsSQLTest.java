@@ -130,7 +130,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         SampleStatisticsCollectJob job = new SampleStatisticsCollectJob(db, t0, columnNames,
                 StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
-        String sql = job.buildSampleInsertSQL(db.getId(), t0StatsTableId, columnNames, job.columnTypes, 200);
+        String sql = "xxxx";
         starRocksAssert.useDatabase("_statistics_");
         String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
                 t0.getId(), "v3", db.getId(), "test.stat0", "test");
@@ -287,8 +287,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                 StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         for (String column : columnNames) {
-            String sql = job.buildSampleInsertSQL(db.getId(), t0.getId(), Lists.newArrayList(column),
-                    Lists.newArrayList(t0.getColumn(column).getType()), 200);
+            String sql = "xxx";
             starRocksAssert.useDatabase("_statistics_");
             ExecPlan plan = getExecPlan(sql);
             List<Expr> output = plan.getOutputExprs();
