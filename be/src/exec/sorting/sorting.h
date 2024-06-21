@@ -41,7 +41,8 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& col
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation);
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
-                            Permutation* permutation, std::pair<int, int> range);
+                            Permutation* permutation, std::pair<int, int> range, size_t row,
+                            const std::vector<std::shared_ptr<UInt32Column>>& key_offsets_columns);
 
 // Sort multiple columns, and stable
 Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,

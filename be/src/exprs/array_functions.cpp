@@ -1538,7 +1538,7 @@ static void sort_multi_array_column(FunctionContext* ctx, const Column& src_arra
     std::vector<ColumnPtr> non_nullable_key_array_columns(key_array_size);
 
     for (size_t i = 0; i < key_array_size; ++i) {
-        ColumnPtr key_data = key_array_columns[i];
+        const ColumnPtr& key_data = key_array_columns[i];
         if (key_data->is_nullable()) {
             const auto* key_nullable_column = down_cast<const NullableColumn*>(key_data.get());
             if (key_nullable_column) {
@@ -1575,6 +1575,8 @@ static void sort_multi_array_column(FunctionContext* ctx, const Column& src_arra
             auto src_column_offset_size = end_offset - start_offset;
 
             std::vector<ColumnPtr> filtered_key_elements_columns;
+            std::vector<std::shared_ptr<UInt32Column>> filtered_key_offsets_columns;
+
             for (size_t key_column_size = 0; key_column_size < key_array_size; ++key_column_size) {
                 //  If key_nullable_column->immutable_null_column_data[i] is true, Skip this key column for row i
                 if (nullable_columns[key_column_size] &&
@@ -1589,6 +1591,7 @@ static void sort_multi_array_column(FunctionContext* ctx, const Column& src_arra
                 }
 
                 filtered_key_elements_columns.push_back(key_elements_columns[key_column_size]);
+                filtered_key_offsets_columns.push_back(key_offsets_columns[key_column_size]);
             }
 
             if (filtered_key_elements_columns.empty()) {
@@ -1600,7 +1603,8 @@ static void sort_multi_array_column(FunctionContext* ctx, const Column& src_arra
 
             Permutation perm;
             auto range = std::make_pair(start_offset, end_offset);
-            status = sort_and_tie_columns(cancel, filtered_key_elements_columns, sort_desc, &perm, range);
+            status = sort_and_tie_columns(cancel, filtered_key_elements_columns, sort_desc, &perm, range, i,
+                                          filtered_key_offsets_columns);
             if (!status.ok()) {
                 throw std::runtime_error("sort_and_tie_columns error");
             }
