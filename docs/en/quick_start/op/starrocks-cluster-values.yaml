@@ -1,0 +1,1005 @@
+# set the nameOverride values for creating the same resources with parent chart.
+# In version v1.7.1 or before, there is only one chart called kube-starrocks, and the chart name is the prefix
+# of some resources created by the chart.
+# In version v1.8.0, the kube-starrocks chart is split into two charts, and to keep backward compatibility, the
+# nameOverride is used to set the prefix of the resources created by starrocks chart.
+nameOverride: "kube-starrocks"
+
+# This configuration is used to modify the root password during initial deployment.
+# After deployment is completed, it won't take effect to modify the password here and to do a `helm upgrade`.
+# It also supports providing secret name that contains password, using the password in the secret instead of the plaintext in the values.yaml.
+# When both password and passwordSecret are set, only passwordSecret takes effect.
+# Note: If you install StarRocks using helm install without setting the initPassword, then for subsequent upgrade deployments,
+#       you should also not set the initPassword.
+#       If you install StarRocks using helm install and set the initPassword, please always retain the configuration of initPassword.
+initPassword:
+  enabled: true
+  #password: ""
+  # The secret name that contains password, the key of the secret is "password", and you should create it first.
+  passwordSecret: "starrocks-root-password"
+  # The image of the initPassword job, if it is not set, the FE image will be used.
+  # see https://github.com/StarRocks/starrocks-kubernetes-operator/issues/453 for why we need to set the image.
+  image: ""
+  # The annotations for the Job, not including the annotations for the pod.
+  annotations: {}
+
+# TimeZone is used to set the environment variable TZ for pod, with Asia/Shanghai as the default.
+timeZone: America/New_York
+
+# This configuration is used to integrate with external system DataDog.
+# You can enable the integration by setting the enabled to true, e.g. datalog.log.enabled=true will enable datadog agent
+# to collect the log.
+datadog:
+  log:
+    enabled: false
+    # besides the attributes you added, chart will append "source" and "service" attributes to the log config.
+    # see https://docs.datadoghq.com/containers/kubernetes/log/?tab=operator for more details.
+    logConfig: '{}' # e.g. '{"app": "starrocks", "tags": ["aa", "bb"]}'
+  metrics:
+    enabled: false
+  profiling:
+    fe: false # change to 'true' to enable profiling on FE pods;
+    be: false # change to 'true' to enable profiling on BE pods;
+    cn: false # change to 'true' to enable profiling on CN pods;
+    env: "starrocks-default" # the default value for DD_ENV;
+    configMode: "service" # see https://docs.datadoghq.com/containers/cluster_agent/admission_controller/?tab=operator#configure-apm-and-dogstatsd-communication-mode
+
+# This configuration is used to integrate with external system Prometheus.
+metrics:
+  serviceMonitor:
+    # Whether to expose metrics to Prometheus by ServiceMonitor.
+    # Note: make sure the prometheus operator is installed in your cluster.
+    # If prometheus is not installed by operator, you can add annotations on k8s service to expose metrics.
+    # see https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/integration/integration-prometheus-grafana.md#51-turn-on-the-prometheus-metrics-scrape-by-adding-annotations for more details.
+    enabled: false
+    # Prometheus ServiceMonitor labels
+    labels: {}
+      # scraper: prometheus-operator
+    # Prometheus ServiceMonitor interval
+    interval: 15s
+
+# deploy a starrocks cluster
+starrocksCluster:
+  # the name of starrockscluster cluster, if not set, the value of nameOverride fields will be used.
+  name: ""
+  # the namespace of starrockscluster cluster, if not set, the release namespace will be used.
+  namespace: ""
+  # annotations for starrocks cluster.
+  annotations: {}
+  # specify the cn deploy or not.
+  enabledBe: true
+  enabledCn: false
+  # componentValues field is used to define values for all starrocks cluster components, including starrocksFESpec,
+  # starrocksBeSpec, starrocksCnSpec, not including starrocksFeProxySpec. So that you do not need to modify them in
+  # their own spec.
+  # Note:
+  #   1. the values in their own spec will take precedence over the values in this field.
+  #   2. the values in their own spec will replace all the values in this field, not merge.
+  componentValues:
+    image:
+      tag: "3.2-latest"
+    # hostAliases allows adding entries to /etc/hosts inside the containers.
+    hostAliases: []
+      # - ip: "127.0.0.1"
+      #   hostnames:
+      #   - "example.com"
+    # If runAsNonRoot is true, the container is run as non-root user.
+    # The userId will be set to 1000, and the groupID will be set to 1000.
+    runAsNonRoot: false
+    # schedulerName allows you to specify which scheduler will be used for your pods.
+    schedulerName: ""
+    # serviceAccount for access cloud service.
+    serviceAccount: ""
+    # imagePullSecrets allows you to use secrets to pull images for pods.
+    imagePullSecrets: []
+    # - name: "image-pull-secret"
+    # tolerations for pod scheduling to nodes with taints
+    # Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+    tolerations: []
+      # - key: "key"
+      #   operator: "Equal|Exists"
+      #   value: "value"
+      #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+    # topologySpreadConstraints for scheduling pods across failure-domains.
+    # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+    topologySpreadConstraints: []
+      # - maxSkew: 1
+      #   topologyKey: topology.kubernetes.io/zone
+      #   whenUnsatisfiable: DoNotSchedule|ScheduleAnyway
+      #   labelSelector:
+      #     matchLabels:
+      #       foo: bar
+    # If specified, the pod's nodeSelector，displayName="Map of nodeSelectors to match when scheduling pods on nodes"
+    # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+    nodeSelector: {}
+      # kubernetes.io/arch: amd64
+      # kubernetes.io/os: linux
+    # affinity for pod scheduling.
+    affinity: {}
+      # nodeAffinity:
+      #   requiredDuringSchedulingIgnoredDuringExecution:
+      #     nodeSelectorTerms:
+      #     - matchFields:
+      #       - key: metadata.name
+      #         operator: In
+      #         values:
+      #         - target-host-name
+      # podAntiAffinity:
+      #   requiredDuringSchedulingIgnoredDuringExecution:
+      #   - labelSelector:
+      #       matchExpressions:
+      #       - key: app.kubernetes.io/component
+      #         operator: In
+      #         values:
+      #         - fe
+      #         - be
+      #         - cn
+      #     topologyKey: "kubernetes.io/hostname"
+    # the pod labels for user select or classify pods.
+    podLabels: {}
+
+# spec to deploy fe.
+starrocksFESpec:
+  # number of replicas to deploy for a fe statefulset.
+  replicas: 1
+  image:
+    # image sliced by "repository:tag"
+    repository: starrocks/fe-ubuntu
+    tag: ""
+  imagePullPolicy: IfNotPresent
+  # Specify the entrypoint for FE.
+  # By default, operator will use '/opt/starrocks/fe_entrypoint.sh' as command, and use '$(FE_SERVICE_NAME)' as args in container spec.
+  # If entrypoint is set, the command will be ["bash", "-c"], and the args will be filename of the entrypoint script.
+  # A configmap with name $cluster-fe-entrypoint-script will be created, and the script will be mounted to /etc/starrocks/entrypoint.sh
+  # Pod will be restarted if the entrypoint script is updated.
+  entrypoint: {}
+    # script: |
+    #   #! /bin/bash
+    #   echo "do something before start fe"
+    #   exec /opt/starrocks/fe_entrypoint.sh $FE_SERVICE_NAME
+  # add annotations for fe pods. For example, if you want to config monitor for datadog, you can config the annotations.
+  annotations: {}
+  # If runAsNonRoot is true, the container is run as non-root user.
+  # The userId will be set to 1000, and the groupID will be set to 1000.
+  runAsNonRoot: false
+  # specify the service name and port config and serviceType
+  # the service type refer https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  service:
+    # the fe service type, only supported ClusterIP, NodePort, LoadBalancer
+    type: "LoadBalancer"
+    # the loadBalancerIP for static ip config when the type=LoadBalancer and loadbalancerIp is not empty.
+    loadbalancerIP: ""
+    # add annotations for fe service.
+    annotations: {}
+    # config the service port for fe service.
+    # To assign a specific port or nodePort to a service, you should specify them by the corresponding name or
+    # containerPort in the service configuration. If both containerPort and name are specified, containerPort takes precedence.
+    # For fe, port name can be http, query, rpc, edit-log, and their default container port is 8030, 9030, 9020, 9010.
+    ports: []
+      # e.g. specify a dedicated node port for fe service by containerPort.
+      # - nodePort: 30030 # The range of valid ports is 30000-32767
+      #   containerPort: 8030 # The port exported on the container
+  # imagePullSecrets allows you to use secrets to pull images for pods.
+  imagePullSecrets: []
+    # - name: "image-pull-secret"
+  # serviceAccount for fe access cloud service.
+  serviceAccount: ""
+  # If specified, the pod's nodeSelector，displayName="Map of nodeSelectors to match when scheduling pods on nodes"
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+  nodeSelector: {}
+    # kubernetes.io/arch: amd64
+    # kubernetes.io/os: linux
+  # the pod labels for user select or classify pods.
+  podLabels: {}
+  # hostAliases allows adding entries to /etc/hosts inside the containers
+  hostAliases: []
+    # - ip: "127.0.0.1"
+    #   hostnames:
+    #   - "example.com"
+  # schedulerName allows you to specify which scheduler will be used for your pods.
+  schedulerName: ""
+  # Additional fe container environment variables.
+  # See https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/ for how to define environment variables.
+  # Note: If you use slice to define environment variables, and if there are multiple values files, the values in the last values file will take effect.
+  #       If you use map to define environment variables, the values in the values files will be merged.
+  #       You can only use one of slice and map to define environment variables.
+  # In order to avoid different type of feEnvVars, we do not define the default value of feEnvVars, e.g. feEnvVars: [] or feEnvVars: {}.
+  #feEnvVars:
+    # define environment variables by slice.
+    # e.g. static environment variable:
+    # - name: DEMO_GREETING
+    #   value: "Hello from the environment"
+    # e.g. secret environment variable:
+    # - name: USERNAME
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: mysecret
+    #       key: username
+  # affinity for fe pod scheduling.
+  # Note: It will affect the scheduling of the init-password job.
+  affinity: {}
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #     - matchFields:
+    #       - key: metadata.name
+    #         operator: In
+    #         values:
+    #         - target-host-name
+    # podAntiAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #   - labelSelector:
+    #       matchExpressions:
+    #       - key: app.kubernetes.io/component
+    #         operator: In
+    #         values:
+    #         - fe
+    #     topologyKey: "kubernetes.io/hostname"
+  # Node tolerations for fe pod scheduling to nodes with taints
+  # Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+  # Note: It will affect the scheduling of the init-password job.
+  tolerations: []
+    # - key: "key"
+    #   operator: "Equal|Exists"
+    #   value: "value"
+    #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+  # topologySpreadConstraints for scheduling pods across failure-domains.
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+    # - maxSkew: 1
+    #   topologyKey: topology.kubernetes.io/zone
+    #   whenUnsatisfiable: DoNotSchedule|ScheduleAnyway
+    #   labelSelector:
+    #     matchLabels:
+    #       foo: bar
+  # resources for fe pod.
+  resources:
+    requests:
+      cpu: 1
+      memory: 4Gi
+    # If you want to remove one resource limit, e.g. cpu, you can it to cpu: "unlimited".
+    limits:
+      cpu: 1
+      memory: 4Gi
+  # fe storageSpec for persistent metadata.
+  # Note: Once set, the following fields will not be allowed to be modified.
+  storageSpec:
+    # Specifies the name prefix of the volumes to mount. If left unspecified,
+    # `emptyDir` volumes will be used by default, which are ephemeral and data
+    # will be lost on pod restart.
+    #
+    # For persistent storage, specify a volume name prefix.
+    # For example, using `fe` as the name prefix would be appropriate.
+    name: "fe-storage"
+    # the storageClassName represent the used storageclass name. if not set will use k8s cluster default storageclass.
+    # you must set name when you set storageClassName
+    storageClassName: ""
+    # the persistent volume size， default 10Gi.
+    # fe container stop running if the disk free space which the fe meta directory residents, is less than 5Gi.
+    storageSize: 10Gi
+    # If storageMountPath is empty, the storageMountPath will be set to /opt/starrocks/fe/meta.
+    storageMountPath: ""
+    # Setting this parameter can persist log storage, and the mount path is /opt/starrocks/fe/log.
+    # If you set it to 0Gi, the related PVC will not be created, and the log will not be persisted.
+    logStorageSize: 5Gi
+  # mount emptyDir volumes if necessary.
+  # Note: please use storageSpec field for persistent metadata and log.
+  emptyDirs: []
+    # e.g. mount an emptyDir volume to /tmp
+    # - name: tmp-data
+    #   mountPath: /tmp
+  # mount hostPath volumes if necessary.
+  # Note: please use storageSpec field for persistent storage data and log.
+  hostPaths: []
+    # e.g. mount a hostPath volume to /tmp
+    # - name: tmp-data
+    #   hostPath:
+    #     path: /tmp
+    #     type: Directory
+    #   mountPath: /tmp
+  # the config for start fe. the base information as follows.
+  config: |
+    LOG_DIR = ${STARROCKS_HOME}/log
+    DATE = "$(date +%Y%m%d-%H%M%S)"
+    JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
+    http_port = 8030
+    rpc_port = 9020
+    query_port = 9030
+    edit_log_port = 9010
+    mysql_service_nio_enabled = true
+    sys_log_level = INFO
+  # mount secrets if necessary.
+  # see https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath for more details about subPath.
+  secrets: []
+    # e.g. mount my-secret to /etc/my-secret
+    # - name: my-secret
+    #   mountPath: /etc/my-secret
+    #   subPath: ""
+  # mount configmaps if necessary.
+  # see https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath for more details about subPath.
+  configMaps: []
+    # e.g. mount my-configmap to /etc/my-configmap
+    # - name: my-configmap
+    #   mountPath: /etc/my-configmap
+    #   subPath: ""
+  # terminationGracePeriodSeconds defines duration in seconds the FE pod needs to terminate gracefully.
+  # default value is 120 seconds
+  terminationGracePeriodSeconds: 120
+
+  # Please upgrade the CRD with v1.8.7 released version, if you want to use the following configuration.
+  # including: startupProbeFailureSeconds, livenessProbeFailureSeconds, readinessProbeFailureSeconds
+
+  # StartupProbeFailureSeconds defines the total failure seconds of startup Probe.
+  # default value is 300 seconds
+  startupProbeFailureSeconds:
+  # LivenessProbeFailureSeconds defines the total failure seconds of liveness Probe.
+  # default value is 15 seconds
+  livenessProbeFailureSeconds:
+  # ReadinessProbeFailureSeconds defines the total failure seconds of readiness Probe.
+  # default value is 15 seconds
+  readinessProbeFailureSeconds:
+  # Lifecycle describes actions that the management system should take in response to container lifecycle events.
+  # By default, Operator will add corresponding preStop hooks for different components. For example, the preStop
+  # script for the FE Component is /opt/starrocks/fe_prestop.sh, for the BE Component is /opt/starrocks/be_prestop.sh,
+  # and for the CN Component is /opt/starrocks/cn_prestop.sh.
+  # You can just set postStart hook.
+  lifecycle: {}
+    # postStart:
+    #   exec:
+    #     command:
+    #     - /bin/sh
+    #     - -c
+    #     - echo "Hello, world!"
+  # Sidecars is an optional list of containers that are run in the same pod as the starrocks component.
+  # You can use this field to launch helper containers that provide additional functionality to the main container.
+  # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container for how to define sidecars.
+  sidecars: []
+    # - name: sidecar-container
+    #   image: busybox
+    #   # If starrocksFESpec.storageSpec.name is fe or not set, you can mount the volume of meta like this.
+    #   command: ['sh', '-c', 'echo "hello from the sidecar container" >/opt/starrocks/fe/meta/sidecar-data.txt && sleep 3600']
+    #   volumeMounts:
+    #   - mountPath: /opt/starrocks/fe/meta
+    #     name: fe-meta   # append -meta to the end of the name of the starrocksFESpec.storageSpec.name
+  # initContainers is an optional list of containers that are run in the same pod as the starrocks component.
+  # You can use this to launch helper containers that run before the main container starts.
+  # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container for how to configure a container.
+  initContainers: []
+    # - name: init-container
+    #   image: busybox
+    #   # If starrocksFESpec.storageSpec.name is fe or not set, you can mount the volume of meta like this.
+    #   command: ['sh', '-c', 'echo "hello from the init container" >/opt/starrocks/fe/meta/init-data.txt']
+    #   volumeMounts:
+    #   - mountPath: /opt/starrocks/fe/meta
+    #     name: fe-meta   # append -meta to the end of the name of the starrocksFESpec.storageSpec.name
+
+# spec for compute node, compute node provide compute function.
+starrocksCnSpec:
+  # number of replicas to deploy for CN component.
+  #
+  # When autoscaling of the CN statefulset is used the `replicas` field is set to null
+  # by the operator, and autoscaling is controlled by Horizontal Pod Autoscaling (HPA).
+  # You should only uncomment and set the `replicas` field if autoscaling is disabled.
+  # replicas: 1
+  image:
+    # image sliced by "repository:tag"
+    repository: starrocks/cn-ubuntu
+    tag: ""
+  imagePullPolicy: IfNotPresent
+  # Specify the entrypoint for CN.
+  # By default, operator will use '/opt/starrocks/cn_entrypoint.sh' as command, and use '$(FE_SERVICE_NAME)' as args in container spec.
+  # If entrypoint is set, the command will be ["bash", "-c"], and the args will be filename of the entrypoint script.
+  # A configmap with name $cluster-cn-entrypoint-script will be created, and the script will be mounted to /etc/starrocks/entrypoint.sh
+  # Pod will be restarted if the entrypoint script is updated.
+  entrypoint: {}
+    # script: |
+    #   #! /bin/bash
+    #   echo "do something before start cn"
+    #   exec /opt/starrocks/cn_entrypoint.sh $FE_SERVICE_NAME
+  # serviceAccount for cn access cloud service.
+  serviceAccount: ""
+  # add annotations for cn pods. example, if you want to config monitor for datadog, you can config the annotations.
+  annotations: {}
+  # If runAsNonRoot is true, the container is run as non-root user.
+  # The userId will be set to 1000, and the groupID will be set to 1000.
+  runAsNonRoot: false
+  # add/drop capabilities for CN container.
+  capabilities: {}
+  #  add:
+  #    - PERFMON
+  #    - SYS_PTRACE
+  #  drop:
+  #    - SYS_ADMIN
+  # specify the service name and port config and serviceType
+  # the service type refer https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  service:
+    # the cn service type, only supported ClusterIP, NodePort, LoadBalancer
+    type: "ClusterIP"
+    # the loadBalancerIP for static ip config when the type=LoadBalancer and loadBalancerIp is not empty.
+    loadbalancerIP: ""
+    # add annotations for cn service.
+    annotations: {}
+    # config the service port for cn service.
+    # To assign a specific port or nodePort to a service, you should specify them by the corresponding name or
+    # containerPort in the service configuration. If both containerPort and name are specified, containerPort takes precedence.
+    # For cn, port name can be webserver, heartbeat, brpc, thrift, and their default container port is 8040, 9050, 8060, 9060.
+    ports: []
+      # e.g. specify a dedicated node port for cn service by containerPort.
+      # - nodePort: 30040 # The range of valid ports is 30000-32767
+      #   containerPort: 8040 # The port on the container to expose
+  # imagePullSecrets allows you to use secrets for pulling images for your pods.
+  imagePullSecrets: []
+    # - name: "image-pull-secret"
+  # If specified, the pod's nodeSelector，displayName="Map of nodeSelectors to match when scheduling pods on nodes"
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+  nodeSelector: {}
+    # kubernetes.io/arch: amd64
+    # kubernetes.io/os: linux
+  # the pod labels for user select or classify pods.
+  podLabels: {}
+  ## hostAliases allows adding entries to /etc/hosts inside the containers
+  hostAliases: []
+    # - ip: "127.0.0.1"
+    #   hostnames:
+    #   - "example.com"
+  # schedulerName allows you to specify which scheduler will be used for the pod
+  schedulerName: ""
+  # Additional cn container environment variables.
+  # See https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/ for how to define environment variables.
+  # Note: If you use slice to define environment variables, and if there are multiple values files, the values in the last values file will take effect.
+  #       If you use map to define environment variables, the values in the values files will be merged.
+  #       You can only use one of slice and map to define environment variables.
+  # In order to avoid different type of cnEnvVars, we do not define the default value of cnEnvVars, e.g. cnEnvVars: [] or cnEnvVars: {}.
+  # cnEnvVars:
+    # define environment variables by slice.
+    # e.g. static environment variable:
+    # - name: DEMO_GREETING
+    #   value: "Hello from the environment"
+    # e.g. secret environment variable:
+    # - name: USERNAME
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: mysecret
+    #       key: username
+  # affinity for cn pod scheduling.
+  affinity: {}
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #       - matchFields:
+    #           - key: metadata.name
+    #             operator: In
+    #             values:
+    #               - target-host-name
+    # podAntiAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #   - labelSelector:
+    #       matchExpressions:
+    #       - key: app.kubernetes.io/component
+    #         operator: In
+    #         values:
+    #         - cn
+    #     topologyKey: "kubernetes.io/hostname"
+  # Node tolerations for cn pod scheduling to nodes with taints
+  # Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+  tolerations: []
+    # - key: "key"
+    #   operator: "Equal|Exists"
+    #   value: "value"
+    #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+  # topologySpreadConstraints for scheduling pods across failure-domains.
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+    # - maxSkew: 1
+    #   topologyKey: topology.kubernetes.io/zone
+    #   whenUnsatisfiable: DoNotSchedule|ScheduleAnyway
+    #   labelSelector:
+    #     matchLabels:
+    #       foo: bar
+  autoScalingPolicy: {}
+    # you can select different versions of HPA (Horizontal Pod Autoscaler) based on the Kubernetes version you are
+    # using to ensure compatibility and adaptability. the default version is v2beta2.
+    # version: v2beta2
+    # maxReplicas: 10
+    # minReplicas: 1
+    # hpaPolicy:
+    #   metrics:
+    #   - type: Resource
+    #     resource:
+    #       name: memory
+    #       target:
+    #         averageUtilization: 30
+    #         type: Utilization
+    #   - type: Resource
+    #     resource:
+    #       name: cpu
+    #       target:
+    #         averageUtilization: 30
+    #         type: Utilization
+    #   behavior:
+    #     scaleUp:
+    #       policies:
+    #       - type: Pods
+    #         value: 1
+    #         periodSeconds: 10
+    #     scaleDown:
+    #       selectPolicy: Disabled
+  # define resources requests and limits for cn pods.
+  resources:
+    requests:
+      cpu: 4
+      memory: 8Gi
+    # If you want to remove one resource limit, e.g. cpu, you can it to cpu: "unlimited".
+    limits:
+      cpu: 8
+      memory: 8Gi
+  # specify storageclass name and request size.
+  # Note: Once set, the following fields will not be allowed to be modified.
+  storageSpec:
+    # Specifies the name prefix of the volumes to mount. If left unspecified,
+    # `emptyDir` volumes will be used, which are ephemeral, and only for log.
+    # The logs will be lost on pod restart when using emptyDir volumes.
+    #
+    # For persistent storage, specify a volume name prefix.
+    # For example, using `cn` as the name prefix would be appropriate.
+    name: ""
+    # the storageClassName represent the used storageclass name. if not set will use k8s cluster default storageclass.
+    # you must set name when you set storageClassName
+    storageClassName: ""
+    # the storage size of persistent volume for data.
+    storageSize: 1Ti
+    # If storageMountPath is empty, the storageMountPath will be set to /opt/starrocks/cn/storage.
+    storageMountPath: ""
+    # the storage size of persistent volume for log, and the mount path is /opt/starrocks/cn/log.
+    # If you set it to 0Gi, the related PVC will not be created, and the log will not be persisted.
+    logStorageSize: 1Gi
+    # Setting this parameter can persist spill storage, and the mount path is /opt/starrocks/cn/spill.
+    # If you set it to 0Gi, the related PVC will not be created, and the spill will not be persisted.
+    # You need to add in be.conf spill_local_storage_dir=/opt/starrocks/cn/spill.
+    spillStorageSize: 0Gi
+  # mount emptyDir volumes if necessary.
+  # Note: please use storageSpec field for persistent storage data and log.
+  emptyDirs: []
+    # e.g. mount an emptyDir volume to /tmp
+    # - name: tmp-data
+    #   mountPath: /tmp
+  # mount hostPath volumes if necessary.
+  # Note: please use storageSpec field for persistent storage data and log.
+  hostPaths: []
+    # e.g. mount a hostPath volume to /tmp
+    # - name: tmp-data
+    #   hostPath:
+    #     path: /tmp
+    #     type: Directory
+    #   mountPath: /tmp
+  # the config start for cn, the base information as follows.
+  # From StarRocks 3.1, the official documentation use:
+  #   1. be_port instead of thrift_port, but the thrift_port is still supported.
+  #   2. be_http_port instead of webserver_port, but the webserver_port is still supported.
+  # In order to avoid the impact of the change on the user's deployment, we still use the old configuration.
+  config: |
+    sys_log_level = INFO
+    # ports for admin, web, heartbeat service
+    thrift_port = 9060
+    webserver_port = 8040
+    heartbeat_service_port = 9050
+    brpc_port = 8060
+  # mount secrets if necessary.
+  # see https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath for more details about subPath.
+  secrets: []
+    # e.g. mount my-secret to /etc/my-secret
+    # - name: my-secret
+    #   mountPath: /etc/my-secret
+    #   subPath: ""
+  # mount configmaps if necessary.
+  # see https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath for more details about subPath.
+  configMaps: []
+    # e.g. mount my-configmap to /etc/my-configmap
+    # - name: my-configmap
+    #   mountPath: /etc/my-configmap
+    #   subPath: ""
+  # terminationGracePeriodSeconds defines duration in seconds the CN pod needs to terminate gracefully.
+  # default value is 120 seconds
+  terminationGracePeriodSeconds: 120
+
+  # Please upgrade the CRD with v1.8.7 released version, if you want to use the following configuration.
+  # including: startupProbeFailureSeconds, livenessProbeFailureSeconds, readinessProbeFailureSeconds
+
+  # StartupProbeFailureSeconds defines the total failure seconds of startup Probe.
+  # default value is 300 seconds
+  startupProbeFailureSeconds:
+  # LivenessProbeFailureSeconds defines the total failure seconds of liveness Probe.
+  # default value is 15 seconds
+  livenessProbeFailureSeconds:
+  # ReadinessProbeFailureSeconds defines the total failure seconds of readiness Probe.
+  # default value is 15 seconds
+  readinessProbeFailureSeconds:
+  # Lifecycle describes actions that the management system should take in response to container lifecycle events.
+  # By default, Operator will add corresponding preStop hooks for different components. For example, the preStop
+  # script for the FE Component is /opt/starrocks/fe_prestop.sh, for the BE Component is /opt/starrocks/be_prestop.sh,
+  # and for the CN Component is /opt/starrocks/cn_prestop.sh.
+  # You can just set postStart hook.
+  lifecycle: {}
+    # postStart:
+    #   exec:
+    #     command:
+    #     - /bin/sh
+    #     - -c
+    #     - echo "Hello, world!"
+  # Sidecars is an optional list of containers that are run in the same pod as the starrocks component.
+  # You can use this field to launch helper containers that provide additional functionality to the main container.
+  # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container for how to configure a container.
+  sidecars: []
+    # - name: sidecar-container
+    #   image: busybox
+    #   # If starrocksCnSpec.storageSpec.name is cn, you can mount the volume of cache data like this.
+    #   # If starrocksCnSpec.storageSpec.name is not set, no default volume will be created, so you can not mount the volume of cache data like this.
+    #   command: ['sh', '-c', 'echo "hello from the sidecar container" >/opt/starrocks/cn/storage/sidecar-data.txt && sleep 3600']
+    #   volumeMounts:
+    #   - mountPath: /opt/starrocks/cn/storage
+    #     name: cn-data   # append -data to the end of the name of the starrocksCnSpec.storageSpec.name
+  # initContainers is an optional list of containers that are run in the same pod as the starrocks component.
+  # You can use this to launch helper containers that run before the main container starts.
+  # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container for how to configure a container.
+  initContainers: []
+    # - name: init-container
+    #   image: busybox
+    #   # If starrocksCnSpec.storageSpec.name is cn, you can mount the volume of cache data like this.
+    #   # If starrocksCnSpec.storageSpec.name is not set, no default volume will be created, so you can not mount the volume of cache data like this.
+    #   command: ['sh', '-c', 'echo "hello from the init container" >/opt/starrocks/cn/storage/init-data.txt']
+    #   volumeMounts:
+    #   - mountPath: /opt/starrocks/cn/storage
+    #     name: cn-data   # append -data to the end of the name of the starrocksCnSpec.storageSpec.name
+
+# spec for component be, provide storage and compute function.
+starrocksBeSpec:
+  # number of replicas to deploy.
+  replicas: 1
+  image:
+    # image sliced by "repository:tag"
+    repository: starrocks/be-ubuntu
+    tag: ""
+  imagePullPolicy: IfNotPresent
+  # Specify the entrypoint for BE.
+  # By default, operator will use '/opt/starrocks/be_entrypoint.sh' as command, and use '$(FE_SERVICE_NAME)' as args in container spec.
+  # If entrypoint is set, the command will be ["bash", "-c"], and the args will be filename of the entrypoint script.
+  # A configmap with name $cluster-be-entrypoint-script will be created, and the script will be mounted to /etc/starrocks/entrypoint.sh
+  # Pod will be restarted if the entrypoint script is updated.
+  entrypoint: {}
+    # script: |
+    #   #! /bin/bash
+    #   echo "do something before start BE"
+    #   exec /opt/starrocks/be_entrypoint.sh $FE_SERVICE_NAME
+  # serviceAccount for be access cloud service.
+  serviceAccount: ""
+  # add annotations for be pods. example, if you want to config monitor for datadog, you can config the annotations.
+  annotations: {}
+  # If runAsNonRoot is true, the container is run as non-root user.
+  # The userId will be set to 1000, and the groupID will be set to 1000.
+  runAsNonRoot: false
+  # add/drop capabilities for BE container.
+  capabilities: {}
+  #  add:
+  #    - PERFMON
+  #    - SYS_PTRACE
+  #  drop:
+  #    - SYS_ADMIN
+  # specify the service name and port config and serviceType
+  # the service type refer https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  service:
+    # the be service type, only supported ClusterIP, NodePort, LoadBalancer
+    type: "LoadBalancer"
+    # the loadBalancerIP for static ip config when the type=LoadBalancer and loadbalancerIp is not empty.
+    loadbalancerIP: ""
+    # add annotations for be service.
+    annotations: {}
+    # config the service port for be service.
+    # To assign a specific port or nodePort to a service, you should specify them by the corresponding name or
+    # containerPort in the service configuration. If both containerPort and name are specified, containerPort takes precedence.
+    # For be, port name can be webserver, heartbeat, brpc, be, and their default container port is 8040, 9050, 8060, 9060.
+    ports: []
+      # e.g. specify a dedicated node port for be service by containerPort.
+      # - nodePort: 30040 # The range of valid ports is 30000-32767
+      #   containerPort: 8040 # The port on the container to expose
+  # imagePullSecrets allows you to use secrets to pull images for pods.
+  imagePullSecrets: []
+    # - name: "image-pull-secret"
+  # If specified, the pod's nodeSelector，displayName="Map of nodeSelectors to match when scheduling pods on nodes"
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+  nodeSelector: {}
+    # kubernetes.io/arch: amd64
+    # kubernetes.io/os: linux
+  # the pod labels for user select or classify pods.
+  podLabels: {}
+  ## hostAliases allows adding entries to /etc/hosts inside the containers
+  hostAliases: []
+    # - ip: "127.0.0.1"
+    #   hostnames:
+    #   - "example.com"
+  # schedulerName allows you to specify which scheduler will be used for the pod
+  schedulerName: ""
+  # Additional be container environment variables.
+  # See https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/ for how to define environment variables.
+  # Note: If you use slice to define environment variables, and if there are multiple values files, the values in the last values file will take effect.
+  #       If you use map to define environment variables, the values in the values files will be merged.
+  #       You can only use one of slice and map to define environment variables.
+  # In order to avoid different type of beEnvVars, we do not define the default value of beEnvVars, e.g. beEnvVars: [] or beEnvVars: {}.
+  # beEnvVars:
+    # define environment variables by slice.
+    # e.g. static environment variable:
+    # - name: DEMO_GREETING
+    #   value: "Hello from the environment"
+    # e.g. secret environment variable:
+    # - name: USERNAME
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: mysecret
+    #       key: username
+  # affinity for fe pod scheduling.
+  affinity: {}
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #     - matchFields:
+    #       - key: metadata.name
+    #         operator: In
+    #         values:
+    #         - target-host-name
+    # podAntiAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #   - labelSelector:
+    #       matchExpressions:
+    #       - key: app.kubernetes.io/component
+    #         operator: In
+    #         values:
+    #         - be
+    #     topologyKey: "kubernetes.io/hostname"
+  # Node tolerations for be pod scheduling to nodes with taints
+  # Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+  tolerations: []
+    # - key: "key"
+    #   operator: "Equal|Exists"
+    #   value: "value"
+    #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+  # topologySpreadConstraints for scheduling pods across failure-domains.
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+    # - maxSkew: 1
+    #   topologyKey: topology.kubernetes.io/zone
+    #   whenUnsatisfiable: DoNotSchedule|ScheduleAnyway
+    #   labelSelector:
+    #     matchLabels:
+    #       foo: bar
+  # resources for be pod.
+  resources:
+    requests:
+      cpu: 1
+      memory: 2Gi
+    # If you want to remove one resource limit, e.g. cpu, you can it to cpu: "unlimited".
+    limits:
+      cpu: 2
+      memory: 8Gi
+  # be storageSpec for persistent storage.
+  # Note: Once set, the following fields will not be allowed to be modified.
+  storageSpec:
+    # Specifies the name prefix of the volumes to mount. If left unspecified,
+    # `emptyDir` volumes will be used by default, which are ephemeral and data
+    # will be lost on pod restart.
+    #
+    # For persistent storage, specify a volume name prefix.
+    # For example, using `be` as the name prefix would be appropriate.
+    name: "be-storage"
+    # the storageClassName represent the used storageclass name. if not set will use k8s cluster default storageclass.
+    # you must set name when you set storageClassName
+    storageClassName: ""
+    # the storage size of persistent volume for data.
+    storageSize: 30Gi
+    # If storageMountPath is empty, the storageMountPath will be set to /opt/starrocks/be/storage.
+    storageMountPath: ""
+    # Setting this parameter can persist log storage, and the mount path is /opt/starrocks/be/log.
+    # If you set it to 0Gi, the related PVC will not be created, and the log will not be persisted.
+    logStorageSize: 1Gi
+    # Setting this parameter can persist spill storage, and the mount path is /opt/starrocks/be/spill.
+    # If you set it to 0Gi, the related PVC will not be created, and the spill will not be persisted.
+    # You need to add in be.conf spill_local_storage_dir=/opt/starrocks/be/spill.
+    spillStorageSize: 0Gi
+  # mount emptyDir volumes if necessary.
+  # Note: please use storageSpec field for persistent storage data and log.
+  emptyDirs: []
+    # e.g. mount an emptyDir volume to /tmp
+    # - name: tmp-data
+    #   mountPath: /tmp
+  # mount hostPath volumes if necessary.
+  # Note: please use storageSpec field for persistent storage data and log.
+  hostPaths: []
+    # e.g. mount a hostPath volume to /tmp
+    # - name: tmp-data
+    #   hostPath:
+    #     path: /tmp
+    #     type: Directory
+    #   mountPath: /tmp
+  # the config for start be. the base information as follows.
+  # From StarRocks 3.1, the official documentation use:
+  #   1. be_http_port instead of webserver_port, but the webserver_port is still supported.
+  # In order to avoid the impact of the change on the user's deployment, we still use the old configuration.
+  config: |
+    be_port = 9060
+    webserver_port = 8040
+    heartbeat_service_port = 9050
+    brpc_port = 8060
+    sys_log_level = INFO
+    default_rowset_type = beta
+  # mount secrets if necessary.
+  # see https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath for more details about subPath.
+  secrets: []
+    # e.g. mount my-secret to /etc/my-secret
+    # - name: my-secret
+    #   mountPath: /etc/my-secret
+    #   subPath: ""
+  # mount configmaps if necessary.
+  # see https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath for more details about subPath.
+  configMaps: []
+    # e.g. mount my-configmap to /etc/my-configmap
+    # - name: my-configmap
+    #   mountPath: /etc/my-configmap
+    #   subPath: ""
+  # terminationGracePeriodSeconds defines duration in seconds the BE pod needs to terminate gracefully.
+  # default value is 120 seconds
+  terminationGracePeriodSeconds: 120
+
+  # Please upgrade the CRD with v1.8.7 released version, if you want to use the following configuration.
+  # including: startupProbeFailureSeconds, livenessProbeFailureSeconds, readinessProbeFailureSeconds
+
+  # StartupProbeFailureSeconds defines the total failure seconds of startup Probe.
+  # default value is 300 seconds
+  startupProbeFailureSeconds:
+  # LivenessProbeFailureSeconds defines the total failure seconds of liveness Probe.
+  # default value is 15 seconds
+  livenessProbeFailureSeconds:
+  # ReadinessProbeFailureSeconds defines the total failure seconds of readiness Probe.
+  # default value is 15 seconds
+  readinessProbeFailureSeconds:
+  # Lifecycle describes actions that the management system should take in response to container lifecycle events.
+  # By default, Operator will add corresponding preStop hooks for different components. For example, the preStop
+  # script for the FE Component is /opt/starrocks/fe_prestop.sh, for the BE Component is /opt/starrocks/be_prestop.sh,
+  # and for the CN Component is /opt/starrocks/cn_prestop.sh.
+  # You can just set postStart hook.
+  lifecycle: {}
+    # postStart:
+    #   exec:
+    #     command:
+    #     - /bin/sh
+    #     - -c
+    #     - echo "Hello, world!"
+  # Sidecars is an optional list of containers that are run in the same pod as the starrocks component.
+  # You can use this field to launch helper containers that provide additional functionality to the main container.
+  # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container for how to define sidecars.
+  sidecars: []
+    # - name: sidecar-container
+    #   image: busybox
+    #   # If your starrocksBeSpec.storageSpec.name is be or not set, you can mount the volume of data like this.
+    #   command: ['sh', '-c', 'echo "hello from the sidecar container" >/opt/starrocks/be/storage/sidecar-data.txt && sleep 3600']
+    #   volumeMounts:
+    #   - mountPath: /opt/starrocks/be/storage
+    #     name: be-data   # append -data to the end of the name of the starrocksBeSpec.storageSpec.name
+  # initContainers is an optional list of containers that are run in the same pod as the starrocks component.
+  # You can use this to launch helper containers that run before the main container starts.
+  # See https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container for how to configure a container.
+  initContainers: []
+    # - name: init-container
+    #   image: busybox
+    #   # If your starrocksBeSpec.storageSpec.name is be or not set, you can mount the volume of data like this.
+    #   command: ['sh', '-c', 'echo "hello from the init container" >/opt/starrocks/be/storage/init-data.txt']
+    #   volumeMounts:
+    #   - mountPath: /opt/starrocks/be/storage
+    #     name: be-data   # append -data to the end of the name of the starrocksBeSpec.storageSpec.name
+
+# create secrets if necessary.
+secrets: []
+  # e.g. create my-secret
+  # - name: my-secret
+  #   data:
+  #     key: |
+  #       this is the content of the secret
+  #       when mounted, key will be the name of the file
+
+# create configmaps if necessary.
+configMaps: []
+  # e.g. create my-configmap
+  # - name: my-configmap
+  #   data:
+  #     key: |
+  #       this is the content of the configmap
+  #       when mounted, key will be the name of the file
+
+# If you needs to deploy other resources, e.g. serviceAccount, you can add them here.
+# You can even deploy resources to different namespaces
+resources: []
+  # - apiVersion: v1
+  #   kind: ServiceAccount
+  #   metadata:
+  #     name: sa-for-starrocks
+  #     namespace: starrocks
+
+# specify the fe proxy deploy or not.
+starrocksFeProxySpec:
+  # specify the fe proxy deploy or not.
+  enabled: true
+  replicas: 1
+  imagePullPolicy: IfNotPresent
+  # default nginx:1.24.0
+  image:
+    repository: ""
+    tag: ""
+  resources:
+    requests:
+      cpu: 1
+      memory: 2Gi
+    limits:
+      cpu: 1
+      memory: 2Gi
+  # set the resolver for nginx server, default kube-dns.kube-system.svc.cluster.local
+  resolver: ""
+  service:
+    # the fe proxy service type, only supported ClusterIP, NodePort, LoadBalancer
+    # default ClusterIP
+    type: LoadBalancer
+    # the loadBalancerIP for static ip config when the type=LoadBalancer and loadbalancerIp is not empty.
+    loadbalancerIP: ""
+    # config the service port for fe proxy service.
+    # To assign a specific port or nodePort to a service, you should specify them by the corresponding name or
+    # containerPort in the service configuration. If both containerPort and name are specified, containerPort takes precedence.
+    # For fe proxy, port name can be http-port, and its default container port is 8080.
+    ports: []
+      # e.g. specify a dedicated node port for fe proxy service by containerPort.
+      # - nodePort: 30080 # The range of valid ports is 30000-32767
+      #   containerPort: 8080 # The port on the container to expose
+  # imagePullSecrets allows you to use secrets for pulling images for your pods.
+  imagePullSecrets: []
+  # - name: "image-pull-secret"
+  # If specified, the pod's nodeSelector，displayName="Map of nodeSelectors to match when scheduling pods on nodes"
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
+  nodeSelector: {}
+    # kubernetes.io/arch: amd64
+    # kubernetes.io/os: linux
+  # affinity for fe proxy pod scheduling.
+  affinity: {}
+    # nodeAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     nodeSelectorTerms:
+    #     - matchFields:
+    #       - key: metadata.name
+    #         operator: In
+    #         values:
+    #         - target-host-name
+    # podAntiAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #   - labelSelector:
+    #       matchExpressions:
+    #       - key: app.kubernetes.io/component
+    #         operator: In
+    #         values:
+    #         - fe-proxy
+    #     topologyKey: "kubernetes.io/hostname"
+  # Node tolerations for fe proxy pod scheduling to nodes with taints
+  # Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+  tolerations: []
+    # - key: "key"
+    #   operator: "Equal|Exists"
+    #   value: "value"
+    #   effect: "NoSchedule|PreferNoSchedule|NoExecute(1.6 only)"
+
+  # Please upgrade the CRD with v1.8.7 released version, if you want to use the following configuration.
+  # including: livenessProbeFailureSeconds, readinessProbeFailureSeconds
+
+  # LivenessProbeFailureSeconds defines the total failure seconds of liveness Probe.
+  # default value is 15 seconds
+  livenessProbeFailureSeconds:
+  # ReadinessProbeFailureSeconds defines the total failure seconds of readiness Probe.
+  # default value is 15 seconds
+  readinessProbeFailureSeconds:
+  # Note: will create emptyDir volume for fe proxy, PVC is not supported.
+  emptyDirs: []
+      # e.g. mount an emptyDir volume to /tmp
+      # - name: tmp-data
+      #   mountPath: /tmp
