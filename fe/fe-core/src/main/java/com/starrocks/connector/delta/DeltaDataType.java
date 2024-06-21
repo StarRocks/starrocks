@@ -30,6 +30,7 @@ import io.delta.kernel.types.MapType;
 import io.delta.kernel.types.ShortType;
 import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructType;
+import io.delta.kernel.types.TimestampNTZType;
 import io.delta.kernel.types.TimestampType;
 
 import java.util.Collections;
@@ -56,6 +57,7 @@ public enum DeltaDataType {
     TIMESTAMP(TimestampType.class),
     STRING(StringType.class),
     STRUCT(StructType.class),
+    TIMESTAMP_NTZ(TimestampNTZType.class),
     OTHER(null);
 
     private static final Map<Class<?>, DeltaDataType> LOOKUP_MAP;
