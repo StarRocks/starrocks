@@ -117,9 +117,9 @@ TEST_F(RowsMapperTest, test_crm_file_gc) {
     DataDir* dir = get_stores();
     {
         // generate several crm files.
-        ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/aaa.crm"));
-        ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/bbb.crm"));
-        ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/ccc.crm"));
+        ASSERT_TRUE(fs::new_writable_file(dir->get_tmp_path() + "/aaa.crm").ok());
+        ASSERT_TRUE(fs::new_writable_file(dir->get_tmp_path() + "/bbb.crm").ok());
+        ASSERT_TRUE(fs::new_writable_file(dir->get_tmp_path() + "/ccc.crm").ok());
         // collect files
         dir->perform_tmp_path_scan();
         dir->perform_tmp_path_scan();
@@ -137,16 +137,16 @@ TEST_F(RowsMapperTest, test_crm_file_gc) {
         ASSERT_TRUE(dir->get_all_crm_files_cnt() == 0);
     }
     {
-        ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/aaa.crm"));
+        ASSERT_TRUE(fs::new_writable_file(dir->get_tmp_path() + "/aaa.crm").ok());
         // collect files
         dir->perform_tmp_path_scan();
         // delete this file
-        ASSERT_OK(fs::remove(dir->get_tmp_path() + "/aaa.crm"));
+        ASSERT_TRUE(fs::remove(dir->get_tmp_path() + "/aaa.crm").ok());
         // try to gc
         dir->perform_crm_gc(config::unused_crm_file_threshold_second);
     }
     {
-        ASSERT_OK(fs::remove(dir->get_tmp_path()));
+        ASSERT_TRUE(fs::remove(dir->get_tmp_path()).ok());
         // collect files
         dir->perform_tmp_path_scan();
     }
