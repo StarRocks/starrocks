@@ -274,6 +274,7 @@
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
                         "data_source/catalog/maxcompute_catalog",
+                        "data_source/catalog/kudu_catalog",
                         "data_source/icebergtutorial",
                         "data_source/catalog/query_external_data"
                     ]
@@ -1725,6 +1726,7 @@
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
                         "data_source/catalog/maxcompute_catalog",
+                        "data_source/catalog/kudu_catalog",
                         "data_source/icebergtutorial",
                         "data_source/catalog/query_external_data"
                     ]
