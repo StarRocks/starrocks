@@ -409,41 +409,15 @@ CLUCENE_NAME="starrocks-clucene-2024.06.03.tar.gz"
 CLUCENE_SOURCE="starrocks-clucene-2024.06.03"
 CLUCENE_MD5SUM="c218eb0fbbfe7f295e81ab1c8a9317cb"
 
-<<<<<<< HEAD
-=======
-
-#absl
-ABSL_DOWNLOAD="https://github.com/abseil/abseil-cpp/archive/refs/tags/20220623.0.tar.gz"
-ABSL_NAME="abseil-cpp-20220623.0.tar.gz"
-ABSL_SOURCE="abseil-cpp-20220623.0"
-ABSL_MD5SUM="955b6faedf32ec2ce1b7725561d15618"
-
-# cares - grpc dependency
-CARES_DOWNLOAD="https://github.com/c-ares/c-ares/archive/tags/cares-1_19_1.tar.gz"
-CARES_NAME=cares-1_19_1.tar.gz
-CARES_SOURCE=cares-1_19_1
-CARES_MD5SUM="ae2177836c9dbbacb8f303d167fe700f"
-
-# grpc
-GRPC_DOWNLOAD="https://github.com/grpc/grpc/archive/refs/tags/v1.43.0.tar.gz"
-GRPC_NAME="grpc-1.43.0.tar.gz"
-GRPC_SOURCE="grpc-1.43.0"
-GRPC_MD5SUM="92559743e7b5d3f67486c4c0de2f5cbe"
-
 # simdutf
 SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz"
 SIMDUTF_NAME="simdutf-5.2.8.tar.gz"
 SIMDUTF_SOURCE="simdutf-5.2.8"
 SIMDUTF_MD5SUM="731c78ab5a10c6073942dc93d5c4b04c"
 
->>>>>>> 43d99dbfe9 ([Enhancement] adopt simdutf implementation (#47174))
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-<<<<<<< HEAD
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM"
-=======
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF"
->>>>>>> 43d99dbfe9 ([Enhancement] adopt simdutf implementation (#47174))
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM SIMDUTF"
