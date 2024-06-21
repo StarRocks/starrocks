@@ -28,6 +28,9 @@ import configparser
 import datetime
 import json
 import logging
+import trino
+import pyhive
+
 import mysql.connector
 import os
 import re
@@ -631,6 +634,10 @@ class StarrocksSQLApiLib(object):
 
             return {"status": True, "result": "\n".join(result), "msg": "OK"}
 
+        except trino.exceptions.TrinoQueryError as e:
+            return {"status": False, "msg": e.message}
+        except pyhive.exc.OperationalError as e:
+            return {"status": False, "msg": e.args}
         except Exception as e:
             print("unknown error", e)
             raise
