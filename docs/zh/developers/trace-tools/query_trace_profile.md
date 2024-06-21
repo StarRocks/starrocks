@@ -23,7 +23,7 @@ TRACE { TIMES | VALUES | LOGS | ALL } [ <module> ] <query_statement>
   - `MV`：物化视图模块。
   - `OPTIMIZER`：优化器模块。
   - `SCHEDULE`：调度模块。
-  - `EXTERNAL`：外部模块。
+  - `EXTERNAL`：外表相关模块。
 
   如果未指定模块，默认使用 `BASE`。
 
