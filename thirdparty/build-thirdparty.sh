@@ -1246,6 +1246,77 @@ build_clucene() {
     fi
 }
 
+<<<<<<< HEAD
+=======
+build_absl() {
+    check_if_source_exist "${ABSL_SOURCE}"
+    cd "$TP_SOURCE_DIR/${ABSL_SOURCE}"
+
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
+        -DCMAKE_CXX_STANDARD=17
+    
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
+build_grpc() {
+    check_if_source_exist "${GRPC_SOURCE}"
+    cd "$TP_SOURCE_DIR/${GRPC_SOURCE}"
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}            \
+        -DgRPC_INSTALL=ON                                   \
+        -DgRPC_BUILD_TESTS=OFF                              \
+        -DgRPC_BUILD_CSHARP_EXT=OFF                         \
+        -DgRPC_BUILD_GRPC_RUBY_PLUGIN=OFF                   \
+        -DgRPC_BUILD_GRPC_PYTHON_PLUGIN=OFF                 \
+        -DgRPC_BUILD_GRPC_PHP_PLUGIN=OFF                    \
+        -DgRPC_BUILD_GRPC_OBJECTIVE_C_PLUGIN=OFF            \
+        -DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF                   \
+        -DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF                 \
+        -DgRPC_BACKWARDS_COMPATIBILITY_MODE=ON              \
+        -DgRPC_SSL_PROVIDER=package                         \
+        -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE                      \
+        -DgRPC_ZLIB_PROVIDER=package                        \
+        -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a \
+        -DgRPC_ABSL_PROVIDER=package                        \
+        -Dabsl_DIR=${TP_INSTALL_DIR}/lib/cmake/absl         \
+        -DgRPC_PROTOBUF_PROVIDER=package    \
+        -DgRPC_RE2_PROVIDER=package                         \
+        -DRE2_INCLUDE_DIR=${TP_INSTALL_DIR}/include    \
+        -DRE2_LIBRARY=${TP_INSTALL_DIR}/libre2.a \
+        -DgRPC_CARES_PROVIDER=module                        \
+        -DCARES_ROOT_DIR=$TP_SOURCE_DIR/$CARES_SOURCE/      \
+        -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
+        -DCMAKE_CXX_STANDARD=17 ..
+        
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
+build_simdutf() {
+    check_if_source_exist "${SIMDUTF_SOURCE}"
+    cd "$TP_SOURCE_DIR/${SIMDUTF_SOURCE}"
+
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR"    \
+        -DSIMDUTF_TESTS=OFF \
+        -DSIMDUTF_TOOLS=OFF \
+        -DSIMDUTF_ICONV=OFF
+
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
+>>>>>>> 43d99dbfe9 ([Enhancement] adopt simdutf implementation (#47174))
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1336,7 +1407,7 @@ build_async_profiler
 build_fiu
 build_llvm
 build_clucene
-
+build_simdutf
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
