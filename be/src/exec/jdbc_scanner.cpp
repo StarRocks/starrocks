@@ -410,8 +410,8 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
         // TODO: add check cast status
         Expr* cast_expr = nullptr;
         if (ret_type != _slot_descs[i]->type().type) {
-            cast_expr =
-                    VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool, true);
+            cast_expr = VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool,
+                                                             true);
         } else {
             cast_expr = column_ref;
         }
