@@ -182,7 +182,9 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
     new_expr->clear_children();
     new_expr->add_child(new_left);
     new_expr->add_child(literal);
-    return pool->add(new ExprContext(new_expr));
+    auto expr = pool->add(new ExprContext(new_expr));
+    expr->set_build_from_only_in_filter(true);
+    return expr;
 }
 
 struct FilterZoneMapWithMinMaxOp {
