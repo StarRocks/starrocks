@@ -38,8 +38,8 @@ public class DecommissionTest {
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 4);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
-        ColocateTableBalancer.getInstance().setInterval(1000);
-        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(1000);
+        ColocateTableBalancer.getInstance().setInterval(500);
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(500);
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
@@ -60,7 +60,7 @@ public class DecommissionTest {
         for (int i = 0; i < numTable; i++) {
             tableNames[i] = "test_" + i;
             PseudoCluster.CreateTableSqlBuilder sqlBuilder = PseudoCluster.newCreateTableSqlBuilder().setTableName(tableNames[i])
-                    .setBuckets(2);
+                    .setBuckets(1);
             if (i % 2 == 0) {
                 sqlBuilder.setColocateGroup("g1");
             }
@@ -80,7 +80,7 @@ public class DecommissionTest {
                 break;
             }
             cluster.runSql("test", insertSqls[rand.nextInt(numTable)]);
-            Thread.sleep(1000);
+            Thread.sleep(3000);
         }
         System.out.println("decommission finished");
     }
