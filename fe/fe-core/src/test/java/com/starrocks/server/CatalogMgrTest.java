@@ -106,6 +106,30 @@ public class CatalogMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCreateExceptionMsg() {
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        Map<String, String> config = new HashMap<>();
+
+        config.put("type", "jdbc");
+
+        try {
+            catalogMgr.createCatalog("jdbc", "a", "", config);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Missing"));
+        }
+
+        config.put("type", "test_unsupported");
+
+        Assert.assertThrows(DdlException.class, () -> {
+            catalogMgr.createCatalog("test_unsupported", "b", "", config);
+        });
+    }
+
+    @Test
+>>>>>>> 2cf96cb785 ([BugFix]keep connector/catalog map in consistent as much as possible (#46995))
     public void testLoadCatalog() throws IOException, DdlException {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
