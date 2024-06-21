@@ -281,6 +281,7 @@ public class Index implements Writable {
                 searchIndexParamKeySet = Collections.emptySet();
             }
 
+            // only keep valid properties
             for (Entry<String, String> propEntry : properties.entrySet()) {
                 String key = propEntry.getKey();
                 String value = propEntry.getValue();
@@ -296,15 +297,20 @@ public class Index implements Writable {
                 }
             }
 
-            Arrays.stream(CommonIndexParamKey.values())
-                    .filter(k -> !commonProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) && k.needDefault())
-                    .forEach(k -> commonProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-            Arrays.stream(IndexParamsKey.values())
-                    .filter(k -> !indexProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) && k.needDefault())
-                    .forEach(k -> indexProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-            Arrays.stream(SearchParamsKey.values())
-                    .filter(k -> !searchProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) && k.needDefault())
-                    .forEach(k -> searchProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
+            // Add default values for missing properties
+            if (indexType == IndexType.GIN) {
+                Arrays.stream(CommonIndexParamKey.values())
+                        .filter(k -> !commonProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) &&
+                                k.needDefault())
+                        .forEach(k -> commonProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
+                Arrays.stream(IndexParamsKey.values())
+                        .filter(k -> !indexProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) && k.needDefault())
+                        .forEach(k -> indexProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
+                Arrays.stream(SearchParamsKey.values())
+                        .filter(k -> !searchProperties.containsKey(k.name().toLowerCase(Locale.ROOT)) &&
+                                k.needDefault())
+                        .forEach(k -> searchProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
+            }
 
             tIndex.setCommon_properties(commonProperties);
             tIndex.setIndex_properties(indexProperties);

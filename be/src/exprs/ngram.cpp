@@ -70,7 +70,7 @@ public:
         const auto& gram_num_column = columns[2];
 
         if (!needle_column->is_constant()) {
-            return Status::NotSupported("ngram function's second parameter must be const");
+            return Status::NotSupported("ngram search's second parameter must be const");
         }
 
         const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
@@ -78,7 +78,11 @@ public:
             return Status::NotSupported("ngram function's second parameter is larger than 2^15");
         }
 
-        size_t gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
+        int gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
+
+        if (gram_num <= 0) {
+            return Status::NotSupported("ngram search's third parameter must be a positive number");
+        }
 
         // needle is too small so we can not get even single Ngram, so they are not similar at all
         if (needle.get_size() < gram_num) {

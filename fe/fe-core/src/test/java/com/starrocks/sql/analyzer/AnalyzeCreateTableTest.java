@@ -450,5 +450,11 @@ public class AnalyzeCreateTableTest {
                 "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2', 'CASE_SENSITIVE' = 'false'))" +
                 "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
         analyzeSuccess(sql);
+
+        // create index with default valus
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF)" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeSuccess(sql);
     }
 }
