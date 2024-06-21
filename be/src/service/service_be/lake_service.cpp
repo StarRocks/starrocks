@@ -178,10 +178,28 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto run_ts = butil::gettimeofday_us();
             auto base_version = request->base_version();
             auto new_version = request->new_version();
+<<<<<<< HEAD
             auto txns = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
             auto commit_time = request->commit_time();
             auto queuing_latency = run_ts - start_ts;
             g_publish_tablet_version_queuing_latency << queuing_latency;
+=======
+            auto txns = std::vector<TxnInfoPB>();
+            if (request->txn_infos_size() > 0) {
+                txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
+            } else { // This is a request from older version FE
+                // Construct TxnInfoPB from other fields
+                txns.reserve(request->txn_ids_size());
+                for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                    auto& info = txns.emplace_back();
+                    info.set_txn_id(request->txn_ids(i));
+                    info.set_txn_type(TXN_NORMAL);
+                    info.set_combined_txn_log(false);
+                    info.set_commit_time(request->commit_time());
+                    info.set_force_publish(false);
+                }
+            }
+>>>>>>> 570235b3c4 ([Enhancement] support lake compaction force commit (#47097))
 
             TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
             TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
