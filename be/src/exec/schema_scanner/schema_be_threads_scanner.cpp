@@ -24,13 +24,13 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeThreadsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"GROUP", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PTHREAD_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"IDLE", TYPE_BOOLEAN, 1, false},
-        {"FINISHED_TASKS", TYPE_BIGINT, sizeof(int64_t), false},
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"GROUP", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PTHREAD_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"IDLE", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
+        {"FINISHED_TASKS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaBeThreadsScanner::SchemaBeThreadsScanner()
