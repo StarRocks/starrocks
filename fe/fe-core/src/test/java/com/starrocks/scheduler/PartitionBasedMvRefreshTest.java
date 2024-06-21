@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -361,14 +362,16 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                 "    PARTITION p202007 VALUES in (\"2020-07-23\"),\n" +
                 "    PARTITION p202008 VALUES in (\"2020-08-23\")\n" +
                 ");");
-        Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+        Exception e = Assert.assertThrows(DmlException.class, () ->
                 starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW join_mv1 " +
                         "PARTITION BY dt1 REFRESH MANUAL PROPERTIES (\"partition_refresh_number\"=\"3\") AS \n" +
                         "SELECT dt1,dt2,sum(int1) " +
                         "FROM join_base_t1 t1 " +
                         "JOIN join_base_t2 t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2")
         );
-        Assert.assertEquals("Must be range partitioned table", e.getMessage());
+        // TODO(fix me): throw a better stack
+        System.out.println(e.getMessage());
+        Assert.assertTrue(e.getMessage().contains("Must be range partitioned table"));
 
         starRocksAssert.dropTable("join_base_t1");
         starRocksAssert.dropTable("join_base_t2");
