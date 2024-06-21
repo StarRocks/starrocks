@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #include "split_local_exchange.h"
+
+#include <memory>
 namespace starrocks::pipeline {
 
 static constexpr size_t kBufferedRowSizeScaleFactor = 16;
@@ -28,28 +30,30 @@ void SplitLocalExchanger::close(RuntimeState* state) {
 }
 
 Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, SplitLocalExchangeSinkOperator* sink_op) {
-    DCHECK(_split_expr_ctxs.size() > 1);
-    size_t original_chunk_size;
+    // currently only In and not-In
+    DCHECK(_split_expr_ctxs.size() == 2);
     // split chunk into multiple chunks using split_expr_ctxs
     // cur_chunk is the chunk that is being split and has no overlap with the previous chunks
     auto& cur_chunk = chunk;
+    if (cur_chunk->is_empty()) return Status::OK();
+    size_t cur_chunk_size = cur_chunk->num_rows();
     size_t new_chunk_size;
     for (size_t i = 0; i < _split_expr_ctxs.size() - 1; i++) {
-        original_chunk_size = cur_chunk->num_rows();
         Filter chunk_filter(cur_chunk->num_rows(), 1);
         auto& expr_ctx = _split_expr_ctxs[i];
         ASSIGN_OR_RETURN(new_chunk_size,
                          ExecNode::eval_conjuncts_into_filter({expr_ctx}, cur_chunk.get(), &chunk_filter));
-
+        // all false for expr_ctx
         if (new_chunk_size == 0) {
             continue;
         }
 
-        if (new_chunk_size == original_chunk_size) {
+        if (new_chunk_size == cur_chunk_size) {
             // no row is filtered, just push the cur_chunk
             std::unique_lock l(_mutex);
-            _buffer[i].emplace(cur_chunk);
-            _current_accumulated_row_size += original_chunk_size;
+            DCHECK(cur_chunk->num_rows());
+            _buffer[i].emplace(std::move(cur_chunk));
+            _current_accumulated_row_size += cur_chunk_size;
             _current_memory_usage += cur_chunk->memory_usage();
             sink_op->update_counter(_current_memory_usage, _current_accumulated_row_size);
             return Status::OK();
@@ -58,17 +62,20 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, SplitLocalExchange
         auto newChunk = cur_chunk->clone_unique();
         newChunk->filter(chunk_filter);
         std::unique_lock l(_mutex);
+        DCHECK(newChunk->num_rows());
         _buffer[i].emplace(std::move(newChunk));
         l.unlock();
         std::transform(chunk_filter.begin(), chunk_filter.end(), chunk_filter.begin(),
                        [](uint8_t val) { return val ^ 1; });
         // cur_chunk =  cur_chunk - newChunk
         cur_chunk->filter(chunk_filter);
+        cur_chunk_size = cur_chunk->num_rows();
     }
 
     std::unique_lock l(_mutex);
+    DCHECK(cur_chunk->num_rows());
     _buffer[_num_consumers - 1].emplace(std::move(cur_chunk));
-    _current_accumulated_row_size += original_chunk_size;
+    _current_accumulated_row_size += cur_chunk_size;
     _current_memory_usage += cur_chunk->memory_usage();
     sink_op->update_counter(_current_memory_usage, _current_accumulated_row_size);
     return Status::OK();
@@ -76,10 +83,13 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, SplitLocalExchange
 
 StatusOr<ChunkPtr> SplitLocalExchanger::pull_chunk(RuntimeState* state, int32_t consuemr_index) {
     std::unique_lock l(_mutex);
-    if (_buffer[consuemr_index].empty() && _opened_sink_number == 0) {
-        return Status::EndOfFile("split_local_exchanger eof");
+    if (_buffer[consuemr_index].empty()) {
+        if (_opened_sink_number == 0) return Status::EndOfFile("split_local_exchanger eof");
+        // because other driver with same consuemr_index also can consume this queue
+        return nullptr;
     }
     ChunkPtr chunk = _buffer[consuemr_index].front();
+    if (chunk->is_empty()) return chunk;
     _buffer[consuemr_index].pop();
     _current_accumulated_row_size -= chunk->num_rows();
     _current_memory_usage -= chunk->memory_usage();

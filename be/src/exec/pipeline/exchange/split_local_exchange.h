@@ -27,7 +27,8 @@ public:
             : _split_expr_ctxs(std::move(split_expr_ctxs)),
               _buffer(num_consumers),
               _num_consumers(num_consumers),
-              _opened_source_opcount(num_consumers) {}
+              _opened_source_opcount(num_consumers, 0),
+              _chunk_size(chunk_size) {}
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state);
