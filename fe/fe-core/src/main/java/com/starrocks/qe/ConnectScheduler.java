@@ -42,6 +42,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
@@ -236,7 +237,7 @@ public class ConnectScheduler {
                 MysqlProto.NegotiateResult result = null;
                 try {
                     result = MysqlProto.negotiate(context);
-                    if (!result.isSuccess()) {
+                    if (result.getState() != NegotiateState.OK) {
                         return;
                     }
 
@@ -249,8 +250,11 @@ public class ConnectScheduler {
                         return;
                     }
                 } finally {
-                    LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
-                            result == null ? null : result.getAuthPacket());
+                    // Ignore the NegotiateState.READ_FIRST_AUTH_PKG_FAILED connections,
+                    // because this maybe caused by port probe.
+                    if (result != null && result.getState() != NegotiateState.READ_FIRST_AUTH_PKG_FAILED) {
+                        LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, result.getAuthPacket());
+                    }
                 }
 
                 context.setStartTime();
