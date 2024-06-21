@@ -230,7 +230,9 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
                            [](unsigned char c) { return std::tolower(c); });
         }
 
-        if (_fn_desc->name == "LIKE") {
+        if (!simdjson::validate_utf8(needle.data(), needle.size())) {
+            index_useful = false;
+        } else if (_fn_desc->name == "LIKE") {
             index_useful = split_like_string_to_ngram(needle, reader_options, ngram_set);
         } else {
             index_useful = split_normal_string_to_ngram(needle, fn_ctx, reader_options, ngram_set, _fn_desc->name);
@@ -343,8 +345,8 @@ bool VectorizedFunctionCallExpr::split_like_string_to_ngram(const Slice& needle,
         // cur_valid_grams contains the number of utf-8 gram in needle[cur_grams_begin_index, cur_grams_end_index) without '\\'
         // cur_valid_grams_num is the number of utf-8 gram in needle[cur_grams_begin_index, cur_grams_end_index)
         // escaped means needle[cur_grams_end_index - 1] is '\\'
-
-        for (cur_grams_end_index = cur_grams_begin_index; cur_grams_end_index < needle.size;) {
+        cur_grams_end_index = cur_grams_begin_index;
+        while (cur_grams_end_index < needle.size) {
             if (escaped && (needle[cur_grams_end_index] == '%' || needle[cur_grams_end_index] == '_' ||
                             needle[cur_grams_end_index] == '\\')) {
                 cur_valid_grams += needle[cur_grams_end_index];
