@@ -219,14 +219,15 @@ public class Statistics {
             return this.columnStatistics.get(columnRefOperator);
         }
 
-        public Builder addColumnStatisticsFromOtherStatistic(Statistics statistics, ColumnRefSet hintRefs) {
+        public Builder addColumnStatisticsFromOtherStatistic(Statistics statistics, ColumnRefSet hintRefs, boolean withHist) {
             statistics.getColumnStatistics().forEach((k, v) -> {
                 if (hintRefs.contains(k.getId())) {
-                    this.columnStatistics.put(k, v);
+                    this.columnStatistics.put(k, withHist ? v : ColumnStatistic.buildFrom(v).setHistogram(null).build());
                 }
             });
             return this;
         }
+
 
         public Builder setShadowColumns(Collection<ColumnRefOperator> shadowColumns) {
             this.shadowColumns = shadowColumns;

@@ -217,12 +217,12 @@ public class ColumnStatistic {
                     averageRowSize, distinctValuesCount, histogram, type);
         }
 
-        private Builder(String maxString, String minString, double minValue, double maxValue,
+        private Builder(String minString, String maxString, double minValue, double maxValue,
                         double nullsFraction, double averageRowSize,
                         double distinctValuesCount, Histogram histogram,
                         StatisticType type) {
-            this.maxString = maxString;
             this.minString = minString;
+            this.maxString = maxString;
             this.minValue = minValue;
             this.maxValue = maxValue;
             this.nullsFraction = nullsFraction;
