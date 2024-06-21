@@ -59,6 +59,15 @@ public class ConnectorMgr {
         try {
             Preconditions.checkState(!connectors.containsKey(catalogName),
                     "Connector of catalog '%s' already exists", catalogName);
+<<<<<<< HEAD
+=======
+            connector = ConnectorFactory.createConnector(context);
+            if (connector == null) {
+                return null;
+            }
+        } catch (StarRocksConnectorException e) {
+            throw e;
+>>>>>>> 2cf96cb785 ([BugFix]keep connector/catalog map in consistent as much as possible (#46995))
         } finally {
             readUnlock();
         }
