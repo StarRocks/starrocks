@@ -1321,6 +1321,9 @@ CONF_mInt64(arrow_read_batch_size, "4096");
 CONF_mBool(brpc_socket_keepalive, "false");
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
+// .crm file can be removed after 1day.
+CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
+
 // python envs config
 // create time worker timeout
 CONF_mInt32(create_child_worker_timeout_ms, "1000");
