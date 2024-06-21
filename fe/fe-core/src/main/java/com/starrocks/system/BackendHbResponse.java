@@ -156,6 +156,10 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         return statusCode;
     }
 
+    public void setStatusCode(TStatusCode statusCode) {
+        this.statusCode = statusCode;
+    }
+
     public static BackendHbResponse read(DataInput in) throws IOException {
         BackendHbResponse result = new BackendHbResponse();
         result.readFields(in);

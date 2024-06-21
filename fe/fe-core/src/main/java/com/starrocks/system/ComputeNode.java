@@ -523,8 +523,9 @@ public class ComputeNode implements IComputable, Writable {
      * return true if any port changed, or alive state is changed.
      */
     public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
-        boolean becomeDead = false;
         boolean isChanged = false;
+        boolean changedToShutdown = false;
+        boolean becomeDead = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
             if (this.version == null) {
                 return false;
@@ -622,11 +623,21 @@ public class ComputeNode implements IComputable, Writable {
 
             if (needSetAlive) {
                 if (isAlive.compareAndSet(true, false)) {
-                    becomeDead = true;
                     LOG.info("{} is dead due to {}", this, deadMessage);
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
-                status = isShutdown ? Status.SHUTDOWN : Status.DISCONNECTED;
+                Status targetStatus = isShutdown ? Status.SHUTDOWN : Status.DISCONNECTED;
+                if (status != targetStatus) {
+                    status = targetStatus;
+                    switch (targetStatus) {
+                        case SHUTDOWN:
+                            changedToShutdown = true;
+                            break;
+                        case DISCONNECTED:
+                            becomeDead = true;
+                            break;
+                    }
+                }
             }
             // When the master receives an error heartbeat info which status not ok, 
             // this heartbeat info also need to be synced to follower.
@@ -644,17 +655,23 @@ public class ComputeNode implements IComputable, Writable {
                 // in which case the alive status needs to be handled according to the original logic
                 boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
                 if (isAlive.compareAndSet(!newIsAlive, newIsAlive)) {
-                    becomeDead = !newIsAlive;
                     LOG.info("{} alive status is changed to {}", this, newIsAlive);
                 }
             }
         }
 
-        if (becomeDead && !GlobalStateMgr.isCheckpointThread()) {
-            CoordinatorMonitor.getInstance().addDeadBackend(id);
-            GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            if (changedToShutdown) {
+                // only notify the resource usage changed when the node turns to SHUTDOWN status
+                // Don't add it to CoordinatorMonitor, otherwise FE will proactively cancel queries
+                // where the node is still trying to complete.
+                GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
+            }
+            if (becomeDead) {
+                // the node is firmly dead.
+                CoordinatorMonitor.getInstance().addDeadBackend(id);
+            }
         }
-
         return isChanged;
     }
 
