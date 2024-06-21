@@ -630,7 +630,7 @@ void DataDir::perform_tmp_path_scan() {
         for (const auto& entry : std::filesystem::directory_iterator(tmp_path)) {
             if (entry.is_regular_file()) {
                 const auto& filename = entry.path().string();
-                if (filename.ends_with(".crm")) {
+                if (HasSuffixString(filename, ".crm")) {
                     _all_check_crm_files.insert(filename);
                 }
             }
