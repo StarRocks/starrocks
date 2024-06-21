@@ -1091,7 +1091,7 @@ public class PseudoBackend {
         }
     }
 
-    private class PseudoLakeService implements LakeService {
+    public static class PseudoLakeService implements LakeService {
         @Override
         public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
             return CompletableFuture.completedFuture(null);
