@@ -687,16 +687,13 @@ void DataDir::perform_tmp_path_scan() {
             }
         }
     } catch (const std::filesystem::filesystem_error& ex) {
-        std::string err_msg = "Iterate dir " + tmp_path_str + " Filesystem error: " + ex.what();
-        LOG(ERROR) << err_msg;
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Filesystem error: " << ex.what();
         // do nothing
     } catch (const std::exception& ex) {
-        std::string err_msg = "Iterate dir " + tmp_path_str + " Standard error: " + ex.what();
-        LOG(ERROR) << err_msg;
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Standard error: " << ex.what();
         // do nothing
     } catch (...) {
-        std::string err_msg = "Iterate dir " + tmp_path_str + " Unknown exception occurred.";
-        LOG(ERROR) << err_msg;
+        LOG(ERROR) << "Iterate dir " << tmp_path_str << " Unknown exception occurred.";
         // do nothing
     }
 }
