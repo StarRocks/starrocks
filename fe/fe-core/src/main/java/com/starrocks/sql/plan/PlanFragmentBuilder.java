@@ -631,7 +631,7 @@ public class PlanFragmentBuilder {
             Optional.ofNullable(optExpression.getStatistics()).ifPresent(statistics -> {
                 Statistics.Builder b = Statistics.builder();
                 b.setOutputRowCount(statistics.getOutputRowCount());
-                b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()));
+                b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()), true);
                 projectNode.computeStatistics(b.build());
             });
 

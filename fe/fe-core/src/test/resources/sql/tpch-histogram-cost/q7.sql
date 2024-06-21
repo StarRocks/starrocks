@@ -46,12 +46,12 @@ RESULT SINK
 
 24:MERGING-EXCHANGE
 distribution type: GATHER
-cardinality: 2
+cardinality: 352
 column statistics:
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 2.25] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -62,27 +62,27 @@ OutPut Exchange Id: 24
 23:SORT
 |  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, SMALLINT, false] ASC
 |  offset: 0
-|  cardinality: 2
+|  cardinality: 352
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 2.25] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 |
 22:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-|  cardinality: 2
+|  cardinality: 352
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 2.25] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 |
 21:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-cardinality: 2
+cardinality: 352
 
 PLAN FRAGMENT 2(F00)
 
@@ -94,12 +94,12 @@ OutPut Exchange Id: 21
 |  STREAMING
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-|  cardinality: 2
+|  cardinality: 352
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 2.25] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 |
 19:Project
 |  output columns:
@@ -107,12 +107,12 @@ OutPut Exchange Id: 21
 |  51 <-> [51: N_NAME, VARCHAR, false]
 |  55 <-> year[([19: L_SHIPDATE, DATE, false]); args: DATE; result: SMALLINT; args nullable: false; result nullable: false]
 |  56 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
-|  cardinality: 292324
+|  cardinality: 584181
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 292324.269935338] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 584180.8210387795] ESTIMATE
 |
 18:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -122,17 +122,17 @@ OutPut Exchange Id: 21
 |  - filter_id = 3, build_expr = (4: S_NATIONKEY), remote = true
 |  - filter_id = 4, build_expr = (1: S_SUPPKEY), remote = false
 |  output columns: 14, 15, 19, 46, 51
-|  cardinality: 292324
+|  cardinality: 584181
 |  column statistics:
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 292324.269935338] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
-|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] MCV: [[1995-09-18:267300][1996-11-29:266400][1995-09-26:265700][1996-04-13:265400][1995-05-30:263000]] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 584180.8210387795] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 292324.269935338] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 584180.8210387795] ESTIMATE
 |
 |----17:EXCHANGE
 |       distribution type: BROADCAST
@@ -151,11 +151,11 @@ OutPut Exchange Id: 21
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
-|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] MCV: [[1995-09-18:267300][1996-11-29:266400][1995-09-26:265700][1996-04-13:265400][1995-05-30:263000]] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |
 14:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -167,11 +167,13 @@ OutPut Exchange Id: 21
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] MCV: [[0.05:54639500][0.07:54619200][0.02:54617300][0.01:54583400][0.10:54581500]] ESTIMATE
-|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] MCV: [[1995-09-18:267300][1996-11-29:266400][1995-09-26:265700][1996-04-13:265400][1995-05-30:263000]] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |
 |----13:EXCHANGE
 |       distribution type: SHUFFLE
@@ -230,9 +232,9 @@ OutPut Exchange Id: 13
 |  cardinality: 6000000
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6000000.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |
 11:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -243,9 +245,11 @@ OutPut Exchange Id: 13
 |  cardinality: 6000000
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 6000000.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |
 |----10:EXCHANGE
 |       distribution type: BROADCAST
@@ -279,9 +283,9 @@ OutPut Exchange Id: 10
 |  cardinality: 600000
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 600000.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -292,9 +296,11 @@ OutPut Exchange Id: 10
 |  cardinality: 600000
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 600000.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0] ESTIMATE
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |
 |----7:EXCHANGE
 |       distribution type: BROADCAST
@@ -326,9 +332,9 @@ OutPut Exchange Id: 07
 |  other join predicates: ((46: N_NAME = 'CANADA') AND (51: N_NAME = 'IRAN')) OR ((46: N_NAME = 'IRAN') AND (51: N_NAME = 'CANADA'))
 |  cardinality: 1
 |  column statistics:
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] MCV: [[22:1][23:1][24:1][10:1][11:1]] ESTIMATE
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |
 |----5:EXCHANGE
