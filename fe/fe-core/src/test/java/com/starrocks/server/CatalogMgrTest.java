@@ -118,6 +118,12 @@ public class CatalogMgrTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("Missing"));
         }
+
+        config.put("type", "test_unsupported");
+
+        Assert.assertThrows(DdlException.class, () -> {
+            catalogMgr.createCatalog("test_unsupported", "b", "", config);
+        });
     }
 
     @Test
