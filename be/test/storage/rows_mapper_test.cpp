@@ -16,6 +16,8 @@
 
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "storage/data_dir.h"
+#include "storage/storage_engine.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -30,6 +32,11 @@ protected:
     void SetUp() override { ASSERT_OK(fs::create_directories(kTestDirectory)); }
 
     void TearDown() override { (void)fs::remove_all(kTestDirectory); }
+
+    DataDir* get_stores() {
+        TCreateTabletReq request;
+        return StorageEngine::instance()->get_stores_for_create_tablet(request.storage_medium)[0];
+    }
 
     // generate id between [start, end)
     void generate_rssid_rowids(std::vector<uint64_t>* rssid_rowids, uint64_t start, size_t end, uint64_t rssid) {
@@ -104,6 +111,45 @@ TEST_F(RowsMapperTest, test_write_read_multi_segment) {
     // should eof
     std::vector<uint64_t> rows_mapper;
     ASSERT_TRUE(iterator.next_values(1, &rows_mapper).is_end_of_file());
+}
+
+TEST_F(RowsMapperTest, test_crm_file_gc) {
+    DataDir* dir = get_stores();
+    {
+        // generate several crm files.
+        ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/aaa.crm"));
+        ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/bbb.crm"));
+        ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/ccc.crm"));
+        // collect files
+        dir->perform_tmp_path_scan();
+        dir->perform_tmp_path_scan();
+        ASSERT_TRUE(dir->get_all_crm_files_cnt() == 3);
+        // try to gc
+        dir->perform_crm_gc(config::unused_crm_file_threshold_second);
+        ASSERT_TRUE(dir->get_all_crm_files_cnt() == 0);
+        // try to gc again
+        dir->perform_tmp_path_scan();
+        ASSERT_TRUE(dir->get_all_crm_files_cnt() == 3);
+        dir->perform_crm_gc(0);
+        ASSERT_TRUE(dir->get_all_crm_files_cnt() == 0);
+        dir->perform_tmp_path_scan();
+        // make sure file have been clean.
+        ASSERT_TRUE(dir->get_all_crm_files_cnt() == 0);
+    }
+    {
+        ASSERT_OK(fs::new_writable_file(dir->get_tmp_path() + "/aaa.crm"));
+        // collect files
+        dir->perform_tmp_path_scan();
+        // delete this file
+        ASSERT_OK(fs::remove(dir->get_tmp_path() + "/aaa.crm"));
+        // try to gc
+        dir->perform_crm_gc(config::unused_crm_file_threshold_second);
+    }
+    {
+        ASSERT_OK(fs::remove(dir->get_tmp_path()));
+        // collect files
+        dir->perform_tmp_path_scan();
+    }
 }
 
 } // namespace starrocks
