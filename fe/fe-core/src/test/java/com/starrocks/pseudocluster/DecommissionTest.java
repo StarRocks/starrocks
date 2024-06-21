@@ -35,6 +35,7 @@ public class DecommissionTest {
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
         Config.alter_scheduler_interval_millisecond = 5000;
         Config.tablet_sched_slot_num_per_path = 32;
+        Config.tablet_sched_colocate_balance_wait_system_stable_time_s = 1;
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 4);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
