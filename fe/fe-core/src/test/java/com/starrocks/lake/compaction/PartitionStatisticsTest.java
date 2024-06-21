@@ -37,4 +37,20 @@ public class PartitionStatisticsTest {
         // Assert that the priority field is set to the default value as defined in the PartitionStatistics class
         assertEquals(PartitionStatistics.CompactionPriority.DEFAULT, statistics.getPriority());
     }
+
+    @Test
+    public void testPunishFactor() {
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
+        Quantiles q1 = new Quantiles(1.0, 2.0, 3.0);
+        statistics.setCompactionScore(q1);
+        assertEquals(1, statistics.getPunishFactor());
+
+        Quantiles q2 = new Quantiles(1.0, 2.0, 3.0);
+        statistics.setCompactionScore(q2);
+        assertEquals(1, statistics.getPunishFactor());
+
+        Quantiles q3 = new Quantiles(2.0, 2.0, 3.0);
+        statistics.setCompactionScore(q3);
+        assertEquals(2, statistics.getPunishFactor());
+    }
 }

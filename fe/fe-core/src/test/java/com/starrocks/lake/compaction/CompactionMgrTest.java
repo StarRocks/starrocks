@@ -137,7 +137,7 @@ public class CompactionMgrTest {
                 Database db = new Database();
                 Table table = new LakeTable();
                 PhysicalPartition partition = new Partition(123, "aaa", null, null);
-                CompactionJob job = new CompactionJob(db, table, partition, txnId);
+                CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
                 r.put(partitionIdentifier, job);
                 return r;
             }
