@@ -138,17 +138,14 @@ TEST_F(DiskSpaceMonitorTest, adjust_for_dirty_cache_dir) {
     mock_fs->set_space(2, "disk2", space_info);
     mock_fs->set_global_directory_capacity(200 * GB);
 
-    std::vector<DirSpace> dir_spaces = {{.path = "disk1/dir1", .size = 500 * GB},
-                                        {.path = "disk1/dir2", .size = 500 * GB},
-                                        {.path = "disk2/dir2", .size = 500 * GB}};
+    std::vector<DirSpace> dir_spaces = {
+            {.path = "disk1/dir1", .size = 0}, {.path = "disk1/dir2", .size = 0}, {.path = "disk2/dir2", .size = 0}};
 
-    // disk2 usage: (1000G - 180G) / 1000G = 82%
-    // disk2 safe usage: 70%
-    // delta bytes: (70% - 82%) * 1000G = -120G
-    // quota for each cache dir: 200G - 120G = 80G
-    ASSERT_TRUE(space_monitor->adjust_spaces(&dir_spaces));
+    // disk1 usage: (1000G - 180G - 200G) / 1000G = 62%
+    // This will not triger adjustment because it between low level and high level.
+    ASSERT_FALSE(space_monitor->adjust_spaces(&dir_spaces));
     for (auto& dir : dir_spaces) {
-        ASSERT_EQ(dir.size, 80 * GB);
+        ASSERT_EQ(dir.size, 0);
     }
 }
 
