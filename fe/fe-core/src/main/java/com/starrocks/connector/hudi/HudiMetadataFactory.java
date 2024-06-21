@@ -20,9 +20,9 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.connector.hive.IHiveMetastore;
@@ -76,16 +76,16 @@ public class HudiMetadataFactory {
                 remoteFileIO instanceof CachingRemoteFileIO,
                 hdfsEnvironment.getConfiguration());
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
-        Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
 
         return new HudiMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations,
                 remoteFileOperations, statisticsProvider, cacheUpdateProcessor);
     }
 
-    public synchronized Optional<CacheUpdateProcessor> getCacheUpdateProcessor() {
-        Optional<CacheUpdateProcessor> cacheUpdateProcessor;
+    public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
-            cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(
+            cacheUpdateProcessor = Optional.of(new HiveCacheUpdateProcessor(
                     catalogName, metastore, remoteFileIO, pullRemoteFileExecutor,
                     isRecursive, false));
         } else {

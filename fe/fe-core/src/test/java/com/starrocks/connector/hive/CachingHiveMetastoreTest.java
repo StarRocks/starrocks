@@ -456,11 +456,11 @@ public class CachingHiveMetastoreTest {
     public void testGetCachedName() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        CacheUpdateProcessor processor = new CacheUpdateProcessor(
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor(
                 "hive_catalog", cachingHiveMetastore, null, null, false, false);
         Assert.assertTrue(processor.getCachedTableNames().isEmpty());
 
-        processor = new CacheUpdateProcessor("hive_catalog", metastore, null, null, false, false);
+        processor = new HiveCacheUpdateProcessor("hive_catalog", metastore, null, null, false, false);
         Assert.assertTrue(processor.getCachedTableNames().isEmpty());
     }
 }

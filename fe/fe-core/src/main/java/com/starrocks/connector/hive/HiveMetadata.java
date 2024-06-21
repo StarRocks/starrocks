@@ -81,7 +81,7 @@ public class HiveMetadata implements ConnectorMetadata {
     private final HiveMetastoreOperations hmsOps;
     private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
-    private final Optional<CacheUpdateProcessor> cacheUpdateProcessor;
+    private final Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
     private Executor updateExecutor;
     private Executor refreshOthersFeExecutor;
 
@@ -90,7 +90,7 @@ public class HiveMetadata implements ConnectorMetadata {
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider,
-                        Optional<CacheUpdateProcessor> cacheUpdateProcessor,
+                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
                         Executor updateExecutor,
                         Executor refreshOthersFeExecutor) {
         this.catalogName = catalogName;

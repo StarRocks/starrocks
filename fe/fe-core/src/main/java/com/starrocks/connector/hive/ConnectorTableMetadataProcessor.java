@@ -23,6 +23,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.connector.CacheUpdateProcessor;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalog;

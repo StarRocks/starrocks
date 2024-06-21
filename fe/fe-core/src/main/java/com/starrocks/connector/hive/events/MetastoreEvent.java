@@ -15,7 +15,7 @@
 
 package com.starrocks.connector.hive.events;
 
-import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,11 +51,11 @@ public abstract class MetastoreEvent {
     protected final NotificationEvent metastoreNotificationEvent;
 
     // The cached instance of this event that needs to be updated
-    protected final CacheUpdateProcessor cache;
+    protected final HiveCacheUpdateProcessor cache;
 
     protected final String catalogName;
 
-    protected MetastoreEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+    protected MetastoreEvent(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         this.event = event;
         this.dbName = event.getDbName();
         this.tblName = event.getTableName();
