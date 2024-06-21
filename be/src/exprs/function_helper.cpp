@@ -14,6 +14,12 @@
 
 #include "function_helper.h"
 
+#ifdef __x86_64__
+#include <immintrin.h>
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
+#include "avx2ki.h"
+#endif
+
 #include <util/raw_container.h>
 
 #include "simd/multi_version.h"

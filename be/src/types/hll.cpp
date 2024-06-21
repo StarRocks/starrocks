@@ -34,6 +34,12 @@
 
 #include "types/hll.h"
 
+#ifdef __x86_64__
+#include <immintrin.h>
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
+#include "avx2ki.h"
+#endif
+
 #include <cmath>
 #include <map>
 

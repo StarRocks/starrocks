@@ -21,6 +21,8 @@
 #include "util/crc32c.h"
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
+#include "avx2ki.h"
 #endif
 #if defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_acle.h>
@@ -156,7 +158,7 @@ static inline uint32_t LE_LOAD32(const uint8_t* p) {
     return decode_fixed32_le(p);
 }
 
-#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64))
+#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64)) || defined(USE_AVX2KI)
 static inline uint64_t LE_LOAD64(const uint8_t* p) {
     return decode_fixed64_le(p);
 }
