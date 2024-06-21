@@ -613,7 +613,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         auto limited = query_mem_tracker->limit();
         auto reserved_limit = query_mem_tracker->reserve_limit();
 
-        TRACE_SPILL_LOG << "TRACE spill:" << op->get_name() << " request: " << request_reserved
+        TRACE_SPILL_LOG << "adjust memory spill:" << op->get_name() << " request: " << request_reserved
                         << " revocable: " << op->revocable_mem_bytes() << " set finishing: " << (chunk == nullptr)
                         << " need_spill:" << need_spill << " query_consumption:" << query_consumption
                         << " limit:" << limited << "query reserved limit:" << reserved_limit;
