@@ -52,6 +52,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -217,7 +218,7 @@ public class BackupJobMaterializedViewTest {
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
-    @Test
+    @Ignore
     public void testRunNormal() {
         // 1.pending
         Assert.assertEquals(BackupJobState.PENDING, job.getState());

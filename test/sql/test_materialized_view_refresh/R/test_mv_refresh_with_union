@@ -79,6 +79,7 @@ function: wait_async_materialized_view_finish("test_mv1")
 -- result:
 None
 -- !result
+refresh materialized view  test_mv1 with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
 -- result:
 2020-10-10	1
@@ -233,6 +234,7 @@ function: wait_async_materialized_view_finish("test_mv1")
 -- result:
 None
 -- !result
+refresh materialized view  test_mv1 with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
 -- result:
 2020-10-10	1
