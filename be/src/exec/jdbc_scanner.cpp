@@ -110,7 +110,7 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
 
     jmethodID constructor = env->GetMethodID(
             scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIII)V");
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIII)V");
     jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     LOCAL_REF_GUARD_ENV(env, driver_class_name);
     jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
@@ -135,9 +135,13 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
         idle_timeout_ms = MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS;
     }
 
-    auto scan_ctx =
-            env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
-                           statement_fetch_size, connection_pool_size, minimum_idle_connections, idle_timeout_ms);
+    // use query timeout or default value of HikariConfig
+    int connection_timeout_ms =
+            state->query_options().__isset.query_timeout ? state->query_options().query_timeout * 1000 : 30 * 1000;
+
+    auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
+                                   statement_fetch_size, connection_pool_size, minimum_idle_connections,
+                                   idle_timeout_ms, connection_timeout_ms);
     _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
     LOCAL_REF_GUARD_ENV(env, scan_ctx);
     CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
