@@ -63,7 +63,8 @@ IAM 策略用于声明特定 AWS 资源的一组访问权限。创建 IAM 策略
           "Effect": "Allow",
           "Action": [
               "s3:GetObject", 
-              "s3:PutObject"
+              "s3:PutObject",
+              "s3:DeleteObject"
           ],
           "Resource": [
               "arn:aws:s3:::<bucket_name>/*"
@@ -85,7 +86,7 @@ IAM 策略用于声明特定 AWS 资源的一组访问权限。创建 IAM 策略
 
 ## 对接 AWS Glue
 
-如果您需要对接 AWS Glue，请按如下配置 IAM 策略：
+如果您需要对接 AWS Glue，完成数据糊的查询与写入，请按如下配置 IAM 策略：
 
 ```SQL
 {
@@ -94,18 +95,29 @@ IAM 策略用于声明特定 AWS 资源的一组访问权限。创建 IAM 策略
       {
           "Effect": "Allow",
           "Action": [
-              "glue:GetDatabase",
-              "glue:GetDatabases",
-              "glue:GetPartition",
-              "glue:GetPartitions",
-              "glue:GetTable",
-              "glue:GetTableVersions",
-              "glue:GetTables",
-              "glue:GetConnection",
-              "glue:GetConnections",
-              "glue:GetDevEndpoint",
-              "glue:GetDevEndpoints",
-              "glue:BatchGetPartition"
+                "glue:BatchCreatePartition",
+                "glue:UpdateDatabase",
+                "glue:GetConnections",
+                "glue:CreateTable",
+                "glue:DeleteDatabase",
+                "glue:BatchUpdatePartition",
+                "glue:GetTables",
+                "glue:GetTableVersions",
+                "glue:GetPartitions",
+                "glue:UpdateTable",
+                "glue:BatchGetPartition",
+                "glue:DeleteTable",
+                "glue:GetDatabases",
+                "glue:GetDevEndpoint",
+                "glue:GetTable",
+                "glue:GetDatabase",
+                "glue:GetPartition",
+                "glue:GetDevEndpoints",
+                "glue:GetConnection",
+                "glue:CreateDatabase",
+                "glue:CreatePartition",
+                "glue:DeletePartition",
+                "glue:UpdatePartition"
           ],
           "Resource": [
               "*"
