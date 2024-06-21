@@ -1,16 +1,15 @@
-from pyspark.sql import SparkSession
-from datetime import datetime, date
+from pyhive import hive
 
 def main():
-    # SparkSession.builder.master("local[*]").getOrCreate().stop()
-    spark = SparkSession.builder.remote("sc://localhost:10001").getOrCreate()
+    conn = hive.Connection(host='localhost', port=10005, username='root')
+    with conn.cursor() as cur:
+        cur.execute("show tables from hive_sink_bench_oss")
+        rows = cur.fetchall()
+        print(rows)
 
-    df = spark.createDataFrame([
-        Row(a=1, b=2., c='string1', d=date(2000, 1, 1), e=datetime(2000, 1, 1, 12, 0)),
-        Row(a=2, b=3., c='string2', d=date(2000, 2, 1), e=datetime(2000, 1, 2, 12, 0)),
-        Row(a=4, b=5., c='string3', d=date(2000, 3, 1), e=datetime(2000, 1, 3, 12, 0))
-    ])
-    df.show()
+        cur.execute("SELECT * FROM hive_sink_bench_oss.lineitem_sf1 limit 10")
+        rows = cur.fetchall()
+        print(rows)
 
 
 if __name__ == "__main__":

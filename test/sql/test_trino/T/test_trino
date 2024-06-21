@@ -1,9 +1,0 @@
--- name: testTrino
-
-select 1, 2;
-
-trino: SELECT * FROM hive.hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;
-
-select 1, 2;
-
-hive: SELECT * FROM hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;

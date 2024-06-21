@@ -53,6 +53,7 @@ from lib import data_insert_lib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
 from lib.trino_lib import TrinoLib
+from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
@@ -114,6 +115,7 @@ RESULT_FLAG = "-- result:"
 RESULT_END_FLAT = "-- !result"
 SHELL_FLAG = "shell: "
 TRINO_FLAG = "trino: "
+SPARK_FLAG = "spark: "
 HIVE_FLAG = "hive: "
 FUNCTION_FLAG = "function: "
 NAME_FLAG = "-- name: "
@@ -134,6 +136,7 @@ class StarrocksSQLApiLib(object):
         self.root_path = root_path
         self.mysql_lib = MysqlLib()
         self.trino_lib = TrinoLib()
+        self.spark_lib = SparkLib()
         self.hive_lib = HiveLib()
         self.be_num = 0
         self.mysql_host = ""
@@ -151,6 +154,11 @@ class StarrocksSQLApiLib(object):
         self.trino_host = ""
         self.trino_port = ""
         self.trino_user = ""
+
+        # spark client config
+        self.spark_host = ""
+        self.spark_port = ""
+        self.spark_user = ""
 
         # hive client config
         self.hive_host = ""
@@ -391,6 +399,11 @@ class StarrocksSQLApiLib(object):
         self.trino_port = config_parser.get("trino-client", "port")
         self.trino_user = config_parser.get("trino-client", "user")
 
+        # parse spark config
+        self.spark_host = config_parser.get("spark-client", "host")
+        self.spark_port = config_parser.get("spark-client", "port")
+        self.spark_user = config_parser.get("spark-client", "user")
+
         # parse hive config
         self.hive_host = config_parser.get("hive-client", "host")
         self.hive_port = config_parser.get("hive-client", "port")
@@ -428,6 +441,14 @@ class StarrocksSQLApiLib(object):
         }
         self.trino_lib.connect(trino_dict)
 
+    def connect_spark(self):
+        spark_dict = {
+            "host": self.spark_host,
+            "port": self.spark_port,
+            "user": self.spark_user,
+        }
+        self.spark_lib.connect(spark_dict)
+
     def connect_hive(self):
         hive_dict = {
             "host": self.hive_host,
@@ -441,6 +462,9 @@ class StarrocksSQLApiLib(object):
 
     def close_trino(self):
         self.trino_lib.close()
+
+    def close_spark(self):
+        self.spark_lib.close()
 
     def close_hive(self):
         self.hive_lib.close()
@@ -593,10 +617,9 @@ class StarrocksSQLApiLib(object):
             print("unknown error", e)
             raise
 
-    def trino_execute_sql(self, sql):
-        """trino execute query"""
+    def conn_execute_sql(self, conn, sql):
         try:
-            cursor = self.trino_lib.connector.cursor()
+            cursor = conn.cursor()
             if sql.endswith(";"):
                 sql = sql[:-1]
             cursor.execute(sql)
@@ -611,25 +634,18 @@ class StarrocksSQLApiLib(object):
         except Exception as e:
             print("unknown error", e)
             raise
+
+    def trino_execute_sql(self, sql):
+        """trino execute query"""
+        return self.conn_execute_sql(self.trino_lib.connector, sql)
+
+    def spark_execute_sql(self, sql):
+        """spark execute query"""
+        return self.conn_execute_sql(self.spark_lib.connector, sql)
 
     def hive_execute_sql(self, sql):
         """hive execute query"""
-        try:
-            cursor = self.hive_lib.connector.cursor()
-            if sql.endswith(";"):
-                sql = sql[:-1]
-            cursor.execute(sql)
-            result = cursor.fetchall()
-
-            for i in range(len(result)):
-                row = [str(item) for item in result[i]]
-                result[i] = '\t'.join(row)
-
-            return {"status": True, "result": "\n".join(result), "msg": "OK"}
-
-        except Exception as e:
-            print("unknown error", e)
-            raise
+        return self.conn_execute_sql(self.hive_lib.connector, sql)
 
     def delete_from(self, args_dict):
         """
@@ -1369,6 +1385,32 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(res["status"])
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+
+    def assert_equal_result(self, *sqls):
+        if len(sqls) < 2:
+            return
+
+        res_list = []
+        # could be faster if making this loop parallel
+        for sql in sqls:
+            if sql.startswith(TRINO_FLAG):
+                sql = sql[len(TRINO_FLAG):]
+                res = self.trino_execute_sql(sql)
+            elif sql.startswith(SPARK_FLAG):
+                sql = sql[len(SPARK_FLAG):]
+                res = self.spark_execute_sql(sql)
+            elif sql.startswith(HIVE_FLAG):
+                sql = sql[len(HIVE_FLAG):]
+                res = self.hive_execute_sql(sql)
+            else:
+                res = self.execute_sql(sql)
+
+            tools.assert_true(res["status"])
+            res_list.append(res["result"])
+
+        # assert equal result
+        for i in range(1, len(res_list)):
+            tools.assert_equal(res_list[0], res_list[i])
 
     def check_no_hit_materialized_view(self, query, *expects):
         """

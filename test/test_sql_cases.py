@@ -85,6 +85,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         super().setUp()
         self.connect_starrocks()
         self.connect_trino()
+        self.connect_spark()
         self.connect_hive()
 
     def tearDown(self):
@@ -104,6 +105,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         self.close_starrocks()
         self.close_trino()
+        self.close_spark()
         self.close_hive()
 
         if record_mode:
@@ -167,6 +169,22 @@ Start to run: %s
 
                 actual_res = self.trino_execute_sql(sql)
                 self_print("[TRINO]: %s" % sql)
+
+                if record_mode:
+                    self.treatment_record_res(sql, actual_res)
+
+                actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+                # pretreatment actual res
+                actual_res, actual_res_log = self.pretreatment_res(actual_res)
+
+            elif sql.startswith(sr_sql_lib.SPARK_FLAG):
+                sql = sql[len(sr_sql_lib.SPARK_FLAG):]
+                # analyse var set
+                var, sql = self.analyse_var(sql)
+
+                actual_res = self.spark_execute_sql(sql)
+                self_print("[SPARK]: %s" % sql)
 
                 if record_mode:
                     self.treatment_record_res(sql, actual_res)
