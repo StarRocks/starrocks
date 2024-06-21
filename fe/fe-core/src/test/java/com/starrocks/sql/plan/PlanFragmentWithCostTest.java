@@ -136,6 +136,35 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE t1_single(\n" +
+                "    id bigint  ,\n" +
+                "    user_id  bigint  ,\n" +
+                "    recharge_money decimal(32,2) , \n" +
+                "    province varchar(255) not null ,\n" +
+                "    dt varchar\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "   PARTITION p1 VALUES IN (\"beijing\",\"chongqing\"),\n" +
+                "   PARTITION p2 VALUES IN (\"shanghai\",\"tianjing\")\n" +
+                ") PROPERTIES (\"replication_num\" = \"1\")");
+        starRocksAssert.withTable("CREATE TABLE t1_multi_col(\n" +
+                "    id bigint  ,\n" +
+                "    user_id  bigint  ,\n" +
+                "    recharge_money decimal(32,2) , \n" +
+                "    province varchar(255) not null ,\n" +
+                "    dt varchar(255) not null\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (dt,province) (\n" +
+                "   PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\"),(\"2022-04-01\", \"chongqing\")),\n" +
+                "   PARTITION p2 VALUES IN ((\"2022-04-02\", \"beijing\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
         FeConstants.runningUnitTest = true;
     }
 
@@ -2351,5 +2380,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         tQueryPlanInfo.output_names = execPlan.getColNames();
         Assert.assertEquals(4, tQueryPlanInfo.output_names.size());
         Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
+    }
+
+    @Test
+    public void testListPartitionTable() throws Exception {
+        String sql = "select * from t1_single";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "province-->[-Infinity, Infinity, 0.0, 1.0, 4.0]");
+
+        sql = "select * from t1_multi_col";
+        plan = getCostExplain(sql);
+        assertContains(plan, "province-->[-Infinity, Infinity, 0.0, 1.0, 2.0]");
+        assertContains(plan, "dt-->[-Infinity, Infinity, 0.0, 1.0, 2.0]");
     }
 }
