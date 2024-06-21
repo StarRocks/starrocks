@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.HashSet;
@@ -139,7 +140,7 @@ public class PruneGroupByKeysRule extends TransformationRule {
             return Lists.newArrayList();
         }
 
-        if (newGroupingKeys.isEmpty() && aggregations.isEmpty()) {
+        if (newGroupingKeys.isEmpty()) {
             // If agg's predicate is not null, cannot prune it.
             // eg: select 1 from t group by null having 1=0, it returns empty rather than input + limit 1.
             if (aggOperator.getPredicate() != null) {
@@ -155,6 +156,14 @@ public class PruneGroupByKeysRule extends TransformationRule {
                 return Lists.newArrayList(result);
             }
         }
+
+        // uppdate predicate
+        ScalarOperator newPredicate = aggOperator.getPredicate();
+        if (null != aggOperator.getPredicate()) {
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newPostAggProjections);
+            newPredicate = rewriter.rewrite(aggOperator.getPredicate());
+        }
+
         // update projection by aggregation
         for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : aggregations.entrySet()) {
             CallOperator aggExpr = aggregation.getValue();
@@ -177,7 +186,8 @@ public class PruneGroupByKeysRule extends TransformationRule {
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator.Builder().withOperator(aggOperator)
                 .setType(AggType.GLOBAL)
                 .setGroupingKeys(newGroupingKeys)
-                .setPartitionByColumns(newPartitionColumns).build();
+                .setPartitionByColumns(newPartitionColumns)
+                .setPredicate(newPredicate).build();
 
         LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjections);
 
