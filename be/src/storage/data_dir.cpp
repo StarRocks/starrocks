@@ -43,6 +43,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+#include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "storage/olap_define.h"
