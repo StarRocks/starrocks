@@ -108,6 +108,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         int cteId = context.getCteContext().getNextCteId();
 
         // cte produce and push down aggregate
+        context.getCteContext().addForceCTE(cteId);
         OptExpression cteProduce = buildCTEProduce(context, input, cteId);
 
         // new grouping sets consume
