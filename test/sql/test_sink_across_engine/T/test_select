@@ -1,11 +1,11 @@
--- name: testTrino
+-- name: test_select
 
 SELECT * FROM hive.hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;
 
 trino: SELECT * FROM hive.hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;
 
--- hive: SELECT * FROM hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;
+hive: SELECT * FROM hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;
 
 spark: SELECT * FROM hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;
 
--- function: assert_equal_for_sr_trino_hive("SELECT * FROM hive.hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;", "SELECT * FROM hive.hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;", "SELECT * FROM hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;")
+function: assert_equal_result("SELECT * FROM hive.hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;", "trino: SELECT * FROM hive.hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;", "spark: SELECT * FROM hive_sink_bench_oss.lineitem_sf1 order by 1, 2, 3 limit 10;")
