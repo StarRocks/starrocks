@@ -915,10 +915,10 @@ select array_contains_seq(ai_0,null) from array_test_01 order by pk;
 
 CREATE TABLE test_array_sortby_muliti (
     id INT(11) not null,
-    array_col1 ARRAY<int(11)> ,
-    array_col2 ARRAY<int(11)> ,
-    array_col3 ARRAY<int(11)> ,
-    array_col4 ARRAY<int(11)> 
+    array_col1 ARRAY<INT>,
+    array_col2 ARRAY<DOUBLE>,
+    array_col3 ARRAY<VARCHAR(20)>,
+    array_col4 ARRAY<DATE>
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 COMMENT "OLAP"
@@ -930,16 +930,17 @@ PROPERTIES (
     "compression" = "LZ4"
 );
 INSERT INTO test_array_sortby_muliti VALUES
-(1, [4, 3, 5], [82, 4, 4], [1, 3, 2], [7, 8, 9]),
-(2, [4, 3, 5], [82, 4, 4], [1, 2, 3], [6, 5, 4]),
-(3, [4, 3, 5, 6], [82, 4, 4, 4], [1, 2, 3, 3], [3, 2, 1]),
-(4, [4, 3, 5, 6], [82, 4, 4, 4], [1, 3, 2, 3], [9, 8, 7]),
-(5, [1, 2, 3], [3, 2, 2], NULL, [5, 5, 5]),
-(6, NULL, [1, 2, 3], [4, 5, 6], [1, 1, 1]),
-(7, [7, 8, 9], NULL, [7, 8, 9], [2, 2, 2]),
-(8, [3, 2, 1], [5, 6, 7], [2, 3, 1], [4, 4, 4]);
-select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 1;
-select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 2;
-select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 5;
-select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 7;
-select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 8;
+(1, [4, 3, 5], [1.1, 2.2, 2.2], ['a', 'b', 'c'], ['2023-01-01', '2023-01-02', '2023-01-03']),
+(2, [6, 7, 8], [6.6, 5.5, 6.6], ['d', 'e', 'd'], ['2023-01-04', '2023-01-05', '2023-01-06']),
+(3, NULL, [7.7, 8.8, 8.8], ['g', 'h', 'h'], ['2023-01-07', '2023-01-08', '2023-01-09']),
+(4, [9, 10, 11], NULL, ['k', 'k', 'j'], ['2023-01-10', '2023-01-12', '2023-01-11']),
+(5, [12, 13, 14], [10.10, 11.11, 11.11], NULL, ['2023-01-13', '2023-01-14', '2023-01-15']),
+(6, [15, 16, 17], [14.14, 13.13, 14.14], ['m', 'o', 'o'], NULL),
+(7, [18, 19, 20], [16.16, 16.16, 18.18], ['p', 'p', 'r'], ['2023-01-16', NULL, '2023-01-18']),
+(8, [21, 22, 23], [19.19, 20.20, 19.19], ['a', 't', 'a'], ['2023-01-19', '2023-01-20', '2023-01-21']),
+(9, [24, 25, 26], NULL, ['y', 'y', 'z'], ['2023-01-25', '2023-01-24', '2023-01-26']),
+(10, [24, 25, 26], NULL, ['y', 'y', 'z'], ['2023-01-25', NULL, '2023-01-26']);
+select id, array_col1, array_col2, array_sortby_multi(array_col1, array_col2) from test_array_sortby_muliti order by id asc;
+select id, array_col1, array_col2, array_col3, array_sortby_multi(array_col1, array_col2, array_col3) from test_array_sortby_muliti order by id asc;
+select id, array_col1, array_col2, array_col3, array_col4, array_sortby_multi(array_col1, array_col2, array_col3, array_col4) from test_array_sortby_muliti order by id asc;
+drop table test_array_sortby_muliti;
