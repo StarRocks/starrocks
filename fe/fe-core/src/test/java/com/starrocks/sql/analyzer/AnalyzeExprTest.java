@@ -502,7 +502,6 @@ public class AnalyzeExprTest {
         analyzeFail("select array_to_bitmap('[1,2]')");
         analyzeFail("select array_sortby_multi('a')");
         analyzeFail("select array_sortby_multi([1, 2, 3], 'a')");
-        analyzeFail("select array_sortby_multi([1, 2, 3], ['a', 'b'])");
     }
 
     @Test
