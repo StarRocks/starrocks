@@ -4666,7 +4666,6 @@ None
 None
 None
 -- !result
--- !result
 CREATE TABLE test_array_sortby_muliti (
     id INT(11) not null,
     array_col1 ARRAY<INT>,
