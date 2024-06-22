@@ -62,9 +62,6 @@ public class DecommissionTest {
             tableNames[i] = "test_" + i;
             PseudoCluster.CreateTableSqlBuilder sqlBuilder = PseudoCluster.newCreateTableSqlBuilder().setTableName(tableNames[i])
                     .setBuckets(1);
-            if (i % 2 == 0) {
-                sqlBuilder.setColocateGroup("g1");
-            }
             createTableSqls[i] = sqlBuilder.build();
             insertSqls[i] = PseudoCluster.buildInsertSql("test", tableNames[i]);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
