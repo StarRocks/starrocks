@@ -1,72 +1,68 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: "Chinese"
 ---
 
 # array_sortby
 
 
 
-Sorts elements in an array according to the ascending order of elements in another array or array converted from a lambda expression. For more information, see [Lambda expression](../Lambda_expression.md). This function is supported from v2.5.
+对数组中的元素根据另外一个键值数组元素或者 Lambda 函数生成的键值数组元素进行升序排列。有关 Lambda 表达式的详细信息，参见 [Lambda expression](../Lambda_expression.md)。该函数从 2.5 版本开始支持。
 
-Elements in the two arrays are like key-value pairs. For example, b = [7,5,6] is the sorting key of a = [3,1,4]. According to the key-value pair relationship, elements in the two arrays have the following one-to-one mapping.
+举例，有两个数组 a = [3,1,4]，b = [7,5,6]。将 `b` 作为排序键，对 `a` 里的元素进行排序。
 
-| **Array** | **Element 1** | **Element 2** | **Element 3** |
-| --------- | ------------- | ------------- | ------------- |
-| a         | 3             | 1             | 4             |
-| b         | 7             | 5             | 6             |
+根据键值对关系，`b` 的元素 [7,5,6] 一一对应 `a` 的 元素[3,1,4]。
 
-After array `b` is sorted in ascending order, it becomes [5,6,7]. Array `a` becomes [1,4,3] accordingly.
+转换前：
 
-| **Array** | **Element 1** | **Element 2** | **Element 3** |
-| --------- | ------------- | ------------- | ------------- |
-| a         | 1             | 4             | 3             |
-| b         | 5             | 6             | 7             |
+| 数组  | 第一个元素  | 第二个元素 | 第三个元素 |
+| ---- | ---------- | ---------- | ---------- |
+| a    | 3          | 1          | 4          |
+| b    | 7          | 5          | 6          |
 
-## Syntax
+转换后，b 按照升序排列为 [5,6,7]，对应 a 的元素位置也进行相应调整，变为 [1,4,3]。
+
+| 数组 | 第一个元素 | 第二个元素 | 第三个元素 |
+| ---- | ---------- | ---------- | ---------- |
+| a    | 1          | 4          | 3          |
+| b    | 5          | 6          | 7          |
+
+## 语法
 
 ```Haskell
 array_sortby(array0, array1)
 array_sortby(<lambda function>, array0 [, array1...])
-array_sortby(array0, array1, array2 [, array3...])
 ```
 
 - `array_sortby(array0, array1)`
 
-   Sorts `array0` according to the ascending order of `array1`.
+  根据 `array1` 的键值数组元素对 `array0` 进行升序排序。
 
-- `array_sortby(<lambda function>, array0 [, array1...])`
+- `array_sortby(<lambda_function>, array0 [, array1...])`
 
-   Sorts `array0` according to the array returned from the lambda function.
+  根据 `lambda_function` 生成的键值数组元素，对 `array0` 进行升序排序。
 
-- `array_sortby(array0, array1, array2 [, array3...])`
+## 参数说明
 
-  For each row in the table, sort array0 based on the values in multiple array columns (array1, array2, array3, etc.). The sorting rule is: first compare the corresponding elements in array1, if they are the same, then compare the corresponding elements in array2, and so on, until the last array column.
-   
-   
+- `array0`：需要排序的数组，支持的数据类型为 ARRAY，或者 `null`。数组中的元素必须为可排序的元素。
+- `array1`：用于排序的键值数组，支持的数据类型为 ARRAY，或者 `null`。
+- `lambda_function`：lambda 函数，用于生成排序键值数组。
 
-## Parameters
+## 返回值说明
 
-- `array0`: the array you want to sort. It must be an array, array expression, or `null`. Elements in the array must be sortable.
-- `array1`: the sorting array used to sort `array0`. It must be an array, array expression, or `null`.
-- `lambda function`: the lambda expression used to generate the sorting array.
-- array1, array2 [, array3...]: the sorting array used to sort `array0`. It must be an array, array expression, or `null`.
+返回的数据类型为 ARRAY。
 
-## Return value
+## 注意事项
 
-Returns an array.
+- 只支持升序排序。
+- 如果需要降序排列，可以对排序后的结果，调用 [reverse()](../string-functions/reverse.md) 函数。
+- `null` 值会排在最前面。
+- 返回数组中的元素类型和输入数组中的元素类型一致，`null` 属性一致。
+- 如果用于排序的键值数组或表达式为 `null`，数据保持不变。
+- 排序涉及的两个数组的元素个数必须一致，否则返回报错。
 
-## Usage notes
+## 示例
 
-- This function can sort elements of an array only in ascending order.
-- `NULL` values are placed at the beginning of the array that is returned.
-- If you want to sort elements of an array in descending order, use the [reverse](../string-functions/reverse.md) function.
-- If the sorting array (`array1`) is null, data in `array0` remains unchanged.
-- The elements of the returned array have the same data type as the elements of `array0`. The attribute of null values are also the same.
-- The two arrays must have the same number of elements. Otherwise, an error is returned.
-
-## Examples
-
-The following table is used to demonstrate how to use this function.
+下面的示例使用如下数据表。
 
 ```SQL
 CREATE TABLE `test_array` (
@@ -112,7 +108,7 @@ select * from test_array order by c1;
 9 rows in set (0.00 sec)
 ```
 
-Example 1: Sort `c3` according to `c2`. This example also provides the result of array_sort() for comparison.
+示例一：将数组 `c3` 按照 `c2` 的值进行升序排序。
 
 ```Plaintext
 select c1, c3, c2, array_sort(c2), array_sortby(c3,c2)
@@ -132,10 +128,10 @@ from test_array order by c1;
 +------+------------+-------------+----------------+----------------------+
 ```
 
-Example 2: Sort array `c3` based on `c2` generated from a lambda expression. This example is equivalent to Example 1. It also provides the result of array_sort() for comparison.
+示例二：将数组 `c3` 按照 Lambda 表达式生成的键值数组进行升序排序。该函数与上个示例功能对等。
 
 ```Plaintext
-select
+select 
     c1,
     c3,
     c2,
@@ -145,7 +141,7 @@ from test_array order by c1;
 +------+------------+-------------+---------------+-----------------+
 | c1   | c3         | c2          | sorted_c2_asc | sorted_c3_by_c2 |
 +------+------------+-------------+---------------+-----------------+
-|    1 | [82,1,4]   | [4,3,5]     | [3,4,5]       | [82,1,4]        |
+|    1 | [82,1,4]   | [4,3,5]     | [3,4,5]       | [1,82,4]        |
 |    2 | [23]       | NULL        | NULL          | [23]            |
 |    3 | [6,5]      | [4,2]       | [2,4]         | [5,6]           |
 |    4 | NULL       | NULL        | NULL          | NULL            |
@@ -157,15 +153,15 @@ from test_array order by c1;
 +------+------------+-------------+---------------+-----------------+
 ```
 
-Example 3: Sort array `c3` based on the ascending order of `c2+c3`.
+示例三：将数组 `c3` 按照按照 c2+c3 的和的升序排序。
 
-```Plain
+```SQL
 select
     c3,
     c2,
     array_map((x,y)-> x+y,c3,c2) as sum,
-    array_sort(array_map((x,y)-> x+y, c3, c2)) as sorted_sum,
-    array_sortby((x,y) -> x+y, c3, c2) as sorted_c3_by_sum
+    array_sort(array_map((x,y)-> x+y,c3,c2)) as sorted_sum,
+    array_sortby((x,y) -> x+y , c3,c2) as sorted_c3_by_sum
 from test_array where c1=1;
 +----------+---------+----------+------------+------------------+
 | c3       | c2      | sum      | sorted_sum | sorted_c3_by_sum |
@@ -174,62 +170,6 @@ from test_array where c1=1;
 +----------+---------+----------+------------+------------------+
 ```
 
-```SQL
-CREATE TABLE test_array_sortby_muliti (
-    id INT(11) not null,
-    array_col1 ARRAY<int(11)> ,
-    array_col2 ARRAY<int(11)> ,
-    array_col3 ARRAY<int(11)> ,
-    array_col4 ARRAY<int(11)> 
-) ENGINE=OLAP
-DUPLICATE KEY(id)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(id)
-PROPERTIES (
-    "replication_num" = "1",
-    "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
-    "compression" = "LZ4"
-);
+## 相关文档
 
-INSERT INTO test_array_sortby_muliti VALUES
-(1, [4, 3, 5], [82, 4, 4], [1, 3, 2], [7, 8, 9]),
-(2, [4, 3, 5], [82, 4, 4], [1, 2, 3], [6, 5, 4]),
-(3, [4, 3, 5, 6], [82, 4, 4, 4], [1, 2, 3, 3], [3, 2, 1]),
-(4, [4, 3, 5, 6], [82, 4, 4, 4], [1, 3, 2, 3], [9, 8, 7]),
-(5, [1, 2, 3], [3, 2, 2], NULL, [5, 5, 5]),
-(6, NULL, [1, 2, 3], [4, 5, 6], [1, 1, 1]),
-(7, [7, 8, 9], NULL, [7, 8, 9], [2, 2, 2]),
-(8, [3, 2, 1], [5, 6, 7], [2, 3, 1], [4, 4, 4]);
-
-select * from test_array_sortby_muliti;
-+------+------------+------------+------------+------------+
-| id   | array_col1 | array_col2 | array_col3 | array_col4 |
-+------+------------+------------+------------+------------+
-|    3 | [4,3,5,6]  | [82,4,4,4] | [1,2,3,3]  | [3,2,1]    |
-|    5 | [1,2,3]    | [3,2,2]    | NULL       | [5,5,5]    |
-|    6 | NULL       | [1,2,3]    | [4,5,6]    | [1,1,1]    |
-|    1 | [4,3,5]    | [82,4,4]   | [1,3,2]    | [7,8,9]    |
-|    2 | [4,3,5]    | [82,4,4]   | [1,2,3]    | [6,5,4]    |
-|    4 | [4,3,5,6]  | [82,4,4,4] | [1,3,2,3]  | [9,8,7]    |
-|    7 | [7,8,9]    | NULL       | [7,8,9]    | [2,2,2]    |
-|    8 | [3,2,1]    | [5,6,7]    | [2,3,1]    | [4,4,4]    |
-+------+------------+------------+------------+------------+
-8 rows in set (0.07 sec)
-```
-
-Example 1: Sort `array_col1` according to `array_col2`，`array_col3`，`array_col4`
-
-```Plaintext
-select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 1;
-+------+------------+--------------------------------------------------------------+
-| id   | array_col1 | array_sortby(array_col1, array_col2, array_col3, array_col4) |
-+------+------------+--------------------------------------------------------------+
-|    1 | [4,3,5]    | [5,3,4]                                                      |
-+------+------------+--------------------------------------------------------------+
-1 row in set (0.04 sec)
-```
-
-## References
-
-[array_sort](array_sort.md)
+[array_sort](./array_sort.md)

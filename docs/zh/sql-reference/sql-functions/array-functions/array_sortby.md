@@ -31,7 +31,6 @@ displayed_sidebar: "Chinese"
 ```Haskell
 array_sortby(array0, array1)
 array_sortby(<lambda function>, array0 [, array1...])
-array_sortby(array0, array1, array2 [, array3...])
 ```
 
 - `array_sortby(array0, array1)`
@@ -47,8 +46,6 @@ array_sortby(array0, array1, array2 [, array3...])
 - `array0`：需要排序的数组，支持的数据类型为 ARRAY，或者 `null`。数组中的元素必须为可排序的元素。
 - `array1`：用于排序的键值数组，支持的数据类型为 ARRAY，或者 `null`。
 - `lambda_function`：lambda 函数，用于生成排序键值数组。
-- `array_sortby(array0, array1, array2 [, array3...])`：对表中的每一行，按照多个数组列（array1、array2、array3 等）的值对 array0 进行排序。排序规则是：首先比较 array1 的对应元素，如果相同则比较 array2 的对应元素，依此类推，直到最后一个数组列
-
 
 ## 返回值说明
 
@@ -172,63 +169,6 @@ from test_array where c1=1;
 | [82,1,4] | [4,3,5] | [86,4,9] | [4,9,86]   | [1,4,82]         |
 +----------+---------+----------+------------+------------------+
 ```
-
-```SQL
-CREATE TABLE test_array_sortby_muliti (
-    id INT(11) not null,
-    array_col1 ARRAY<int(11)> ,
-    array_col2 ARRAY<int(11)> ,
-    array_col3 ARRAY<int(11)> ,
-    array_col4 ARRAY<int(11)> 
-) ENGINE=OLAP
-DUPLICATE KEY(id)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(id)
-PROPERTIES (
-    "replication_num" = "1",
-    "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
-    "compression" = "LZ4"
-);
-
-INSERT INTO test_array_sortby_muliti VALUES
-(1, [4, 3, 5], [82, 4, 4], [1, 3, 2], [7, 8, 9]),
-(2, [4, 3, 5], [82, 4, 4], [1, 2, 3], [6, 5, 4]),
-(3, [4, 3, 5, 6], [82, 4, 4, 4], [1, 2, 3, 3], [3, 2, 1]),
-(4, [4, 3, 5, 6], [82, 4, 4, 4], [1, 3, 2, 3], [9, 8, 7]),
-(5, [1, 2, 3], [3, 2, 2], NULL, [5, 5, 5]),
-(6, NULL, [1, 2, 3], [4, 5, 6], [1, 1, 1]),
-(7, [7, 8, 9], NULL, [7, 8, 9], [2, 2, 2]),
-(8, [3, 2, 1], [5, 6, 7], [2, 3, 1], [4, 4, 4]);
-
-select * from test_array_sortby_muliti;
-+------+------------+------------+------------+------------+
-| id   | array_col1 | array_col2 | array_col3 | array_col4 |
-+------+------------+------------+------------+------------+
-|    3 | [4,3,5,6]  | [82,4,4,4] | [1,2,3,3]  | [3,2,1]    |
-|    5 | [1,2,3]    | [3,2,2]    | NULL       | [5,5,5]    |
-|    6 | NULL       | [1,2,3]    | [4,5,6]    | [1,1,1]    |
-|    1 | [4,3,5]    | [82,4,4]   | [1,3,2]    | [7,8,9]    |
-|    2 | [4,3,5]    | [82,4,4]   | [1,2,3]    | [6,5,4]    |
-|    4 | [4,3,5,6]  | [82,4,4,4] | [1,3,2,3]  | [9,8,7]    |
-|    7 | [7,8,9]    | NULL       | [7,8,9]    | [2,2,2]    |
-|    8 | [3,2,1]    | [5,6,7]    | [2,3,1]    | [4,4,4]    |
-+------+------------+------------+------------+------------+
-8 rows in set (0.07 sec)
-```
-
-示例一：将数组 `array_col1` 按照 `array_col2`，`array_col3`，`array_col4` 的值进行升序排序。
-
-```Plaintext
-select id, array_col1, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sort where id = 1;
-+------+------------+--------------------------------------------------------------+
-| id   | array_col1 | array_sortby(array_col1, array_col2, array_col3, array_col4) |
-+------+------------+--------------------------------------------------------------+
-|    1 | [4,3,5]    | [5,3,4]                                                      |
-+------+------------+--------------------------------------------------------------+
-1 row in set (0.04 sec)
-```
-
 
 ## 相关文档
 
