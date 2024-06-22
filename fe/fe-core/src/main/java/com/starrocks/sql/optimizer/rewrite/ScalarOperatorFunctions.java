@@ -148,8 +148,8 @@ public class ScalarOperatorFunctions {
 
     // NOTE: Have to be consistent with BE implementation in `time_functions.cpp`
     public static class TimeFunctions {
-        final static int NUMBER_OF_LEAP_YEAR = 366;
-        final static int NUMBER_OF_NON_LEAP_YEAR = 365;
+        static final int NUMBER_OF_LEAP_YEAR = 366;
+        static final int NUMBER_OF_NON_LEAP_YEAR = 365;
 
         static long computeDayNR(long year, long month, long day) {
             long y = year;
@@ -492,23 +492,23 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "week", argTypes = {DATETIME}, returnType = SMALLINT),
-            @ConstantFunction(name = "week", argTypes = {DATE}, returnType = SMALLINT)
+            @ConstantFunction(name = "week", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "week", argTypes = {DATE}, returnType = INT)
     })
     public static ConstantOperator week(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
         long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
-        return ConstantOperator.createSmallInt((short) result);
+        return ConstantOperator.createInt((int) result);
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "week", argTypes = {DATETIME, SMALLINT}, returnType = SMALLINT),
-            @ConstantFunction(name = "week", argTypes = {DATE, SMALLINT}, returnType = SMALLINT)
+            @ConstantFunction(name = "week", argTypes = {DATETIME, INT}, returnType = INT),
+            @ConstantFunction(name = "week", argTypes = {DATE, INT}, returnType = INT)
     })
     public static ConstantOperator weekWithMode(ConstantOperator arg, ConstantOperator mode) {
         LocalDateTime dt = arg.getDatetime();
-        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getSmallint());
-        return ConstantOperator.createSmallInt((short) result);
+        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getInt());
+        return ConstantOperator.createInt((int) result);
     }
 
     @ConstantFunction.List(list = {
