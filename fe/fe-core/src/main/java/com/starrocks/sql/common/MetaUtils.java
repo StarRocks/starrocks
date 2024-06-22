@@ -25,12 +25,16 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.leader.LeaderImpl;
+import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
@@ -41,10 +45,13 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TGetTableMetaRequest;
+import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -280,5 +287,23 @@ public class MetaUtils {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
+    }
+
+    public static ExternalOlapTable syncOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable)
+            throws DdlException, IOException {
+        if (!FeConstants.runningUnitTest) {
+            return syncOLAPExternalTableMeta(externalOlapTable);
+        }
+        TGetTableMetaRequest request = new TGetTableMetaRequest();
+        request.setDb_name(database.getFullName());
+        request.setTable_name(externalOlapTable.getSourceTableName());
+        LeaderImpl leader = new LeaderImpl();
+        TGetTableMetaResponse response = leader.getTableMeta(request);
+        Table table = GlobalStateMgr.getCurrentState().getDb(database.getFullName()).getTable(externalOlapTable.getName());
+        ExternalOlapTable extTable = (ExternalOlapTable) table;
+        // remove the thread local meta context
+        MetaContext.remove();
+        extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
+        return extTable;
     }
 }
