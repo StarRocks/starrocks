@@ -40,6 +40,8 @@ public class Scope {
     private List<PlaceHolderExpr> lambdaInputs = Lists.newArrayList();
 
     private boolean isLambdaScope = false;
+    private List<String> userVariableDependencyWithoutFind = Lists.newArrayList();
+
 
     public Scope(RelationId relationId, RelationFields relation) {
         this.relationId = relationId;
@@ -152,5 +154,13 @@ public class Scope {
 
     public void setParent(Scope parent) {
         this.parent = parent;
+    }
+
+    public void putUserVariableDependencyWithoutFind(String variable) {
+        userVariableDependencyWithoutFind.add(variable);
+    }
+
+    public List<String> getUserVariableDependencyWithoutFind() {
+        return userVariableDependencyWithoutFind;
     }
 }

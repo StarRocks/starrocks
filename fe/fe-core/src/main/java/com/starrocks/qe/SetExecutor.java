@@ -38,6 +38,7 @@ import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
@@ -61,6 +62,11 @@ public class SetExecutor {
             UserVariable userVariable = (UserVariable) var;
             if (userVariable.getEvaluatedExpression() == null) {
                 userVariable.deriveUserVariableExpressionResult(ctx);
+            }
+
+            //reanalyze UserVariable
+            if (userVariable.getUserVariableDependencyWithoutFind().size() > 0) {
+                SetStmtAnalyzer.analyzeUserVariable(userVariable);
             }
 
             ctx.modifyUserVariable(userVariable);

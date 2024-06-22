@@ -73,7 +73,11 @@ public class SetStmtAnalyzer {
             if (var instanceof SystemVariable) {
                 analyzeSystemVariable((SystemVariable) var);
             } else if (var instanceof UserVariable) {
-                analyzeUserVariable((UserVariable) var);
+                UserVariable userVar = (UserVariable) var;
+                analyzeUserVariable(userVar);
+                List<String> varDependency = ExpressionAnalyzer.
+                        analyzeUserVariableExprDependency((userVar).getUnevaluatedExpression(), ConnectContext.get());
+                userVar.setUserVariableDependencyWithoutFind(varDependency);
             } else if (var instanceof SetUserPropertyVar) {
                 analyzeSetUserPropertyVar((SetUserPropertyVar) var);
             } else if (var instanceof SetNamesVar) {

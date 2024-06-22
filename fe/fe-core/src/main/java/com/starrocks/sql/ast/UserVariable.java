@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -44,6 +45,8 @@ public class UserVariable extends SetListItem {
     private final String variable;
     private Expr unevaluatedExpression;
     private Expr evaluatedExpression;
+    private List<String> userVariableDependencyWithoutFind = Lists.newArrayList();
+
 
     private final boolean isFromHint;
     public UserVariable(String variable, Expr unevaluatedExpression, NodePosition pos) {
@@ -80,6 +83,14 @@ public class UserVariable extends SetListItem {
 
     public void setEvaluatedExpression(Expr evaluatedExpression) {
         this.evaluatedExpression = evaluatedExpression;
+    }
+
+    public List<String> getUserVariableDependencyWithoutFind() {
+        return this.userVariableDependencyWithoutFind;
+    }
+
+    public void setUserVariableDependencyWithoutFind(List<String> userVariableDependencyWithoutFind) {
+        this.userVariableDependencyWithoutFind = userVariableDependencyWithoutFind;
     }
 
     public boolean isFromHint() {
