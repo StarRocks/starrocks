@@ -34,7 +34,7 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
         values.emplace_back(i * 2);
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
-    auto memtable = std::make_unique<PersistentIndexMemtable>();
+    auto memtable = std::make_unique<PersistentIndexMemtable>(0);
     ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
     // insert duplicate should return error
     ASSERT_FALSE(memtable->insert(N, key_slices.data(), values.data(), -1).ok());
@@ -130,7 +130,7 @@ TEST(PersistentIndexMemtableTest, test_replace) {
         replace_idxes.emplace_back(i);
     }
 
-    auto memtable = std::make_unique<PersistentIndexMemtable>();
+    auto memtable = std::make_unique<PersistentIndexMemtable>(0);
     ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
 
     //replace

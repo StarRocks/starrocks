@@ -116,6 +116,10 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
 
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
+    // collect del files
+    for (const auto& del_file : op_write.dels()) {
+        rowset->add_del_files(del_file);
+    }
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     // collect trash files
@@ -123,11 +127,6 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         DCHECK(is_segment(orphan_file));
         FileMetaPB file_meta;
         file_meta.set_name(orphan_file);
-        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
-    }
-    for (const auto& del_file : op_write.dels()) {
-        FileMetaPB file_meta;
-        file_meta.set_name(del_file);
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }

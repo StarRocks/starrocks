@@ -25,6 +25,7 @@ using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class PersistentIndexMemtable {
 public:
+    PersistentIndexMemtable(uint64_t max_rss_rowid) : _max_rss_rowid(max_rss_rowid) {}
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   KeyIndexSet* not_founds, size_t* num_found, int64_t version);
@@ -33,8 +34,9 @@ public:
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
     // |version|: version of index values
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
     Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds, size_t* num_found,
-                 int64_t version);
+                 int64_t version, uint32_t rowset_id);
 
     // |version|: version of index values
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes,
@@ -58,7 +60,7 @@ public:
 
     void clear();
 
-    const int64_t max_rss_rowid() const { return _max_rss_rowid; }
+    const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
 
 private:
     static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,

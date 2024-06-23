@@ -71,7 +71,7 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
 }
 
 Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
-                                      size_t* num_found, int64_t version) {
+                                      size_t* num_found, int64_t version, uint32_t rowset_id) {
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
@@ -89,6 +89,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
             update_index_value(&old_index_value_vers, version, IndexValue(NullIndexValue));
         }
     }
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32);
     *num_found = nfound;
     return Status::OK();
 }

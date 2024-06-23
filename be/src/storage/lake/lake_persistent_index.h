@@ -15,6 +15,7 @@
 #pragma once
 
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 
 namespace starrocks {
@@ -88,6 +89,9 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t rowset_id);
+
     Status erase(size_t n, const Slice* keys, IndexValue* old_values) override;
 
     // batch replace
@@ -113,6 +117,13 @@ public:
     // |values|: value array
     // |version|: version of values
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
+
+    // batch insert delete operations, used when rebuild index.
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |version|: version of values
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    Status insert_erase(size_t n, const Slice* keys, int64_t version, uint32_t rowset_id);
 
     Status minor_compact();
 
@@ -152,6 +163,9 @@ private:
     // |version|: version of values
     Status get_from_sstables(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* key_indexes,
                              int64_t version) const;
+
+    // rebuild delete operation from rowset.
+    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 

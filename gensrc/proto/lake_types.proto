@@ -81,6 +81,8 @@ message RowsetMetadataPB {
     optional uint32 max_compact_input_rowset_id = 9;
     // The generated version of rowset.
     optional int64 version = 10;
+    // del_files are generated when pk table handle delete operation.
+    repeated string del_files = 11;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,

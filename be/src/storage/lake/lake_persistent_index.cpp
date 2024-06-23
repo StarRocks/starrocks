@@ -15,6 +15,7 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include "fs/fs_util.h"
+#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
@@ -84,7 +85,7 @@ void KeyValueMerger::flush() {
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
         : PersistentIndex(""),
-          _memtable(std::make_unique<PersistentIndexMemtable>()),
+          _memtable(std::make_unique<PersistentIndexMemtable>(0)),
           _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_id) {}
 
@@ -119,7 +120,13 @@ void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyInde
 
 bool LakePersistentIndex::is_memtable_full() const {
     const auto memtable_mem_size = _memtable->memory_usage();
-    return memtable_mem_size >= config::l0_max_mem_usage / 2;
+    // We have two memtable in index, so memtable memory limit means half of `l0_max_mem_usage`.
+    const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage / 2;
+    // When update memory is urgent, using a lower limit (`l0_min_mem_usage`).
+    const bool mem_tracker_exceed =
+            _tablet_mgr->update_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
+            memtable_mem_size >= config::l0_min_mem_usage;
+    return mem_size_exceed || mem_tracker_exceed;
 }
 
 Status LakePersistentIndex::minor_compact() {
@@ -151,7 +158,7 @@ Status LakePersistentIndex::flush_memtable() {
     if (_immutable_memtable != nullptr) {
         RETURN_IF_ERROR(minor_compact());
     }
-    _immutable_memtable = std::make_unique<PersistentIndexMemtable>();
+    _immutable_memtable = std::make_unique<PersistentIndexMemtable>(_memtable->max_rss_rowid());
     _memtable.swap(_immutable_memtable);
     return Status::OK();
 }
@@ -220,10 +227,28 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
     return Status::OK();
 }
 
+// Used to rebuild delete operation.
+Status LakePersistentIndex::insert_erase(size_t n, const Slice* keys, int64_t version, uint32_t rowset_id) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_delete_us");
+    KeyIndexSet not_founds;                                            // Unused
+    size_t num_found;                                                  // Unused
+    std::vector<IndexValue> old_values(n, IndexValue(NullIndexValue)); // Unused
+    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values.data(), &not_founds, &num_found, version, rowset_id));
+    if (is_memtable_full()) {
+        RETURN_IF_ERROR(flush_memtable());
+    }
+    return Status::OK();
+}
+
+// Use erase with `rowset_id` instead of this one.
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
+    return Status::NotSupported("LakePersistentIndex::erase not supported");
+}
+
+Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t rowset_id) {
     KeyIndexSet not_founds;
     size_t num_found;
-    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number()));
+    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), rowset_id));
     KeyIndexSet& key_indexes = not_founds;
     KeyIndexSet found_key_indexes;
     RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
@@ -446,13 +471,51 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
     for (auto& sstable : _sstables) {
         int64_t max_rss_rowid = sstable->sstable_pb().max_rss_rowid();
         if (last_max_rss_rowid > max_rss_rowid) {
-            return Status::InternalError("sstables are not ordered");
+            return Status::InternalError(
+                    fmt::format("sstables are not ordered, {} : {}", last_max_rss_rowid, max_rss_rowid));
         }
         last_max_rss_rowid = max_rss_rowid;
         auto* sstable_pb = sstable_meta.add_sstables();
         sstable_pb->CopyFrom(sstable->sstable_pb());
     }
     builder->finalize_sstable_meta(sstable_meta);
+    return Status::OK();
+}
+
+// rebuild index from del files.
+Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
+    TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+    // Build pk column struct from schema
+    std::unique_ptr<Column> pk_column;
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    // Iterate all del files and insert into index.
+    for (const auto& del : rowset->metadata().del_files()) {
+        ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(_tablet_mgr->del_location(_tablet_id, del)));
+        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+        std::vector<uint8_t> read_buffer(file_size);
+        // read from del file
+        RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+        // serialize to column
+        auto pkc = pk_column->clone();
+        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), pkc.get()) == nullptr) {
+            return Status::InternalError("column deserialization failed");
+        }
+        // insert delete operations to index.
+        if (pkc->is_binary()) {
+            RETURN_IF_ERROR(insert_erase(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), rowset_version,
+                                         rowset->id()));
+        } else {
+            std::vector<Slice> keys;
+            keys.reserve(pkc->size());
+            const auto* fkeys = pkc->continuous_data();
+            for (size_t i = 0; i < pkc->size(); ++i) {
+                keys.emplace_back(fkeys, _key_size);
+                fkeys += _key_size;
+            }
+            RETURN_IF_ERROR(insert_erase(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), rowset_version,
+                                         rowset->id()));
+        }
+    }
     return Status::OK();
 }
 
@@ -490,8 +553,12 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
-        if (rowset->id() + rowset->num_segments() <= rebuild_rss_id) {
-            // All segments under this rowset are not need to rebuild
+        if (rowset->num_segments() > 0 && (rowset->id() + rowset->num_segments() <= rebuild_rss_id)) {
+            // All segments and del files under this rowset are not need to rebuild
+            continue;
+        }
+        if (rowset->num_segments() == 0 && (rowset->id() < rebuild_rss_id)) {
+            // Rowset with empty segments may has del files, and need to rebuild them.
             continue;
         }
         const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
@@ -506,6 +573,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             if (itr == nullptr) {
                 continue;
             }
+            DeferOp close_iter([&] { itr->close(); });
             if (rowset->id() + i < rebuild_rss_id) {
                 // lower than rebuild point, skip
                 // Notice: segment id that equal `rebuild_rss_id` can't be skip because
@@ -543,7 +611,6 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                         continue;
                     }
                     TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    Status st;
                     if (pkc->is_binary()) {
                         RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
                                                values.data(), rowset_version));
@@ -560,7 +627,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     }
                 }
             }
-            itr->close();
+        }
+        // Rebuild from del files
+        if (rowset->metadata().del_files_size() > 0) {
+            RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
         }
     }
     return Status::OK();
