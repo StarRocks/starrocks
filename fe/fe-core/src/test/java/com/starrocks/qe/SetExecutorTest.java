@@ -214,6 +214,26 @@ public class SetExecutorTest {
         LiteralExpr literalExprC = (LiteralExpr) userVariableC.getEvaluatedExpression();
         Assert.assertEquals("7", literalExprC.getStringValue());
 
+        sql = "set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        userVariableA = ctx.getUserVariable("aVar");
+        userVariableB = ctx.getUserVariable("bVar");
+        userVariableC = ctx.getUserVariable("cVar");
+        Assert.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
+        Assert.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
+        Assert.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(Type.INT));
+        literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
+        Assert.assertEquals("6", literalExprA.getStringValue());
+
+        literalExprB = (LiteralExpr) userVariableB.getEvaluatedExpression();
+        Assert.assertEquals("7", literalExprB.getStringValue());
+
+        literalExprC = (LiteralExpr) userVariableC.getEvaluatedExpression();
+        Assert.assertEquals("8", literalExprC.getStringValue());
+
+
         sql = "set @aVar = 5, @bVar = @aVar + 1, @cVar = @eVar + 1";
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);

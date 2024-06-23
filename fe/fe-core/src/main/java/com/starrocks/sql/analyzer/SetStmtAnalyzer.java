@@ -74,6 +74,11 @@ public class SetStmtAnalyzer {
                 analyzeSystemVariable((SystemVariable) var);
             } else if (var instanceof UserVariable) {
                 UserVariable userVar = (UserVariable) var;
+                UserVariable userVariableExisted = session.getUserVariable(userVar.getVariable());
+                if (userVariableExisted != null) {
+                    session.removeUserVariable(userVar.getVariable());
+                }
+
                 analyzeUserVariable(userVar);
                 List<String> varDependency = ExpressionAnalyzer.
                         analyzeUserVariableExprDependency((userVar).getUnevaluatedExpression(), ConnectContext.get());

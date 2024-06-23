@@ -435,6 +435,10 @@ public class ConnectContext {
         return userVariables.get(variable);
     }
 
+    public void removeUserVariable(String variable) {
+        userVariables.remove(variable);
+    }
+
     public void resetSessionVariable() {
         this.sessionVariable = VariableMgr.newSessionVariable();
         modifiedSessionVariables.clear();
