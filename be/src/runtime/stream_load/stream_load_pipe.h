@@ -83,6 +83,11 @@ public:
 
     void set_non_blocking_read() { _non_blocking_read = true; }
 
+    int64_t get_write_wait_time_ns() const { return _write_wait_time_ns; }
+    int64_t get_write_process_time_ns() const { return _write_process_time_ns; }
+    int64_t get_read_wait_time_ns() const { return _read_wait_time_ns; }
+    int64_t get_read_process_time_ns() const { return _read_process_time_ns; }
+
 private:
     Status _append(const ByteBufferPtr& buf);
 
@@ -108,6 +113,10 @@ private:
     ByteBufferPtr _write_buf;
     ByteBufferPtr _read_buf;
     Status _err_st = Status::OK();
+    int64_t _write_wait_time_ns{0};
+    int64_t _write_process_time_ns{0};
+    int64_t _read_wait_time_ns{0};
+    int64_t _read_process_time_ns{0};
 };
 
 class StreamLoadPipeReader {

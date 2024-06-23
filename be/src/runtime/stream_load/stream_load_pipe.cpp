@@ -42,6 +42,8 @@ namespace starrocks {
 
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
     if (buf != nullptr && buf->has_remaining()) {
+        MonotonicStopWatch watch;
+        watch.start();
         std::unique_lock<std::mutex> l(_lock);
         if (_cancelled) {
             return _err_st;
@@ -50,6 +52,7 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
         _put_cond.wait(l, [&]() {
             return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
         });
+        auto finish_wait_time = watch.elapsed_time();
 
         if (_cancelled) {
             return _err_st;
@@ -57,6 +60,9 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
         _buffered_bytes += buf->remaining();
         _buf_queue.emplace_back(std::move(buf));
         _get_cond.notify_one();
+
+        _write_wait_time_ns += finish_wait_time;
+        _write_process_time_ns += watch.elapsed_time() - finish_wait_time;
     }
     return Status::OK();
 }
@@ -88,8 +94,12 @@ StatusOr<ByteBufferPtr> StreamLoadPipe::read() {
     if (_non_blocking_read) {
         return no_block_read();
     }
+
+    MonotonicStopWatch watch;
+    watch.start();
     std::unique_lock<std::mutex> l(_lock);
     _get_cond.wait(l, [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
+    auto finish_wait_time = watch.elapsed_time();
 
     // cancelled
     if (_cancelled) {
@@ -105,6 +115,10 @@ StatusOr<ByteBufferPtr> StreamLoadPipe::read() {
     _buf_queue.pop_front();
     _buffered_bytes -= buf->limit;
     _put_cond.notify_one();
+
+    _read_wait_time_ns += finish_wait_time;
+    _read_process_time_ns += watch.elapsed_time() - finish_wait_time;
+
     return buf;
 }
 

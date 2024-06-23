@@ -152,6 +152,11 @@ void StreamLoadAction::handle(HttpRequest* req) {
         return;
     }
 
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "Finish load, label: " << ctx->label << ", txn_id: " << ctx->txn_id
+                  << ", query_id: " << print_id(ctx->put_result.params.params.query_id);
+    }
+
     // status already set to fail
     if (ctx->status.ok()) {
         ctx->status = _handle(ctx);
@@ -201,6 +206,11 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
             ctx->buffer = nullptr;
         }
         RETURN_IF_ERROR(ctx->body_sink->finish());
+    }
+
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "Wait load future, label: " << ctx->label << ", txn_id: " << ctx->txn_id
+                  << ", query_id: " << print_id(ctx->put_result.params.params.query_id);
     }
 
     // wait stream load finish
@@ -343,6 +353,11 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr || !ctx->status.ok()) {
         return;
+    }
+
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "Receive load data, label: " << ctx->label << ", txn_id: " << ctx->txn_id
+                  << ", query_id: " << print_id(ctx->put_result.params.params.query_id);
     }
 
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->instance_mem_tracker.get());
