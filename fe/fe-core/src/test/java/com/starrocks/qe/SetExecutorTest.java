@@ -24,6 +24,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -188,6 +189,50 @@ public class SetExecutorTest {
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
         literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertFalse(literal.getValue());
+    }
+
+    @Test
+    public void testUserDefineVariable3() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1";
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetExecutor executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        UserVariable userVariableA = ctx.getUserVariable("aVar");
+        UserVariable userVariableB = ctx.getUserVariable("bVar");
+        UserVariable userVariableC = ctx.getUserVariable("cVar");
+        Assert.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
+        Assert.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
+        Assert.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(Type.INT));
+
+        LiteralExpr literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
+        Assert.assertEquals("5", literalExprA.getStringValue());
+
+        LiteralExpr literalExprB = (LiteralExpr) userVariableB.getEvaluatedExpression();
+        Assert.assertEquals("6", literalExprB.getStringValue());
+
+        LiteralExpr literalExprC = (LiteralExpr) userVariableC.getEvaluatedExpression();
+        Assert.assertEquals("7", literalExprC.getStringValue());
+
+        sql = "set @aVar = 5, @bVar = @aVar + 1, @cVar = @eVar + 1";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        userVariableA = ctx.getUserVariable("aVar");
+        userVariableB = ctx.getUserVariable("bVar");
+        userVariableC = ctx.getUserVariable("cVar");
+        Assert.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
+        Assert.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
+        Assert.assertTrue(userVariableC.getEvaluatedExpression() instanceof NullLiteral);
+
+        literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
+        Assert.assertEquals("5", literalExprA.getStringValue());
+
+        literalExprB = (LiteralExpr) userVariableB.getEvaluatedExpression();
+        Assert.assertEquals("6", literalExprB.getStringValue());
+
+        literalExprC = (LiteralExpr) userVariableC.getEvaluatedExpression();
+        Assert.assertEquals("NULL", literalExprC.getStringValue());
     }
 
     @Test

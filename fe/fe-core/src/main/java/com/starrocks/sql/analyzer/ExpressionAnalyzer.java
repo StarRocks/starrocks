@@ -149,7 +149,7 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
-    public void analyzeUserVarDdependency(Expr expression, Scope scope) {
+    public void analyzeUserVarDependency(Expr expression, Scope scope) {
         CheckUserVariableDependencyVisitor visitor = new CheckUserVariableDependencyVisitor(session);
         bottomUpAnalyze(visitor, expression, scope);
     }
@@ -2077,7 +2077,7 @@ public class ExpressionAnalyzer {
     public static List<String> analyzeUserVariableExprDependency(Expr expression, ConnectContext session) {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
-        expressionAnalyzer.analyzeUserVarDdependency(expression, scope);
+        expressionAnalyzer.analyzeUserVarDependency(expression, scope);
         return scope.getUserVariableDependencyWithoutFind();
     }
 

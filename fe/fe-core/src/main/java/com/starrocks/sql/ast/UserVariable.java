@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -39,13 +38,14 @@ import com.starrocks.thrift.TResultSinkType;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 public class UserVariable extends SetListItem {
     private final String variable;
     private Expr unevaluatedExpression;
     private Expr evaluatedExpression;
-    private List<String> userVariableDependencyWithoutFind = Lists.newArrayList();
+    private List<String> userVariableDependencyWithoutFind = new ArrayList<>();
 
 
     private final boolean isFromHint;

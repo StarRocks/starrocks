@@ -23,6 +23,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.LambdaArgument;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,7 +41,7 @@ public class Scope {
     private List<PlaceHolderExpr> lambdaInputs = Lists.newArrayList();
 
     private boolean isLambdaScope = false;
-    private List<String> userVariableDependencyWithoutFind = Lists.newArrayList();
+    private List<String> userVariableDependencyWithoutFind = new ArrayList<>();
 
 
     public Scope(RelationId relationId, RelationFields relation) {
