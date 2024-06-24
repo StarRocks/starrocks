@@ -1274,7 +1274,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createMVSQL);
 
         String query = "select k1, sum(case when(k2=0) then k3 else 0 end) from t1 group by k1";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "MV");
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
         // TODO: support this for amv
         PlanTestBase.assertNotContains(plan, "test_mv1)\n");
         starRocksAssert.dropTable("t1");
@@ -1287,7 +1287,7 @@ public class MVRewriteTest {
                 "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id, time;";
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query = "select bitmap_union_count(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "MV");
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
         PlanTestBase.assertContains(plan, USER_TAG_MV_NAME);
         PlanTestBase.assertContains(plan, "  |  <slot 2> : 2: user_id\n" +
                 "  |  <slot 6> : 5: mv_bitmap_union_tag_id");
@@ -1711,7 +1711,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createMVSQL);
 
         String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "Optimizer");
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
         PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: k1 = '2024-06-12'\n" +
@@ -1741,7 +1741,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createMVSQL);
 
         String query = "select k1, sum(k3) from t1 where k1 = '2024-06-12' group by k1";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, query, "Optimizer");
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
         System.out.println(plan);
         PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
