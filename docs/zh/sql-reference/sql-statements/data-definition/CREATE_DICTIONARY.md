@@ -44,7 +44,7 @@ CREATE DICTIONARY <dictionary_object_name> USING <dictionary_source>
 - 字典对象相关属性 `PROPERTIES`：
   - `dictionary_warm_up`：缓存数据至各个 BE 节点中字典对象的触发方式，取值：`TRUE` （默认）或 `FALSE` 。如果为 `TRUE`，则创建字典对象后，自动缓存数据至字典对象；如果为 `FALSE`，则需要您手动刷新字典对象，则才能缓存数据至字典对象。
   - `dictionary_memory_limit`：各个 BE 节点上字典对象可占用的最大内存，单位：Byte，默认为 2,000,000,000 Bytes（2 GB）。
-  - `dictionary_refresh_interval`：周期性刷新字典对象的时间间隔，单位：秒，默认为 `0`，取值为 <=`0` 时表示不会自动刷新。
+  - `dictionary_refresh_interval`：周期性刷新字典对象的时间间隔，单位：秒，默认为 `0`，取值为 `<=0` 时表示不会自动刷新。
   - `dictionary_read_latest`：是否只查询最新的字典对象，主要影响刷新字典对象时所查询的字典对象，取值：`TRUE` 或 `FALSE`（默认）。如果设置为 `TRUE`，在刷新时无法查询字典对象，因为最新的字典对象还在刷新中。如果为设置为 `FALSE`，则在刷新时可以查询上一次成功缓存字典对象。
   - `dictionary_ignore_failed_refresh`：刷新失败是否自动回滚为前一次成功缓存的字典对象，取值：`TRUE` 或 `FALSE`（默认）。如果设置为 `TRUE`，在刷新失败时，则自动回滚为前一次成功缓存的字典对象。如果为 `FALSE`，在刷新失败时，则将字典对象状态设置为 `CANCELLED`。
 
