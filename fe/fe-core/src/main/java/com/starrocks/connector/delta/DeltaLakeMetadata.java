@@ -115,7 +115,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String tableName = deltaLakeTable.getTableName();
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, operator);
 
-        triggerDeltaLakePlanFilesIfNeeded(key, table, operator, null);
+        triggerDeltaLakePlanFilesIfNeeded(key, table, operator);
 
         List<Row> scanTasks = splitTasks.get(key);
         if (scanTasks == null) {
@@ -129,11 +129,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         return Lists.newArrayList(remoteFileInfo);
     }
 
-    private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table, ScalarOperator operator,
-                                                   Tracers tracers) {
+    private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table, ScalarOperator operator) {
         if (!scannedTables.contains(key)) {
-            tracers = tracers == null ? Tracers.get() : tracers;
-            try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
+            try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
                 collectDeltaLakePlanFiles(key, table, operator);
             }
         }
