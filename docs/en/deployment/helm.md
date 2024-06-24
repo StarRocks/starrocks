@@ -68,19 +68,24 @@ displayed_sidebar: "English"
         helm install -f my-values.yaml starrocks starrocks-community/kube-starrocks
         ```
 
-    Deployment takes a while. During this period, you can check the deployment status by using the prompt command in the returned result of the deployment command above. The default prompt command is as follows:
+    Deployment takes a while. During this period, you can check the deployment status with:
 
     ```Bash
-    $ kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
+    kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
+
+    ```bash
     # If the following result is returned, the deployment has been successfully completed.
-    NAME             FESTATUS   CNSTATUS   BESTATUS
-    kube-starrocks   running               running
+    NAME             PHASE     FESTATUS   BESTATUS   CNSTATUS   FEPROXYSTATUS
+    kube-starrocks   running   running    running
     ```
 
     You can also run `kubectl get pods` to check the deployment status. If all Pods are in the `Running` state and all containers within the Pods are `READY`, the deployment has been successfully completed.
 
     ```Bash
-    $ kubectl get pods
+    kubectl get pods
+    ```
+
+    ```bash
     NAME                                       READY   STATUS    RESTARTS   AGE
     kube-starrocks-be-0                        1/1     Running   0          2m50s
     kube-starrocks-fe-0                        1/1     Running   0          4m31s
