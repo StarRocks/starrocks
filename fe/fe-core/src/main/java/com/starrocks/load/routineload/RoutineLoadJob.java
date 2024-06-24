@@ -763,9 +763,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 // if this is a replay thread, the update state should already be replayed by OP_CHANGE_ROUTINE_LOAD_JOB
                 if (!isReplay) {
                     // remove all of task in jobs and change job state to paused
+                    String errMsg =
+                            String.format("Current error rows: %d is more than max error num: %d", currentErrorRows, maxErrorNum);
                     updateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
+                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(errMsg, "max_error_number")),
                             isReplay);
                 }
             }
@@ -791,9 +793,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     .build());
             if (!isReplay) {
                 // remove all of task in jobs and change job state to paused
+                String errMsg =
+                        String.format("Current error rows: %d is more than max error num: %d", currentErrorRows, maxErrorNum);
                 updateState(JobState.PAUSED,
                         new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(currentErrorRows, maxErrorNum)),
+                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(errMsg, "max_error_number")),
                         isReplay);
             }
             // reset currentTotalNum and currentErrorNum
@@ -1186,8 +1190,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) == 
                                             TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
             updateState(JobState.PAUSED,
+<<<<<<< HEAD
                         new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
                         false /* not replay */);
+=======
+                    new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
+                            ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")),
+                    false /* not replay */);
+>>>>>>> 6a2fff4add ([Enhancement] Improve routine load error rows message (#47280))
             LOG.warn(
                     "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
                      name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);

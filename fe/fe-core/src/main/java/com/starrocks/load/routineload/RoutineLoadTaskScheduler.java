@@ -198,7 +198,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
 
         } catch (RoutineLoadPauseException e) {
-            String msg = "fe abort task with reason: check task ready to execute failed, " + e.getMessage();
+            String msg = "FE aborts the task with reason: failed to check task ready to execute, err: " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(
                     JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg), false);
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
@@ -206,8 +206,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                     .build());
             return;
         } catch (Exception e) {
-            LOG.warn("check task ready to execute failed", e);
-            delayPutToQueue(routineLoadTaskInfo, "check task ready to execute failed, err: " + e.getMessage());
+            LOG.warn("failed to check task ready to execute", e);
+            delayPutToQueue(routineLoadTaskInfo, "failed to check task ready to execute, err: " + e.getMessage());
             return;
         }
 
