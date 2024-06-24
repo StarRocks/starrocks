@@ -25,14 +25,12 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -67,7 +65,6 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     private final DeltaMetastoreOperations deltaOps;
     private final HdfsEnvironment hdfsEnvironment;
     private final Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor;
-    private final Set<PredicateSearchKey> preparedTables = ConcurrentHashMap.newKeySet();
     private final Map<PredicateSearchKey, List<Row>> splitTasks = new ConcurrentHashMap<>();
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
 
@@ -183,31 +180,6 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         splitTasks.put(key, files);
         scannedTables.add(key);
-    }
-
-    @Override
-    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
-        DeltaLakeTable deltaLakeTable = (DeltaLakeTable) item.getTable();
-        String dbName = deltaLakeTable.getDbName();
-        String tableName = deltaLakeTable.getTableName();
-        SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
-
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName,
-                snapshot.getVersion(deltaLakeTable.getDeltaEngine()), item.getPredicate());
-        if (!preparedTables.add(key)) {
-            return true;
-        }
-
-        if (!scannedTables.contains(key)) {
-            synchronized (this) {
-                try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "DELTA_LAKE.prepareTablesNum")) {
-                    // Only record the number of tables that need to be prepared in parallel
-                }
-            }
-        }
-
-        triggerDeltaLakePlanFilesIfNeeded(key, deltaLakeTable, item.getPredicate(), tracers);
-        return true;
     }
 
     @Override
