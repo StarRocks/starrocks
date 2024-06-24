@@ -186,7 +186,6 @@ public class StructType extends Type {
         fields.clear();
         fieldMap.clear();
         for (StructField field : structFields) {
-            LOG.info("field name " + field.getName());
             String lowerFieldName = field.getName().toLowerCase();
             if (fieldMap.containsKey(lowerFieldName)) {
                 throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
