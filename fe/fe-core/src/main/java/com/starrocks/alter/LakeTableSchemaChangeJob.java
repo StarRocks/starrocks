@@ -925,6 +925,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         return droppedIndexes;
     }
 
+    @Override
     public final boolean cancel(String errMsg) {
         isCancelling.set(true);
         try {
