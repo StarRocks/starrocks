@@ -166,6 +166,7 @@ public class LeaderOpExecutorTest {
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.setCurrentRoleIds(UserIdentity.ROOT);
         connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setThreadLocalInfo();
 
         LeaderOpExecutor executor = new LeaderOpExecutor(new OriginStatement(""),
                 connectContext, RedirectStatus.FORWARD_NO_SYNC);
