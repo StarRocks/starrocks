@@ -45,6 +45,7 @@ class ExecEnv;
 class EvHttpServer;
 class HttpHandler;
 class WebPageHandler;
+class HttpLoadExecutor;
 
 // HTTP service for StarRocks BE
 class HttpServiceBE {
@@ -65,6 +66,7 @@ private:
     std::vector<HttpHandler*> _http_handlers;
 
     std::unique_ptr<ConcurrentLimiter> _http_concurrent_limiter;
+    std::unique_ptr<HttpLoadExecutor> _http_load_executor;
 };
 
 } // namespace starrocks

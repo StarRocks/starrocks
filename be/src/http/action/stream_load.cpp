@@ -54,6 +54,7 @@
 #include "http/http_channel.h"
 #include "http/http_common.h"
 #include "http/http_headers.h"
+#include "http/http_load_executor.h"
 #include "http/http_request.h"
 #include "http/http_response.h"
 #include "http/utils.h"
@@ -128,7 +129,10 @@ static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int
                                        TStreamLoadPutResult* result);
 
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
-        : _exec_env(exec_env), _http_concurrent_limiter(limiter) {
+        : StreamLoadAction(exec_env, limiter, nullptr) {}
+
+StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter, HttpLoadExecutor* http_load_executor)
+        : _exec_env(exec_env), _http_concurrent_limiter(limiter), _http_load_executor(http_load_executor) {
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_requests_total",
                                                              &streaming_load_requests_total);
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
@@ -153,7 +157,28 @@ void StreamLoadAction::handle(HttpRequest* req) {
     }
 
     if (config::enable_stream_load_verbose_log) {
-        LOG(INFO) << "Finish load, label: " << ctx->label << ", txn_id: " << ctx->txn_id
+        LOG(INFO) << "Handle stream load, label: " << ctx->label << ", txn_id: " << ctx->txn_id
+                  << ", query_id: " << print_id(ctx->put_result.params.params.query_id);
+    }
+
+    if (config::enable_http_async_load && _http_load_executor) {
+        Status status =
+                _http_load_executor->thread_pool()->submit_func([this, req, ctx] { _handle_internal(req, ctx); });
+        if (!status.ok()) {
+            LOG(WARNING) << "Failed to execute stream load asynchronously, label: " << ctx->label
+                         << ", txn_id: " << ctx->txn_id
+                         << ", query_id: " << print_id(ctx->put_result.params.params.query_id)
+                         << ", status: " << status;
+        } else {
+            return;
+        }
+    }
+    _handle_internal(req, ctx);
+}
+
+void StreamLoadAction::_handle_internal(HttpRequest* req, StreamLoadContext* ctx) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "Finalize stream load, label: " << ctx->label << ", txn_id: " << ctx->txn_id
                   << ", query_id: " << print_id(ctx->put_result.params.params.query_id);
     }
 

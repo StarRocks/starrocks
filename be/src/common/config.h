@@ -412,6 +412,10 @@ CONF_mBool(enable_streaming_load_thread_pool, "true");
 CONF_Int32(streaming_load_thread_pool_num_min, "0");
 CONF_Int32(streaming_load_thread_pool_idle_time_ms, "2000");
 
+CONF_mBool(enable_http_async_load, "false");
+CONF_Int32(http_load_thread_pool_num_min, "48");
+CONF_Int32(http_load_thread_pool_idle_time_ms, "2000");
+
 // The maximum amount of data that can be processed by a stream load
 CONF_mInt64(streaming_load_max_mb, "102400");
 // Some data formats, such as JSON, cannot be streamed.
