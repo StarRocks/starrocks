@@ -83,6 +83,11 @@ public:
 
     void set_non_blocking_read() { _non_blocking_read = true; }
 
+    int64_t get_write_wait_time_ns() const { return _write_wait_time_ns; }
+    int64_t get_write_process_time_ns() const { return _write_process_time_ns; }
+    int64_t get_read_wait_time_ns() const { return _read_wait_time_ns; }
+    int64_t get_read_process_time_ns() const { return _read_process_time_ns; }
+
 private:
     Status _append(const ByteBufferPtr& buf);
 
@@ -108,6 +113,10 @@ private:
     ByteBufferPtr _write_buf;
     ByteBufferPtr _read_buf;
     Status _err_st = Status::OK();
+    int64_t _write_wait_time_ns{0};
+    int64_t _write_process_time_ns{0};
+    int64_t _read_wait_time_ns{0};
+    int64_t _read_process_time_ns{0};
 };
 
 class StreamLoadPipeReader {
@@ -123,6 +132,9 @@ private:
 class CompressedStreamLoadPipeReader : public StreamLoadPipeReader {
 public:
     CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe, TCompressionType::type compression_type);
+    CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe, TCompressionType::type compression_type,
+                                   int64_t* file_decompress_ns);
+
     ~CompressedStreamLoadPipeReader() override = default;
     StatusOr<ByteBufferPtr> read() override;
 
@@ -132,6 +144,7 @@ private:
     TCompressionType::type _compression_type;
     ByteBufferPtr _decompressed_buffer;
     std::unique_ptr<StreamCompression> _decompressor;
+    int64_t* _file_decompress_ns = nullptr;
 };
 
 // TODO: Make `StreamLoadPipe` as a derived class of `io::InputStream`.

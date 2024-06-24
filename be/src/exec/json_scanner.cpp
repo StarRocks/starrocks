@@ -83,7 +83,10 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     RETURN_IF_ERROR(_create_src_chunk(&src_chunk));
 
     if (_cur_file_eof) {
-        RETURN_IF_ERROR(_open_next_reader());
+        auto st = _open_next_reader();
+        if (!st.ok() && !st.is_time_out()) {
+            return st;
+        }
         _cur_file_eof = false;
     }
 
@@ -279,8 +282,12 @@ Status JsonScanner::_open_next_reader() {
     }
     _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors,
                                                     _json_types, range_desc);
-    RETURN_IF_ERROR(_cur_file_reader->open());
     _next_range++;
+    st = _cur_file_reader->open();
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to open reader, status: " << st.to_string();
+        return st;
+    }
     return Status::OK();
 }
 
@@ -438,6 +445,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
 
 template <typename ParserType>
 Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read) {
+    SCOPED_RAW_TIMER(&_counter->json_read_row_ns);
     simdjson::ondemand::object row;
     auto parser = down_cast<ParserType*>(_parser.get());
 
@@ -658,15 +666,21 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
 
 Status JsonReader::_read_file_stream() {
     // TODO: Remove the down_cast, should not rely on the specific implementation.
-    auto pipe = make_shared<StreamLoadPipeReader>(down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe());
+    auto inner_pipe = down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe();
+    auto pipe = make_shared<StreamLoadPipeReader>(inner_pipe);
     if (_range_desc.compression_type != TCompressionType::NO_COMPRESSION &&
         _range_desc.compression_type != TCompressionType::UNKNOWN_COMPRESSION) {
         pipe = std::make_shared<CompressedStreamLoadPipeReader>(
-                down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe(), _range_desc.compression_type);
+                down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe(), _range_desc.compression_type,
+                &_counter->file_decompress_ns);
     }
     ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
     ASSIGN_OR_RETURN(_file_stream_buffer, pipe->read());
+    _counter->file_pipe_read_wait_ns = inner_pipe->get_read_wait_time_ns();
+    _counter->file_pipe_read_process_ns = inner_pipe->get_read_process_time_ns();
+    _counter->file_pipe_write_wait_ns = inner_pipe->get_write_wait_time_ns();
+    _counter->file_pipe_write_process_ns = inner_pipe->get_write_process_time_ns();
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
@@ -801,6 +815,7 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     _empty_parser = false;
+    SCOPED_RAW_TIMER(&_counter->json_parse_ns);
     return _parser->parse(_payload, _payload_size, _payload_capacity);
 }
 

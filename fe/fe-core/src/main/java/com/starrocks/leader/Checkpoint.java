@@ -35,7 +35,6 @@
 package com.starrocks.leader;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.Journal;
@@ -80,7 +79,7 @@ public class Checkpoint extends FrontendDaemon {
     }
 
     public Checkpoint(String name, Journal journal, String subDir, boolean belongToGlobalStateMgr) {
-        super(name, FeConstants.checkpoint_interval_second * 1000L);
+        super(name, Config.checkpoint_interval_second * 1000L);
         this.imageDir = GlobalStateMgr.getServingState().getImageDir() + subDir;
         this.journal = journal;
         this.subDir = subDir;

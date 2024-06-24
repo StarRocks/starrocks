@@ -15,7 +15,9 @@
 #pragma once
 
 #include "fs/fs.h"
+#include "io/io_profiler.h"
 #include "io/output_stream.h"
+#include "util/stopwatch.hpp"
 namespace starrocks {
 // // Wrap a `starrocks::io::OutputStream` into `starrocks::WritableFile`.
 class OutputStreamAdapter : public WritableFile {
@@ -26,8 +28,11 @@ public:
     }
 
     Status append(const Slice& data) override {
+        MonotonicStopWatch watch;
+        watch.start();
         auto st = _os->write(data.data, data.size);
         _bytes_written += st.ok() ? data.size : 0;
+        IOProfiler::add_write(data.size, watch.elapsed_time());
         return st;
     }
 
@@ -42,20 +47,28 @@ public:
 
     Status close() override {
         FileSystem::on_file_write_close(this);
-        return _os->close();
+        return _close_stream();
     }
 
     // NOTE: unlike posix file, the file cannot be writen anymore after `flush`ed.
-    Status flush(FlushMode mode) override { return _os->close(); }
+    Status flush(FlushMode mode) override { return _close_stream(); }
 
     // NOTE: unlike posix file, the file cannot be writen anymore after `sync`ed.
-    Status sync() override { return _os->close(); }
+    Status sync() override { return _close_stream(); }
 
     uint64_t size() const override { return _bytes_written; }
 
     const std::string& filename() const override { return _name; }
 
 private:
+    Status _close_stream() {
+        MonotonicStopWatch watch;
+        watch.start();
+        Status st = _os->close();
+        IOProfiler::add_sync(watch.elapsed_time());
+        return st;
+    }
+
     std::unique_ptr<io::OutputStream> _os;
     std::string _name;
     uint64_t _bytes_written{0};

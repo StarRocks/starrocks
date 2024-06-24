@@ -202,6 +202,7 @@ public class LoadPlanner {
             this.context = context;
         } else {
             this.context = new ConnectContext();
+            this.context.setQualifiedUser("root");
         }
         this.loadMemLimit = loadMemLimit;
         this.execMemLimit = execMemLimit;

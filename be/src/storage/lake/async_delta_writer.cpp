@@ -70,6 +70,8 @@ public:
 
     [[nodiscard]] int64_t last_write_ts() const { return _writer->last_write_ts(); }
 
+    const FlushStatistic& get_flush_stats() const { return _writer->get_flush_stats(); }
+
 private:
     enum TaskType {
         kWriteTask = 0,
@@ -334,6 +336,10 @@ Status AsyncDeltaWriter::check_immutable() {
 
 int64_t AsyncDeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
+}
+
+const FlushStatistic& AsyncDeltaWriter::get_flush_stats() const {
+    return _impl->get_flush_stats();
 }
 
 StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::build() {

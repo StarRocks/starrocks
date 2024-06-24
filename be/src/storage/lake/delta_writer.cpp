@@ -130,6 +130,8 @@ public:
 
     int64_t last_write_ts() const;
 
+    const FlushStatistic& get_flush_stats() const;
+
 private:
     Status reset_memtable();
 
@@ -217,6 +219,10 @@ Status DeltaWriterImpl::check_immutable() {
 
 int64_t DeltaWriterImpl::last_write_ts() const {
     return _last_write_ts;
+}
+
+const FlushStatistic& DeltaWriterImpl::get_flush_stats() const {
+    return _flush_token->get_stats();
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
@@ -709,6 +715,10 @@ Status DeltaWriter::check_immutable() {
 
 int64_t DeltaWriter::last_write_ts() const {
     return _impl->last_write_ts();
+}
+
+const FlushStatistic& DeltaWriter::get_flush_stats() const {
+    return _impl->get_flush_stats();
 }
 
 ThreadPool* DeltaWriter::io_threads() {

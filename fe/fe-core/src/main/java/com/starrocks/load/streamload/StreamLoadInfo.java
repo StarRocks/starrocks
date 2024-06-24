@@ -336,6 +336,9 @@ public class StreamLoadInfo {
         if (context.transmissionCompressionType != null) {
             compressionType = CompressionUtils.findTCompressionByName(context.transmissionCompressionType);
         }
+        if (context.compressionType != null) {
+            payloadCompressionType = CompressionUtils.findTCompressionByName(context.compressionType);
+        }
         if (context.loadDop != -1) {
             loadParallelRequestNum = context.loadDop;
         }

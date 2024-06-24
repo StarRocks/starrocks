@@ -83,7 +83,7 @@ public class TransactionOperationParams {
         }
 
         public boolean notNull() {
-            return null != id && null != num;
+            return null != num;
         }
 
         public Integer getId() {

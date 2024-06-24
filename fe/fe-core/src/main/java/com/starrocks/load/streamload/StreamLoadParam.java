@@ -42,6 +42,7 @@ public class StreamLoadParam {
     private static final String STRIP_OUTER_ARRAY = "strip_outer_array";
     private static final String PARTIAL_UPDATE = "partial_update";
     private static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
+    private static final String COMPRESSION = "compression";
     private static final String LOAD_DOP = "load_dop";
     private static final String MAX_FILTER_RATIO = "max_filter_ratio";
     private static final String IDLE_TRANSACTION_TIMEOUT = "idle_transaction_timeout";
@@ -68,6 +69,7 @@ public class StreamLoadParam {
     public boolean stripOuterArray = false;
     public boolean partialUpdate = false;
     public String transmissionCompressionType = null;
+    public String compressionType = null;
     // load dop always be 1 here
     public int loadDop = 1;
     public double maxFilterRatio = 0.0;
@@ -171,6 +173,9 @@ public class StreamLoadParam {
         }
         if (headers.contains(TRANSMISSION_COMPRESSION_TYPE)) {
             context.transmissionCompressionType = headers.get(TRANSMISSION_COMPRESSION_TYPE);
+        }
+        if (headers.contains(COMPRESSION)) {
+            context.compressionType = headers.get(COMPRESSION);
         }
         if (headers.contains(MAX_FILTER_RATIO)) {
             context.maxFilterRatio = Double.parseDouble(headers.get(MAX_FILTER_RATIO));

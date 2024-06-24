@@ -160,6 +160,12 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
                 query_ctx->get_runtime_profile_report_interval_ns());
     }
 
+    if (config::force_enable_olap_sink_profile) {
+        _load_channel_profile_config.set_enable_profile(true);
+        _load_channel_profile_config.set_big_query_profile_threshold_ns(0);
+        _load_channel_profile_config.set_runtime_profile_report_interval_ns(config::force_report_interval_ns);
+    }
+
     return Status::OK();
 }
 
@@ -174,6 +180,8 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
     _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
+    _profile->add_info_string("ColocateMvIndex", fmt::format("{}", _colocate_mv_index));
+    _profile->add_info_string("WriteTxnLog", fmt::format("{}", _write_txn_log));
 
     _ts_profile = state->obj_pool()->add(new TabletSinkProfile());
     _ts_profile->runtime_profile = _profile;
@@ -182,6 +190,12 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
     _ts_profile->open_timer = ADD_TIMER(_profile, "OpenTime");
     _ts_profile->close_timer = ADD_TIMER(_profile, "CloseWaitTime");
+    _ts_profile->close_write_txn_log_timer = ADD_CHILD_TIMER(_profile, "CloseWriteTxnLogTime", "CloseWaitTime");
+    _ts_profile->close_wait_response_timer = ADD_CHILD_TIMER(_profile, "CloseWaitResponseTime", "CloseWaitTime");
+    _ts_profile->close_send_rpc_timer = ADD_CHILD_TIMER(_profile, "CloseSendRpcTime", "CloseWaitTime");
+    _ts_profile->close_serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "CloseSerializeChunkTime", "CloseSendRpcTime");
+    _ts_profile->close_compress_timer = ADD_CHILD_TIMER(_profile, "CloseCompressTime", "CloseSendRpcTime");
+    _ts_profile->close_call_rpc_timer = ADD_CHILD_TIMER(_profile, "CloseCallRpcTime", "CloseSendRpcTime");
     _ts_profile->prepare_data_timer = ADD_TIMER(_profile, "PrepareDataTime");
     _ts_profile->convert_chunk_timer = ADD_CHILD_TIMER(_profile, "ConvertChunkTime", "PrepareDataTime");
     _ts_profile->validate_data_timer = ADD_CHILD_TIMER(_profile, "ValidateDataTime", "PrepareDataTime");
@@ -191,10 +205,12 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
     _ts_profile->serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
     _ts_profile->compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
+    _ts_profile->call_rpc_timer = ADD_CHILD_TIMER(_profile, "CallRpcTime", "SendRpcTime");
     _ts_profile->client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
     _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
     _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+    _ts_profile->update_load_channel_profile_timer = ADD_TIMER(_profile, "UpdateLoadChannelProfileTime");
 }
 
 void OlapTableSink::set_profile(RuntimeProfile* profile) {
@@ -831,13 +847,16 @@ bool OlapTableSink::is_close_done() {
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
+    SCOPED_TIMER(_profile->total_time_counter());
+    SCOPED_TIMER(_ts_profile->close_timer);
     if (close_status.ok()) {
-        SCOPED_TIMER(_profile->total_time_counter());
-        SCOPED_TIMER(_ts_profile->close_timer);
         do {
             close_status = try_close(state);
             if (!close_status.ok()) break;
-            SleepFor(MonoDelta::FromMilliseconds(5));
+            {
+                SCOPED_TIMER(_ts_profile->close_wait_response_timer);
+                SleepFor(MonoDelta::FromMilliseconds(5));
+            }
         } while (!is_close_done());
     }
     return close_wait(state, close_status);
@@ -862,6 +881,14 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     if (!status.ok()) {
         _span->SetStatus(trace::StatusCode::kError, std::string(status.message()));
     }
+
+    if (config::olap_sink_print_profile) {
+        std::stringstream ss;
+        state->runtime_profile()->compute_time_in_profile();
+        state->runtime_profile()->pretty_print(&ss);
+        LOG(INFO) << ss.str();
+    }
+
     return status;
 }
 
