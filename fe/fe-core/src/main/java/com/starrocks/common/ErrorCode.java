@@ -350,7 +350,47 @@ public enum ErrorCode {
             "Inserted target column count: %d doesn't match select/value column count: %d"),
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
+<<<<<<< HEAD
             "Current error rows: %d is more than max error num: %d. Check the 'TrackingSQL' field for detailed information");
+=======
+            "%s. Check the 'TrackingSQL' field for detailed information. If you are sure that the data has many errors, " +
+                    "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job."),
+    ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
+            "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
+            "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job."),
+
+    /**
+     * 5700 - 5799: Partition
+     */
+    ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE(5700, new byte[] {'4', '2', '0', '0', '0'},
+            "Cannot add a Range partition to a table that partition type is not of Range"),
+
+    ERR_ADD_PARTITION_WITH_ERROR_STEP_LENGTH(5701, new byte[] {'4', '2', '0', '0', '0'},
+            "Step length [%d] in the operation is not equal to the partition step length [%d] stored in the table"),
+
+    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702,  new byte[] {'4', '2', '0', '0', '0'},
+            "Can't add multi range partition to multi partition column table"),
+
+    ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
+            "The interval of the Multi-Range Partition must be greater than 0"),
+
+    /**
+     * 10000 - 10099: warehouse
+     */
+    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s not exist."),
+    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s already exists."),
+    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s has been suspended."),
+    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse %s is not available."),
+    ERR_NO_NODES_IN_WAREHOUSE(10005, new byte[] {'4', '2', '0', '0', '0'},
+            "No alive backend or compute node in warehouse %s."),
+    ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+
+    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
+            "unsupported statement in shared_nothing mode");
+
+    public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
+            " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
+>>>>>>> 6a2fff4add ([Enhancement] Improve routine load error rows message (#47280))
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
