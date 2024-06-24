@@ -187,6 +187,23 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_double order b
 -- result:
 E: (1064, 'Table partition by float/double/decimal datatype is not supported')
 -- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
+4	44	None
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_timestamp is null order by col_smallint;
+-- result:
+4	44	None
+-- !result
+select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_null where col_timestamp is not null order by col_smallint;
+-- result:
+1	1	2024-01-01 01:01:01
+2	2	2023-01-01 01:01:01
+3	3	2022-01-01 01:01:01
+-- !result
 drop catalog delta_test_${uuid0}
 -- result:
 -- !result
