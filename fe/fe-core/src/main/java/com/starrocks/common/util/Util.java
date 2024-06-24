@@ -41,6 +41,8 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -450,5 +452,14 @@ public class Util {
             dos.write(input);
         }
         return outputStream.toByteArray();
+    }
+
+    public static ConnectContext getOrCreateConnectContext() {
+        if (ConnectContext.get() != null) {
+            return ConnectContext.get();
+        }
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        return ctx;
     }
 }

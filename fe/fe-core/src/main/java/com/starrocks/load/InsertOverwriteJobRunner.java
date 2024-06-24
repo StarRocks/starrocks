@@ -294,7 +294,7 @@ public class InsertOverwriteJobRunner {
         Database db = state.getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
-            state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
+            state.getLocalMetastore().addPartitions(context, db, olapTable.getName(), addPartitionClause);
         } catch (Exception ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);

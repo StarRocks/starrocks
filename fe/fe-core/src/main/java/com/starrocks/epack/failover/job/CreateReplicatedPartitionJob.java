@@ -14,9 +14,12 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.common.util.Util;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.failover.ReplicatedObjectMeta;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -63,7 +66,10 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
 
         AddPartitionClause addPartitionClause = getAddPartitionClause(remoteTable, remotePartition);
         try {
-            GlobalStateMgr.getServingState().getLocalMetastore().addPartitions(localDatabase, localTable.getName(),
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            ConnectContext ctx = Util.getOrCreateConnectContext();
+            ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
+            GlobalStateMgr.getServingState().getLocalMetastore().addPartitions(ctx, localDatabase, localTable.getName(),
                     addPartitionClause);
         } catch (Exception e) {
             LOG.warn("Failed to create partition {}.{}.{} in failover group {}, ", localDatabase.getFullName(),
