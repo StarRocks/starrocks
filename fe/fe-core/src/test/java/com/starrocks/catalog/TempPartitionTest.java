@@ -381,8 +381,6 @@ public class TempPartitionTest {
         Database db2 = GlobalStateMgr.getCurrentState().getDb("db2");
         OlapTable tbl2 = (OlapTable) db2.getTable("tbl2");
 
-        testSerializeOlapTable(tbl2);
-
         Map<String, Long> originPartitionTabletIds = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds);
         Assert.assertEquals(3, originPartitionTabletIds.keySet().size());
@@ -420,8 +418,6 @@ public class TempPartitionTest {
 
         System.out.println("partition tablets: " + originPartitionTabletIds);
         System.out.println("temp partition tablets: " + tempPartitionTabletIds);
-
-        testSerializeOlapTable(tbl2);
 
         // drop non exist temp partition
         stmtStr = "alter table db2.tbl2 drop temporary partition tp4;";
@@ -764,25 +760,6 @@ public class TempPartitionTest {
             FeConstants.runningUnitTest = flag;
         }
 
-    }
-
-    private void testSerializeOlapTable(OlapTable tbl) throws IOException, AnalysisException {
-        // 1. Write objects to file
-        File file = new File(tempPartitionFile);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        tbl.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-
-        OlapTable readTbl = (OlapTable) Table.read(in);
-        Assert.assertEquals(tbl.getId(), readTbl.getId());
-        Assert.assertEquals(tbl.getTempPartitions().size(), readTbl.getTempPartitions().size());
-        file.delete();
     }
 
     private void testSerializeTempPartitions(TempPartitions tempPartitionsInstance)

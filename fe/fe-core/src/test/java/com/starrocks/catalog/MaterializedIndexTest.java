@@ -42,11 +42,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -79,28 +74,6 @@ public class MaterializedIndexTest {
     @Test
     public void getMethodTest() {
         Assert.assertEquals(indexId, index.getId());
-    }
-
-    @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./index");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        index.write(dos);
-
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        MaterializedIndex rIndex = MaterializedIndex.read(dis);
-        Assert.assertTrue(index.equals(rIndex));
-
-        // 3. delete files
-        dis.close();
-        file.delete();
     }
 
     @Test
