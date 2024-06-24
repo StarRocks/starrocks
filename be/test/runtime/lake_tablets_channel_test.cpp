@@ -333,7 +333,9 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
 
+    config::stale_memtable_flush_time_sec = 30;
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
+    config::stale_memtable_flush_time_sec = 0;
     ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code());
     ASSERT_EQ(4, finish_response.tablet_vec_size());
 
