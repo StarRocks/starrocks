@@ -825,6 +825,8 @@ TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
 
 TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
     starrocks::TabletMetadata metadata;
+    auto schema = metadata->mutable_schema();
+    schema->set_id(1);
     metadata.set_id(123);
     metadata.set_version(1);
     auto rowset_meta_pb1 = metadata.add_rowsets();
