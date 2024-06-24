@@ -445,6 +445,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {
+    if (_immutable_partition_ids.empty() && config::stale_memtable_flush_time_sec <= 0) {
+        return;
+    }
     bool high_mem_usage = false;
     bool full_mem_usage = false;
     if (_mem_tracker->limit_exceeded_by_ratio(70) ||

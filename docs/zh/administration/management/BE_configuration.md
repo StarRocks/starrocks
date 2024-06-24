@@ -1593,11 +1593,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### stale_memtable_flush_time_sec
 
-- 默认值：30
+- 默认值：0
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：
+- 描述：0表示禁止，其他上次更新时间大于stale_memtable_flush_time_sec的memtable会在内存不足时持久化
 - 引入版本：-
 -->
 
