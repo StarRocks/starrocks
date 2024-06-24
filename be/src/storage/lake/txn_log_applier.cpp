@@ -117,20 +117,9 @@ public:
     }
 
     Status finish() override {
-<<<<<<< HEAD
-=======
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
-        // still need prepre primary index even there is an empty compaction
-        if (_index_entry == nullptr && _has_empty_compaction) {
-            // get lock to avoid gc
-            _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
-            DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
-            RETURN_IF_ERROR(prepare_primary_index());
-        }
-
->>>>>>> 15ad8a892b ([Enhancement] add memory usage check for pk table (#46978))
         // Must call `commit` before `finalize`,
         // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
