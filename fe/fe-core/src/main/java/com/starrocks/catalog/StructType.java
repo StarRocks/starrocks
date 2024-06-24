@@ -48,7 +48,7 @@ public class StructType extends Type {
 
     private static final Logger LOG = LogManager.getLogger(StructType.class);
 
-    private HashMap<String, StructField> fieldMap = Maps.newHashMap();
+    private final HashMap<String, StructField> fieldMap = Maps.newHashMap();
     @SerializedName(value = "fields")
     private ArrayList<StructField> fields;
 

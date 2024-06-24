@@ -472,7 +472,7 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private void processAddField(AddFieldClause alterClause, OlapTable olapTable,
                                      Map<Long, LinkedList<Column>> indexSchemaMap,
-                                     int id) throws DdlException {
+                                     int id, List<Index> indexes) throws DdlException {
         String modifyColumnName = alterClause.getColName();
 
         // Struct column can not be key column or sort key column right now. 
@@ -488,21 +488,23 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Column[" + modifyColumnName + "] type is invalid, add field only support Struct");
         }
 
-        List<String> nestedFieldName = alterClause.getNestedParentFieldNames();
-        Type modifyFieldType = getModifiedType(modifyColumn, nestedFieldName);
+        List<String> nestedParentFieldNames = alterClause.getNestedParentFieldNames();
+        Type modifyFieldType = getModifiedType(modifyColumn, nestedParentFieldNames);
         String modifyFieldName = null;
-        // If nestedFieldName is empty, this means we add a new field directly to this column. 
+        // If nestedParentFieldNames is empty, this means we add a new field directly to this column. 
         // Otherwise, it means adding a new field to the specified field within the column.
         // But the specified field type must be Struct.
-        if (nestedFieldName == null || nestedFieldName.isEmpty()) {
+        if (nestedParentFieldNames == null || nestedParentFieldNames.isEmpty()) {
             modifyFieldName = modifyColumn.getName();
         } else {
-            modifyFieldName = nestedFieldName.get(nestedFieldName.size() - 1);
+            modifyFieldName = nestedParentFieldNames.get(nestedParentFieldNames.size() - 1);
         }
         if (!modifyFieldType.isStructType()) {
             throw new DdlException("Field " + modifyFieldName + " is invalid, add field only support for Struct");
         }
 
+        // Remove all Index that contains a column with the name modifyColumnName
+        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(modifyColumnName)));
         // Add new field into the pecified field. If no `fieldPos`, the new field will be added to the end.
         StructType oriFieldType = ((StructType) modifyFieldType);
         String fieldName = alterClause.getFieldName();
@@ -552,7 +554,8 @@ public class SchemaChangeHandler extends AlterHandler {
      * @throws DdlException
      */
     private void processDropField(DropFieldClause alterClause, OlapTable olapTable,
-                                     Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                     Map<Long, LinkedList<Column>> indexSchemaMap,
+                                     List<Index> indexes) throws DdlException {
         String modifyColumnName = alterClause.getColName();
         String baseIndexName = olapTable.getName();
 
@@ -590,6 +593,8 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Field[" + dropFieldName + "] is not exist in Field[" + modifyFieldName + "]");
         }
 
+        // Remove all Index that contains a column with the name modifyColumnName
+        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(modifyColumnName)));
         // remove the dropped field from fields and update StructFields
         ArrayList<StructField> fields = new ArrayList<>();
         for (StructField field : oriFieldType.getFields()) {
@@ -1863,9 +1868,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof AddFieldClause) {
-                if (RunMode.isSharedDataMode() || !fastSchemaEvolution) {
-                    throw new DdlException("Share data mode does not support add field. Add field" + 
-                                           " requires enable fast schema evolution ");
+                if (RunMode.isSharedDataMode()) {
+                    throw new DdlException("Add field for struct column not support shared-data mode so far");
+                }
+                if (!fastSchemaEvolution) {
+                    throw new DdlException("Add field for struct column require table enable fast schema evolution");
                 }
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
@@ -1873,18 +1880,24 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
-                int id = olapTable.incAndGetMaxColUniqueId();
-                locker.unLockDatabase(db, LockType.READ);
-                processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id);
+                int id = 0;
+                try {
+                    id = olapTable.incAndGetMaxColUniqueId();
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+                processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
-                if (RunMode.isSharedDataMode() || !fastSchemaEvolution) {
-                    throw new DdlException("Share data mode does not support drop field. Drop field" + 
-                                           " requires enable fast schema evolution ");
+                if (RunMode.isSharedDataMode()) {
+                    throw new DdlException("Drop field for struct column not support shared-data mode so far");
+                }
+                if (!fastSchemaEvolution) {
+                    throw new DdlException("Drop field for struct column require table enable fast schema evolution");
                 }
                 DropFieldClause dropFieldClause = (DropFieldClause) alterClause;
                 modifyFieldColumns = Set.of(dropFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
-                processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap);
+                processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
                 fastSchemaEvolution = false;
@@ -2698,10 +2711,20 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     // the invoker should keep write lock
+    // this function will update the table index meta according to the `indexSchemaMap` and the
+    // `indexSchemaMap` keep the latest column set for each index.
+    // there are two scenarios:
+    //   1. add/drop column with fast schema evolution in shared-nothing mode
+    //   2. add/drop field for a struct colum with fast schema evolution in shared-nothing mode(modify column actually)
+    // e.g:
+    //   origin table schema: {c1: int, c2: int, c3: Struct<v1 int, v2 int>}
+    //       a. add a new column `c4 int` and the table schema will be set {c1: int, c2: int, c3: Struct<v1 int, v2 int>, c4: int}
+    //       b. add a new field `v3 int` into `c3` column and the table schema will be set"
+    //          {c1: int, c2: int, c3: Struct<v1 int, v2 int, v3 int>}
     public void modifyTableAddOrDrop(Database db, OlapTable olapTable,
-                                            Map<Long, List<Column>> indexSchemaMap,
-                                            List<Index> indexes, long jobId, long txnId,
-                                            Map<Long, Long> indexToNewSchemaId, boolean isReplay)
+                                     Map<Long, List<Column>> indexSchemaMap,
+                                     List<Index> indexes, long jobId, long txnId,
+                                     Map<Long, Long> indexToNewSchemaId, boolean isReplay)
             throws DdlException, NotImplementedException {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
