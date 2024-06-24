@@ -715,7 +715,7 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
 
 TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
     starrocks::TabletMetadata metadata;
-    auto schema = metadata->mutable_schema();
+    auto schema = metadata.mutable_schema();
     schema->set_id(1);
     metadata.set_id(123);
     metadata.set_version(1);
