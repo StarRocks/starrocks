@@ -4744,7 +4744,7 @@ INSERT INTO test_array_sortby_muliti VALUES
 
 -- result:
 -- !result
-select id, array_col1, array_col2, array_sortby_multi(array_col1, array_col2) from test_array_sortby_muliti order by id asc;
+select id, array_col1, array_col2, array_sortby(array_col1, array_col2) from test_array_sortby_muliti order by id asc;
 -- result:
 1	[4,3,5]	[1.1,2.2,2.2]	[4,3,5]
 2	[6,7,8]	[6.6,5.5,6.6]	[7,6,8]
@@ -4757,7 +4757,7 @@ select id, array_col1, array_col2, array_sortby_multi(array_col1, array_col2) fr
 9	[24,25,26]	None	[24,25,26]
 10	[24,25,26]	None	[24,25,26]
 -- !result
-select id, array_col1, array_col2, array_col3, array_sortby_multi(array_col1, array_col2, array_col3) from test_array_sortby_muliti order by id asc;
+select id, array_col1, array_col2, array_col3, array_sortby(array_col1, array_col2, array_col3) from test_array_sortby_muliti order by id asc;
 -- result:
 1	[4,3,5]	[1.1,2.2,2.2]	["a","b","c"]	[4,3,5]
 2	[6,7,8]	[6.6,5.5,6.6]	["d","e","d"]	[7,6,8]
@@ -4770,7 +4770,7 @@ select id, array_col1, array_col2, array_col3, array_sortby_multi(array_col1, ar
 9	[24,25,26]	None	["y","y","z"]	[24,25,26]
 10	[24,25,26]	None	["y","y","z"]	[24,25,26]
 -- !result
-select id, array_col1, array_col2, array_col3, array_col4, array_sortby_multi(array_col1, array_col2, array_col3, array_col4) from test_array_sortby_muliti order by id asc;
+select id, array_col1, array_col2, array_col3, array_col4, array_sortby(array_col1, array_col2, array_col3, array_col4) from test_array_sortby_muliti order by id asc;
 -- result:
 1	[4,3,5]	[1.1,2.2,2.2]	["a","b","c"]	["2023-01-01","2023-01-02","2023-01-03"]	[4,3,5]
 2	[6,7,8]	[6.6,5.5,6.6]	["d","e","d"]	["2023-01-04","2023-01-05","2023-01-06"]	[7,6,8]
