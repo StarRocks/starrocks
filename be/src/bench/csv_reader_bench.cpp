@@ -25,6 +25,11 @@ public:
 
     Status _fill_buffer() override;
 
+    char* _find_line_delimiter(CSVBuffer& buffer, size_t pos) override {
+        // Intend no implementation just for compiling
+        return nullptr;
+    }
+
 private:
     std::shared_ptr<SequentialFile> _file;
 };
