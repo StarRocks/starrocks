@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.system;
 
 import com.starrocks.persist.gson.GsonUtils;
@@ -30,7 +29,9 @@ public class BackendHbResponseTest {
         long hbTime = System.currentTimeMillis();
         String version = "version1";
         int cpuCores = 10;
-        BackendHbResponse resp = new BackendHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
+        long memLimitBytes = 20;
+        BackendHbResponse resp =
+                new BackendHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores, memLimitBytes);
 
         Assert.assertEquals(beId, resp.getBeId());
         Assert.assertEquals(bePort, resp.getBePort());
@@ -39,6 +40,7 @@ public class BackendHbResponseTest {
         Assert.assertEquals(starletPort, resp.getStarletPort());
         Assert.assertEquals(version, resp.getVersion());
         Assert.assertEquals(cpuCores, resp.getCpuCores());
+        Assert.assertEquals(memLimitBytes, resp.getMemLimitBytes());
 
         // json serialize
         String json = GsonUtils.GSON.toJson(resp);
@@ -50,5 +52,6 @@ public class BackendHbResponseTest {
         Assert.assertEquals(starletPort, respJson.getStarletPort());
         Assert.assertEquals(version, respJson.getVersion());
         Assert.assertEquals(cpuCores, respJson.getCpuCores());
+        Assert.assertEquals(memLimitBytes, respJson.getMemLimitBytes());
     }
 }

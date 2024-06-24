@@ -116,7 +116,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
@@ -445,6 +445,7 @@ public class StarRocksAssert {
 
     /**
      * Create tables and do insert datas and later actions.
+     *
      * @param cluster : insert into datas into table if it's not null.
      * @param tables  : tables which needs to be created and inserted.
      * @param action  : actions which will be used to do later.
@@ -474,7 +475,7 @@ public class StarRocksAssert {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail("Do action failed:" +  e.getMessage());
+            Assert.fail("Do action failed:" + e.getMessage());
         } finally {
             if (action != null) {
                 for (String table : tables) {
@@ -974,7 +975,7 @@ public class StarRocksAssert {
 
     public void executeResourceGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
 
@@ -986,7 +987,7 @@ public class StarRocksAssert {
 
     public List<List<String>> executeResourceGroupShowSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
 
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statement, ctx);
@@ -1001,7 +1002,7 @@ public class StarRocksAssert {
         StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(stmt, ctx);
 
-        ShowResultSet res =  ShowExecutor.execute((ShowStmt) stmt, ctx);
+        ShowResultSet res = ShowExecutor.execute((ShowStmt) stmt, ctx);
         String header = res.getMetaData().getColumns().stream().map(Column::getName).collect(Collectors.joining("|"));
         String body = res.getResultRows().stream()
                 .map(row -> String.join("|", row))

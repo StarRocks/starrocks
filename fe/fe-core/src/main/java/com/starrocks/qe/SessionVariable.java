@@ -58,7 +58,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.storagevolume.StorageVolume;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
@@ -294,7 +294,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER =
             "enable_prune_column_after_index_filter";
-    
+
     public static final String ENABLE_GIN_FILTER = "enable_gin_filter";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
@@ -2172,6 +2172,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
     private int likePredicateConsolidateMin = 2;
+
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2539,9 +2540,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return BackendCoreStat.getDefaultDOP();
+                return BackendResourceStat.getInstance().getDefaultDOP();
             }
-            return Math.min(maxPipelineDop, BackendCoreStat.getDefaultDOP());
+            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
@@ -2553,9 +2554,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return BackendCoreStat.getSinkDefaultDOP();
+                return BackendResourceStat.getInstance().getSinkDefaultDOP();
             }
-            return Math.min(maxPipelineDop, BackendCoreStat.getSinkDefaultDOP());
+            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getSinkDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
