@@ -356,9 +356,6 @@ public enum ErrorCode {
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
             "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job.");
 
-    public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
-            " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
-
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
         this.sqlState = sqlState;
