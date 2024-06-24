@@ -1322,5 +1322,7 @@ CONF_mBool(brpc_socket_keepalive, "false");
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
+CONF_mBool(enable_pk_strict_memcheck, "false");
+
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 } // namespace starrocks::config
