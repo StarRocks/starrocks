@@ -40,6 +40,14 @@ displayed_sidebar: "English"
    1. Deployment with default configurations
 
       Run the following command to deploy the StarRocks Operator and the StarRocks cluster which consists of one FE and one BE:
+   > Tip
+   >
+   > The default `values.yaml` is configured to deploy:
+   > - The operator pod with 1/2CPU and 0.8GB RAM
+   > - One FE with 4GB RAM, 4 cores, and 15Gi disk
+   > - One BE with 4GB RAM, 4 cores, and 1Ti disk
+   >
+   > If you do not have these resources available in your Kubernetes cluster then skip to the **Deployment with custom configurations** section and adjust the resources.
 
       ```Bash
       $ helm install starrocks starrocks-community/kube-starrocks
@@ -52,7 +60,7 @@ displayed_sidebar: "English"
       TEST SUITE: None
       ```
 
-   2. Deployment with custom configurations
+   3. Deployment with custom configurations
       - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart.
       - Run the following command to deploy the StarRocks Operator and StarRocks cluster with the custom configurations in **my-values.yaml**.
 
