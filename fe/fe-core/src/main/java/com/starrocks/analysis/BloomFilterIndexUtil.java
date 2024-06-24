@@ -74,6 +74,12 @@ public class BloomFilterIndexUtil {
         }
     }
 
+    private static void addDefaultProperties(Map<String, String> properties) {
+        properties.computeIfAbsent(FPP_KEY, k -> NgramBfIndexParamsKey.BLOOM_FILTER_FPP.defaultValue());
+        properties.computeIfAbsent(GRAM_NUM_KEY, k -> NgramBfIndexParamsKey.GRAM_NUM.defaultValue());
+        properties.computeIfAbsent(CASE_SENSITIVE_KEY, k -> NgramBfIndexParamsKey.CASE_SENSITIVE.defaultValue());
+    }
+
     public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)
             throws SemanticException {
         Type type = column.getType();
@@ -94,6 +100,8 @@ public class BloomFilterIndexUtil {
         analyzeBloomFilterFpp(properties);
         analyzeBloomFilterGramNum(properties);
         analyzeBloomFilterCaseSensitive(properties);
+        // prefer add default values here instead of Index::toThrift
+        addDefaultProperties(properties);
     }
 
     public static void analyseBfWithNgramBf(Set<Index> newIndexs, Set<String> bfColumns) throws AnalysisException {

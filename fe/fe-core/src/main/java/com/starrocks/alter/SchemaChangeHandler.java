@@ -94,11 +94,13 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -106,6 +108,7 @@ import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -1347,7 +1350,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns();
+        List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
         for (Column partitionCol : partitionColumns) {
             String colName = partitionCol.getName();
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
@@ -1374,7 +1377,8 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        List<Column> distributionColumns = olapTable.getDefaultDistributionInfo().getDistributionColumns();
+        List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
+                olapTable, olapTable.getDefaultDistributionInfo().getDistributionColumns());
         for (Column distributionCol : distributionColumns) {
             String colName = distributionCol.getName();
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
@@ -1565,7 +1569,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     if (!olapTable.dynamicPartitionExists()) {
                         try {
                             DynamicPartitionUtil
-                                    .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                                    .checkInputDynamicPartitionProperties(olapTable, properties, olapTable.getPartitionInfo());
                         } catch (DdlException e) {
                             // This table is not a dynamic partition table and didn't supply all dynamic partition properties
                             throw new DdlException("Table " + db.getOriginName() + "." +
@@ -1648,6 +1652,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
+            } else if (alterClause instanceof AddFieldClause) {
+                throw new DdlException("Add field is not support so far");
+            } else if (alterClause instanceof DropFieldClause) {
+                throw new DdlException("Drop field is not support so far");
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
                 fastSchemaEvolution = false;

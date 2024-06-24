@@ -34,10 +34,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
+import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
@@ -93,7 +93,8 @@ public class OptExternalPartitionPruner {
 
             Collection<Long> partitionIds = null;
             try {
-                partitionIds = partitionPrune(esTablePartitions.getPartitionInfo(), operator.getColumnFilters());
+                partitionIds = partitionPrune(operator.getTable(),
+                        esTablePartitions.getPartitionInfo(), operator.getColumnFilters());
             } catch (AnalysisException e) {
                 LOG.warn("Es Table partition prune failed. ", e);
             }
@@ -451,7 +452,7 @@ public class OptExternalPartitionPruner {
                 return;
             }
 
-            RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+            PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
             if (remoteFileDesc == null) {
                 return;
             }
@@ -475,7 +476,7 @@ public class OptExternalPartitionPruner {
      * @return
      * @throws AnalysisException
      */
-    private static Collection<Long> partitionPrune(PartitionInfo partitionInfo,
+    private static Collection<Long> partitionPrune(Table table, PartitionInfo partitionInfo,
             Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
         if (partitionInfo == null) {
             return null;
@@ -486,8 +487,10 @@ public class OptExternalPartitionPruner {
             case EXPR_RANGE: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
-                partitionPruner =
-                        new RangePartitionPruner(keyRangeById, rangePartitionInfo.getPartitionColumns(), columnFilters);
+                partitionPruner = new RangePartitionPruner(
+                        keyRangeById,
+                        rangePartitionInfo.getPartitionColumns(table.getIdToColumn()),
+                        columnFilters);
                 return partitionPruner.prune();
             }
             default: {

@@ -41,6 +41,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
@@ -747,7 +748,8 @@ public class IcebergMetadataTest extends TableTestBase {
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
         List<RemoteFileInfo> res = metadata.getRemoteFileInfos(
                 icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 10);
-        Assert.assertEquals(7, res.get(0).getFiles().get(0).getIcebergScanTasks().stream()
+        IcebergRemoteFileDesc fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
+        Assert.assertEquals(7, fileDesc.getIcebergScanTasks().stream()
                 .map(x -> x.file().recordCount()).reduce(0L, Long::sum), 0.001);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert();
@@ -758,11 +760,12 @@ public class IcebergMetadataTest extends TableTestBase {
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(2));
         res = metadata.getRemoteFileInfos(
                 icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 10);
-        Assert.assertEquals(1, res.get(0).getFiles().get(0).getIcebergScanTasks().size());
-        Assert.assertEquals(3, res.get(0).getFiles().get(0).getIcebergScanTasks().get(0).file().recordCount());
+        fileDesc = (IcebergRemoteFileDesc) res.get(0).getFiles().get(0);
+        Assert.assertEquals(1, fileDesc.getIcebergScanTasks().size());
+        Assert.assertEquals(3, fileDesc.getIcebergScanTasks().get(0).file().recordCount());
 
-        IcebergFilter filter = IcebergFilter.of("db", "table", 1, null);
-        Assert.assertEquals("IcebergFilter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
+        PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1, null);
+        Assert.assertEquals("Filter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
                 filter.toString());
     }
 
@@ -1048,12 +1051,12 @@ public class IcebergMetadataTest extends TableTestBase {
         newArguments.add(new ColumnRefOperator(22, Type.INT, "date_col", true));
         ScalarOperator newCallOperator = new CallOperator("date_trunc", Type.DATE, newArguments);
 
-        IcebergFilter filter = IcebergFilter.of("db", "table", 1L, callOperator);
-        IcebergFilter newFilter = IcebergFilter.of("db", "table", 1L, newCallOperator);
+        PredicateSearchKey filter = PredicateSearchKey.of("db", "table", 1L, callOperator);
+        PredicateSearchKey newFilter = PredicateSearchKey.of("db", "table", 1L, newCallOperator);
         Assert.assertEquals(filter, newFilter);
 
-        Assert.assertEquals(newFilter, IcebergFilter.of("db", "table", 1L, newCallOperator));
-        Assert.assertNotEquals(newFilter, IcebergFilter.of("db", "table", 1L, null));
+        Assert.assertEquals(newFilter, PredicateSearchKey.of("db", "table", 1L, newCallOperator));
+        Assert.assertNotEquals(newFilter, PredicateSearchKey.of("db", "table", 1L, null));
     }
 
     @Test

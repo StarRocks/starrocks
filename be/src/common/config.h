@@ -987,7 +987,9 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
-CONF_mInt32(lake_pk_index_sst_max_compaction_bytes, /*1GB*/ "1073741824");
+CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
+// When the ratio of cumulative level to base level is greater than this config, use base merge.
+CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
@@ -1033,6 +1035,8 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
 CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
+// min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
+CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -1317,6 +1321,9 @@ CONF_mInt64(arrow_read_batch_size, "4096");
 CONF_mBool(brpc_socket_keepalive, "false");
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
+// .crm file can be removed after 1day.
+CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
+
 // python envs config
 // create time worker timeout
 CONF_mInt32(create_child_worker_timeout_ms, "1000");
@@ -1326,5 +1333,6 @@ CONF_Strings(python_envs, "");
 CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
+CONF_mBool(enable_pk_strict_memcheck, "true");
 
 } // namespace starrocks::config

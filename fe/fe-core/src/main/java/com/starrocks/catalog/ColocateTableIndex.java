@@ -48,7 +48,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
@@ -61,6 +60,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -162,7 +162,7 @@ public class ColocateTableIndex implements Writable {
     // lake group, in memory
     private final Set<GroupId> lakeGroups = Sets.newHashSet();
 
-    private final transient ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public ColocateTableIndex() {
 
@@ -252,7 +252,8 @@ public class ColocateTableIndex implements Writable {
                     }
                 }
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
-                        distributionInfo.getDistributionColumns(), distributionInfo.getBucketNum(),
+                        MetaUtils.getColumnsByColumnIds(tbl, distributionInfo.getDistributionColumns()),
+                        distributionInfo.getBucketNum(),
                         tbl.getDefaultReplicationNum());
                 groupName2Id.put(fullGroupName, groupId);
                 group2Schema.put(groupId, groupSchema);

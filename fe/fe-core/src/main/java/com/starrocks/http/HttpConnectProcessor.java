@@ -73,8 +73,6 @@ public class HttpConnectProcessor extends ConnectProcessor {
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
         String sql = parsedStmt.getOrigStmt().originStmt;
 
-        addRunningQueryDetail(parsedStmt);
-
         executor = new StmtExecutor(ctx, parsedStmt);
         ctx.setExecutor(executor);
 

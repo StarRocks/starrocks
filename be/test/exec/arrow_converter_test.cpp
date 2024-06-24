@@ -14,8 +14,10 @@
 
 #include <arrow/builder.h>
 #include <arrow/memory_pool.h>
+#include <arrow/testing/builder.h>
 #include <arrow/testing/gtest_util.h>
 #include <arrow/testing/util.h>
+#include <arrow/util/bit_util.h>
 #include <gtest/gtest.h>
 #include <testutil/parallel_test.h>
 #include <util/guard.h>
@@ -229,9 +231,9 @@ static inline std::shared_ptr<arrow::Array> create_constant_binary_array(int64_t
     auto data_off = 0;
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && i % 2 == 0) {
-            arrow::BitUtil::ClearBit(nulls, i);
+            arrow::bit_util::ClearBit(nulls, i);
         } else {
-            arrow::BitUtil::SetBit(nulls, i);
+            arrow::bit_util::SetBit(nulls, i);
             memcpy(data + data_off, value.data(), value_size);
             data_off += value_size;
         }
@@ -490,9 +492,9 @@ static inline std::shared_ptr<arrow::Array> create_constant_fixed_size_binary_ar
 
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && i % 2 == 0) {
-            arrow::BitUtil::ClearBit(nulls, i);
+            arrow::bit_util::ClearBit(nulls, i);
         } else {
-            arrow::BitUtil::SetBit(nulls, i);
+            arrow::bit_util::SetBit(nulls, i);
         }
         memcpy(p, value.c_str(), std::min(value.size() + 1, (std::string::size_type)bytes_width));
         p += bytes_width;
@@ -683,9 +685,9 @@ std::shared_ptr<arrow::Array> create_constant_datetime_array(size_t num_elements
 
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && (i % 2 == 0)) {
-            arrow::BitUtil::ClearBit(nulls, i);
+            arrow::bit_util::ClearBit(nulls, i);
         } else {
-            arrow::BitUtil::SetBit(nulls, i);
+            arrow::bit_util::SetBit(nulls, i);
         }
         data[i] = value;
     }
@@ -963,9 +965,9 @@ std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
     auto* data = buffers[1]->mutable_data();
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && (i % 2 == 0)) {
-            arrow::BitUtil::ClearBit(nulls, i);
+            arrow::bit_util::ClearBit(nulls, i);
         } else {
-            arrow::BitUtil::SetBit(nulls, i);
+            arrow::bit_util::SetBit(nulls, i);
             memcpy(data + i * byte_width, &decimal, sizeof(decimal));
         }
     }

@@ -146,6 +146,79 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    // NOTE: Have to be consistent with BE implementation in `time_functions.cpp`
+    public static class TimeFunctions {
+        static final int NUMBER_OF_LEAP_YEAR = 366;
+        static final int NUMBER_OF_NON_LEAP_YEAR = 365;
+
+        static long computeDayNR(long year, long month, long day) {
+            long y = year;
+            if (y == 0 && month == 0) {
+                return 0;
+            }
+            long delsum = NUMBER_OF_NON_LEAP_YEAR * y + 31 * (month - 1) + day;
+            if (month <= 2) {
+                y--;
+            } else {
+                delsum -= (month * 4 + 23) / 10;
+            }
+            long tmp = ((y / 100 + 1) * 3) / 4;
+            long result = delsum + y / 4 - tmp;
+            Preconditions.checkArgument(result >= 0);
+            return result;
+        }
+
+        static long computeWeekDay(long days, boolean sundayFirstDayOfWeek) {
+            return (days + 5 + (sundayFirstDayOfWeek ? 1 : 0)) % 7;
+        }
+
+        static long computeDaysInYear(long year) {
+            return (year & 3) == 0 && ((year % 100 != 0) || (year % 400 == 0 && (year != 0))) ? NUMBER_OF_LEAP_YEAR
+                    : NUMBER_OF_NON_LEAP_YEAR;
+        }
+
+        public static long computeWeek(long year, long month, long day, int weekBehaviour) {
+            weekBehaviour = weekBehaviour & 0x7;
+            if ((weekBehaviour & 0x1) == 0) {
+                weekBehaviour ^= 0x4;
+            }
+
+            long days = 0;
+            long dayNR = computeDayNR(year, month, day);
+            long firstDayNR = computeDayNR(year, 1, 1);
+            boolean bMondayFirst = (weekBehaviour & 0x1) != 0;
+            boolean bWeekYear = (weekBehaviour & 0x2) != 0;
+            boolean bFirstWeekDay = (weekBehaviour & 0x4) != 0;
+
+            long weekDay = computeWeekDay(firstDayNR, !bMondayFirst);
+            long yearLocal = year;
+            if (month == 1 && day <= (7 - weekDay)) {
+                if (!bWeekYear && ((bFirstWeekDay && weekDay != 0) || (!bFirstWeekDay && weekDay >= 4))) {
+                    return 0;
+                }
+                bWeekYear = true;
+                yearLocal--;
+                days = computeDaysInYear(yearLocal);
+                firstDayNR -= days;
+                weekDay = (weekDay + 53 * 7 - days) % 7;
+            }
+
+            if ((bFirstWeekDay && weekDay != 0) || (!bFirstWeekDay && weekDay >= 4)) {
+                days = dayNR - (firstDayNR + 7 - weekDay);
+            } else {
+                days = dayNR - (firstDayNR - weekDay);
+            }
+            if (bWeekYear && days >= 52 * 7) {
+                weekDay = (weekDay + computeDaysInYear(yearLocal)) % 7;
+                if ((!bFirstWeekDay && weekDay < 4) || (bFirstWeekDay && weekDay == 0)) {
+                    yearLocal++;
+                    return 1;
+                }
+            }
+            return days / 7 + 1;
+        }
+    }
+
     /**
      * date and time function
      */
@@ -416,6 +489,26 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator year(ConstantOperator arg) {
         return ConstantOperator.createSmallInt((short) arg.getDatetime().getYear());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "week", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "week", argTypes = {DATE}, returnType = INT)
+    })
+    public static ConstantOperator week(ConstantOperator arg) {
+        LocalDateTime dt = arg.getDatetime();
+        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), 0);
+        return ConstantOperator.createInt((int) result);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "week", argTypes = {DATETIME, INT}, returnType = INT),
+            @ConstantFunction(name = "week", argTypes = {DATE, INT}, returnType = INT)
+    })
+    public static ConstantOperator weekWithMode(ConstantOperator arg, ConstantOperator mode) {
+        LocalDateTime dt = arg.getDatetime();
+        long result = TimeFunctions.computeWeek(dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), mode.getInt());
+        return ConstantOperator.createInt((int) result);
     }
 
     @ConstantFunction.List(list = {
@@ -1246,7 +1339,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createBoolean(roleNames.contains(role.getVarchar()));
     }
 
-    @ConstantFunction(name = "typeof_internal", returnType = VARCHAR, argTypes = { VARCHAR })
+    @ConstantFunction(name = "typeof_internal", returnType = VARCHAR, argTypes = {VARCHAR})
     public static ConstantOperator typeofInternal(ConstantOperator value) {
         return ConstantOperator.createVarchar(value.getVarchar());
     }

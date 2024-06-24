@@ -85,6 +85,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentTask;
@@ -969,7 +970,7 @@ public class LeaderImpl {
             if (partitionInfo.isRangePartition()) {
                 TRangePartitionDesc rangePartitionDesc = new TRangePartitionDesc();
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                for (Column column : rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())) {
                     TColumnMeta columnMeta = new TColumnMeta();
                     columnMeta.setColumnName(column.getName());
                     columnMeta.setColumnType(column.getType().toThrift());
@@ -1146,7 +1147,8 @@ public class LeaderImpl {
             THashDistributionInfo tHashDistributionInfo = new THashDistributionInfo();
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             tHashDistributionInfo.setBucket_num(hashDistributionInfo.getBucketNum());
-            for (Column column : hashDistributionInfo.getDistributionColumns()) {
+            for (Column column : MetaUtils.getColumnsByColumnIds(
+                    olapTable, hashDistributionInfo.getDistributionColumns())) {
                 tHashDistributionInfo.addToDistribution_columns(column.getName());
             }
             distributionDesc.setHash_distribution(tHashDistributionInfo);

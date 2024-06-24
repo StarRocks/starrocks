@@ -361,7 +361,7 @@ public class OdpsMetadata implements ConnectorMetadata {
                     throw new StarRocksConnectorException(
                             "unsupported split policy: " + properties.get(OdpsProperties.SPLIT_POLICY));
             }
-            RemoteFileDesc odpsRemoteFileDesc = RemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo);
+            OdpsRemoteFileDesc odpsRemoteFileDesc = OdpsRemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(odpsRemoteFileDesc);
             remoteFileInfo.setFiles(remoteFileDescs);
             return Lists.newArrayList(remoteFileInfo);
