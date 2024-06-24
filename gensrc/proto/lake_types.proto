@@ -66,6 +66,13 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
+message DelfileWithRowsetId {
+    optional string del_file = 1;
+    optional uint64 del_file_size = 2;
+    // origin rowset that generate this del file.
+    optional uint32 origin_rowset_id = 3;
+}
+
 message RowsetMetadataPB {
     optional uint32 id = 1;
     optional bool overlapped = 2;
@@ -82,7 +89,7 @@ message RowsetMetadataPB {
     // The generated version of rowset.
     optional int64 version = 10;
     // del_files are generated when pk table handle delete operation.
-    repeated string del_files = 11;
+    repeated DelfileWithRowsetId del_files = 11;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
@@ -136,6 +143,7 @@ message TxnLogPB {
         repeated string dels = 3;
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
+        repeated uint64 del_file_sizes = 5;
     }
 
     message OpCompaction {

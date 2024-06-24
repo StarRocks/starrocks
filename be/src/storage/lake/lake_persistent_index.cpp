@@ -85,7 +85,7 @@ void KeyValueMerger::flush() {
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
         : PersistentIndex(""),
-          _memtable(std::make_unique<PersistentIndexMemtable>(0)),
+          _memtable(std::make_unique<PersistentIndexMemtable>()),
           _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_id) {}
 
@@ -228,21 +228,14 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
 }
 
 // Used to rebuild delete operation.
-Status LakePersistentIndex::insert_erase(size_t n, const Slice* keys, int64_t version, uint32_t rowset_id) {
+Status LakePersistentIndex::insert_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
+                                         uint32_t rowset_id) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_delete_us");
-    KeyIndexSet not_founds;                                            // Unused
-    size_t num_found;                                                  // Unused
-    std::vector<IndexValue> old_values(n, IndexValue(NullIndexValue)); // Unused
-    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values.data(), &not_founds, &num_found, version, rowset_id));
+    RETURN_IF_ERROR(_memtable->erase_with_filter(n, keys, filter, version, rowset_id));
     if (is_memtable_full()) {
         RETURN_IF_ERROR(flush_memtable());
     }
     return Status::OK();
-}
-
-// Use erase with `rowset_id` instead of this one.
-Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
-    return Status::NotSupported("LakePersistentIndex::erase not supported");
 }
 
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t rowset_id) {
@@ -472,7 +465,8 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
         int64_t max_rss_rowid = sstable->sstable_pb().max_rss_rowid();
         if (last_max_rss_rowid > max_rss_rowid) {
             return Status::InternalError(
-                    fmt::format("sstables are not ordered, {} : {}", last_max_rss_rowid, max_rss_rowid));
+                    fmt::format("sstables are not ordered, last_max_rss_rowid={} : max_rss_rowid={}",
+                                last_max_rss_rowid, max_rss_rowid));
         }
         last_max_rss_rowid = max_rss_rowid;
         auto* sstable_pb = sstable_meta.add_sstables();
@@ -490,20 +484,49 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
     for (const auto& del : rowset->metadata().del_files()) {
-        ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(_tablet_mgr->del_location(_tablet_id, del)));
-        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+        ASSIGN_OR_RETURN(auto read_file,
+                         fs::new_random_access_file(_tablet_mgr->del_location(_tablet_id, del.del_file())));
+        int64_t file_size = 0;
+        if (del.del_file_size() > 0) {
+            file_size = del.del_file_size();
+        } else {
+            // Upgraded from old version SR.
+            ASSIGN_OR_RETURN(file_size, read_file->get_size());
+        }
         std::vector<uint8_t> read_buffer(file_size);
         // read from del file
         RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
         // serialize to column
         auto pkc = pk_column->clone();
         if (serde::ColumnArraySerde::deserialize(read_buffer.data(), pkc.get()) == nullptr) {
+            // Deserialze will fail when del file is corrupted.
             return Status::InternalError("column deserialization failed");
         }
-        // insert delete operations to index.
+        // We can't insert delete operation to index directly, because some delete operation is
+        // older than current item, and we need to igore these delete operations.
+        std::vector<IndexValue> found_values(pkc->size(), IndexValue(NullIndexValue));
+        std::vector<bool> filter(pkc->size(), false);
+        auto generate_filter_fn = [&]() {
+            if (rowset->id() != del.origin_rowset_id()) {
+                // del file in origin rowset doesn't need to skip.
+                for (int i = 0; i < pkc->size(); i++) {
+                    if (found_values[i] != IndexValue(NullIndexValue) &&
+                        found_values[i].get_rssid() > del.origin_rowset_id()) {
+                        // delete operation is too old for this key.
+                        filter[i] = true;
+                    }
+                }
+            }
+        };
         if (pkc->is_binary()) {
-            RETURN_IF_ERROR(insert_erase(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), rowset_version,
-                                         rowset->id()));
+            // When PK table have multi pk columns or one pk column with varchar type,
+            // we treat it as binary column.
+            // 1. Get from pk index, to find out if this delete operation is too old.
+            RETURN_IF_ERROR(get(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), found_values.data()));
+            generate_filter_fn();
+            // 2. insert delete operations to pk index.
+            RETURN_IF_ERROR(insert_erase(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), filter,
+                                         rowset_version, rowset->id()));
         } else {
             std::vector<Slice> keys;
             keys.reserve(pkc->size());
@@ -512,11 +535,38 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
                 keys.emplace_back(fkeys, _key_size);
                 fkeys += _key_size;
             }
-            RETURN_IF_ERROR(insert_erase(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), rowset_version,
-                                         rowset->id()));
+            // 1. Get from pk index, to find out if this delete operation is too old.
+            RETURN_IF_ERROR(get(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), found_values.data()));
+            generate_filter_fn();
+            // 2. insert delete operations to pk index.
+            RETURN_IF_ERROR(insert_erase(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), filter,
+                                         rowset_version, rowset->id()));
         }
     }
     return Status::OK();
+}
+
+// Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
+bool LakePersistentIndex::rowset_rebuild_checker(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
+    if (rowset.segments_size() > 0 && (rowset.id() + rowset.segments_size() <= rebuild_rss_id)) {
+        // All segments and del files under this rowset are not need to rebuild.
+        // E.g.
+        // If `rebuild_rss_id` is 12, and
+        // 1. `id` = 10, `segments_size` = 2, we can skip this rowset, because two segment's id is
+        //     10 and 11, both smaller than 12.
+        // 2. `id` = 10, `segments_size` = 3, we can't skip this rowset, because last segment's id
+        //     is 12 which is equal to 12, it may not dump to sst yet.
+        return false;
+    }
+    if (rowset.segments_size() == 0 && (rowset.id() < rebuild_rss_id)) {
+        // Rowset with empty segments may has del files, and need to rebuild them.
+        // E.g.
+        // If `rebuild_rss_id` is 12, and
+        // 1. `id` = 11, can skip. it means this rowset's del files has been dump to sst.
+        // 2. `id` = 12, can't skip. this rowset's del files may not dump to sst yet.
+        return false;
+    }
+    return true;
 }
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
@@ -553,12 +603,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
-        if (rowset->num_segments() > 0 && (rowset->id() + rowset->num_segments() <= rebuild_rss_id)) {
-            // All segments and del files under this rowset are not need to rebuild
-            continue;
-        }
-        if (rowset->num_segments() == 0 && (rowset->id() < rebuild_rss_id)) {
-            // Rowset with empty segments may has del files, and need to rebuild them.
+        if (!rowset_rebuild_checker(rowset->metadata(), rebuild_rss_id)) {
             continue;
         }
         const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;

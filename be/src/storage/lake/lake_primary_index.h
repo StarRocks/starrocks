@@ -72,6 +72,12 @@ public:
 
     void set_local_pk_index_write_amp_score(double score);
 
+    // This function is used for handling delete operation in cloud native PK table.
+    // It is different from another pk index implementation (such as in-memory index or local persistent index),
+    // because it need `rowset_id` to setup the rebuild point.
+    //
+    // |metadata| Used to decide the index type.
+    //
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
     //

@@ -161,6 +161,7 @@ public:
 
 protected:
     void _set_schema(const Schema& pk_schema);
+    // Return the pointer of specific position of slice array.
     const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                                         std::vector<Slice>* key_slices) const;
 

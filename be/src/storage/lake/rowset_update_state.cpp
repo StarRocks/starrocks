@@ -741,7 +741,14 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(params.tablet->del_location(path)));
-    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+    int64_t file_size = 0;
+    if (params.op_write.del_file_sizes_size() > 0) {
+        DCHECK(params.op_write.dels_size() == params.op_write.del_file_sizes_size());
+        file_size = params.op_write.del_file_sizes(del_id);
+    } else {
+        // TxnLog is generated in old version SR.
+        ASSIGN_OR_RETURN(file_size, read_file->get_size());
+    }
     std::vector<uint8_t> read_buffer(file_size);
     RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
     auto col = pk_column->clone();

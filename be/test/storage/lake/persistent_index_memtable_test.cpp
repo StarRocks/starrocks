@@ -34,7 +34,7 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
         values.emplace_back(i * 2);
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
-    auto memtable = std::make_unique<PersistentIndexMemtable>(0);
+    auto memtable = std::make_unique<PersistentIndexMemtable>();
     ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
     // insert duplicate should return error
     ASSERT_FALSE(memtable->insert(N, key_slices.data(), values.data(), -1).ok());
@@ -76,7 +76,7 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
     KeyIndexSet erase_not_found;
     size_t erase_num_found = 0;
     ASSERT_TRUE(memtable->erase(num, erase_key_slices.data(), erase_old_values.data(), &erase_not_found,
-                                &erase_num_found, -1)
+                                &erase_num_found, -1, 1)
                         .ok());
     ASSERT_EQ(erase_num_found, (N + 2) / 3);
     // N+2 not found
@@ -130,7 +130,7 @@ TEST(PersistentIndexMemtableTest, test_replace) {
         replace_idxes.emplace_back(i);
     }
 
-    auto memtable = std::make_unique<PersistentIndexMemtable>(0);
+    auto memtable = std::make_unique<PersistentIndexMemtable>();
     ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
 
     //replace
