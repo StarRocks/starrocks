@@ -39,7 +39,6 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
@@ -60,6 +59,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import static com.starrocks.common.ErrorCode.ERR_ROUTINE_LOAD_OFFSET_INVALID;
 
 public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     private static final Logger LOG = LogManager.getLogger(KafkaTaskInfo.class);
@@ -135,9 +136,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     return true;
                 } else if (latestOffset < consumeOffset) {
                     throw new RoutineLoadPauseException(
-                            "there is no data in partition: " + partitionId + " at offset: " + consumeOffset + ". " +
-                                    "you can modify kafka_offsets by alter routine load, then resume the job. " +
-                                    "refer to " + FeConstants.DOCUMENT_ALTER_ROUTINE_LOAD);
+                            ERR_ROUTINE_LOAD_OFFSET_INVALID.formatErrorMsg(consumeOffset, latestOffset, partitionId));
                 }
             }
         }
