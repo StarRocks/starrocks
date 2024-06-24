@@ -181,10 +181,6 @@ public class ShowExecutorTest {
         // mock index 2
         MaterializedIndex index2 = new MaterializedIndex();
 
-        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
-        idToColumn.put(column1.getColumnId(), column1);
-        idToColumn.put(column2.getColumnId(), column2);
-
         // mock partition
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {

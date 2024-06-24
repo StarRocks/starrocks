@@ -26,7 +26,10 @@ public class ExpressionSerializedObject {
     private String expressionSql;
 
     public static ExpressionSerializedObject create(ColumnIdExpr expr) {
-        return new ExpressionSerializedObject(expr.toSql());
+        String sql = expr.toSql();
+        // Use fromSql to check the correctness of SQL and avoid storing incorrect SQL in persistent metadata.
+        ColumnIdExpr.fromSql(sql);
+        return new ExpressionSerializedObject(sql);
     }
 
     public ColumnIdExpr deserialize() {

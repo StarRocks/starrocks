@@ -1,5 +1,7 @@
-package com.starrocks.analysis;
+package com.starrocks.persist;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.qe.SqlModeHelper;
