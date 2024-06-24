@@ -124,6 +124,11 @@ public:
 
     Status rewrite_jit_expr(ObjectPool* pool);
 
+    void set_build_from_only_in_filter(bool build_from_only_in_filter) {
+        _build_from_only_in_filter = build_from_only_in_filter;
+    }
+    bool build_from_only_in_filter() const { return _build_from_only_in_filter; }
+
 private:
     friend class Expr;
     friend class OlapScanNode;
@@ -146,6 +151,10 @@ private:
     /// Variables keeping track of current state.
     bool _prepared{false};
     bool _opened{false};
+    // Indicates that this expr is built from only in runtime in filter
+    // For hash join, it will build both IN filter and bloom filter. This variable is false.
+    // For cross join, it will only build Runtime IN filter, and this value is false.
+    bool _build_from_only_in_filter{false};
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed{false};
 };
