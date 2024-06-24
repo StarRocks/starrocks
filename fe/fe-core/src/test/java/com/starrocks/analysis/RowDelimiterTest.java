@@ -49,6 +49,24 @@ public class RowDelimiterTest {
         Assert.assertEquals("\n", delimiter.getRowDelimiter());
         Assert.assertEquals("\n", delimiter.getOriDelimiter());
 
+        // \\n
+        delimiter = new RowDelimiter("\\n");
+        Assert.assertEquals("'\\n'", delimiter.toSql());
+        Assert.assertEquals("\n", delimiter.getRowDelimiter());
+        Assert.assertEquals("\\n", delimiter.getOriDelimiter());
+
+        // \\n\\n
+        delimiter = new RowDelimiter("\\n\\n");
+        Assert.assertEquals("'\\n\\n'", delimiter.toSql());
+        Assert.assertEquals("\n\n", delimiter.getRowDelimiter());
+        Assert.assertEquals("\\n\\n", delimiter.getOriDelimiter());
+
+        // a\\na\\n
+        delimiter = new RowDelimiter("a\\na\\n");
+        Assert.assertEquals("'a\\na\\n'", delimiter.toSql());
+        Assert.assertEquals("a\na\n", delimiter.getRowDelimiter());
+        Assert.assertEquals("a\\na\\n", delimiter.getOriDelimiter());
+
         // \x01
         delimiter = new RowDelimiter("\\x01");
         Assert.assertEquals("'\\x01'", delimiter.toSql());
