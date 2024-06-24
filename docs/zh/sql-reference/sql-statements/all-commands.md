@@ -32,6 +32,7 @@ displayed_sidebar: "Chinese"
   - [视图，物化视图](#视图物化视图)
     - [视图](#视图)
     - [物化视图](#物化视图)
+  - [字典对象](#字典对象)
   - [函数，SELECT](#函数select)
   - [CBO 统计信息](#cbo-统计信息)
   - [备份与恢复](#备份与恢复)
@@ -252,6 +253,14 @@ displayed_sidebar: "Chinese"
 - [SHOW ALTER MATERIALIZED VIEW](./data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md)
 - [SHOW CREATE MATERIALIZED VIEW](./data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW.md)
 - [SHOW MATERIALIZED VIEWS](./data-manipulation/SHOW_MATERIALIZED_VIEW.md)
+
+## 字典对象
+
+- [CANCEL REFRESH DICTIONARY](./data-definition/CANCEL_REFRESH_DICTIONARY.md)
+- [CREATE DICTIONARY](./data-definition/CREATE_DICTIONARY.md)
+- [DROP DICTIONARY](./data-definition/DROP_DICTIONARY.md)
+- [REFRESH DICTIONARY](./data-definition/REFRESH_DICTIONARY.md)
+- [SHOW DICTIONARY](./data-manipulation/SHOW_DICTIONARY.md)
 
 ## 函数，SELECT
 

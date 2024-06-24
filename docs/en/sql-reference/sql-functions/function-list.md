@@ -462,4 +462,5 @@ You can find a built-in function based on the following categories:
 
 ## Dictionary functions
 
-[dict_mapping](./dict-functions/dict_mapping.md)
+- [dict_mapping](./dict-functions/dict_mapping.md)
+- [dictionary_get](./dict-functions/dictionary_get.md)

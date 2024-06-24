@@ -508,3 +508,4 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 |  [dict_mapping](./dict-functions/dict_mapping.md)| 通过指定字典表和 key，返回该 key 所映射的 value。 |
+|  [dictionary_get](./dict-functions/dictionary_get.md)| 查询字典对象中 key 映射的 value。 |

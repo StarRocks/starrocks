@@ -64,6 +64,7 @@ displayed_sidebar: "English"
 - [SHOW DATA](./data-manipulation/SHOW_DATA.md)
 - [SHOW DATABASES](./data-manipulation/SHOW_DATABASES.md)
 - [SHOW DELETE](./data-manipulation/SHOW_DELETE.md)
+- [SHOW DICTIONARY](./data-manipulation/SHOW_DICTIONARY.md)
 - [SHOW DYNAMIC PARTITION TABLES](./data-manipulation/SHOW_DYNAMIC_PARTITION_TABLES.md)
 - [SHOW FULL COLUMNS](./data-manipulation//SHOW_FULL_COLUMNS.md)
 - [SHOW FUNCTIONS](./data-definition/SHOW_FUNCTIONS.md)
