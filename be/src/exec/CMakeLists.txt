@@ -21,6 +21,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
+    capture_version_node.cpp
     data_sink.cpp
     empty_set_node.cpp
     exec_node.cpp
@@ -166,6 +167,7 @@ set(EXEC_FILES
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp
+    pipeline/capture_version_operator.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_parallel_merge_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp

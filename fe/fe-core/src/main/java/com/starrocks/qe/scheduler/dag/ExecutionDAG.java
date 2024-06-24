@@ -17,6 +17,8 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -25,9 +27,13 @@ import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.qe.QueryStatisticsItem;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.SchedulerException;
+import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
@@ -66,6 +72,7 @@ public class ExecutionDAG {
 
     private final JobSpec jobSpec;
     private final List<ExecutionFragment> fragments;
+    private ExecutionFragment captureVersionFragment = null;
     private final Map<PlanFragmentId, ExecutionFragment> idToFragment;
 
     /**
@@ -78,7 +85,8 @@ public class ExecutionDAG {
     /**
      * The executions will be added to {@code indexInJobToExecState}, when it is deploying.
      */
-    private final ConcurrentMap<Integer, FragmentInstanceExecState> indexInJobToExecState = new ConcurrentSkipListMap<>();
+    private final ConcurrentMap<Integer, FragmentInstanceExecState> indexInJobToExecState =
+            new ConcurrentSkipListMap<>();
 
     /**
      * Backend which state need to be checked when joining this coordinator.
@@ -112,6 +120,10 @@ public class ExecutionDAG {
             fragments.add(fragment);
             idToFragment.put(planFragment.getFragmentId(), fragment);
         }
+    }
+
+    ExecutionFragment getCaptureVersionFragment() {
+        return captureVersionFragment;
     }
 
     public Set<TUniqueId> getInstanceIds() {
@@ -256,6 +268,19 @@ public class ExecutionDAG {
         return fragments.get(0).getPlanFragment().getDataPartition() == DataPartition.UNPARTITIONED;
     }
 
+    public void prepareCaptureVersion(boolean isPhasedSchedule) {
+        if (!isPhasedSchedule) {
+            return;
+        }
+        final CaptureVersionFragmentBuilder builder =
+                new CaptureVersionFragmentBuilder(fragments);
+        final ExecutionFragment build = builder.build(this);
+        if (build != null) {
+            captureVersionFragment = build;
+            fragments.add(build);
+        }
+    }
+
     /**
      * Do the finalize work after all the fragment instances have already been added to the DAG, including:
      *
@@ -374,7 +399,8 @@ public class ExecutionDAG {
      */
     private void connectFragmentToDestFragments(ExecutionFragment execFragment) throws SchedulerException {
         if (execFragment.getPlanFragment() instanceof MultiCastPlanFragment) {
-            connectMultiCastFragmentToDestFragments(execFragment, (MultiCastPlanFragment) execFragment.getPlanFragment());
+            connectMultiCastFragmentToDestFragments(execFragment,
+                    (MultiCastPlanFragment) execFragment.getPlanFragment());
         } else {
             connectNormalFragmentToDestFragments(execFragment);
         }
@@ -525,6 +551,34 @@ public class ExecutionDAG {
 
         instance.setInstanceId(instanceId);
         instanceIdToInstance.put(instanceId, instance);
+    }
+
+    public void cancelQueryContext(PPlanFragmentCancelReason cancelReason) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("cancel query context id:{} reason:{}", DebugUtil.printId(jobSpec.getQueryId()),
+                    cancelReason.name());
+        }
+
+        Set<ComputeNode> workers = Sets.newHashSet();
+        for (FragmentInstanceExecState execution : this.getExecutions()) {
+            final ComputeNode worker = execution.getWorker();
+            workers.add(worker);
+        }
+
+        final TUniqueId dummyInstanceId = new TUniqueId(0, 0);
+
+        for (ComputeNode worker : workers) {
+            TNetworkAddress brpcAddress = worker.getBrpcAddress();
+            try {
+                BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
+                        jobSpec.getQueryId(), dummyInstanceId, cancelReason,
+                        jobSpec.isEnablePipeline());
+            } catch (RpcException e) {
+                LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
+                        brpcAddress.getPort(), e);
+                SimpleScheduler.addToBlocklist(worker.getId());
+            }
+        }
     }
 
 }

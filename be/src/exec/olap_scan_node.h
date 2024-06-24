@@ -87,6 +87,9 @@ public:
     int estimated_max_concurrent_chunks() const;
 
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
+    static StatusOr<std::vector<RowsetSharedPtr>> capture_tablet_rowsets(const TabletSharedPtr& tablet,
+                                                                         const TInternalScanRange* scan_range);
+
     static int compute_priority(int32_t num_submitted_tasks);
 
     int io_tasks_per_scan_operator() const override {

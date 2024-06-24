@@ -509,7 +509,13 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     Status st;
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
-    LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
+    if (cancel_query_ctx) {
+        DCHECK(request->has_query_id());
+        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
+    } else {
+        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    }
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
         TUniqueId query_id;
@@ -521,19 +527,27 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         query_id.__set_hi(request->query_id().hi());
         query_id.__set_lo(request->query_id().lo());
-        auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
+
+        auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
         if (!query_ctx) {
             LOG(INFO) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
                                              print_id(query_id), print_id(tid));
             st.to_protobuf(result->mutable_status());
             return;
         }
-        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
-        if (!fragment_ctx) {
-            LOG(INFO) << strings::Substitute("FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1",
-                                             print_id(query_id), print_id(tid));
+        if (cancel_query_ctx) {
+            // cancel query_id
+            query_ctx->cancel(Status::Cancelled(reason_string));
         } else {
-            fragment_ctx->cancel(Status::Cancelled(reason_string));
+            // cancel fragment
+            auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
+            if (!fragment_ctx) {
+                LOG(INFO) << strings::Substitute(
+                        "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
+                        print_id(tid));
+            } else {
+                fragment_ctx->cancel(Status::Cancelled(reason_string));
+            }
         }
     } else {
         if (request->has_cancel_reason()) {

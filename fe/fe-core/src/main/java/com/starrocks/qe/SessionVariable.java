@@ -539,6 +539,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
 
+    public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
+    public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
+
     // Access ORC columns by name. By default, columns in ORC files are accessed by
     // their ordinal position in the Hive table definition.
     public static final String ORC_USE_COLUMN_NAMES = "orc_use_column_names";
@@ -2178,6 +2181,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //
     @VarAttr(name = ENABLE_WAIT_DEPENDENT_EVENT)
     private boolean enableWaitDependentEvent = false;
+
+    @VarAttr(name = ENABLE_PHASED_SCHEDULER)
+    private boolean enablePhasedScheduler = false;
+
+    @VarAttr(name = PHASED_SCHEDULER_MAX_CONCURRENCY)
+    private int phasedSchedulerMaxConcurrency = 2;
+
+    public int getPhasedSchedulerMaxConcurrency() {
+        return phasedSchedulerMaxConcurrency;
+    }
+    public void setPhasedSchedulerMaxConcurrency(int phasedSchedulerMaxConcurrency) {
+        this.phasedSchedulerMaxConcurrency = phasedSchedulerMaxConcurrency;
+    }
+
+    public boolean enablePhasedScheduler() {
+        return enablePhasedScheduler;
+    }
+    public void setEnablePhasedScheduler(boolean enablePhasedScheduler) {
+        this.enablePhasedScheduler = enablePhasedScheduler;
+    }
 
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
@@ -4011,7 +4034,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
-        tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
+        if (enablePhasedScheduler) {
+            tResult.setQuery_delivery_timeout(tResult.getQuery_timeout());
+        } else {
+            tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
+        }
         tResult.setEnable_profile(enableProfile);
         tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
         tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);

@@ -111,6 +111,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
@@ -737,7 +738,7 @@ public class StmtExecutor {
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
-                coord.cancel(context.getState().getErrorMessage());
+                coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
             }
 
             if (parsedStmt instanceof InsertStmt && !parsedStmt.isExplain()) {

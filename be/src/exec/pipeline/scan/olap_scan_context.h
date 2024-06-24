@@ -23,6 +23,7 @@
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "runtime/global_dict/parser.h"
+#include "storage/rowset/rowset.h"
 #include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
@@ -115,7 +116,9 @@ public:
 
     Status capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges);
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
-    const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const { return _tablet_rowsets; };
+    const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const {
+        return _rowset_release_guard.tablet_rowsets();
+    };
 
     const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
 
@@ -148,7 +151,7 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<TabletSharedPtr> _tablets;
-    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+    MultiRowsetReleaseGuard _rowset_release_guard;
     ConcurrentJitRewriter& _jit_rewriter;
 };
 

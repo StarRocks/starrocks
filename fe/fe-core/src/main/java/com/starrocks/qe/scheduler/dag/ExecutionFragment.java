@@ -86,6 +86,9 @@ public class ExecutionFragment {
     private Boolean cachedIsLocalBucketShuffleJoin = null;
 
     private boolean isRightOrFullBucketShuffle = false;
+    // used for phased schedule
+    private boolean isScheduled = false;
+    private boolean needReportFragmentFinish = false;
 
     public ExecutionFragment(ExecutionDAG executionDAG, PlanFragment planFragment, int fragmentIndex) {
         this.executionDAG = executionDAG;
@@ -439,5 +442,20 @@ public class ExecutionFragment {
         }
 
         return childHasBucketShuffle;
+    }
+
+    public boolean isScheduled() {
+        return isScheduled;
+    }
+
+    public void setIsScheduled(boolean isScheduled) {
+        this.isScheduled = isScheduled;
+    }
+
+    public boolean isNeedReportFragmentFinish() {
+        return needReportFragmentFinish;
+    }
+    public void setNeedReportFragmentFinish(boolean needReportFragmentFinish) {
+        this.needReportFragmentFinish = needReportFragmentFinish;
     }
 }
