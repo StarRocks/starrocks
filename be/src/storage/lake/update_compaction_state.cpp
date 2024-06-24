@@ -33,6 +33,7 @@ CompactionState::~CompactionState() {
 
 Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
                                       const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+    CHECK_MEM_LIMIT("CompactionState::load_segments");
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
     std::lock_guard<std::mutex> lg(_state_lock);
     if (pk_cols.empty() && rowset->num_segments() > 0) {
@@ -90,13 +91,13 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
             } else if (!st.ok()) {
                 return st;
             } else {
-                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
             }
         }
         itr->close();
     }
     dest = std::move(col);
-    dest->raw_data();
+    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest->memory_usage();
     _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
     return Status::OK();
