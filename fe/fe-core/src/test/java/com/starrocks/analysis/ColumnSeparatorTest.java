@@ -49,6 +49,30 @@ public class ColumnSeparatorTest {
         Assert.assertEquals("\t", separator.getColumnSeparator());
         Assert.assertEquals("\t", separator.getOriSeparator());
 
+        // \\t
+        separator = new ColumnSeparator("\\t");
+        Assert.assertEquals("'\\t'", separator.toSql());
+        Assert.assertEquals("\t", separator.getColumnSeparator());
+        Assert.assertEquals("\\t", separator.getOriSeparator());
+
+        // \\t\\t
+        separator = new ColumnSeparator("\\t\\t");
+        Assert.assertEquals("'\\t\\t'", separator.toSql());
+        Assert.assertEquals("\t\t", separator.getColumnSeparator());
+        Assert.assertEquals("\\t\\t", separator.getOriSeparator());
+
+        // a\\ta\\t
+        separator = new ColumnSeparator("a\\ta\\t");
+        Assert.assertEquals("'a\\ta\\t'", separator.toSql());
+        Assert.assertEquals("a\ta\t", separator.getColumnSeparator());
+        Assert.assertEquals("a\\ta\\t", separator.getOriSeparator());
+
+        // \\t\\n
+        separator = new ColumnSeparator("\\t\\n");
+        Assert.assertEquals("'\\t\\n'", separator.toSql());
+        Assert.assertEquals("\t\n", separator.getColumnSeparator());
+        Assert.assertEquals("\\t\\n", separator.getOriSeparator());
+
         // \x01
         separator = new ColumnSeparator("\\x01");
         Assert.assertEquals("'\\x01'", separator.toSql());
