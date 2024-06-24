@@ -252,8 +252,6 @@ public class RestoreJobPrimaryKeyTest {
                 for (Tablet tablet : index.getTablets()) {
                     BackupTabletInfo tabletInfo = new BackupTabletInfo();
                     tabletInfo.id = tablet.getId();
-                    tabletInfo.files.add(tabletInfo.id + ".dat");
-                    tabletInfo.files.add("meta");
                     idxInfo.tablets.add(tabletInfo);
                 }
             }
