@@ -68,6 +68,9 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+        SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
+                config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
         if (log.has_op_write()) {
             RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
@@ -89,8 +92,24 @@ public:
     }
 
     Status finish() override {
+<<<<<<< HEAD
         // Must call `commit_primary_index` before `finalize`,
         // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
+=======
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+        SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
+                config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+        // still need prepre primary index even there is an empty compaction
+        if (_index_entry == nullptr && _has_empty_compaction) {
+            // get lock to avoid gc
+            _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
+            DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+            RETURN_IF_ERROR(prepare_primary_index());
+        }
+
+        // Must call `commit` before `finalize`,
+        // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
+>>>>>>> 15ad8a892b ([Enhancement] add memory usage check for pk table (#46978))
         // if `_index_entry` is null, do nothing.
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
         Status st = _builder.finalize(_max_txn_id);
