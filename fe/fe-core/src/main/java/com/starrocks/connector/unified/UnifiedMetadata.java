@@ -52,6 +52,7 @@ import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.catalog.Table.TableType.KUDU;
+import static com.starrocks.catalog.Table.TableType.PAIMON;
 import static java.util.Objects.requireNonNull;
 
 public class UnifiedMetadata implements ConnectorMetadata {
@@ -97,6 +98,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
         }
         if (isDeltaLakeTable(table.getProperties())) {
             return DELTALAKE;
+        }
+        if (isPaimonTable(table.getProperties())) {
+            return PAIMON;
         }
         if (table.isKuduTable()) {
             return KUDU;
