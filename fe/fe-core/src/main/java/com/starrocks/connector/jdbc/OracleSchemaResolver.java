@@ -116,6 +116,8 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             case Types.LONGVARCHAR:
                 return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
             case Types.BLOB:
+            case Types.BINARY:
+            case Types.VARBINARY:
             // raw
             case 23:
                 if (columnSize > 0) {
