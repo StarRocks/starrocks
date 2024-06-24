@@ -1653,11 +1653,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### stale_memtable_flush_time_sec
 
-- Default: 30
+- Default: 0
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
+- Description: 0 means prohibited. Other memtables whose last update time is greater than stale_memtable_flush_time_sec will be persisted when memory is insufficient.
 - Introduced in: -
 -->
 
