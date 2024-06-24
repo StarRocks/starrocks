@@ -27,8 +27,8 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
-#include "util/bthreads/single_flight.h"
 #include "storage/rowset/base_rowset.h"
+#include "util/bthreads/single_flight.h"
 
 namespace starrocks {
 struct FileInfo;
@@ -171,14 +171,22 @@ public:
     const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
+    const LocationProvider* location_provider() const {
+        return _location_provider;
+    }
+
     UpdateManager* update_mgr();
 
-    CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
+    CompactionScheduler* compaction_scheduler() {
+        return _compaction_scheduler.get();
+    }
 
     void update_metacache_limit(size_t limit);
 
     // The return value will never be null.
-    Metacache* metacache() { return _metacache.get(); }
+    Metacache* metacache() {
+        return _metacache.get();
+    }
 
     StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 
