@@ -844,12 +844,12 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
 
     auto res = _tablet_manager->capture_tablet_and_rowsets(123, 0, 2);
     EXPECT_TRUE(res.ok());
-    auto& [tablet, rowsets] = res.value();
-    ASSERT_EQ(2, rowsets.size());
+    auto pair = res.value();
+    ASSERT_EQ(2, pair.second.size());
 
     res = _tablet_manager->capture_tablet_and_rowsets(123, 1, 2);
-    [tablet, rowsets] = res.value();
-    ASSERT_EQ(1, rowsets.size());
+    pair = res.value();
+    ASSERT_EQ(1, pair.second.size());
 }
 
 #endif // USE_STAROS
