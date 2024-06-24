@@ -360,6 +360,14 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
                                 slot_desc->col_name(), java_class));
         }
         return TYPE_VARCHAR;
+    } else if (java_class == "byte[]" || java_class == "oracle.jdbc.OracleBlob" || java_class == "[B") {
+        if (type != TYPE_BINARY && type != TYPE_VARBINARY) {
+            return Status::NotSupported(
+                    fmt::format("Type mismatches on column[{}], JDBC result type is {}, please set the "
+                                "type to varbinary",
+                                slot_desc->col_name(), java_class));
+        }
+        return TYPE_VARBINARY;
     } else {
         if (type != TYPE_VARCHAR) {
             return Status::NotSupported(
@@ -404,8 +412,14 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
         _result_chunk->append_column(std::move(result_column), i);
         auto column_ref = _pool.add(new ColumnRef(intermediate, i));
         // TODO: add check cast status
-        Expr* cast_expr =
-                VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool, true);
+        Expr* cast_expr = nullptr;
+        if (ret_type != _slot_descs[i]->type().type) {
+            cast_expr = VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool,
+                                                             true);
+        } else {
+            cast_expr = column_ref;
+        }
+
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
     }
     RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
