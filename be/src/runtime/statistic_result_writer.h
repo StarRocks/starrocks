@@ -66,6 +66,8 @@ private:
     Status _fill_statistic_histogram_external(int version, const Columns& columns, const Chunk* chunk,
                                               TFetchDataResult* result);
 
+    Status _fill_datacache_copilot_statistic(const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
+
 private:
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;

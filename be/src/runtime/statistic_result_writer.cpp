@@ -32,6 +32,7 @@ const int STATISTIC_BATCH_VERSION = 4;
 const int STATISTIC_EXTERNAL_VERSION = 5;
 const int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
 const int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
+const int STATISTICS_DATACACHE_COPILOT_VERSION = 20;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -160,6 +161,9 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_EXTERNAL_HISTOGRAM_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_statistic_histogram_external(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
+    } else if (version == STATISTICS_DATACACHE_COPILOT_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_datacache_copilot_statistic(result_columns, chunk, result.get()),
+                                  "Fill datacache copilot statistic data failed");
     }
     return result;
 }
@@ -466,6 +470,44 @@ Status StatisticResultWriter::_fill_full_statistic_query_external(int version, c
 
     result->result_batch.rows.resize(num_rows);
     result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+Status StatisticResultWriter::_fill_datacache_copilot_statistic(const Columns& columns, const Chunk* chunk,
+                                                                TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 7);
+
+    // skip read version
+    auto catalog_name = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto database_name = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    auto table_name = ColumnViewer<TYPE_VARCHAR>(columns[3]);
+    auto partition_name = ColumnViewer<TYPE_VARCHAR>(columns[4]);
+    auto column_names = ColumnViewer<TYPE_VARCHAR>(columns[5]);
+    auto count = ColumnViewer<TYPE_BIGINT>(columns[6]);
+
+    std::vector<TStatisticData> data_list;
+    size_t num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        data_list[i].__set_catalogName(catalog_name.value(i).to_string());
+        data_list[i].__set_databaseName(database_name.value(i).to_string());
+        data_list[i].__set_tableName(table_name.value(i).to_string());
+        data_list[i].__set_partitionName(partition_name.value(i).to_string());
+        data_list[i].__set_columnName(column_names.value(i).to_string());
+        data_list[i].__set_rowCount(count.value(i));
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(STATISTICS_DATACACHE_COPILOT_VERSION);
 
     ThriftSerializer serializer(true, chunk->memory_usage());
     for (int i = 0; i < num_rows; ++i) {
