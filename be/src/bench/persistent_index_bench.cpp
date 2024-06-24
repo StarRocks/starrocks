@@ -81,7 +81,7 @@ public:
         _index = std::make_unique<PersistentIndex>(_index_dir);
     }
 
-    ~PersistentIndexBenchTest() { fs::remove_all(_index_dir); }
+    ~PersistentIndexBenchTest() { (void)fs::remove_all(_index_dir); }
 
     void do_bench(benchmark::State& state);
     void do_verify();
@@ -144,11 +144,13 @@ void PersistentIndexBenchTest::do_bench(benchmark::State& state) {
         ASSERT_CHECK(_index->commit(&_index_meta, &stat));
         uint64_t tail = watch.elapsed_time();
         ASSERT_CHECK(_index->on_commited());
+        /* `_index->get_write_amp_score` interface is removed
         if (config::enable_pindex_minor_compaction) {
             if (_index->get_write_amp_score() > 0.0) {
                 ASSERT_CHECK(_index->TEST_major_compaction(_index_meta));
             }
         }
+        */
         if (stat.compaction_cost > 0) {
             LOG(INFO) << stat.print_str();
         }
