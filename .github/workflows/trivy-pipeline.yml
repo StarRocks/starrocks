@@ -40,76 +40,36 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Download
+        run: |
+          cp /home/sr/tar/StarRocks-81e60d1.tar.gz .
+          tar -I pigz -xvf StarRocks-81e60d1.tar.gz
 
       - name: Init
         run: |
-         mkdir trivy_temp
+         mkdir trivy_report
          trivy image --clear-cache
 
-      - name: Run Trivy vulnerability scanner (BE) - console
-        uses: aquasecurity/trivy-action@0.20.0
+      - name: Run Trivy vulnerability scanner (FE)
+        uses: aquasecurity/trivy-action@0.23.0
         env:
-          TMPDIR: ${{ github.workspace }}/trivy_temp # Required to prevent Trivy running out of space
+          TMPDIR: ${{ github.workspace }}/trivy_report
         with:
-          image-ref: 172.26.92.142:5000/celerdata/be-ubuntu:branch-3.3-c6c2a65
-          scan-type: image
+          scan-type: fs
+          scan-ref: './output/fe'
           severity: HIGH,CRITICAL
           scanners: vuln
           vuln-type: library
           timeout: 30m
           exit-code: 0
 
-      - name: Run Trivy vulnerability scanner (BE) - json
-        uses: aquasecurity/trivy-action@0.20.0
-        env:
-          TMPDIR: ${{ github.workspace }}/trivy_temp # Required to prevent Trivy running out of space
-        with:
-          image-ref: 172.26.92.142:5000/celerdata/be-ubuntu:branch-3.3-c6c2a65
-          scan-type: image
-          severity: HIGH,CRITICAL
-          scanners: vuln
-          vuln-type: library
-          format: json
-          timeout: 30m
-          output: trivy-be.json
-          exit-code: 0
 
-      - name: Run Trivy vulnerability scanner (FE) - console
-        uses: aquasecurity/trivy-action@0.20.0
-        env:
-          TMPDIR: ${{ github.workspace }}/trivy_temp
-        with:
-          image-ref: 172.26.92.142:5000/celerdata/fe-ubuntu:branch-3.3-c6c2a65
-          scan-type: image
-          severity: HIGH,CRITICAL
-          scanners: vuln
-          vuln-type: library
-          timeout: 30m
-          exit-code: 0
-
-      - name: Run Trivy vulnerability scanner (FE) - json
-        uses: aquasecurity/trivy-action@0.20.0
-        env:
-          TMPDIR: ${{ github.workspace }}/trivy_temp # Required to prevent Trivy running out of space
-        with:
-          image-ref: 172.26.92.142:5000/celerdata/fe-ubuntu:branch-3.3-c6c2a65
-          scan-type: image
-          severity: HIGH,CRITICAL
-          scanners: vuln
-          vuln-type: library
-          format: json
-          timeout: 30m
-          output: trivy-fe.json
-          exit-code: 0
-
-      - name: Upload trivy report as a Github artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-sbom-report
-          path: '${{ github.workspace }}/trivy-*.json'
-          retention-days: 20
+#      - name: Upload trivy report as a Github artifact
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: trivy-sbom-report
+#          path: '${{ github.workspace }}/trivy-*.json'
+#          retention-days: 20
 
 #      - name: Upload Trivy scan results to GitHub Security tab
 #        uses: github/codeql-action/upload-sarif@v2
