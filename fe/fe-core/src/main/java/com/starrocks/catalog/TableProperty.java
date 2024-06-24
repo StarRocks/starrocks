@@ -244,6 +244,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
+    @SerializedName(value = "compressionLevel")
     // the default compression level of this table, only used for zstd for now.
     private int compressionLevel = -1;
 
