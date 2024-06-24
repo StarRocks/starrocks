@@ -107,7 +107,7 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 for (EsShardPartitions esShardPartitions : partitionedIndices.values()) {
                     List<Comparable> partitionInfo = new ArrayList<Comparable>();
                     partitionInfo.add(esShardPartitions.getIndexName());
-                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(esTable.getIdToColumn());
                     List<String> colNames = new ArrayList<String>();
                     for (Column column : partitionColumns) {
                         colNames.add(column.getName());

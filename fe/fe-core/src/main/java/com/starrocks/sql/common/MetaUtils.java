@@ -20,6 +20,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
@@ -45,6 +47,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -280,5 +283,62 @@ public class MetaUtils {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
+    }
+
+    public static List<Column> getColumnsByColumnIds(List<Column> schema, List<ColumnId> ids) {
+        return getColumnsByColumnIds(buildIdToColumn(schema), ids);
+    }
+
+    public static List<Column> getColumnsByColumnIds(Table table, List<ColumnId> ids) {
+        List<Column> result = new ArrayList<>(ids.size());
+        for (ColumnId columnId : ids) {
+            Column column = table.getColumn(columnId);
+            if (column == null) {
+                throw new SemanticException(String.format("can not find column by column id: %s", columnId));
+            }
+            result.add(column);
+        }
+        return result;
+    }
+
+    public static List<Column> getColumnsByColumnIds(Map<ColumnId, Column> idToColumn, List<ColumnId> ids) {
+        List<Column> result = new ArrayList<>(ids.size());
+        for (ColumnId columnId : ids) {
+            Column column = idToColumn.get(columnId);
+            if (column == null) {
+                throw new SemanticException(String.format("can not find column by column id: %s", columnId));
+            }
+            result.add(column);
+        }
+        return result;
+    }
+
+    public static Map<ColumnId, Column> buildIdToColumn(List<Column> schema) {
+        Map<ColumnId, Column> result = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : schema) {
+            result.put(column.getColumnId(), column);
+        }
+        return result;
+    }
+
+    public static List<String> getColumnNamesByColumnIds(Map<ColumnId, Column> idToColumn, List<ColumnId> columnIds) {
+        List<String> names = new ArrayList<>(columnIds.size());
+        for (ColumnId columnId : columnIds) {
+            Column column = idToColumn.get(columnId);
+            if (column == null) {
+                throw new SemanticException(String.format("can not find column by column id: %s", columnId));
+            }
+            names.add(column.getName());
+        }
+        return names;
+    }
+
+    public static Column getColumnByColumnName(long dbId, long tableId, String columnName) {
+        Table table = getTable(dbId, tableId);
+        Column column = table.getColumn(columnName);
+        if (column == null) {
+            throw new SemanticException(String.format("can not find column by name: %s", columnName));
+        }
+        return column;
     }
 }

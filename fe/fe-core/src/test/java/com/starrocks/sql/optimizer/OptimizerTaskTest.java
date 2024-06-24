@@ -22,6 +22,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -2046,6 +2047,10 @@ public class OptimizerTaskTest {
         columnList2.add(column4);
         HashDistributionInfo hashDistributionInfo2 = new HashDistributionInfo(3, columnList2);
 
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(column2.getColumnId(), column2);
+        idToColumn.put(column4.getColumnId(), column4);
+
         MaterializedIndex m1 = new MaterializedIndex();
         m1.setRowCount(100000000);
         Partition p1 = new Partition(0, "p1", m1, hashDistributionInfo1);
@@ -2075,6 +2080,10 @@ public class OptimizerTaskTest {
                 olapTable1.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
+
+                olapTable1.getIdToColumn();
+                result = idToColumn;
+                minTimes = 0;
             }
 
             {
@@ -2096,6 +2105,10 @@ public class OptimizerTaskTest {
 
                 olapTable2.isNativeTableOrMaterializedView();
                 result = true;
+                minTimes = 0;
+
+                olapTable2.getIdToColumn();
+                result = idToColumn;
                 minTimes = 0;
             }
         };
@@ -2163,6 +2176,10 @@ public class OptimizerTaskTest {
         m2.setRowCount(2000000);
         Partition p2 = new Partition(1, "p2", m2, hashDistributionInfo2);
 
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(column2.getColumnId(), column2);
+        idToColumn.put(column4.getColumnId(), column4);
+
         new Expectations() {
             {
                 olapTable1.getId();
@@ -2188,6 +2205,10 @@ public class OptimizerTaskTest {
                 olapTable1.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
+
+                olapTable1.getIdToColumn();
+                result = idToColumn;
+                minTimes = 0;
             }
 
             {
@@ -2209,6 +2230,10 @@ public class OptimizerTaskTest {
 
                 olapTable2.isNativeTableOrMaterializedView();
                 result = true;
+                minTimes = 0;
+
+                olapTable2.getIdToColumn();
+                result = idToColumn;
                 minTimes = 0;
             }
         };

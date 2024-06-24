@@ -1548,7 +1548,7 @@ public class AstToStringBuilder {
 
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql());
+            sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
 
             // order by
             MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -1606,7 +1606,7 @@ public class AstToStringBuilder {
                 sb.append("PARTITION BY RANGE(");
                 idx = 0;
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                for (Column column : rangePartitionInfo.getPartitionColumns(table.getIdToColumn())) {
                     if (idx != 0) {
                         sb.append(", ");
                     }

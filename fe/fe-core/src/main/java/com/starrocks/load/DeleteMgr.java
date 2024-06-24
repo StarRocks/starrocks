@@ -333,7 +333,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             partitionNames.addAll(olapTable.getPartitionNames());
         } else {
             RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
-                    rangePartitionInfo.getPartitionColumns(), columnFilters);
+                    rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn()), columnFilters);
             Collection<Long> selectedPartitionIds = pruner.prune();
 
             if (selectedPartitionIds == null) {
@@ -352,7 +352,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                                                                    List<Predicate> conditions)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(table.getIdToColumn());
         List<Predicate> deleteConditions = conditions;
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column column : table.getBaseSchema()) {

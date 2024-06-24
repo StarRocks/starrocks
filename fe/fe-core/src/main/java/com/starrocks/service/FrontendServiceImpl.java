@@ -2113,7 +2113,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(physicalPartition.getParentId());
-            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            int partColNum = rangePartitionInfo.getPartitionColumnsSize();
             // set start keys
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
@@ -2482,7 +2482,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
-            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            int partColNum = rangePartitionInfo.getPartitionColumnsSize();
             // set start keys
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
