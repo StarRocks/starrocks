@@ -1244,6 +1244,29 @@ class StarrocksSQLApiLib(object):
                 count += 1
         tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
 
+    def wait_mv_refresh_count(self, db_name, mv_name, expect_count):
+        show_sql = """select count(*) from information_schema.materialized_views 
+        join information_schema.task_runs using(task_name)
+        where table_schema='{}' and table_name='{}' and state = 'SUCCESS'
+        """.format(db_name, mv_name)
+        print(show_sql)
+        
+        cnt = 1
+        refresh_count = 0
+        while cnt < 60:
+            res = self.execute_sql(show_sql, True)
+            print(res)
+            refresh_count = res["result"][0][0]
+            if refresh_count >= expect_count:
+                return
+            else:
+                print("current refresh count is {}, expect is {}".format(refresh_count, expect_count))
+                time.sleep(1)
+            cnt += 1
+            
+        tools.assert_equal(expect_count, refresh_count, "wait too long for the refresh count")
+
+
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
         wait pipe load finish
