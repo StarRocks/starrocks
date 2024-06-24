@@ -359,7 +359,9 @@ public class RoutineLoadJobTest {
         ErrorReason reason = routineLoadJob.pauseReason;
         Assert.assertEquals(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, reason.getCode());
         Assert.assertEquals(
-                "Current error rows: 1 is more than max error num: 0. Check the 'TrackingSQL' field for detailed information",
+                "Current error rows: 1 is more than max error num: 0. Check the 'TrackingSQL' field for detailed information. " +
+                        "If you are sure that the data has many errors, you can set 'max_error_number' property " +
+                        "to a greater value through ALTER ROUTINE LOAD and RESUME the job.",
                 reason.getMsg());
     }
 
