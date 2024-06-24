@@ -42,7 +42,7 @@ jobs:
 
       - name: Download
         run: |
-          cp /home/sr/tar/StarRocks-81e60d1.tar.gz .
+          cp /home/disk1/sr/tar/StarRocks-81e60d1.tar.gz .
           tar -I pigz -xvf StarRocks-81e60d1.tar.gz
 
       - name: Init
