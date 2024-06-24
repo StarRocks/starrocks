@@ -727,7 +727,7 @@ public:
     }
 
     static const ZstdBlockCompression* instance(int level) {
-        if (level <= 0 || level >= 22) {
+        if (level <= 0 || level >= 23) {
             return nullptr;
         }
 
