@@ -468,6 +468,9 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
         ck->append_or_update_column(std::move(col), slot_desc->id());
     } else {
         for (auto* slot_desc : not_existed_slots) {
+            if (ck->is_slot_exist(slot_desc->id())) {
+                continue;
+            }
             auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
             if (row_count > 0) {
                 col->append_default(row_count);
@@ -528,6 +531,9 @@ void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* ch
     ChunkPtr& ck = (*chunk);
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
+        if (ck->is_slot_exist(slot_desc->id())) {
+            continue;
+        }
         DCHECK(partition_values[i]->is_constant());
         auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
         ColumnPtr data_column = const_column->data_column();
