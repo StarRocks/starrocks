@@ -1583,13 +1583,4 @@ public class ScalarOperatorFunctions {
 
         return ConstantOperator.createBoolean(roleNames.contains(role.getVarchar()));
     }
-<<<<<<< HEAD
-=======
-
-    @ConstantFunction(name = "typeof_internal", returnType = VARCHAR, argTypes = {VARCHAR})
-    public static ConstantOperator typeofInternal(ConstantOperator value) {
-        return ConstantOperator.createVarchar(value.getVarchar());
-    }
-
->>>>>>> df250942c0 ([Enhancement] Support `week` function to do const folding (#47365))
 }
