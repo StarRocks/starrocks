@@ -273,9 +273,9 @@ alter table tab1 modify column c1 add field [*].val1 int;
 -- result:
 E: (1064, 'Add field for struct column require table enable fast schema evolution')
 -- !result
-alter table tab1 modify column c1 add field [*].v3 int;
+alter table tab1 modify column c1 drop field [*].v1;
 -- result:
-E: (1064, 'Add field for struct column require table enable fast schema evolution')
+E: (1064, 'Drop field for struct column require table enable fast schema evolution')
 -- !result
 drop table tab1;
 -- result:
