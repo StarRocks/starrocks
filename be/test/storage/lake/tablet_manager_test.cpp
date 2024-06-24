@@ -629,6 +629,8 @@ TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
     }
 }
 
+
+
 #ifdef USE_STAROS
 class MockStarOSWorker : public StarOSWorker {
 public:
@@ -709,6 +711,36 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
 
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
+}
+
+TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
+    starrocks::TabletMetadata metadata;
+    metadata.set_id(123);
+    metadata.set_version(1);
+    auto rowset_meta_pb1 = metadata.add_rowsets();
+    rowset_meta_pb1->set_id(2);
+    rowset_meta_pb1->set_overlapped(false);
+    rowset_meta_pb1->set_data_size(1024);
+    rowset_meta_pb1->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+
+    metadata.set_version(2);
+    auto rowset_meta_pb2 = metadata.add_rowsets();
+    rowset_meta_pb2->set_id(3);
+    rowset_meta_pb2->set_overlapped(false);
+    rowset_meta_pb2->set_data_size(1024);
+    rowset_meta_pb2->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    auto res = _tablet_manager->capture_tablet_and_rowsets(123, 0, 2);
+    EXPECT_TRUE(res.ok());
+    auto& [tablet, rowsets] = res.value();
+    ASSERT_EQ(2, rowset.size());
+
+    res = _tablet_manager->capture_tablet_and_rowsets(123, 1, 2);
+    [tablet, rowsets] = res.value();
+    ASSERT_EQ(1, rowset.size());
 }
 
 #endif // USE_STAROS
