@@ -337,7 +337,6 @@ public class FunctionSet {
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
-    public static final String ARRAY_SORTBY_MULTI = "array_sortby_multi";
     public static final String ANY_MATCH = "any_match";
     public static final String ALL_MATCH = "all_match";
 

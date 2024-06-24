@@ -79,7 +79,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (fn.functionName().equals(FunctionSet.ARRAY_MAP) ||
                     fn.functionName().equals(FunctionSet.EXCHANGE_BYTES) ||
                     fn.functionName().equals(FunctionSet.EXCHANGE_SPEED) ||
-                    fn.functionName().equals(FunctionSet.ARRAY_SORTBY_MULTI)) {
+                    fn.functionName().equals(FunctionSet.ARRAY_SORTBY)) {
                 return call;
             }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {
