@@ -352,9 +352,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                                                 IMaterializedViewMetricsEntity mvEntity) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         int maxRefreshMaterializedViewRetryNum = getMaxRefreshMaterializedViewRetryNum(taskRunContext.getCtx());
-        LOG.info("start to refresh mv:{} with retry times:{}, try lock failure retry times:{}",
-                materializedView.getName(), maxRefreshMaterializedViewRetryNum,
-                Config.max_mv_refresh_try_lock_failure_retry_times);
+        LOG.info("Start to refresh mv:{} with retry times:{}, try lock failure retry times:{}",
+                materializedView.getName(), maxRefreshMaterializedViewRetryNum);
+        LOG.info("MV Refresh info, mv:{}, refBaseTablePartitionExprMap:{}," +
+                        "refBaseTablePartitionSlotMap:{}, refBaseTablePartitionColumnMap:{}," +
+                        "refBaseTablePartitionColumn:{}, baseTableInfos:{}", materializedView.getName(),
+                materializedView.getRefBaseTablePartitionExprMap(), materializedView.getRefBaseTablePartitionSlotMap(),
+                materializedView.getRefBaseTablePartitionColumnMap(), materializedView.getRefBaseTablePartitionColumn(),
+                MvUtils.formatBaseTableInfos(materializedView.getBaseTableInfos()));
 
         Throwable lastException = null;
         int lockFailedTimes = 0;
@@ -1254,7 +1259,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (!(mvPartitionInfo.isRangePartition())) {
                         return false;
                     }
-                    Pair<Table, Column> partitionTableAndColumn = materializedView.getDirectTableAndPartitionColumn();
+                    Pair<Table, Column> partitionTableAndColumn = materializedView.getRefBaseTablePartitionColumn();
                     Column partitionColumn = partitionTableAndColumn.second;
                     // TODO: need to consider(non ref-base table's change)
                     // For Non-partition based base table, it's not necessary to check the partition changed.

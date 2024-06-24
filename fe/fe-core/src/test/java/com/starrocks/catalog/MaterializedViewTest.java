@@ -281,7 +281,7 @@ public class MaterializedViewTest {
         MaterializedView oldMv = (MaterializedView) table;
         Assert.assertTrue(oldMv.getRefreshScheme().isAsync());
         Assert.assertTrue(oldMv.getRefreshScheme().toString().contains("MvRefreshScheme"));
-        Map<Table, Column> partitionMap = oldMv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> partitionMap = oldMv.getRefBaseTablePartitionColumnMap();
         Table table1 = db.getTable("tbl1");
         Assert.assertTrue(partitionMap.containsKey(table1));
         List<Table.TableType> baseTableType = oldMv.getBaseTableTypes();
@@ -290,7 +290,7 @@ public class MaterializedViewTest {
         connectContext.executeSql("refresh materialized view mv_to_rename with sync mode");
         Optional<Long> maxTime = oldMv.maxBaseTableRefreshTimestamp();
         Assert.assertTrue(maxTime.isPresent());
-        Pair<Table, Column> pair = oldMv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> pair = oldMv.getRefBaseTablePartitionColumn();
         Assert.assertEquals("tbl1", pair.first.getName());
 
         String alterSql = "alter materialized view mv_to_rename rename mv_new_name;";

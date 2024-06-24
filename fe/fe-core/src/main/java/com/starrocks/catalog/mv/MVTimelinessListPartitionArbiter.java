@@ -47,7 +47,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
     public MvUpdateInfo getMVTimelinessUpdateInfoInChecked() throws AnalysisException {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
-        Map<Table, Column> refBaseTableAndColumns = mv.getRelatedPartitionTableAndColumn();
+        Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumnMap();
         if (refBaseTableAndColumns.isEmpty()) {
             mv.setInactiveAndReason("partition configuration changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", mv.getName());
