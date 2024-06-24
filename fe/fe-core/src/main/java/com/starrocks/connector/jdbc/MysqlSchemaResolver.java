@@ -136,6 +136,10 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.VARCHAR:
             case Types.LONGVARCHAR: //text type in mysql
                 return ScalarType.createVarcharType(columnSize);
+            case Types.BLOB:
+            case Types.BINARY:
+            case Types.LONGVARBINARY:
+                return ScalarType.createOlapMaxVarcharType();
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
