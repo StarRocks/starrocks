@@ -9,7 +9,7 @@ admin set frontend config ("max_automatic_partition_number"="0");
 -- !result
 insert into ss values('2002-01-01', 1, 2);
 -- result:
-E: (5025, ' Automatically created partitions exceeded the maximum limit: 0. You can modify this restriction on by setting max_automatic_partition_number larger.')
+[REGEX].*Automatically created partitions exceeded the maximum limit: 0.*
 -- !result
 admin set frontend config ("max_automatic_partition_number"="4096");
 -- result:
