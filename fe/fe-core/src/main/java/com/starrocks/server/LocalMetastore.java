@@ -909,9 +909,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                List<Column> newDistriCols = hashDistributionInfo.getDistributionColumns();
-                List<Column> defaultDistriCols = ((HashDistributionInfo) defaultDistributionInfo)
-                        .getDistributionColumns();
+                List<Column> newDistriCols = MetaUtils.getColumnsByColumnIds(olapTable,
+                        hashDistributionInfo.getDistributionColumns());
+                List<Column> defaultDistriCols = MetaUtils.getColumnsByColumnIds(olapTable,
+                        defaultDistributionInfo.getDistributionColumns());
                 if (!newDistriCols.equals(defaultDistriCols)) {
                     throw new DdlException("Cannot assign hash distribution with different distribution cols. "
                             + "default is: " + defaultDistriCols);
@@ -939,7 +940,7 @@ public class LocalMetastore implements ConnectorMetadata {
             String fullGroupName = db.getId() + "_" + olapTable.getColocateGroup();
             ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
             Preconditions.checkNotNull(groupSchema);
-            groupSchema.checkDistribution(distributionInfo);
+            groupSchema.checkDistribution(olapTable.getIdToColumn(), distributionInfo);
             for (PartitionDesc partitionDesc : partitionDescs) {
                 groupSchema.checkReplicationNum(partitionDesc.getReplicationNum());
             }
@@ -1026,10 +1027,12 @@ public class LocalMetastore implements ConnectorMetadata {
         boolean isTempPartition = addPartitionClause.isTempPartition();
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            rangePartitionInfo.handleNewRangePartitionDescs(partitionList, existPartitionNameSet, isTempPartition);
+            rangePartitionInfo.handleNewRangePartitionDescs(olapTable.getIdToColumn(),
+                    partitionList, existPartitionNameSet, isTempPartition);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-            listPartitionInfo.handleNewListPartitionDescs(partitionList, existPartitionNameSet, isTempPartition);
+            listPartitionInfo.handleNewListPartitionDescs(olapTable.getIdToColumn(),
+                    partitionList, existPartitionNameSet, isTempPartition);
         } else {
             throw new DdlException("Only support adding partition to range/list partitioned table");
         }
@@ -1312,7 +1315,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (partitionType == PartitionType.LIST) {
                 try {
                     ((ListPartitionInfo) partitionInfo).unprotectHandleNewPartitionDesc(
-                            info.asListPartitionPersistInfo());
+                            olapTable.getIdToColumn(), info.asListPartitionPersistInfo());
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
@@ -2985,8 +2988,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // create partition info
         PartitionInfo partitionInfo = buildPartitionInfo(stmt);
-        if (partitionInfo instanceof ListPartitionInfo && ((ListPartitionInfo) partitionInfo).getPartitionColumns()
-                .stream().anyMatch(Column::isAllowNull)) {
+        if (partitionInfo instanceof ListPartitionInfo && stmt.getPartitionColumn().isAllowNull()) {
             throw new DdlException("List partition columns must not be nullable in Materialized view for now.");
         }
         // create distribution info
@@ -3647,7 +3649,24 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("rename column {} to {}", colName, newColName);
     }
 
-    private static void renameColumnInternal(OlapTable olapTable, String colName, String newColName) {
+    public void replayRenameColumn(ColumnRenameInfo columnRenameInfo) throws DdlException {
+        long dbId = columnRenameInfo.getDbId();
+        long tableId = columnRenameInfo.getTableId();
+        String colName = columnRenameInfo.getColumnName();
+        String newColName = columnRenameInfo.getNewColumnName();
+        Database db = getDb(dbId);
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+        try {
+            OlapTable olapTable = (OlapTable) db.getTable(tableId);
+            renameColumnInternal(olapTable, colName, newColName);
+            LOG.info("replay rename column[{}] to {}", colName, newColName);
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
+    }
+
+    private void renameColumnInternal(OlapTable olapTable, String colName, String newColName) {
         olapTable.renameColumn(colName, newColName);
 
         Set<String> bfColumns = olapTable.getBfColumns();
@@ -3663,26 +3682,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-        if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
-            for (Column distributionColumn : distributionColumns) {
-                if (distributionColumn.getName().equalsIgnoreCase(colName)) {
-                    distributionColumn.setName(newColName);
-                }
-            }
-        }
-
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-            for (Column partitionColumn : partitionColumns) {
-                if (partitionColumn.getName().equalsIgnoreCase(colName)) {
-                    partitionColumn.setName(newColName);
-                }
-            }
             // for expression range partition will also modify the inner slotRef
             if (partitionInfo instanceof ExpressionRangePartitionInfo) {
                 ExpressionRangePartitionInfo expressionRangePartitionInfo =
@@ -3695,31 +3697,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 Expr expr = expressionRangePartitionInfo.getPartitionExprs().get(0);
                 AnalyzerUtils.renameSlotRef(expr, newColName);
             }
-        } else if (partitionInfo instanceof ListPartitionInfo) {
-            ListPartitionInfo rangePartitionInfo = (ListPartitionInfo) partitionInfo;
-            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-            for (Column partitionColumn : partitionColumns) {
-                if (partitionColumn.getName().equalsIgnoreCase(colName)) {
-                    partitionColumn.setName(newColName);
-                }
-            }
-        }
-    }
-
-    public void replayRenameColumn(ColumnRenameInfo columnRenameInfo) throws DdlException {
-        long dbId = columnRenameInfo.getDbId();
-        long tableId = columnRenameInfo.getTableId();
-        String colName = columnRenameInfo.getColumnName();
-        String newColName = columnRenameInfo.getNewColumnName();
-        Database db = getDb(dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            renameColumnInternal(olapTable, colName, newColName);
-            LOG.info("replay rename column[{}] to {}", colName, newColName);
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

@@ -1296,7 +1296,8 @@ public class AnalyzerUtils {
                     (ExpressionRangePartitionInfo) partitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-            DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+            DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
+                    .toDistributionDesc(olapTable.getIdToColumn());
             Map<String, String> partitionProperties =
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
             String partitionPrefix = "p";
@@ -1359,10 +1360,12 @@ public class AnalyzerUtils {
             throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
-        Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns().get(0).getType();
+        Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
+                .get(0).getType();
         String partitionPrefix = "p";
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
+                .toDistributionDesc(olapTable.getIdToColumn());
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList();

@@ -45,7 +45,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
-import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -1633,8 +1632,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                 for (Column column : indexMeta.getSchema()) {
                     TColumn tColumn = column.toThrift();
-                    tColumn.setColumn_name(
-                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
+                    tColumn.setColumn_name(column.getColumnId().getId());
                     column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
                     columnsDesc.add(tColumn);
                 }

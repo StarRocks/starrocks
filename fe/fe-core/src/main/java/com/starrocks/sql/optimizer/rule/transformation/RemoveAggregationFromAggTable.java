@@ -122,8 +122,8 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         // group by keys contain partition columns and distribution columns
         Set<String> groupKeyColumns = aggregationOperator.getGroupingKeys().stream()
                 .map(columnRefOperator -> columnRefOperator.getName().toLowerCase()).collect(Collectors.toSet());
-        Set<String> partitionColumnNames = olapTable.getPartitionInfo().getPartitionColumns().stream()
-                .map(column -> column.getName().toLowerCase()).collect(Collectors.toSet());
+        Set<String> partitionColumnNames = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn())
+                .stream().map(column -> column.getName().toLowerCase()).collect(Collectors.toSet());
         Set<String> distributionColumnNames = olapTable.getDistributionColumnNames().stream()
                 .map(String::toLowerCase).collect(Collectors.toSet());
         return groupKeyColumns.containsAll(keyColumnNames)

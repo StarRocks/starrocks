@@ -88,7 +88,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -481,6 +480,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         for (Map.Entry<Long, Partition> kv : baseTable.idToPartition.entrySet()) {
             // TODO: only copy mv's partition index.
             Partition copiedPartition = kv.getValue().shallowCopy();
+            if (copiedPartition.getDistributionInfo().getType() != distributionInfo.getType()) {
+                copiedPartition.setDistributionInfo(distributionInfo);
+            }
             idToPartitions.put(kv.getKey(), copiedPartition);
             nameToPartitions.put(kv.getValue().getName(), copiedPartition);
         }
@@ -651,9 +653,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionRefTableExprs == null) {
             return null;
         }
+<<<<<<< HEAD
         Expr partitionExpr = partitionRefTableExprs.get(0);
         if (partitionExpr == null) {
             return null;
+=======
+        if (partitionRefTableExprs.get(0).getType() == Type.INVALID) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Type partitionColType = expressionRangePartitionInfo.getPartitionColumns(this.idToColumn).get(0).getType();
+            partitionRefTableExprs.get(0).setType(partitionColType);
+>>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
         }
         if (partitionExpr.getType() == Type.INVALID) {
             Optional<Column> partitionColOpt = getPartitionColumn();
@@ -834,13 +843,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return null;
         }
         return ((MaterializedView) selectiveCopyInternal(copied, reservedPartitions, resetState, extState));
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // write type first
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public static SlotRef getMvPartitionSlotRef(Expr expr) {
@@ -1185,7 +1187,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // distribution
         DistributionInfo distributionInfo = this.getDefaultDistributionInfo();
-        sb.append("\n").append(distributionInfo.toSql());
+        sb.append("\n").append(distributionInfo.toSql(this.getIdToColumn()));
 
         // order by
         if (CollectionUtils.isNotEmpty(getTableProperty().getMvSortKeys())) {
@@ -1640,7 +1642,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionColOpt.isEmpty()) {
             return;
         }
+<<<<<<< HEAD
         Column partitionCol = partitionColOpt.get();
+=======
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        // only one partition column is supported now.
+        Preconditions.checkState(expressionRangePartitionInfo.getPartitionColumnsSize() == 1);
+        Column partitionCol = expressionRangePartitionInfo.getPartitionColumns(this.idToColumn).get(0);
+>>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
 
         // for single ref base table, recover from serializedPartitionRefTableExprs
         partitionRefTableExprs = new ArrayList<>();

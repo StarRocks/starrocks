@@ -52,6 +52,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -685,9 +686,9 @@ public class MvRewritePreprocessor {
                         indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toSet());
                 if (baseTableDistributionInfo.getType() == DistributionInfoType.HASH) {
                     HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) baseTableDistributionInfo;
-                    Set<String> distributedColumns =
-                            hashDistributionInfo.getDistributionColumns().stream().map(Column::getName)
-                                    .collect(Collectors.toSet());
+                    Set<String> distributedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+                    distributedColumns.addAll(MetaUtils.getColumnNamesByColumnIds(
+                            olapTable.getIdToColumn(), hashDistributionInfo.getDistributionColumns()));
                     // NOTE: SyncMV's column may not be equal to base table's exactly.
                     List<Column> newDistributionColumns = Lists.newArrayList();
                     for (Column mvColumn : indexMeta.getSchema()) {
@@ -707,7 +708,8 @@ public class MvRewritePreprocessor {
                 PartitionInfo mvPartitionInfo = basePartitionInfo;
                 // Set single partition if sync mv' columns do not contain partition by columns.
                 if (basePartitionInfo.isPartitioned()) {
-                    if (basePartitionInfo.getPartitionColumns().stream()
+                    List<Column> partitionColumns = basePartitionInfo.getPartitionColumns(olapTable.getIdToColumn());
+                    if (partitionColumns.stream()
                             .anyMatch(x -> !mvColumnNames.contains(x.getName())) ||
                             !(basePartitionInfo instanceof ExpressionRangePartitionInfo)) {
                         mvPartitionInfo = new SinglePartitionInfo();
@@ -1022,7 +1024,8 @@ public class MvRewritePreprocessor {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+            List<Column> distributedColumns = MetaUtils.getColumnsByColumnIds(mv,
+                    hashDistributionInfo.getDistributionColumns());
             List<Integer> hashDistributeColumns = new ArrayList<>();
             for (Column distributedColumn : distributedColumns) {
                 hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());

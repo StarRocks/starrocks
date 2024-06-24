@@ -41,11 +41,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /*
@@ -89,11 +91,12 @@ public class ColocateGroupSchema implements Writable {
     }
 
     public void checkColocateSchema(OlapTable tbl) throws DdlException {
-        checkDistribution(tbl.getDefaultDistributionInfo());
+        checkDistribution(tbl.getIdToColumn(), tbl.getDefaultDistributionInfo());
         checkReplicationNum(tbl.getPartitionInfo());
     }
 
-    public void checkDistribution(DistributionInfo distributionInfo) throws DdlException {
+    public void checkDistribution(Map<ColumnId, Column> idToColumn, DistributionInfo distributionInfo)
+            throws DdlException {
         if (distributionInfo instanceof HashDistributionInfo) {
             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
             // buckets num
@@ -107,11 +110,13 @@ public class ColocateGroupSchema implements Writable {
                         distributionColTypes.size(), groupId.toString(), info.toString());
             }
             // distribution col type
+            List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
+                    idToColumn, distributionInfo.getDistributionColumns());
             for (int i = 0; i < distributionColTypes.size(); i++) {
                 Type targetColType = distributionColTypes.get(i);
-                if (!targetColType.equals(info.getDistributionColumns().get(i).getType())) {
+                if (!targetColType.equals(distributionColumns.get(i).getType())) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE,
-                            groupId.toString(), info.getDistributionColumns().get(i).getName(), targetColType, info.toString());
+                            groupId.toString(), distributionColumns.get(i).getName(), targetColType, info.toString());
                 }
             }
         }

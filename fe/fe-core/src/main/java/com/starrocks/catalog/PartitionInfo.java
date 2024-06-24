@@ -34,11 +34,9 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
+import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
@@ -48,8 +46,6 @@ import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -60,7 +56,7 @@ import javax.validation.constraints.NotNull;
 /*
  * Repository of a partition's related infos
  */
-public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, GsonPostProcessable {
+public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(PartitionInfo.class);
 
     @SerializedName(value = "type")
@@ -227,12 +223,6 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         }
     }
 
-    public static PartitionInfo read(DataInput in) throws IOException {
-        PartitionInfo partitionInfo = new PartitionInfo();
-        partitionInfo.readFields(in);
-        return partitionInfo;
-    }
-
     public boolean isMultiColumnPartition() {
         return isMultiColumnPartition;
     }
@@ -242,10 +232,11 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
     }
 
     @NotNull
-    public List<Column> getPartitionColumns() {
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
         return Collections.emptyList();
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, type.name());
@@ -284,6 +275,10 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
             idToReplicationNum.put(partitionId, replicationNum);
             idToInMemory.put(partitionId, in.readBoolean());
         }
+=======
+    public int getPartitionColumnsSize() {
+        return 0;
+>>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
     }
 
     @Override
@@ -310,7 +305,7 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return buff.toString();
     }
 
-    public void createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+    public void createAutomaticShadowPartition(List<Column> schema, long partitionId, String replicateNum) throws DdlException {
     }
 
     public boolean isAutomaticPartition() {

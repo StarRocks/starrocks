@@ -765,7 +765,7 @@ public class MvPartitionCompensator {
             partitionPredicates.add(partitionPredicate);
         } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn());
             if (partitionColumns.size() != 1) {
                 // now do not support more than one partition columns
                 return null;
