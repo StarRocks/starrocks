@@ -15,7 +15,6 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.ColumnIdExpr;
 
 public class ExpressionSerializedObject {
     public ExpressionSerializedObject(String expressionSql) {

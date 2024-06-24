@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.ColumnIdExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -38,6 +37,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
