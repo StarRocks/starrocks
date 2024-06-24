@@ -31,17 +31,25 @@
 #define SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker)
 
+#define SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(mem_tracker) \
+    auto VARNAME_LINENUM(tracker_setter) = CurrentThreadSingletonCheckMemTrackerSetter(mem_tracker)
+
 #define SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(operator) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadOperatorMemTrackerSetter(operator->mem_tracker())
 
 #define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
 
-#define CHECK_MEM_LIMIT(err_msg)                                                              \
-    do {                                                                                      \
-        if (tls_thread_status.check_mem_limit() && CurrentThread::mem_tracker() != nullptr) { \
-            RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit(err_msg));          \
-        }                                                                                     \
+#define CHECK_MEM_LIMIT(err_msg)                                                                         \
+    do {                                                                                                 \
+        if (tls_thread_status.check_mem_limit()) {                                                       \
+            if (CurrentThread::mem_tracker() != nullptr) {                                               \
+                RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit(err_msg));                 \
+            }                                                                                            \
+            if (CurrentThread::singleton_check_mem_tracker() != nullptr) {                               \
+                RETURN_IF_ERROR(CurrentThread::singleton_check_mem_tracker()->check_mem_limit(err_msg)); \
+            }                                                                                            \
+        }                                                                                                \
     } while (0)
 
 namespace starrocks {
@@ -51,6 +59,9 @@ class TUniqueId;
 inline thread_local MemTracker* tls_mem_tracker = nullptr;
 inline thread_local MemTracker* tls_operator_mem_tracker = nullptr;
 inline thread_local MemTracker* tls_exceed_mem_tracker = nullptr;
+// `tls_singleton_check_mem_tracker` is used when you want to separate the mem tracker and check tracker,
+// you can add a new check tracker by set up `tls_singleton_check_mem_tracker`.
+inline thread_local MemTracker* tls_singleton_check_mem_tracker = nullptr;
 inline thread_local bool tls_is_thread_status_init = false;
 
 class CurrentThread {
@@ -78,18 +89,31 @@ private:
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
-            if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-                MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
-                if (LIKELY(limit_tracker == nullptr)) {
-                    _cache_size = 0;
-                    return true;
-                } else {
-                    _reserved_bytes = prev_reserved;
-                    _cache_size -= size;
-                    _allocated_cache_size -= size;
-                    _try_consume_mem_size = size;
-                    tls_exceed_mem_tracker = limit_tracker;
-                    return false;
+            auto failure_handler = [&]() {
+                _reserved_bytes = prev_reserved;
+                _cache_size -= size;
+                _allocated_cache_size -= size;
+                _try_consume_mem_size = size;
+            };
+            if (_cache_size >= BATCH_SIZE) {
+                if (tls_singleton_check_mem_tracker != nullptr) {
+                    // check singleton tracker first.
+                    if (UNLIKELY(tls_singleton_check_mem_tracker->any_limit_exceeded_precheck(_cache_size))) {
+                        failure_handler();
+                        tls_exceed_mem_tracker = tls_singleton_check_mem_tracker;
+                        return false;
+                    }
+                }
+                if (cur_tracker != nullptr) {
+                    MemTracker* limit_tracker = cur_tracker->try_consume(_cache_size);
+                    if (LIKELY(limit_tracker == nullptr)) {
+                        _cache_size = 0;
+                        return true;
+                    } else {
+                        failure_handler();
+                        tls_exceed_mem_tracker = limit_tracker;
+                        return false;
+                    }
                 }
             }
             return true;
@@ -244,10 +268,15 @@ public:
 
     static starrocks::MemTracker* mem_tracker();
     static starrocks::MemTracker* operator_mem_tracker();
+    static starrocks::MemTracker* singleton_check_mem_tracker();
 
     static CurrentThread& current();
 
     static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
+
+    static void set_singleton_check_mem_tracker(starrocks::MemTracker* mem_tracker) {
+        tls_singleton_check_mem_tracker = mem_tracker;
+    }
 
     bool set_is_catched(bool is_catched) {
         bool old = _is_catched;
@@ -386,6 +415,32 @@ public:
 
 private:
     MemTracker* _old_mem_tracker;
+    bool _is_same;
+};
+
+class CurrentThreadSingletonCheckMemTrackerSetter {
+public:
+    explicit CurrentThreadSingletonCheckMemTrackerSetter(MemTracker* new_tracker) {
+        _old_tracker = tls_thread_status.singleton_check_mem_tracker();
+        _is_same = (_old_tracker == new_tracker);
+        if (!_is_same) {
+            tls_thread_status.set_singleton_check_mem_tracker(new_tracker);
+        }
+    }
+
+    ~CurrentThreadSingletonCheckMemTrackerSetter() {
+        if (!_is_same) {
+            (void)tls_thread_status.set_singleton_check_mem_tracker(_old_tracker);
+        }
+    }
+
+    CurrentThreadSingletonCheckMemTrackerSetter(const CurrentThreadSingletonCheckMemTrackerSetter&) = delete;
+    void operator=(const CurrentThreadSingletonCheckMemTrackerSetter&) = delete;
+    CurrentThreadSingletonCheckMemTrackerSetter(CurrentThreadSingletonCheckMemTrackerSetter&&) = delete;
+    void operator=(CurrentThreadSingletonCheckMemTrackerSetter&&) = delete;
+
+private:
+    MemTracker* _old_tracker;
     bool _is_same;
 };
 

@@ -918,6 +918,9 @@ void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
 }
 
 void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
+                                                                                             : nullptr);
     // use tabletid-txnid as update state cache's key, so it can retry safe.
     auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
@@ -970,6 +973,9 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
                                              const TabletSchemaCSPtr& tablet_schema) {
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
+    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
+                                                                                             : nullptr);
     // no need to preload if using light compaction publish
     if (StorageEngine::instance()->enable_light_pk_compaction_publish()) {
         return;

@@ -298,6 +298,17 @@ public:
 
     bool limit_exceeded_by_ratio(int64_t ratio) const { return _limit >= 0 && (_limit * ratio / 100) < consumption(); }
 
+    bool limit_exceeded_precheck(int64_t consume) const { return _limit >= 0 && _limit < consumption() + consume; }
+
+    bool any_limit_exceeded_precheck(int64_t consume) const {
+        for (auto& _limit_tracker : _limit_trackers) {
+            if (_limit_tracker->limit_exceeded_precheck(consume)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void set_limit(int64_t limit) { _limit = limit; }
 
     int64_t limit() const { return _limit; }
