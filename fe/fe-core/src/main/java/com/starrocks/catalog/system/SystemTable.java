@@ -17,8 +17,8 @@ package com.starrocks.catalog.system;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -98,11 +98,11 @@ public class SystemTable extends Table {
             columns = Lists.newArrayList();
         }
 
-        public Builder column(String name, ScalarType type) {
+        public Builder column(String name, Type type) {
             return column(name, type, true);
         }
 
-        public Builder column(String name, ScalarType type, boolean nullable) {
+        public Builder column(String name, Type type, boolean nullable) {
             columns.add(new Column(name, type, false, null, nullable, null, ""));
             return this;
         }

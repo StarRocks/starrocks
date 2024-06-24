@@ -26,11 +26,11 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaLoadTrackingLogsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"JOB_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LABEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TRACKING_LOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TYPE", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TRACKING_LOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
 
 SchemaLoadTrackingLogsScanner::SchemaLoadTrackingLogsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),

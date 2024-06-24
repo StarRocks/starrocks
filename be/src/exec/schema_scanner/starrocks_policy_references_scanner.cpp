@@ -23,13 +23,13 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksPolicyReferencesScanner::_s_policy_references_columns[] = {
         //   name,       type,          size
-        {"POLICY_DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"POLICY_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"POLICY_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"REF_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"REF_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"REF_OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"REF_COLUMN", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"POLICY_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"POLICY_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"POLICY_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"REF_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"REF_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"REF_OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"REF_COLUMN", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
 };
 
 StarrocksPolicyReferencesScanner::StarrocksPolicyReferencesScanner()

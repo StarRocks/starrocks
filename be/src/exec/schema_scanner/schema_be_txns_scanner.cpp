@@ -26,13 +26,20 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeTxnsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},          {"LOAD_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TXN_ID", TYPE_BIGINT, sizeof(int64_t), false},         {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},      {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
-        {"COMMIT_TIME", TYPE_BIGINT, sizeof(int64_t), false},    {"PUBLISH_TIME", TYPE_BIGINT, sizeof(int64_t), false},
-        {"ROWSET_ID", TYPE_VARCHAR, sizeof(StringValue), false}, {"NUM_SEGMENT", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NUM_DELFILE", TYPE_BIGINT, sizeof(int64_t), false},    {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},
-        {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},      {"VERSION", TYPE_BIGINT, sizeof(int64_t), false},
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"COMMIT_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PUBLISH_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"ROWSET_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"NUM_SEGMENT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"NUM_DELFILE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"NUM_ROW", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"DATA_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaBeTxnsScanner::SchemaBeTxnsScanner()

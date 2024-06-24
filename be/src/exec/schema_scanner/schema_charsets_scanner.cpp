@@ -22,10 +22,10 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaCharsetsScanner::_s_css_columns[] = {
         //   name,       type,          size
-        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT_COLLATE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DESCRIPTION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"MAXLEN", TYPE_BIGINT, sizeof(int64_t), false},
+        {"CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFAULT_COLLATE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DESCRIPTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"MAXLEN", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaCharsetsScanner::CharsetStruct SchemaCharsetsScanner::_s_charsets[] = {
