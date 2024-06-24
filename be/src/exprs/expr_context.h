@@ -117,6 +117,16 @@ public:
 
     bool error_if_overflow() const;
 
+<<<<<<< HEAD
+=======
+    Status rewrite_jit_expr(ObjectPool* pool);
+
+    void set_build_from_only_in_filter(bool build_from_only_in_filter) {
+        _build_from_only_in_filter = build_from_only_in_filter;
+    }
+    bool build_from_only_in_filter() const { return _build_from_only_in_filter; }
+
+>>>>>>> a5a975f1e0 ([BugFix] Fix NestLoop Join runtime filter not evaluate in Exchange node (#47348))
 private:
     friend class Expr;
     friend class OlapScanNode;
@@ -137,9 +147,18 @@ private:
     bool _is_clone;
 
     /// Variables keeping track of current state.
+<<<<<<< HEAD
     bool _prepared;
     bool _opened;
     RuntimeState* _runtime_state = nullptr;
+=======
+    bool _prepared{false};
+    bool _opened{false};
+    // Indicates that this expr is built from only in runtime in filter
+    // For hash join, it will build both IN filter and bloom filter. This variable is false.
+    // For cross join, it will only build Runtime IN filter, and this value is false.
+    bool _build_from_only_in_filter{false};
+>>>>>>> a5a975f1e0 ([BugFix] Fix NestLoop Join runtime filter not evaluate in Exchange node (#47348))
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed;
 };
