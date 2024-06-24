@@ -1190,14 +1190,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) == 
                                             TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
             updateState(JobState.PAUSED,
-<<<<<<< HEAD
-                        new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
-                        false /* not replay */);
-=======
                     new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
                             ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")),
                     false /* not replay */);
->>>>>>> 6a2fff4add ([Enhancement] Improve routine load error rows message (#47280))
             LOG.warn(
                     "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
                      name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
