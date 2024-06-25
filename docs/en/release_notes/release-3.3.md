@@ -135,3 +135,28 @@ Fixed the following issues:
 - BEs crash after the column type is modified from VARCHAR to DECIMAL. [#44406](https://github.com/StarRocks/starrocks/issues/44406)
 - When a table with List partitioning is queried by using a not-equal operator, partitions are incorrectly pruned, resulting in wrong query results. [#42907](https://github.com/StarRocks/starrocks/issues/42907)
 - Leader FE's heap size increases quickly as many Stream Load jobs using non-transactional interface finishes. [#43715](https://github.com/StarRocks/starrocks/issues/43715)
+
+### Downgrade notes
+
+To downgrade a cluster from v3.3.0 or later to v3.2, users must follow these steps:
+
+1. Ensure that all ALTER TABLE SCHEMA CHANGE transactions initiated in the v3.3 cluster are either completed or canceled before downgrading.
+2. Clear all transaction history by executing the following command:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("history_job_keep_max_second" = "0");
+   ```
+
+3. Verify that there are no remaining historical records by running the following command:
+
+   ```SQL
+   SHOW PROC '/jobs/<db>/schema_change';
+   ```
+
+4. Execute the following command to create an image file for your metadata:
+
+   ```sql
+   ALTER SYSTEM CREATE IMAGE;
+   ```
+
+5. After the new image file is transmitted to the directory **meta/image** of all FE nodes, you can first downgrade a Follower FE node. If no error is returned, you can then downgrade other nodes in the cluster.
