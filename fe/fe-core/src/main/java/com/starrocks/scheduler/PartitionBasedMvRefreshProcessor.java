@@ -543,7 +543,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void postProcess() {
-        mvContext.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(oldTransactionVisibleWaitTimeout);
+        if (mvContext != null) {
+            mvContext.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(oldTransactionVisibleWaitTimeout);
+        }
     }
 
     public MVTaskRunExtraMessage getMVTaskRunExtraMessage() {
@@ -695,11 +697,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             .flatMap(name -> convertMVPartitionNameToRealPartitionName(e.getKey(), name).stream())
                             .collect(Collectors.toSet());
             baseTableAndPartitionNames.put(e.getKey(), realPartitionNames);
-
-            Map<Table, Set<String>> nonRefTableAndPartitionNames = getNonRefTableRefreshPartitions();
-            if (!nonRefTableAndPartitionNames.isEmpty()) {
-                baseTableAndPartitionNames.putAll(nonRefTableAndPartitionNames);
-            }
+        }
+        Map<Table, Set<String>> nonRefTableAndPartitionNames = getNonRefTableRefreshPartitions();
+        if (!nonRefTableAndPartitionNames.isEmpty()) {
+            baseTableAndPartitionNames.putAll(nonRefTableAndPartitionNames);
         }
         // update the meta if succeed
         if (!database.writeLockAndCheckExist()) {
