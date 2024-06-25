@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/fragment_executor.h"
 
+#include <optional>
 #include <unordered_map>
 
 #include "common/config.h"
@@ -217,11 +218,16 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     int64_t option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
     if (option_query_mem_limit <= 0) option_query_mem_limit = -1;
     int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
-    int64_t spill_mem_limit_bytes = -1;
-    if (query_options.__isset.enable_spill && query_options.enable_spill && option_query_mem_limit > 0) {
-        spill_mem_limit_bytes = option_query_mem_limit * query_options.spill_mem_limit_threshold;
+    std::optional<double> spill_mem_limit_ratio;
+
+    if (query_options.__isset.enable_spill && query_options.enable_spill) {
+        if (query_options.spill_options.__isset.spill_mem_limit_threshold) {
+            spill_mem_limit_ratio = query_options.spill_options.spill_mem_limit_threshold;
+        } else {
+            spill_mem_limit_ratio = query_options.spill_mem_limit_threshold;
+        }
     }
-    _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_bytes,
+    _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_ratio,
                                  wg.get(), runtime_state);
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
