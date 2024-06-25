@@ -95,7 +95,7 @@ public class HashDistributionPruner implements DistributionPruner {
         if (null == filter) {
             // no filter in this column, no partition Key
             // return all subPartition
-            return Lists.newArrayList(bucketsList);
+            return bucketsList;
         }
 
         List<LiteralExpr> inPredicateLiterals = filter.getInPredicateLiterals();
@@ -115,17 +115,17 @@ public class HashDistributionPruner implements DistributionPruner {
                     return result;
                 } catch (Exception e) {
                     LOG.warn("Prune distribution key {} with predicate {} failed:", keyColumn, filter, e);
-                    return Lists.newArrayList(bucketsList);
+                    return bucketsList;
                 }
             }
             // return all SubPartition
-            return Lists.newArrayList(bucketsList);
+            return bucketsList;
         }
 
         InPredicate inPredicate = filter.getInPredicate();
         if (null != inPredicate && !(inPredicate.getChild(0) instanceof SlotRef)) {
             // return all SubPartition
-            return Lists.newArrayList(bucketsList);
+            return bucketsList;
         }
 
         Set<Long> resultSet = Sets.newHashSet();
