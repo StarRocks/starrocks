@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * `TableSnapshotInfo` represents a snapshot of the base table of materialized view.
@@ -33,12 +34,22 @@ public class TableSnapshotInfo {
     Map<String, MaterializedView.BasePartitionInfo> refreshedPartitionInfos = Maps.newHashMap();
 
     public TableSnapshotInfo(BaseTableInfo baseTableInfo, Table baseTable) {
+        Objects.requireNonNull(baseTableInfo);
+        Objects.requireNonNull(baseTable);
         this.baseTableInfo = baseTableInfo;
         this.baseTable = baseTable;
     }
 
     public BaseTableInfo getBaseTableInfo() {
         return baseTableInfo;
+    }
+
+    public long getId() {
+        return baseTableInfo.getTableId();
+    }
+
+    public String getName() {
+        return baseTable.getName();
     }
 
     public Table getBaseTable() {
