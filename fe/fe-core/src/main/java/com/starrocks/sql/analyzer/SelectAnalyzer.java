@@ -236,6 +236,7 @@ public class SelectAnalyzer {
                 }
                 outputFields.addAll(fields);
 
+                session.getQueryContext().setHasStarScan(true);
             } else {
                 String name;
                 if (item.getExpr() instanceof SlotRef) {

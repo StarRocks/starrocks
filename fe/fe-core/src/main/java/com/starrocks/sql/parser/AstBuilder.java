@@ -305,6 +305,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.RecommendDataCacheSelectStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
@@ -3349,6 +3350,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new DataCacheSelectStatement(insertStmt, properties, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitRecommendDataCacheSelectStatement(
+            StarRocksParser.RecommendDataCacheSelectStatementContext context) {
+        QualifiedName qualifiedName = null;
+        if (context.qualifiedName() != null) {
+            qualifiedName = getQualifiedName(context.qualifiedName());
+        }
+
+        long intervalSecs = 0;
+        if (context.duration != null) {
+            long period = ((IntLiteral) visit(context.duration)).getLongValue();
+            UnitIdentifier unitIdentifier = (UnitIdentifier) visit(context.from);
+            TimeUnit timeUnit;
+            try {
+                timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(unitIdentifier.getDescription());
+            } catch (DdlException e) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(
+                        unitIdentifier.getDescription(), "IN LAST "), createPos(context.duration));
+            }
+            intervalSecs = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
+        }
+
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        } else {
+            limitElement = new LimitElement(Config.datacache_copilot_default_recommend_nums);
+        }
+        return new RecommendDataCacheSelectStmt(qualifiedName, intervalSecs, limitElement, createPos(context));
     }
 
     // ----------------------------------------------- Export Statement ------------------------------------------------

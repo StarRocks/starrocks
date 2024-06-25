@@ -112,6 +112,7 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.datacache.copilot.DataCacheCopilotRepo;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -304,6 +305,7 @@ public class GlobalStateMgr {
     private Daemon replayer;
     private Daemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
+    private final DataCacheCopilotRepo dataCacheCopilotRepository;
     private final MetastoreEventsProcessor metastoreEventsProcessor;
     private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
@@ -641,6 +643,7 @@ public class GlobalStateMgr {
         this.resourceGroupMgr = new ResourceGroupMgr();
 
         this.esRepository = new EsRepository();
+        this.dataCacheCopilotRepository = new DataCacheCopilotRepo();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
@@ -1356,6 +1359,7 @@ public class GlobalStateMgr {
         labelCleaner.start();
         // ES state store
         esRepository.start();
+        dataCacheCopilotRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -2073,6 +2077,10 @@ public class GlobalStateMgr {
 
     public EsRepository getEsRepository() {
         return esRepository;
+    }
+
+    public DataCacheCopilotRepo getDataCacheCopilotRepository() {
+        return dataCacheCopilotRepository;
     }
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {

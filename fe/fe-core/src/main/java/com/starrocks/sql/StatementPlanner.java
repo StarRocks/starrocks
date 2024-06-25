@@ -31,6 +31,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.datacache.copilot.DataCacheCopilotCollector;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -224,6 +225,12 @@ public class StatementPlanner {
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
+        }
+        try (Timer ignored = Tracers.watchScope("DataCacheCopilotCollect")) {
+            if (session.getSessionVariable().isEnableDataCacheCopilot()) {
+                // todo ignore star scan
+                DataCacheCopilotCollector.collectFromPhysicalPlan(optimizedPlan);
+            }
         }
         try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
             // 3. Build fragment exec plan

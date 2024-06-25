@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RecommendDataCacheSelectStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
@@ -164,6 +165,15 @@ public class DataCacheStmtAnalyzer {
             }
             statement.setTTLSeconds(ttlSeconds);
 
+            return null;
+        }
+
+        @Override
+        public Void visitRecommendDataCacheSelectStmt(RecommendDataCacheSelectStmt stmt, ConnectContext context) {
+            if (!context.getSessionVariable().isEnableDataCacheCopilot()) {
+                throw new SemanticException(
+                        "DataCache copilot(SET datacache_copilot=true) must be enabled before show recommendations.");
+            }
             return null;
         }
     }

@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -47,6 +48,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.datacache.copilot.DataCacheCopilotConstants;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
@@ -407,6 +409,20 @@ public class StatisticUtils {
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
+        } else if (tableName.equals(DataCacheCopilotConstants.DATACACHE_COPILOT_STATISTICS_TABLE_NAME)) {
+            ScalarType accessTimeType = ScalarType.createType(PrimitiveType.DATETIME);
+            ScalarType countType = ScalarType.createType(PrimitiveType.BIGINT);
+
+            return ImmutableList.of(
+                    new ColumnDef(DataCacheCopilotConstants.CATALOG_NAME, new TypeDef(catalogNameType)),
+                    new ColumnDef(DataCacheCopilotConstants.DATABASE_NAME, new TypeDef(dbNameType)),
+                    new ColumnDef(DataCacheCopilotConstants.TABLE_NAME, new TypeDef(tableNameType)),
+                    new ColumnDef(DataCacheCopilotConstants.PARTITION_NAME, new TypeDef(partitionNameType)),
+                    new ColumnDef(DataCacheCopilotConstants.COLUMN_NAME, new TypeDef(columnNameType)),
+                    new ColumnDef(DataCacheCopilotConstants.ACCESS_TIME_NAME, new TypeDef(accessTimeType)),
+                    new ColumnDef(DataCacheCopilotConstants.COUNT_NAME, new TypeDef(countType), false,
+                            AggregateType.SUM, false,
+                            new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), ""));
         } else {
             throw new StarRocksPlannerException("Not support stats table " + tableName, ErrorType.INTERNAL_ERROR);
         }
