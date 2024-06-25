@@ -110,8 +110,8 @@ public class SlotManager {
      *
      * <pre>{@code
      * CREATED -(1)-> REQUIRED -(2)-> ALLOCATED -(3)-> RELEASED
-     *                  │                                    ▲
-     *                  └─────────────────(3)────────────────┘
+     *                  │                                  ▲
+     *                  └─────────────────(3)──────────────┘
      * }</pre>
      *
      * <ul>
