@@ -251,7 +251,27 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 如果待查询的表中存在大量 tablet，开启该特性会对性能有提升，因为会更快的将 tablet 的元信息以及数据缓存在内存中。但是，如果查询存在一些热点 tablet，开启该特性可能会导致性能有所退化，因为该特性倾向于将一个热点 tablet 的查询调度到相同的 BE 上，在高并发的场景下无法充分利用多台 BE 的资源。
 
+<<<<<<< HEAD
 默认值：`false`，表示使用原来的机制，即每次查询会从多个副本中选择一个。自 2.5.6、3.0.8、3.1.4 版本起，StarRocks 支持该参数。
+=======
+### enable_lake_tablet_internal_parallel
+
+* 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v3.3.0
+
+### tablet_internal_parallel_mode
+
+* 描述：Tablet 内部并行 Scan 策略。有效值:
+  * `auto`: 在 BE 或 CN 节点需要扫描的 Tablet 数小于 DOP 时，系统根据预估的 Tablet 大小自动判断是否需要并行 Scan。
+  * `force_split`: 强制对 Tablet 进行拆分和并行扫描。
+* 默认值：auto
+* 类型：String
+* 引入版本：v2.5.0
+
+### enable_scan_datacache
+>>>>>>> 17c2eded73 ([Doc] Doc for shared-data tablet parallel Scan (#47458))
 
 ### enable_scan_block_cache（2.5 及以后）
 
