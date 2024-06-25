@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/iceberg//iceberg_delete_builder.h"
+#include "exec/iceberg/iceberg_delete_builder.h"
 
 #include <gtest/gtest.h>
 
