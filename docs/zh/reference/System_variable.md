@@ -488,7 +488,7 @@ SELECT /*+ SET_VAR
 
 ### tablet_internal_parallel_mode
 
-* 描述：tablet 内部并行 scan 策略。有效值:
+* 描述：Tablet 内部并行 Scan 策略。有效值:
   * `auto`: 在 BE 或 CN 节点需要扫描的 Tablet 数小于 DOP 时，系统根据预估的 Tablet 大小自动判断是否需要并行 Scan。
   * `force_split`: 强制对 Tablet 进行拆分和并行扫描。
 * 默认值：auto
