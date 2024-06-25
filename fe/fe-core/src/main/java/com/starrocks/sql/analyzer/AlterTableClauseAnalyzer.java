@@ -710,6 +710,51 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Add field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        StructFieldDesc fieldDesc = clause.getFieldDesc();
+        try {
+            fieldDesc.analyze(baseColumn, false);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDropFieldClause(DropFieldClause clause, ConnectContext context) {
+        String columnName = clause.getColName();
+        if (Strings.isNullOrEmpty(columnName)) {
+            throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
+        }
+
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Drop field only support olap table");
+        }
+
+        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
+        try {
+            fieldDesc.analyze(baseColumn, true);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+>>>>>>> 13899a2d67 ([Feature]Support add/drop field for struct column(part3) (#47217))
     public Void visitModifyColumnClause(ModifyColumnClause clause, ConnectContext context) {
         ColumnDef columnDef = clause.getColumnDef();
         if (columnDef == null) {
