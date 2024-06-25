@@ -27,7 +27,7 @@ displayed_sidebar: "Chinese"
 | b    | 5          | 6          | 7          |
 
 
-当参与排序的函数大于2个时候，该函数的作用是根据多个数组列（如 array1、array2、array3 等）的值对 array0 进行升序排列。排序规则如下：
+当参与排序的数组大于2个时候，该函数的作用是根据多个数组列（如 array1、array2、array3 等）的值对 array0 进行升序排列。排序规则如下：
 
 1. 首先比较 array1 的对应元素；
 2. 如果相同，则比较 array2 的对应元素；
