@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,6 +30,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
 public class DefaultSlotSelectionStrategy implements SlotSelectionStrategy {
+    private static final long SWEEP_EMPTY_GROUP_INTERVAL_MS = 1000L;
 
     private final Map<Long, LinkedHashMap<TUniqueId, LogicalSlot>> requiringGroupIdToSubQueue = new LinkedHashMap<>();
     private final Map<Long, Integer> allocatedGroupIdToSlotCount = new HashMap<>();
@@ -36,6 +38,8 @@ public class DefaultSlotSelectionStrategy implements SlotSelectionStrategy {
 
     private final BooleanSupplier isGlobalResourceOverloaded;
     private final Function<Long, Boolean> isGroupResourceOverloaded;
+
+    private long lastSweepEmptyGroupTimeMs = 0;
 
     public DefaultSlotSelectionStrategy(BooleanSupplier isGlobalResourceOverloaded,
                                         Function<Long, Boolean> isGroupResourceOverloaded) {
@@ -45,6 +49,8 @@ public class DefaultSlotSelectionStrategy implements SlotSelectionStrategy {
 
     @Override
     public List<LogicalSlot> peakSlotsToAllocate(SlotTracker slotTracker) {
+        sweepEmptyGroups();
+
         List<LogicalSlot> slotsToAllocate = Lists.newArrayList();
 
         if (requiringGroupIdToSubQueue.isEmpty()) {
@@ -138,8 +144,11 @@ public class DefaultSlotSelectionStrategy implements SlotSelectionStrategy {
 
     @Override
     public void onRequireSlot(LogicalSlot slot) {
-        requiringGroupIdToSubQueue.computeIfAbsent(slot.getGroupId(), k -> new LinkedHashMap<>())
+        requiringGroupIdToSubQueue
+                .computeIfAbsent(slot.getGroupId(), k -> new LinkedHashMap<>())
                 .put(slot.getSlotId(), slot);
+
+        sweepEmptyGroups();
     }
 
     @Override
@@ -151,15 +160,34 @@ public class DefaultSlotSelectionStrategy implements SlotSelectionStrategy {
 
         allocatedGroupIdToSlotCount.compute(slot.getGroupId(),
                 (k, prevCount) -> prevCount == null ? slot.getNumPhysicalSlots() : prevCount + slot.getNumPhysicalSlots());
+
+        sweepEmptyGroups();
     }
 
     @Override
     public void onReleaseSlot(LogicalSlot slot) {
         LinkedHashMap<TUniqueId, LogicalSlot> subQueue = requiringGroupIdToSubQueue.get(slot.getGroupId());
-        if (subQueue != null) {
-            subQueue.remove(slot.getSlotId());
+        boolean isRequiredSlot = subQueue != null && subQueue.remove(slot.getSlotId()) != null;
+        if (!isRequiredSlot) {
+            allocatedGroupIdToSlotCount.computeIfPresent(slot.getGroupId(), (k, v) -> v - slot.getNumPhysicalSlots());
         }
 
-        allocatedGroupIdToSlotCount.computeIfPresent(slot.getGroupId(), (k, v) -> v - slot.getNumPhysicalSlots());
+        sweepEmptyGroups();
+    }
+
+    @VisibleForTesting
+    int getNumAllocatedSlotsOfGroup(long groupId) {
+        return allocatedGroupIdToSlotCount.getOrDefault(groupId, 0);
+    }
+
+    private void sweepEmptyGroups() {
+        long nowMs = System.currentTimeMillis();
+        if (lastSweepEmptyGroupTimeMs + SWEEP_EMPTY_GROUP_INTERVAL_MS > nowMs) {
+            return;
+        }
+
+        lastSweepEmptyGroupTimeMs = nowMs;
+        requiringGroupIdToSubQueue.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        allocatedGroupIdToSlotCount.entrySet().removeIf(entry -> entry.getValue() == 0);
     }
 }
