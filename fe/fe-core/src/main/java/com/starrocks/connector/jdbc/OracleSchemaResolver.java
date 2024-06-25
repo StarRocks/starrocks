@@ -108,13 +108,13 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 if (columnSize > 0) {
                     return ScalarType.createVarcharType(columnSize);
                 } else {
-                    return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                    return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
                 }
             case Types.CLOB:
             case Types.NCLOB:
             // LONG
             case Types.LONGVARCHAR:
-                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
             case Types.BLOB:
             case Types.BINARY:
             case Types.VARBINARY:
@@ -123,7 +123,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 if (columnSize > 0) {
                     return ScalarType.createVarbinary(columnSize);
                 } else {
-                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                    return ScalarType.createVarbinary(ScalarType.MAX_VARCHAR_LENGTH);
                 }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
@@ -134,7 +134,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             case -102:
             // TIMESTAMP WITH TIME ZONE
             case -101:
-                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
@@ -147,7 +147,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
-                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
             }
             return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
         }
