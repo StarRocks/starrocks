@@ -28,6 +28,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
@@ -2829,6 +2830,67 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 Assert.assertEquals(taskRunStatus.getLastRefreshState(),
                                         Constants.TaskRunState.FAILED);
                             });
+                });
+    }
+
+    @Test
+    public void testRefreshWithTraceProfile() {
+        starRocksAssert.withMaterializedView("create materialized view test_mv1 \n" +
+                "partition by date_trunc('month',k1) \n" +
+                "distributed by random \n" +
+                "refresh deferred manual\n" +
+                "as select k1, k2 from tbl1;",
+                () -> {
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    MaterializedView materializedView = ((MaterializedView) testDb.getTable("test_mv1"));
+
+                    String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
+                    executeInsertSql(connectContext, insertSql);
+
+                    Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                    TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                    initAndExecuteTaskRun(taskRun);
+                    PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                            taskRun.getProcessor();
+
+                    RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
+                    Assert.assertTrue(runtimeProfile != null);
+                    Map<String, String> result = runtimeProfile.getInfoStrings();
+                    Set<String> mvRefreshProfileKeys = ImmutableSet.of(
+                            "MVRefreshPrepare",
+                            "MVRefreshDoWholeRefresh",
+                            "MVRefreshSyncAndCheckPartitions",
+                            "MVRefreshExternalTable",
+                            "MVRefreshSyncPartitions",
+                            "MVRefreshCheckBaseTableChange",
+                            "MVRefreshPrepareRefreshPlan",
+                            "MVRefreshParser",
+                            "MVRefreshAnalyzer",
+                            "AnalyzeDatabase",
+                            "AnalyzeTemporaryTable",
+                            "AnalyzeTable",
+                            "MVRefreshPlanner",
+                            "Transform",
+                            "InsertPlanner",
+                            "Optimizer",
+                            "RuleBaseOptimize",
+                            "CostBaseOptimize",
+                            "PhysicalRewrite",
+                            "PlanValidate",
+                            "InputDependenciesChecker",
+                            "TypeChecker",
+                            "CTEUniqueChecker",
+                            "ColumnReuseChecker",
+                            "PlanBuilder",
+                            "MVRefreshMaterializedView",
+                            "MVRefreshUpdateMeta",
+                            "MVRefreshLockRetryTimes",
+                            "MVRefreshRetryTimes",
+                            "MVRefreshSyncPartitionsRetryTimes"
+                    );
+                    for (Map.Entry<String, String> e : result.entrySet()) {
+                        Assert.assertTrue(mvRefreshProfileKeys.stream().anyMatch(k -> e.getKey().contains(k)));
+                    }
                 });
     }
 }
