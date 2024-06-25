@@ -615,7 +615,6 @@ public class StarRocksAssert {
             withView(sql);
             action.run();
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail("With view " + viewName + " failed:" + e.getMessage());
         } finally {
             dropView(viewName);
