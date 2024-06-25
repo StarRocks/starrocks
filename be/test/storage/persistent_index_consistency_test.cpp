@@ -548,6 +548,8 @@ static void test_func(int64_t max_number, int64_t max_n, size_t run_second, int 
 TEST_F(PersistentIndexConsistencyTestTest, test_local_persistent_index) {
     int seed = time(nullptr);
     test_func(FLAGS_max_number, FLAGS_max_n, FLAGS_second, seed, true);
+    // regenerate seed
+    seed = time(nullptr);
     test_func(FLAGS_max_number, FLAGS_max_n, FLAGS_second, seed, false);
 }
 
