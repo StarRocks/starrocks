@@ -933,6 +933,16 @@ public class UtFrameUtils {
         tearMockEnv();
     }
 
+    public static ExecPlan getPlanFragmentFromQueryDump(ConnectContext connectContext, QueryDumpInfo dumpInfo)
+            throws Exception {
+        String q = initMockEnv(connectContext, dumpInfo);
+        try {
+            return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
+        } finally {
+            tearMockEnv();
+        }
+    }
+
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
