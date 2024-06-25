@@ -290,14 +290,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private Set<String> checkMvToRefreshedPartitions(TaskRunContext context) throws AnalysisException {
         Set<String> mvToRefreshedPartitions = null;
         Locker locker = new Locker();
-<<<<<<< HEAD
-        if (!locker.tryLockDatabase(db, LockType.READ, Config.mv_refresh_try_lock_timeout_ms)) {
-=======
         if (!locker.tryLockTableWithIntensiveDbLock(db, materializedView, LockType.READ, Config.mv_refresh_try_lock_timeout_ms,
                 TimeUnit.MILLISECONDS)) {
             LOG.warn("Failed to lock database: {} in checkMvToRefreshedPartitions for mv refresh {}", db.getFullName(),
                     materializedView.getName());
->>>>>>> e92354cc21 ([BugFix] Optimize mv refresh locks by intensive locks (#47381))
             throw new LockTimeoutException("Failed to lock database: " + db.getFullName());
         }
         try {
@@ -736,107 +732,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
-<<<<<<< HEAD
-=======
-    private List<String> getUpdatedPartitionNames(
-            List<String> partitionNames,
-            Map<String, MaterializedView.BasePartitionInfo> tablePartitionInfoMap,
-            Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos) {
-        List<String> updatedPartitionNames = Lists.newArrayList();
-        for (int i = 0; i < partitionNames.size(); i++) {
-            String partitionName = partitionNames.get(i);
-            if (!partitionDataInfos.containsKey(partitionName)) {
-                continue;
-            }
-            MaterializedView.BasePartitionInfo basePartitionInfo = tablePartitionInfoMap.get(partitionName);
-            Optional<HivePartitionDataInfo> partitionDataInfoOptional = partitionDataInfos.get(partitionName);
-            if (partitionDataInfoOptional.isEmpty()) {
-                updatedPartitionNames.add(partitionNames.get(i));
-            } else {
-                HivePartitionDataInfo hivePartitionDataInfo = partitionDataInfoOptional.get();
-                // if file last modified time changed or file number under partition change,
-                // the partition is treated as changed
-                if (basePartitionInfo.getExtLastFileModifiedTime() != hivePartitionDataInfo.getLastFileModifiedTime()
-                        || basePartitionInfo.getFileNumber() != hivePartitionDataInfo.getFileNumber()) {
-                    updatedPartitionNames.add(partitionNames.get(i));
-                }
-            }
-        }
-        return updatedPartitionNames;
-    }
-
-    private void repairMvBaseTableMeta(
-            MaterializedView mv, BaseTableInfo oldBaseTableInfo,
-            Table newTable, List<String> updatedPartitionNames) {
-        if (oldBaseTableInfo.isInternalCatalog()) {
-            return;
-        }
-
-        // acquire db write lock to modify meta of mv
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, materializedView, LockType.WRITE)) {
-            LOG.warn("Failed to lock database: {} in repairMvBaseTableMeta for mv refresh {}", db.getFullName(),
-                    materializedView.getName());
-            throw new DmlException("repair mv meta failed. database:" + db.getFullName() + " not exist");
-        }
-        try {
-            Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = mv.getBaseTableRefreshInfo(oldBaseTableInfo);
-            Map<String, MaterializedView.BasePartitionInfo> newPartitionInfoMap = Maps.newHashMap();
-            for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : partitionInfoMap.entrySet()) {
-                if (updatedPartitionNames.contains(entry.getKey())) {
-                    newPartitionInfoMap.put(entry.getKey(), entry.getValue());
-                } else {
-                    List<String> baseTablePartitionNames = Lists.newArrayList(partitionInfoMap.keySet());
-                    Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos =
-                            PartitionUtil.getPartitionNameWithPartitionInfo(newTable, baseTablePartitionNames);
-                    if (newPartitionInfos.containsKey(entry.getKey())) {
-                        MaterializedView.BasePartitionInfo oldBasePartitionInfo = entry.getValue();
-                        com.starrocks.connector.PartitionInfo newPartitionInfo = newPartitionInfos.get(entry.getKey());
-                        MaterializedView.BasePartitionInfo newBasePartitionInfo = new MaterializedView.BasePartitionInfo(
-                                entry.getValue().getId(), newPartitionInfo.getModifiedTime(), newPartitionInfo.getModifiedTime());
-                        newBasePartitionInfo.setExtLastFileModifiedTime(oldBasePartitionInfo.getExtLastFileModifiedTime());
-                        newBasePartitionInfo.setFileNumber(oldBasePartitionInfo.getFileNumber());
-                        newPartitionInfoMap.put(entry.getKey(), newBasePartitionInfo);
-                    } else {
-                        // if the partition does not exist in new table,
-                        // keep the partition's last modified time as old
-                        // which will be refreshed
-                        newPartitionInfoMap.put(entry.getKey(), entry.getValue());
-                    }
-                }
-            }
-            Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoMapMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
-            // create new base table info with newTable.getTableIdentifier()
-            BaseTableInfo newBaseTableInfo = new BaseTableInfo(
-                    oldBaseTableInfo.getCatalogName(),
-                    oldBaseTableInfo.getDbName(),
-                    oldBaseTableInfo.getTableName(), newTable.getTableIdentifier());
-            baseTableInfoMapMap.remove(oldBaseTableInfo);
-            baseTableInfoMapMap.put(newBaseTableInfo, newPartitionInfoMap);
-
-            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-            baseTableInfos.remove(oldBaseTableInfo);
-            baseTableInfos.add(newBaseTableInfo);
-
-            ConnectorTableInfo connectorTableInfo = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr()
-                    .getConnectorTableInfo(oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
-                            oldBaseTableInfo.getTableIdentifier());
-            ConnectorTableInfo newConnectorTableInfo = ConnectorTableInfo.builder()
-                    .setRelatedMaterializedViews(connectorTableInfo.getRelatedMaterializedViews())
-                    .build();
-            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().removeConnectorTableInfo(
-                    oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
-                    oldBaseTableInfo.getTableIdentifier(), connectorTableInfo);
-            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
-                    newBaseTableInfo.getCatalogName(), newBaseTableInfo.getDbName(),
-                    newBaseTableInfo.getTableIdentifier(), newConnectorTableInfo);
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db, materializedView, LockType.WRITE);
-        }
-    }
-
->>>>>>> e92354cc21 ([BugFix] Optimize mv refresh locks by intensive locks (#47381))
     /**
      * After materialized view is refreshed, update materialized view's meta info to record history refreshes.
      *
@@ -868,13 +763,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         Locker locker = new Locker();
         // update the meta if succeed
-<<<<<<< HEAD
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
-=======
         if (!locker.lockDatabaseAndCheckExist(db, materializedView, LockType.WRITE)) {
             LOG.warn("Failed to lock database: {} in updateMeta for mv refresh {}", db.getFullName(),
                     materializedView.getName());
->>>>>>> e92354cc21 ([BugFix] Optimize mv refresh locks by intensive locks (#47381))
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
 
@@ -1206,14 +1097,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         Map<String, List<List<String>>> listPartitionMap = materializedView.getListPartitionMap();
         Locker locker = new Locker();
-<<<<<<< HEAD
-        if (!locker.tryLockDatabase(db, LockType.READ, Config.mv_refresh_try_lock_timeout_ms)) {
-=======
         if (!locker.tryLockTableWithIntensiveDbLock(db, materializedView, LockType.READ,
                 Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             LOG.warn("Failed to lock database: {} in syncPartitionsForList for mv refresh: {}", db.getFullName(),
                     materializedView.getName());
->>>>>>> e92354cc21 ([BugFix] Optimize mv refresh locks by intensive locks (#47381))
             throw new LockTimeoutException("Failed to lock database: " + db.getFullName() + " in syncPartitionsForList");
         }
         try {
@@ -1961,13 +1848,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
         Locker locker = new Locker();
-<<<<<<< HEAD
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
-=======
         if (!locker.lockDatabaseAndCheckExist(db, materializedView, LockType.WRITE)) {
             LOG.warn("Fail to lock database {} in drop partition for mv refresh {}", db.getFullName(),
                     materializedView.getName());
->>>>>>> e92354cc21 ([BugFix] Optimize mv refresh locks by intensive locks (#47381))
             throw new DmlException("drop partition failed. database:" + db.getFullName() + " not exist");
         }
         try {

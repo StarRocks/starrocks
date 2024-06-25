@@ -37,10 +37,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-=======
 import java.util.Set;
->>>>>>> e92354cc21 ([BugFix] Optimize mv refresh locks by intensive locks (#47381))
 import java.util.concurrent.TimeUnit;
 
 public class Locker {
@@ -141,29 +138,8 @@ public class Locker {
      */
     public boolean tryLockDatabase(Database database, LockType lockType, long timeout) {
         if (Config.lock_manager_enabled) {
-<<<<<<< HEAD
             Preconditions.checkNotNull(database);
-=======
-            lockDatabase(database, lockType);
-        } else {
-            if (lockType.isWriteLock()) {
-                LockUtils.dbWriteLock(database.getRwLock(), database.getId(),
-                        database.getFullName(), database.getSlowLockLogStats());
-            } else {
-                LockUtils.dbReadLock(database.getRwLock(), database.getId(),
-                        database.getFullName(), database.getSlowLockLogStats());
-            }
-        }
-        return checkExistenceInLock(database, lockType);
-    }
 
-    /**
-     * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
-     */
-    public boolean tryLockDatabase(Database database, LockType lockType, long timeout, TimeUnit unit) {
-        if (Config.lock_manager_enabled) {
-            Preconditions.checkState(database != null);
->>>>>>> e92354cc21 ([BugFix] Optimize mv refresh locks by intensive locks (#47381))
             try {
                 lock(database.getId(), lockType, timeout);
                 return true;
@@ -337,8 +313,6 @@ public class Locker {
         }
     }
 
-<<<<<<< HEAD
-=======
     private boolean checkExistenceInLock(Database database, LockType lockType) {
         if (database.isExist()) {
             return true;
@@ -350,7 +324,6 @@ public class Locker {
 
     // --------------- Table locking API ---------------
 
->>>>>>> e92354cc21 ([BugFix] Optimize mv refresh locks by intensive locks (#47381))
     /**
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
@@ -376,6 +349,15 @@ public class Locker {
             //Fallback to db lock
             lockDatabase(database, lockType);
         }
+    }
+
+    public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, 
+                                                    long timeout, TimeUnit unit) {
+        long timeoutMillis = timeout;
+        if (!unit.equals(TimeUnit.MILLISECONDS)) {
+            timeoutMillis = TimeUnit.MILLISECONDS.convert(Duration.of(timeout, unit.toChronoUnit()));
+        }
+        return tryLockTablesWithIntensiveDbLock(database, tableList, lockType, timeoutMillis);
     }
 
     public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, long timeout) {
@@ -460,13 +442,8 @@ public class Locker {
             lockTableWithIntensiveDbLock(database, tableId, lockType);
             return checkExistenceInLock(database, tableId, lockType);
         } else {
-            if (lockType.isWriteLock()) {
-                LockUtils.dbWriteLock(database.getRwLock(), database.getId(),
-                        database.getFullName(), database.getSlowLockLogStats());
-            } else {
-                LockUtils.dbReadLock(database.getRwLock(), database.getId(),
-                        database.getFullName(), database.getSlowLockLogStats());
-            }
+            //Fallback to db lock
+            lockDatabase(database, lockType);
             return checkExistenceInLock(database, lockType);
         }
     }
