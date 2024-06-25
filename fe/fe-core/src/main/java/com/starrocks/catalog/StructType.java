@@ -50,7 +50,7 @@ public class StructType extends Type {
 
     private final HashMap<String, StructField> fieldMap = Maps.newHashMap();
     @SerializedName(value = "fields")
-    private ArrayList<StructField> fields;
+    private final ArrayList<StructField> fields;
 
     @SerializedName(value = "named")
     private final boolean isNamed;
