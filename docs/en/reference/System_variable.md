@@ -446,6 +446,23 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
 
+
+### enable_lake_tablet_internal_parallel
+
+* **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v3.3.0
+
+### tablet_internal_parallel_mode
+
+* **Description**: Internal Parallel Scan strategy of tablets. Valid Values:
+  * `auto`: When the number of Tablets to be scanned on BE or CN nodes is less than the Degree of Parallelism (DOP), the system automatically determines whether Parallel Scan is needed based on the estimated size of the Tablets.
+  * `force_split`: Forces the splitting of Tablets and performs Parallel Scan.
+* **Default**: auto
+* **Data type**: String
+* **Introduced in**: v2.5.0
+
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
