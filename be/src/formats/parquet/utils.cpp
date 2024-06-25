@@ -35,6 +35,8 @@ CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type cod
         return LZO;
     case tparquet::CompressionCodec::BROTLI:
         return BROTLI;
+    case tparquet::CompressionCodec::LZ4_RAW:
+        return LZ4;
     default:
         return UNKNOWN_COMPRESSION;
     }
