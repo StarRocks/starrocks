@@ -180,6 +180,26 @@ public class StructType extends Type {
         return fields.get(pos);
     }
 
+    public void updateFields(List<StructField> structFields) {
+        Preconditions.checkNotNull(structFields);
+        Preconditions.checkArgument(structFields.size() > 0);
+        fields.clear();
+        fieldMap.clear();
+        for (StructField field : structFields) {
+            String lowerFieldName = field.getName().toLowerCase();
+            if (fieldMap.containsKey(lowerFieldName)) {
+                throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
+            } else {
+                field.setPosition(fields.size());
+                fields.add(field);
+                // Store lowercase field name in fieldMap
+                fieldMap.put(lowerFieldName, field);
+            }
+        }
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
+    }
+
     @Override
     public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
         if (accessPath.getAccessPathType() == ComplexTypeAccessPathType.ALL_SUBFIELDS) {

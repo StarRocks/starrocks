@@ -705,7 +705,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         }
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
-        StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedFieldName(), null, null);
+        StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
         try {
             fieldDesc.analyze(baseColumn, true);
         } catch (AnalysisException e) {
