@@ -53,7 +53,8 @@ displayed_sidebar: "Chinese"
 
       > **说明**
       >
-      > 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。
 
    d. 如果您的实例安装了多个 JDK，并且您要使用 JDK 与环境变量 `JAVA_HOME` 中指定的不同，则必须在配置文件中添加配置项 `JAVA_HOME` 来指定所选该 JDK 的安装路径。
 
@@ -131,7 +132,8 @@ displayed_sidebar: "Chinese"
 
       > **说明**
       >
-      > 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。
 
    d. 如果您的实例安装了多个 JDK，并且您要使用 JDK 与环境变量 `JAVA_HOME` 中指定的不同，则必须在配置文件中添加配置项 `JAVA_HOME` 来指定所选该 JDK 的安装路径。
 
@@ -192,7 +194,8 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
       > **说明**
       >
-      > 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 您可以在终端中运行 `ifconfig` 以查看当前实例拥有的 IP 地址。
+      > - 从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。
 
    c. 如果您的实例安装了多个 JDK，并且您要使用 JDK 与环境变量 `JAVA_HOME` 中指定的不同，则必须在配置文件中添加配置项 `JAVA_HOME` 来指定所选该 JDK 的安装路径。
 
