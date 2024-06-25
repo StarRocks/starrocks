@@ -489,7 +489,8 @@ jobs:
       - name: Run
         run: |
           rm -rf /root/.cache/trivy
-          /var/local/env/trivy fs . --scanners vuln --parallel 0 --vuln-type library --output ${REPORT_FILE}
+          /var/local/env/trivy fs . --scanners vuln --vuln-type library --severity CRITICAL,HIGH \
+            --output ${REPORT_FILE}  --exit-code 1
 
       - name: Publish Trivy Output to Summary
         run: |
