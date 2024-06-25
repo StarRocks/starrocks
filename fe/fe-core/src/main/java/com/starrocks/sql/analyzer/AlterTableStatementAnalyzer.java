@@ -44,23 +44,22 @@ public class AlterTableStatementAnalyzer {
         if (table.isTemporaryTable()) {
             throw new SemanticException("temporary table doesn't support alter table statement");
         }
-        if (table instanceof MaterializedView && alterClauseList != null) {
+        if (table instanceof MaterializedView) {
             for (AlterClause alterClause : alterClauseList) {
-                if (!indexCluase(alterClause)) {
+                if (!indexClause(alterClause)) {
                     String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
                             "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
                     throw new SemanticException(msg, tbl.getPos());
                 }
             }
         }
-        AlterTableClauseVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitor();
-        alterTableClauseAnalyzerVisitor.setTable(table);
+        AlterTableClauseAnalyzer alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzer(table);
         for (AlterClause alterClause : alterClauseList) {
-            alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
+            alterTableClauseAnalyzerVisitor.analyze(context, alterClause);
         }
     }
 
-    public static boolean indexCluase(AlterClause alterClause) {
+    public static boolean indexClause(AlterClause alterClause) {
         if (alterClause instanceof CreateIndexClause || alterClause instanceof DropIndexClause) {
             return true;
         } else if (alterClause.getProperties() != null && alterClause.getProperties().containsKey(PROPERTIES_BF_COLUMNS)) {

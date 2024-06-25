@@ -80,6 +80,7 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -1379,7 +1380,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Set<String> result = getMVPartitionNamesByBasePartitionNames(refBaseTable, updatePartitionNames);
         result.retainAll(mvRangePartitionNames);
         LOG.info("The ref base table {} has updated partitions: {}, the corresponding mv partitions to refresh: {}, " +
-                        "mvRangePartitionNames: {}", refBaseTable.getName(), updatePartitionNames, result, mvRangePartitionNames);
+                "mvRangePartitionNames: {}", refBaseTable.getName(), updatePartitionNames, result, mvRangePartitionNames);
         return result;
     }
 
@@ -1548,6 +1549,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     /**
      * Check whether the base table's partition has changed or not. Wait to refresh until all mv's base tables
      * don't change again.
+     *
      * @return: true if the base table's partition has changed, otherwise false.
      */
     private boolean checkBaseTablePartitionChange(MaterializedView materializedView) {
@@ -1604,6 +1606,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     /**
      * Collect all deduplicated databases of the materialized view's base tables.
+     *
      * @param materializedView: the materialized view to check
      * @return: the deduplicated databases of the materialized view's base tables,
      * throw exception if the database does not exist.
@@ -1630,6 +1633,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * NOTE:
      * 1. deep copy of the base table's metadata may be time costing, we can optimize it later.
      * 2. no needs to lock the base table's metadata since the metadata is not changed during the refresh process.
+     *
      * @param materializedView the materialized view to collect
      * @return the base table and its snapshot info map
      */
@@ -1789,6 +1793,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     new RangePartitionDesc(materializedView.getPartitionColumnNames(), batch);
             AddPartitionClause alterPartition = new AddPartitionClause(rangePartitionDesc, distributionDesc,
                     partitionProperties, false);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
+            analyzer.analyze(mvContext.getCtx(), alterPartition);
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
                         database, materializedView.getName(), alterPartition);
@@ -1813,10 +1819,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MultiItemListPartitionDesc multiItemListPartitionDesc =
                     new MultiItemListPartitionDesc(false, mvPartitionName, partitionKeyList, partitionProperties);
             try {
+                AddPartitionClause addPartitionClause =
+                        new AddPartitionClause(multiItemListPartitionDesc, distributionDesc, partitionProperties, false);
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
+                analyzer.analyze(mvContext.getCtx(), addPartitionClause);
+
                 GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
-                        database, materializedView.getName(), new AddPartitionClause(
-                                multiItemListPartitionDesc, distributionDesc,
-                                partitionProperties, false));
+                        database, materializedView.getName(), addPartitionClause);
             } catch (Exception e) {
                 throw new DmlException("add list partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                         database.getFullName(), materializedView.getName());
@@ -1841,9 +1850,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 throw new DmlException("drop partition failed. partition:" + dropPartitionName + " not exist");
             }
 
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(
-                    db, materializedView,
-                    new DropPartitionClause(false, dropPartitionName, false, true));
+            DropPartitionClause dropPartitionClause = new DropPartitionClause(false, dropPartitionName, false, true);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
+            analyzer.analyze(new ConnectContext(), dropPartitionClause);
+
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, materializedView, dropPartitionClause);
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                     db.getFullName(), materializedView.getName());
@@ -1901,7 +1912,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(snapshotTable));
                 } else {
                     LOG.info("MV {}'s refTable {} is not found in `mvRefBaseTableIntersectedPartitions` " +
-                                    "because of empty update", materializedView.getName(), snapshotTable.getName());
+                            "because of empty update", materializedView.getName(), snapshotTable.getName());
                 }
             }
             if (needRefreshTablePartitionNames != null) {

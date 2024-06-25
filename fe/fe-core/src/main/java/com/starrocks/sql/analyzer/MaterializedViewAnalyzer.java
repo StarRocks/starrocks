@@ -1042,9 +1042,8 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
             }
 
-            AlterMVClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterMVClauseAnalyzerVisitor();
-            alterTableClauseAnalyzerVisitor.setTable(table);
-            alterTableClauseAnalyzerVisitor.analyze(statement.getAlterTableClause(), context);
+            AlterMVClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterMVClauseAnalyzerVisitor(table);
+            alterTableClauseAnalyzerVisitor.analyze(context, statement.getAlterTableClause());
             return null;
         }
 
