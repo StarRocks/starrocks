@@ -122,6 +122,7 @@ public class MetaHelper {
                 conn.disconnect();
             }
             if (out != null) {
+                out.flush();
                 out.close();
             }
         }
