@@ -479,6 +479,22 @@ SELECT /*+ SET_VAR
 * 类型：Boolean
 * 引入版本：v2.5.6、v3.0.8、v3.1.4、v3.2.0
 
+### enable_lake_tablet_internal_parallel
+
+* 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v3.3.0
+
+### tablet_internal_parallel_mode
+
+* 描述：tablet 内部并行 scan 策略。有效值:
+  * `auto`: 在 BE 或 CN 节点需要扫描的 Tablet 数小于 DOP 时，系统根据预估的 Tablet 大小自动判断是否需要并行 Scan。
+  * `force_split`: 强制对 Tablet 进行拆分和并行扫描。
+* 默认值：auto
+* 类型：String
+* 引入版本：v2.5.0
+
 ### enable_scan_datacache
 
 * 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
