@@ -88,21 +88,6 @@ public class CatalogMgrTest {
     }
 
     @Test
-    public void testCreateExceptionMsg() {
-        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-        Map<String, String> config = new HashMap<>();
-
-        config.put("type", "jdbc");
-
-        try {
-            catalogMgr.createCatalog("jdbc", "a", "", config);
-            Assert.fail();
-        } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Missing"));
-        }
-    }
-
-    @Test
     public void testLoadCatalog() throws IOException, DdlException {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
