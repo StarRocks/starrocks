@@ -73,6 +73,24 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 
 通过降级正确性测试后，您可以先降级 FE 节点。您必须先降级 Follower FE 节点，然后再降级 Leader FE 节点。
 
+:::note
+
+如需将 v3.3.0 及以上集群降级至 v3.2，需在降级前执行以下操作：
+
+1. 确保降级前的 v3.3 集群中发起的所有 ALTER TABLE SCHEMA CHANGE 事物已完成或取消。
+2. 通过以下命令清理所有事务历史记录：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("history_job_keep_max_second" = "0");
+   ```
+
+3. 通过以下命令确认无历史记录遗留：
+
+   ```SQL
+   SHOW PROC '/jobs/<db>/schema_change';
+   ```
+:::
+
 1. 生成新的元数据快照。
 
    a. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。

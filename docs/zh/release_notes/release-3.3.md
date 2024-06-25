@@ -135,3 +135,29 @@ displayed_sidebar: "Chinese"
 - 修改列类型 VARCHAR 为 DECIMAL 后，BE crash。[#44406](https://github.com/StarRocks/starrocks/issues/44406)
 - 使用 not equal 运算符查询 List 分区的表，分区裁剪存在问题，导致查询结果出错。[#42907](https://github.com/StarRocks/starrocks/issues/42907)
 - 随着较多使用非事务接口的 Stream Load 完成，Leader FE 的堆大小迅速增加。[#43715](https://github.com/StarRocks/starrocks/issues/43715)
+
+### 降级说明
+
+如需将 v3.3.0 及以上集群降级至 v3.2，用户需执行以下操作：
+
+1. 确保降级前的 v3.3 集群中发起的所有 ALTER TABLE SCHEMA CHANGE 事物已完成或取消。
+2. 通过以下命令清理所有事务历史记录：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("history_job_keep_max_second" = "0");
+   ```
+
+3. 通过以下命令确认无历史记录遗留：
+
+   ```SQL
+   SHOW PROC '/jobs/<db>/schema_change';
+   ```
+
+4. 执行以下语句为元数据创建镜像文件：
+
+   ```sql
+   ALTER SYSTEM CREATE IMAGE;
+   ```
+
+5. 在新的镜像文件传输到所有 FE 节点的目录 **meta/image** 之后，降级其中一个 Follower FE 节点，确认没有问题后继续降级集群中的其他节点。
+
