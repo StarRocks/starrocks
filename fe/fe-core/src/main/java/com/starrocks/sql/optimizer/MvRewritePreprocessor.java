@@ -226,16 +226,7 @@ public class MvRewritePreprocessor {
             return;
         }
 
-<<<<<<< HEAD
-        try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
-            // MV Rewrite will be used when cbo is enabled.
-            if (context.getOptimizerConfig().isRuleBased()) {
-                return;
-            }
-
-=======
         try (Timer ignored = Tracers.watchScope("MVPreprocess")) {
->>>>>>> 4507a4e21e ([BugFix] Fix mv refresh timer profile (#47384))
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
