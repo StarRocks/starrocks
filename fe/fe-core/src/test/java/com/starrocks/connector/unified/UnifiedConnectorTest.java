@@ -35,7 +35,7 @@ public class UnifiedConnectorTest {
         properties.put("unified.metastore.type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
         ConnectorContext context = new ConnectorContext("unified_catalog", "unified", properties);
-        CatalogConnector catalogConnector = ConnectorFactory.createConnector(context);
+        CatalogConnector catalogConnector = ConnectorFactory.createConnector(context, false);
         ConnectorMetadata metadata = catalogConnector.getMetadata();
         assertTrue(metadata instanceof CatalogConnectorMetadata);
         catalogConnector.shutdown();
