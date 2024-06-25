@@ -500,6 +500,10 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby('[a,b]','[1,2]')");
         analyzeFail("select array_sum('[1,2]')");
         analyzeFail("select array_to_bitmap('[1,2]')");
+        analyzeFail("select array_sortby([1, 2, 3])");
+        analyzeFail("select array_sortby([1, 2, 3], [1, 2, 3], 'a')");
+        analyzeFail("select array_sortby([map{'a':1, 'b':2, 'c':3}], " +
+                "[map{'a':1, 'b':2, 'c':3}], [map{'c':4, 'd':5, 'e':6}])");
     }
 
     @Test
