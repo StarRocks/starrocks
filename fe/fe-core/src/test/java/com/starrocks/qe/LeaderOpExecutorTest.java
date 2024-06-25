@@ -146,6 +146,8 @@ public class LeaderOpExecutorTest {
             {
                 globalStateMgr.getServingState();
                 minTimes = 0;
+                globalStateMgr.isReady();
+                minTimes = 0;
 
                 globalStateMgr.getWarehouseMgr();
                 result = warehouseManager;
