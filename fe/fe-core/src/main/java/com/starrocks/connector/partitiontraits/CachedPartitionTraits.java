@@ -165,13 +165,14 @@ public class CachedPartitionTraits extends DefaultTraits {
 
     @Override
     public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
-        return getCache("getPartitionNameWithPartitionInfo2",
-                () -> delegate.getPartitionNameWithPartitionInfo(partitionNames), () -> Maps.newHashMap());
+        // no cache since partition names are not stable.
+        return delegate.getPartitionNameWithPartitionInfo(partitionNames);
     }
 
     @Override
     public List<PartitionInfo> getPartitions(List<String> names) {
-        return getCache("getPartitions", () -> delegate.getPartitions(names), () -> Lists.newArrayList());
+        // no cache since partition names are not stable.
+        return delegate.getPartitions(names);
     }
 
     @Override
