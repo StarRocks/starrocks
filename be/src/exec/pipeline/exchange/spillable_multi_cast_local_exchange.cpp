@@ -14,6 +14,7 @@
 
 #include <glog/logging.h>
 #include <memory>
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 
@@ -45,22 +46,20 @@ private:
     struct Block {
         // still need a link
         std::vector<Cell> cells;
-        // std::vector<ChunkPtr> chunks;
         bool in_mem = true;
         bool has_load_task = false;
         bool has_flush_task = false;
-        // fronzen = true means no data will be append
-        bool frozen = false;
         // @TODO no need, use last - first
         size_t memory_usage = 0;
         // memory
         Block* next = nullptr;
         // spillable block, only used when spill happens
         spill::BlockPtr block;
+        // @TODO should record read ref??
     };
 
     struct Iterator {
-        Iterator() = default;
+        // Iterator() = default;
         Iterator(Block* blk, size_t idx): block(blk), index(idx) {}
         Block* block = nullptr;
         // @TODO canot use index as internal iterator
@@ -125,6 +124,9 @@ public:
         spill::BlockManager* block_manager = nullptr;
         workgroup::WorkGroupPtr wg;
     };
+    // @TODO mem control strategy
+    // 1. for each consumer, only keep one Block in memory
+    // 2. for producer, keep on block in memory
 
     MemLimitedChunkQueue(RuntimeState* state, RuntimeProfile* profile, int32_t consumer_number, Options opts):
         _state(state), _consumer_number(consumer_number), _opened_source_opcount(consumer_number), _consumer_progress(consumer_number), _opts(std::move(opts)) {
@@ -156,22 +158,19 @@ public:
 
     Status push(const ChunkPtr& chunk, MultiCastLocalExchangeSinkOperator* sink_operator) {
         std::unique_lock l(_mutex);
-        if (_chunk_builder == nullptr) {
+        if (UNLIKELY(_chunk_builder == nullptr)) {
             _chunk_builder = chunk->clone_empty();
         }
         int32_t closed_source_number = _consumer_number - _opened_source_number;
+        
+        DCHECK(_tail != nullptr) << "tail won't be null";
+        DCHECK(_tail->next == nullptr) << "tail should be the last block";
 
-        if (_tail == nullptr) {
-            Block* block = new Block();
-            _tail = block;
-            LOG(INFO) << "create a new block";
-        }
         // create a new block
         if (_tail->memory_usage >= _opts.block_size) {
             Block* block = new Block();
             block->next = nullptr;
-            LOG(INFO) << fmt::format("create a new block, last block mem {}, cells {}, {}->{}, limit {}", _tail->memory_usage, _tail->cells.size(),
-                reinterpret_cast<uintptr_t>(_tail), reinterpret_cast<uintptr_t>(block), _opts.block_size);
+            LOG(INFO) << fmt::format("create a new block {}, prev block {}, mem {}, cells {}", (void*)(block), (void*)(_tail), _tail->memory_usage, _tail->cells.size());
             _tail->next = block;
             _tail = block;
         }
@@ -187,14 +186,15 @@ public:
         _tail->cells.emplace_back(cell);
         _tail->memory_usage += chunk->memory_usage();
 
+        // @TODO in_memory_rows = total_acc_rows - flushed_rows + loaded_rows;
+        // @TODO should consider load
         size_t in_memory_rows = _total_accumulated_rows - _flushed_accumulated_rows;
         size_t in_memory_bytes = _total_accumulated_bytes - _flushed_accumulated_bytes;
         _peak_memory_rows_counter->set(in_memory_rows);
         _peak_memory_bytes_counter->set(in_memory_bytes);
         sink_operator->update_counter(in_memory_bytes, in_memory_rows); 
-        LOG(INFO) << fmt::format("push chunk, rows {} bytes {}, cur block cells {} mem {}, use count {}",
-            _total_accumulated_rows, _total_accumulated_bytes, _tail->cells.size(), _tail->memory_usage, cell.used_count);
-        // @TODO update sink operator
+        LOG(INFO) << fmt::format("push chunk to block {}, rows {}, bytes {}, cells {}, mem {}, in_mem_rows {}, in_mem_bytes {}",
+            (void*)(_tail), _total_accumulated_rows, _total_accumulated_rows, _tail->cells.size(), _tail->memory_usage, in_memory_rows, in_memory_bytes);
 
         return Status::OK();
     }
@@ -232,7 +232,6 @@ public:
             return false;
         }
 
-
         return true;
     }
 
@@ -254,9 +253,10 @@ public:
         Cell* cell = iter->get_cell();
         cell->used_count += 1;
         // @TODO update progress
+
         LOG(INFO) << fmt::format("pop chunk, {} ref {}", (void*)(cell->chunk.get()), cell->chunk.use_count());
         auto result = cell->chunk;
-        // @TODO release may lead modify concurrency
+
         _update_progress(iter);
         LOG(INFO) << fmt::format("pop chunk, rows {}, used_count {}, index {}, consumer numer {}, {}",
             cell->accumulated_rows, cell->used_count, consumer_index, _consumer_number, (void*)(result.get()));
@@ -354,7 +354,7 @@ private:
         // @TODO mark all used cell and release memory
         while (_iterator.valid()) {
             Cell* cell = _iterator.get_cell();
-            if(cell->used_count == _consumer_number && cell->chunk.use_count() == 1) {
+            if(cell->used_count == _consumer_number) {
                 _head_accumulated_rows = cell->accumulated_rows;
                 _head_accumulated_bytes = cell->accumulated_bytes;
 
@@ -365,7 +365,6 @@ private:
                 LOG(INFO) << fmt::format("release chunk, rows {}, mem {}, head acc rows {}, bytes {} ref {}",
                     cell->accumulated_rows,(cell->chunk != nullptr ? cell->chunk->memory_usage(): 0),
                     _head_accumulated_rows, _head_accumulated_bytes, cell->chunk.use_count());
-                // @TODO this is a dangears op
                 cell->chunk.reset();
                 if(_iterator.has_next()) {
                     LOG(INFO) << fmt::format("no next, skip clean");
@@ -453,6 +452,9 @@ private:
     // consumer
     size_t _fastest_accumulated_rows = 0;
     size_t _fastest_accumulated_bytes = 0;
+
+    size_t _current_load_rows = 0;
+    size_t _current_load_bytes = 0;
 
     // spill related
     Options _opts;
@@ -657,6 +659,8 @@ private:
                 DCHECK(read_cursor != nullptr) << "deserialize error";
             }
             chunk->check_or_die();
+            _current_load_rows += chunk->num_rows();
+            _current_load_bytes += chunk->memory_usage();
             LOG(INFO) << "load chunk done, rows " << cell.accumulated_rows << ", used_count " << cell.used_count << ", " << (void*)(cell.chunk.get()) << ", " << chunk->num_rows();
         }
         // @TODO verify??
