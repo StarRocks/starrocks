@@ -24,7 +24,7 @@ import java.util.Map;
 public class DropFieldClause extends AlterTableColumnClause {
     private final String colName;
     private final String fieldName;
-    private final List<String> nestedFieldName;
+    private final List<String> nestedParentFieldNames;
 
     public String getColName() {
         return colName;
@@ -34,16 +34,16 @@ public class DropFieldClause extends AlterTableColumnClause {
         return fieldName;
     }
 
-    public List<String> getNestedFieldName() {
-        return nestedFieldName;
+    public List<String> getNestedParentFieldNames() {
+        return nestedParentFieldNames;
     }
 
-    public DropFieldClause(String colName, String fieldName, List<String> nestedFieldName, 
+    public DropFieldClause(String colName, String fieldName, List<String> nestedParentFieldNames, 
                           Map<String, String> properties) {
         super(AlterOpType.SCHEMA_CHANGE, null, properties, NodePosition.ZERO);
         this.colName = colName;
         this.fieldName = fieldName;
-        this.nestedFieldName = nestedFieldName;
+        this.nestedParentFieldNames = nestedParentFieldNames;
     }
 
     @Override

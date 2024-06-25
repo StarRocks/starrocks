@@ -110,7 +110,7 @@ PROPERTIES (
 );
 
 alter table tab1 modify column c1 add field [*].val1 int;
-alter table tab1 modify column c1 add field [*].v3 int;
+alter table tab1 modify column c1 drop field [*].v1;
 
 drop table tab1;
 drop database test_add_drop_field_not_allowed;
