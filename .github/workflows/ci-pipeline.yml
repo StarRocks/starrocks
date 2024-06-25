@@ -493,6 +493,7 @@ jobs:
             --output ${REPORT_FILE}  --exit-code 1
 
       - name: Publish Trivy Output to Summary
+        if: always()
         run: |
           if [[ -s ${REPORT_FILE} ]]; then
             {
