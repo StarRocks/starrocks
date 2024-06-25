@@ -1237,8 +1237,6 @@ class StarrocksSQLApiLib(object):
                 count += 1
         tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
 
-<<<<<<< HEAD
-=======
     def wait_mv_refresh_count(self, db_name, mv_name, expect_count):
         show_sql = """select count(*) from information_schema.materialized_views 
         join information_schema.task_runs using(task_name)
@@ -1262,7 +1260,6 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal(expect_count, refresh_count, "wait too long for the refresh count")
 
 
->>>>>>> 35d3974c5f ([BugFix] Make sure task run add into task history even it's merged (#47401))
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
         wait pipe load finish
