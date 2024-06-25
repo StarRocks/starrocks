@@ -583,6 +583,50 @@ public class UtFrameUtils {
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
     }
 
+<<<<<<< HEAD
+=======
+    public static String setUpTestDump(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
+        String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        replaySql = LogUtil.removeLineSeparator(replaySql);
+        return replaySql;
+    }
+
+    public static Pair<String, ExecPlan> replaySql(ConnectContext connectContext, String sql) throws Exception {
+        StatementBase statementBase;
+        try (Timer st = Tracers.watchScope("Parse")) {
+            statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+            if (statementBase instanceof QueryStatement) {
+                replaceTableCatalogName(statementBase);
+            }
+        }
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+
+        if (statementBase instanceof QueryStatement) {
+            return getQueryExecPlan((QueryStatement) statementBase, connectContext);
+        } else if (statementBase instanceof InsertStmt) {
+            return getInsertExecPlan((InsertStmt) statementBase, connectContext);
+        } else {
+            Preconditions.checkState(false, "Do not support the statement");
+            return null;
+        }
+    }
+
+    public static void tearDownTestDump() {
+        tearMockEnv();
+    }
+
+    public static ExecPlan getPlanFragmentFromQueryDump(ConnectContext connectContext, QueryDumpInfo dumpInfo)
+            throws Exception {
+        String q = initMockEnv(connectContext, dumpInfo);
+        try {
+            return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
+        } finally {
+            tearMockEnv();
+        }
+    }
+
+>>>>>>> abc33daff3 ([BugFix] Fix array index out of bounds when collect equivalent slot pairs from set operators (#47321))
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);

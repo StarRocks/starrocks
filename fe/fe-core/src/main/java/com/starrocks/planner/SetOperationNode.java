@@ -309,4 +309,37 @@ public abstract class SetOperationNode extends PlanNode {
         }
         return false;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalSetOperationNode setOperationNode = new TNormalSetOperationNode();
+        setOperationNode.setTuple_id(normalizer.remapTupleId(tupleId_).asInt());
+        setOperationNode.setResult_expr_lists(
+                materializedConstExprLists_.stream().map(normalizer::normalizeOrderedExprs)
+                        .collect(Collectors.toList()));
+        setOperationNode.setConst_expr_lists(
+                constExprLists_.stream().map(normalizer::normalizeOrderedExprs).collect(Collectors.toList()));
+        setOperationNode.setFirst_materialized_child_idx(firstMaterializedChildIdx_);
+        if (this instanceof UnionNode) {
+            planNode.setNode_type(TPlanNodeType.UNION_NODE);
+        } else if (this instanceof ExceptNode) {
+            planNode.setNode_type(TPlanNodeType.EXCEPT_NODE);
+        } else if (this instanceof IntersectNode) {
+            planNode.setNode_type(TPlanNodeType.INTERSECT_NODE);
+        } else {
+            Preconditions.checkState(false);
+        }
+        planNode.setSet_operation_node(setOperationNode);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+        super.toNormalForm(planNode, normalizer);
+    }
+
+    @Override
+    public void collectEquivRelation(FragmentNormalizer normalizer) {
+        this.outputSlotIdToChildSlotIdMaps.forEach(map ->
+                map.forEach((k, v) -> normalizer.getEquivRelation().union(new SlotId(k), new SlotId(v))));
+    }
+>>>>>>> abc33daff3 ([BugFix] Fix array index out of bounds when collect equivalent slot pairs from set operators (#47321))
 }

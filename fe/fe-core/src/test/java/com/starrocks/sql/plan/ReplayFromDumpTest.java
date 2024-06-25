@@ -872,4 +872,113 @@ public class ReplayFromDumpTest {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testListPartitionPrunerWithNEExpr() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/list_partition_prune_dump"));
+        // partitions should not be pruned
+        Assert.assertTrue(replayPair.second, !replayPair.second.contains("partitionsRatio=2/3, tabletsRatio=20/20"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("0:OlapScanNode\n" +
+                "     table: partitions2_keys311, rollup: partitions2_keys311\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: [7: undef_signed_not_null, VARCHAR, false] != 'j'\n" +
+                "     partitionsRatio=3/3, tabletsRatio=30/30"));
+    }
+
+    @Test
+    public void testTopNPushDownBelowUnionAll() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/topn_push_down_union"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+
+        // Topn should be pushed down below union all and contains no duplicated ording columns
+        PlanTestBase.assertContains(replayPair.second, "  26:TOP-N\n" +
+                "  |  order by: <slot 240> 240: expr ASC, <slot 241> 241: cast DESC, <slot 206> 206: mock_025 DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 200");
+        PlanTestBase.assertContains(replayPair.second, "17:TOP-N\n" +
+                "  |  order by: <slot 165> 165: cast ASC, <slot 153> 153: cast DESC, <slot 166> 166: expr ASC, " +
+                "<slot 167> 167: cast DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 200");
+    }
+
+    @Test
+    public void testNoCTEOperatorPropertyDerived() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/no_cte_operator_test"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("23:Project\n" +
+                "  |  <slot 193> : 193: mock_081\n" +
+                "  |  <slot 194> : 194: mock_089\n" +
+                "  |  <slot 233> : 233: mock_065\n" +
+                "  |  <slot 391> : 379: case\n" +
+                "  |  <slot 395> : '1'\n" +
+                "  |  \n" +
+                "  22:Project"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:SORT\n" +
+                "  |  order by: <slot 194> 194: mock_089 ASC, <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
+                "<slot 233> 233: mock_065 ASC\n" +
+                "  |  analytic partition by: 194: mock_089, 395: case, 193: mock_081\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  24:EXCHANGE"));
+    }
+
+    @Test
+    public void testTimeoutDeepJoinCostPrune() throws Exception {
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.TIMER, "optimizer");
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/deep_join_cost"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        String ss = Tracers.printScopeTimer();
+        int start = ss.indexOf("EnforceAndCostTask[") + "EnforceAndCostTask[".length();
+        int end = ss.indexOf("]", start);
+        long count = Long.parseLong(ss.substring(start, end));
+        Assert.assertTrue(ss, count < 10000);
+    }
+
+    @Test
+    public void testDistinctConstantRewrite() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/distinct_constant"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("4:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_count(1)"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("9:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_count(NULL)"));
+    }
+
+    @Test
+    public void testSplitOrderBy() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/split_order_by"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:MERGING-EXCHANGE"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("20:TOP-N"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:MERGING-EXCHANGE"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("14:TOP-N"));
+
+    }
+
+    @Test
+    public void testQueryCacheSetOperator() throws Exception {
+
+        String savedSv = connectContext.getSessionVariable().getJsonString();
+        try {
+            connectContext.getSessionVariable().setEnableQueryCache(true);
+            QueryDumpInfo dumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/query_cache_set_operator"));
+            ExecPlan execPlan = UtFrameUtils.getPlanFragmentFromQueryDump(connectContext, dumpInfo);
+            Assert.assertTrue(execPlan.getFragments().stream().anyMatch(frag -> frag.getCacheParam() != null));
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSv);
+        }
+    }
+>>>>>>> abc33daff3 ([BugFix] Fix array index out of bounds when collect equivalent slot pairs from set operators (#47321))
 }
