@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Flat JSON
+# [Preview] Flat JSON
 
 This topic introduces the basic concepts of the Flat JSON feature and how to use this feature.
 
