@@ -13,6 +13,8 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
+permissions:
+  security-events: write
 
 jobs:
 
@@ -456,6 +458,42 @@ jobs:
           cd ${{ github.workspace }}/fe
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
+  trivy-fe-checker:
+    runs-on: ubuntu-latest
+    needs: fe-checker
+    if: needs.fe-checker.outputs.src_filter == 'true' && github.repository == 'StarRocks/starrocks'
+    name: TRIVY CHECKER
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CODE_PATH: ${{ github.workspace }}
+      BRANCH: ${{ github.base_ref }}
+      GH_TOKEN: ${{ github.token }}
+      REPORT: trivy-result-${{ github.event.number }}.sarif
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+
+      - name: Run
+        run: |
+          /var/local/env/trivy fs . --scanners vuln --parallel 0 --vuln-type library --format sarif --output ${REPORT}
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: ${{ env.REPORT }}
   fe-ut:
     runs-on: [self-hosted, normal]
     needs: [fe-codestyle-check]
@@ -470,6 +508,7 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
+          exit -1
 
       - name: BRANCH INFO
         id: branch
