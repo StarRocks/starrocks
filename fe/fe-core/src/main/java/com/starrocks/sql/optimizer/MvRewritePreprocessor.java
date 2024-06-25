@@ -210,7 +210,7 @@ public class MvRewritePreprocessor {
                 !sessionVariable.isEnableMaterializedViewRewrite()) {
             return;
         }
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.MVPreprocessMvs")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
@@ -221,20 +221,20 @@ public class MvRewritePreprocessor {
                 // 2. choose best related mvs by user's config or related mv limit
                 Set<MaterializedView> selectedRelatedMVs;
                 try (PlannerProfile.ScopedTimer t1 =
-                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.chooseCandidates")) {
+                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.MVChooseCandidates")) {
                     selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
                 }
 
                 // 3. convert to mv with planContext, skip if mv has no valid plan(not SPJG)
                 Set<MvWithPlanContext> mvWithPlanContexts;
                 try (PlannerProfile.ScopedTimer t1 =
-                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.generateMvPlan")) {
+                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.MVGenerateMvPlan")) {
                     mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
                 }
 
                 // 4. process related mvs to candidates
                 try (PlannerProfile.ScopedTimer t1 =
-                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.validateMv")) {
+                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.MVValidateMv")) {
                     prepareRelatedMVs(queryTables, mvWithPlanContexts);
                 }
             } catch (Exception e) {
