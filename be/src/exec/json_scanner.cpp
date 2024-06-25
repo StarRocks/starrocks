@@ -105,7 +105,9 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
 
     if (src_chunk->num_rows() == 0) {
         if (status.is_end_of_file()) {
-            return Status::EndOfFile("EOF of reading json file, nothing read");
+            // NOTE: can not stop right here because could be more files to read.
+            // return Status::EndOfFile("EOF of reading json file, nothing read");
+            return src_chunk;
         } else if (status.is_time_out()) {
             // if timeout happens at the beginning of reading src_chunk, we return the error state
             // else we will _materialize the lines read before timeout and return ok()
