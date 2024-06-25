@@ -210,7 +210,7 @@ public abstract class StatisticsCollectJob {
 
     public static String fullAnalyzeGetDataSize(String columnName, Type columnType) {
         if (columnType.getPrimitiveType().isCharFamily()) {
-            return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(columnName) + ")), 0)";
+            return "IFNULL(SUM(CHAR_LENGTH(" + columnName + ")), 0)";
         }
         long typeSize = columnType.getTypeSize();
         return "COUNT(1) * " + typeSize;
