@@ -93,6 +93,7 @@ import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
@@ -602,6 +603,8 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
+        tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
         return tree.getInputs().get(0);
     }
 
