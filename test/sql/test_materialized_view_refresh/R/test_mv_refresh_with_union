@@ -1,4 +1,10 @@
 -- name: test_mv_refresh_with_union
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
 CREATE TABLE `t1` (
     `k1`  date not null, 
     `k2`  datetime not null, 
@@ -75,7 +81,7 @@ union all
 select * from t2;
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("test_mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
 -- result:
 None
 -- !result
@@ -230,7 +236,7 @@ union all
 select * from t2;
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("test_mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
 -- result:
 None
 -- !result
