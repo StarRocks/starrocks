@@ -954,14 +954,14 @@ void TabletUpdates::do_apply() {
         first = false;
         // submit a delay apply task to storage_engine
         if (config::enable_retry_apply && _is_tolerable(apply_st) && !apply_st.ok()) {
+            //reset pk index, reset rowset_update_states, reset compaction_state
+            _reset_apply_status(*version_info_apply);
             auto time_point =
                     std::chrono::steady_clock::now() + std::chrono::seconds(config::retry_apply_interval_second);
             StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
             std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
                                                   _tablet.tablet_id(), apply_st.to_string());
             LOG(WARNING) << msg;
-            //reset pk index, reset rowset_update_states, reset compaction_state
-            _reset_apply_status(*version_info_apply);
             break;
         } else {
             if (!apply_st.ok()) {
