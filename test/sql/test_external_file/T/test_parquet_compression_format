@@ -1,3 +1,7 @@
+-- name: testParquetCompressFormat
+
+[UC]shell: lzo_prefix=echo "oss://${oss_bucket}/test_parquet_compression/${uuid0}/lzo_format/"
+shell: ossutil64 mkdir ${lzo_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 ------------------------------------
 -------------- DATA ----------------
 -- a,b
@@ -5,11 +9,6 @@
 -- 1,2
 -- ...
 -- 99999, 100000
-
--- name: testParquetLZOFormat
-
-[UC]shell: lzo_prefix=echo "oss://${oss_bucket}/test_parquet_compression/${uuid0}/lzo_format/"
-shell: ossutil64 mkdir ${lzo_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
 shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/lzo_compression.parquet ${lzo_prefix[1]} | grep -Pv "(average|elapsed)"
 
 CREATE EXTERNAL TABLE test_parquet_lzo_format
@@ -26,5 +25,28 @@ PROPERTIES
 
 select * from test_parquet_lzo_format where a = '100';
 select * from test_parquet_lzo_format where a = '99999';
+
+shell: ossutil64 rm -rf ${lzo_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
+
+[UC]shell: lz4raw_prefix=echo "oss://${oss_bucket}/test_parquet_compression/${uuid0}/lz4raw_format/"
+shell: ossutil64 mkdir ${lz4raw_prefix[1]} > /dev/null || echo "exit 0" >/dev/null
+------------------------------------
+-------------- DATA ----------------
+-- 10 rows ssbflat
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/lz4_raw.parquet ${lz4raw_prefix[1]} | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE test_parquet_lz4raw_format
+(
+    lo_orderdate int,
+    s_nation string
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "${lz4raw_prefix[1]}",
+    "format" = "parquet"
+);
+
+select * from test_parquet_lz4raw_format order by 1 limit 1;
 
 shell: ossutil64 rm -rf ${lzo_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
