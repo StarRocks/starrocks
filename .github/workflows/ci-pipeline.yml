@@ -488,10 +488,11 @@ jobs:
 
       - name: Run
         run: |
+          rm -rf /root/.cache/trivy
           /var/local/env/trivy fs . --scanners vuln --parallel 0 --vuln-type library --format sarif --output ${REPORT}
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ env.REPORT }}
   fe-ut:
