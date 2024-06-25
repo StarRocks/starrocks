@@ -56,7 +56,7 @@ Follow these steps to enable intermediate result spilling:
    | enable_spill | false       | Whether to enable intermediate result spilling. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries. |
    | spill_mode   | auto        | The execution mode of intermediate result spilling. Valid values:<ul><li>`auto`: Spilling is automatically triggered when the memory usage threshold is reached.</li><li>`force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.</li></ul>This variable takes effect only when the variable `enable_spill` is set to `true`. |
 
-## Spill intermediate result to object storage
+## [Preview] Spill intermediate result to object storage
 
 From v3.3.0 onwards, StarRocks supports spilling intermediate results to object storage.
 
