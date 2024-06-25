@@ -98,7 +98,7 @@ public class TestLockInterface {
     }
 
     @Test
-    public void testTryLockTablesWithIntensiveDbLock() throws IllegalLockStateException {
+    public void testTryLockTablesWithIntensiveDbLock1() throws IllegalLockStateException {
         long rid = 1L;
         Database database = new Database(rid, "db");
 

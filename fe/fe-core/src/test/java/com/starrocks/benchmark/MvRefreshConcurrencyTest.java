@@ -149,25 +149,33 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
-    public void testWithTables2() {
+    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    public void testWithTables2_c4() {
         testRefreshWithConcurrency(4, 2);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
-    public void testWithTables10() {
+    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    public void testWithTables10_c4() {
         testRefreshWithConcurrency(10, 4);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
-    public void testWithTables20() {
+    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    public void testWithTables20_c4() {
         testRefreshWithConcurrency(20, 10);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
+    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    public void testWithTables100_c16() {
+        Config.task_runs_concurrency = 16;
+        testRefreshWithConcurrency(100, 100);
+        Config.task_runs_concurrency = 4;
+    }
+
+    @Test
+    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
     public void testWithTables100_c50() {
         Config.task_runs_concurrency = 50;
         testRefreshWithConcurrency(100, 100);

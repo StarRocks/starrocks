@@ -873,6 +873,11 @@ public class StarRocksAssert {
         return this;
     }
 
+    /**
+     * Wait the input mv refresh task finished.
+     * @param mvId: mv id
+     * @return true if the mv refresh task finished, otherwise false.
+     */
     public boolean waitRefreshFinished(long mvId) {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = tm.getTask(TaskBuilder.getMvTaskName(mvId));
@@ -883,13 +888,18 @@ public class StarRocksAssert {
         int maxTimes = 120;
         int count = 0;
         while (taskRun != null && count < maxTimes) {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(300L);
             taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
             count += 1;
         }
         return taskRun == null;
     }
 
+    /**
+     * Refresh materialized view asynchronously.
+     * @param ctx connnect context
+     * @param mvName mv's name
+     */
     public StarRocksAssert refreshMV(ConnectContext ctx, String mvName) throws Exception {
         String sql = "REFRESH MATERIALIZED VIEW " + mvName;
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -899,7 +909,6 @@ public class StarRocksAssert {
         Table table = db.getTable(tableName.getTbl());
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
-        MaterializedView mv = (MaterializedView) table;
         ctx.executeSql(sql);
         return this;
     }
