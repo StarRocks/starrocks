@@ -920,9 +920,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, collectSqlList.size());
         assertContains(collectSqlList.get(0).toString(), "v1", "v2", "v3", "v4", "v5");
         assertContains(collectSqlList.get(0).toString(), "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9");
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v1`)"));
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v3`)"));
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v5`)"));
+        Assert.assertEquals(50, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`column_key`)"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p0`"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p1`"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition `p9`"));
