@@ -172,6 +172,10 @@ public class StructType extends Type {
         return fieldMap.get(StringUtils.lowerCase(fieldName));
     }
 
+    public boolean containsField(String fieldName) {
+        return fieldMap.containsKey(StringUtils.lowerCase(fieldName));
+    }
+
     public int getFieldPos(String fieldName) {
         return fieldMap.get(StringUtils.lowerCase(fieldName)).getPosition();
     }

@@ -100,7 +100,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         if (table.isTemporaryTable()) {
             context.setSessionId(((OlapTable) table).getSessionId());
         }
-
+        context.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
         for (int i = 0; i < collectSQLList.size(); i++) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), collectSQLList.get(i), collectTypeList.get(i),
                     sampleRowCount);
@@ -200,7 +200,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
         for (int i = 0; i < columnNames.size(); i++) {
             VelocityContext context = new VelocityContext();
-            String quoteColumnName =  StatisticUtils.quoting(columnNames.get(i));
+            String quoteColumnName = StatisticUtils.quoting(table, columnNames.get(i));
             String columnNameStr = StringEscapeUtils.escapeSql(columnNames.get(i));
             Type columnType = columnTypes.get(i);
 
