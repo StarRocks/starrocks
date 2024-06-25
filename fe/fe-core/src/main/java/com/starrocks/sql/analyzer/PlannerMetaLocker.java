@@ -53,14 +53,14 @@ import java.util.stream.Collectors;
  */
 public class PlannerMetaLocker {
     // Map database id -> database
-    Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
+    private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
 
     /**
      * Map database id -> table id set, Use db id as sort key to avoid deadlock,
      * lockTablesWithIntensiveDbLock can internally guarantee the order of locking,
      * so the table ids do not need to be ordered here.
      */
-    Map<Long, Set<Long>> tables = Maps.newTreeMap(Long::compareTo);
+    private Map<Long, Set<Long>> tables = Maps.newTreeMap(Long::compareTo);
 
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         new TableCollector(session, dbs, tables).visit(statementBase);
