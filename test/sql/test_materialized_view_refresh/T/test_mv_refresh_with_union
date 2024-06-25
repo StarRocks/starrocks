@@ -1,5 +1,6 @@
 -- name: test_mv_refresh_with_union
-
+create database db_${uuid0};
+use db_${uuid0};
 CREATE TABLE `t1` (
     `k1`  date not null, 
     `k2`  datetime not null, 
@@ -68,7 +69,7 @@ as
 select * from t1
 union all
 select * from t2;
-function: wait_async_materialized_view_finish("test_mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
 refresh materialized view  test_mv1 with sync mode;
 select k1, count(1) from test_mv1 group by k1 order by k1;
 drop materialized view test_mv1;
@@ -168,7 +169,7 @@ as
 select * from t1
 union all
 select * from t2;
-function: wait_async_materialized_view_finish("test_mv1")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
 refresh materialized view  test_mv1 with sync mode;
 
 select k1, count(1) from test_mv1 group by k1 order by k1;

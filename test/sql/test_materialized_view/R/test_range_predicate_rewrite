@@ -1,4 +1,10 @@
 -- name: test_range_predicate_rewrite
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
 CREATE TABLE `t0` (
   `date_col` date NOT NULL COMMENT "",
   `id` int(11) NOT NULL COMMENT "",
@@ -86,7 +92,7 @@ PROPERTIES (
 -- result:
 -- !result
 refresh materialized view flat_mv;
-function: wait_async_materialized_view_finish("flat_mv")
+function: wait_async_materialized_view_finish("db_${uuid0}", "flat_mv")
 -- result:
 None
 -- !result
@@ -99,7 +105,7 @@ PROPERTIES (
 -- result:
 -- !result
 refresh materialized view join_filter_mv;
-function: wait_async_materialized_view_finish("join_filter_mv")
+function: wait_async_materialized_view_finish("db_${uuid0}", "join_filter_mv")
 -- result:
 None
 -- !result
@@ -112,7 +118,7 @@ PROPERTIES (
 -- result:
 -- !result
 refresh materialized view date_mv;
-function: wait_async_materialized_view_finish("date_mv")
+function: wait_async_materialized_view_finish("db_${uuid0}", "date_mv")
 -- result:
 None
 -- !result
@@ -125,7 +131,7 @@ PROPERTIES (
 -- result:
 -- !result
 refresh materialized view month_mv;
-function: wait_async_materialized_view_finish("month_mv")
+function: wait_async_materialized_view_finish("db_${uuid0}", "month_mv")
 -- result:
 None
 -- !result
@@ -138,7 +144,7 @@ PROPERTIES (
 -- result:
 -- !result
 refresh materialized view year_mv;
-function: wait_async_materialized_view_finish("year_mv")
+function: wait_async_materialized_view_finish("db_${uuid0}", "year_mv")
 -- result:
 None
 -- !result
@@ -146,8 +152,8 @@ select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule
 sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)
 and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;
 -- result:
-777700.0188827515	1
 789599.9851226807	0
+777700.0188827515	1
 -- !result
 select sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)
 and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;
