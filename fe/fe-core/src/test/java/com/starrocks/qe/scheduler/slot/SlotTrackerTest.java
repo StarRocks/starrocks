@@ -16,11 +16,18 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.metric.MetricRepo;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SlotTrackerTest {
+    @BeforeClass
+    public static void beforeClass() {
+        MetricRepo.init();
+    }
+
     @Test
     public void testRequireSlot() {
         SlotTracker slotTracker = new SlotTracker(ImmutableList.of());
