@@ -226,12 +226,7 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
-            // MV Rewrite will be used when cbo is enabled.
-            if (context.getOptimizerConfig().isRuleBased()) {
-                return;
-            }
-
+        try (Timer ignored = Tracers.watchScope("MVPreprocess")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
@@ -242,23 +237,23 @@ public class MvRewritePreprocessor {
 
                 // 2. choose best related mvs by user's config or related mv limit
                 Set<MaterializedView> selectedRelatedMVs;
-                try (Timer t1 = Tracers.watchScope("chooseCandidates")) {
+                try (Timer t1 = Tracers.watchScope("MVChooseCandidates")) {
                     selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
                 }
 
                 // 3. convert to mv with planContext, skip if mv has no valid plan(not SPJG)
                 Set<MvWithPlanContext> mvWithPlanContexts;
-                try (Timer t2 = Tracers.watchScope("generateMvPlan")) {
+                try (Timer t2 = Tracers.watchScope("MVGenerateMvPlan")) {
                     mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
                 }
 
                 // 4. process related mvs to candidates
-                try (Timer t3 = Tracers.watchScope("validateMv")) {
+                try (Timer t3 = Tracers.watchScope("MVValidateMv")) {
                     prepareRelatedMVs(queryTables, mvWithPlanContexts);
                 }
 
                 // 5. process relate mvs with views
-                try (Timer t4 = Tracers.watchScope("mvWithView")) {
+                try (Timer t4 = Tracers.watchScope("MVProcessWithView")) {
                     processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
                             queryColumnRefFactory, requiredColumns);
                 }
