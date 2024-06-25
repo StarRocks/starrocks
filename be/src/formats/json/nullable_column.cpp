@@ -448,7 +448,7 @@ Status add_adaptive_nullable_column_by_json_object(Column* column, const TypeDes
 Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                     simdjson::ondemand::value* value, bool invalid_as_null) {
     try {
-        if (value->is_null()) {
+        if (value == nullptr || value->is_null()) {
             column->append_nulls(1);
             return Status::OK();
         }
@@ -470,7 +470,7 @@ Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_d
 Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                            simdjson::ondemand::value* value, bool invalid_as_null) {
     try {
-        if (value->is_null()) {
+        if (value == nullptr || value->is_null()) {
             column->append_nulls(1);
             return Status::OK();
         }
