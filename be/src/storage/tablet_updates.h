@@ -187,6 +187,9 @@ public:
     // TODO(cbl): estimate more suitable values
     int64_t get_compaction_score();
 
+    // get last compaction score, which is cached the result of last get_compaction_score()
+    int64_t get_last_compaction_score();
+
     // perform compaction, should only be called by compaction thread
     Status compaction(MemTracker* mem_tracker);
     Status compaction_for_size_tiered(MemTracker* mem_tracker);
@@ -557,6 +560,8 @@ private:
     std::string _error_msg;
 
     std::atomic<double> _pk_index_write_amp_score{0.0};
+
+    std::atomic<int64_t> _last_compaction_score{-1};
 };
 
 } // namespace starrocks

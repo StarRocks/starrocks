@@ -2496,7 +2496,12 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     _remove_unused_rowsets();
 }
 
+int64_t TabletUpdates::get_last_compaction_score() {
+    return _last_compaction_score.load();
+}
+
 int64_t TabletUpdates::get_compaction_score() {
+    _last_compaction_score.store(-1);
     if (_compaction_running || _error) {
         // don't do compaction
         return -1;
@@ -2589,7 +2594,9 @@ int64_t TabletUpdates::get_compaction_score() {
         }
     }
     // scale score to a reasonable range relative to the number of files * 10
-    return total_score / std::max(1L, config::update_compaction_size_threshold / 10);
+    int64_t score = total_score / std::max(1L, config::update_compaction_size_threshold / 10);
+    _last_compaction_score.store(score);
+    return score;
 }
 
 struct CompactionEntry {
