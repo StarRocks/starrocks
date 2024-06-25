@@ -468,7 +468,7 @@ jobs:
       CODE_PATH: ${{ github.workspace }}
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
-      REPORT: trivy-result-${{ github.event.number }}.sarif
+      REPORT_FILE: trivy-result-${{ github.event.number }}.txt
     steps:
       - uses: actions/checkout@v4
         with:
@@ -489,12 +489,22 @@ jobs:
       - name: Run
         run: |
           rm -rf /root/.cache/trivy
-          /var/local/env/trivy fs . --scanners vuln --parallel 0 --vuln-type library --format sarif --output ${REPORT}
+          /var/local/env/trivy fs . --scanners vuln --parallel 0 --vuln-type library --output ${REPORT_FILE}
 
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ${{ env.REPORT }}
+      - name: Publish Trivy Output to Summary
+        run: |
+          if [[ -s ${REPORT_FILE} ]]; then
+            {
+              echo "### Security Output"
+              echo "<details><summary>Click to expand</summary>"
+              echo ""
+              echo '```terraform'
+              cat ${REPORT_FILE}
+              echo '```'
+              echo "</details>"
+            } >> $GITHUB_STEP_SUMMARY
+          fi
+
   fe-ut:
     runs-on: [self-hosted, normal]
     needs: [fe-codestyle-check]
