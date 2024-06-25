@@ -489,6 +489,7 @@ jobs:
           rm -rf /root/.cache/trivy
           /var/local/env/trivy fs . --scanners vuln --vuln-type library --severity CRITICAL,HIGH \
             --output ${REPORT_FILE}
+          cat ${REPORT_FILE}
 
       - name: Publish Trivy Output to Summary
         if: always()
