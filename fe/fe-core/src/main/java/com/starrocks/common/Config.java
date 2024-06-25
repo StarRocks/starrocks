@@ -2995,7 +2995,7 @@ public class Config extends ConfigBase {
     public static boolean show_execution_groups = true;
 
     @ConfField(mutable = true)
-    public static long datacache_copilot_repository_check_interval_sec = 60;
+    public static long datacache_copilot_repo_check_interval_sec = 60;
 
     /*
      * Maximum datacache copilot's buffer, if buffer larger this threshold, FE will flush buffer's statistics to BE
@@ -3007,14 +3007,14 @@ public class Config extends ConfigBase {
      * How often to flush the datacache copilot's buffer to BE
      * */
     @ConfField(mutable = true)
-    public static long datacache_copilot_repository_flush_interval_sec = 60; // 60s
+    public static long datacache_copilot_repo_flush_interval_sec = 60; // 60s
 
     /*
      * How long to clear stale datacache copilot's stats in BE,
      * `datacache_copilot_statistics_keep_sec` determines how long ago the stats are stale
      * */
     @ConfField(mutable = true)
-    public static long datacache_copilot_repository_clean_interval_sec = 60; // 60s
+    public static long datacache_copilot_repo_clean_interval_sec = 60; // 60s
 
     @ConfField(mutable = true)
     public static long datacache_copilot_statistics_keep_sec = 30 * 24 * 60; // 30 day

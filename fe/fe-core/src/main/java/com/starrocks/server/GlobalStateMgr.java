@@ -305,7 +305,7 @@ public class GlobalStateMgr {
     private Daemon replayer;
     private Daemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
-    private final DataCacheCopilotRepo dataCacheCopilotRepository;
+    private final DataCacheCopilotRepo dataCacheCopilotRepo;
     private final MetastoreEventsProcessor metastoreEventsProcessor;
     private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
@@ -643,7 +643,7 @@ public class GlobalStateMgr {
         this.resourceGroupMgr = new ResourceGroupMgr();
 
         this.esRepository = new EsRepository();
-        this.dataCacheCopilotRepository = new DataCacheCopilotRepo();
+        this.dataCacheCopilotRepo = new DataCacheCopilotRepo();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
@@ -1359,7 +1359,7 @@ public class GlobalStateMgr {
         labelCleaner.start();
         // ES state store
         esRepository.start();
-        dataCacheCopilotRepository.start();
+        dataCacheCopilotRepo.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -2079,8 +2079,8 @@ public class GlobalStateMgr {
         return esRepository;
     }
 
-    public DataCacheCopilotRepo getDataCacheCopilotRepository() {
-        return dataCacheCopilotRepository;
+    public DataCacheCopilotRepo getDataCacheCopilotRepo() {
+        return dataCacheCopilotRepo;
     }
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {

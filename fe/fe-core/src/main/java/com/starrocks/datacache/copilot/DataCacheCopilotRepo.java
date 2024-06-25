@@ -29,6 +29,7 @@ import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,7 +39,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
     private long lastClearTimestamp = 0L;
 
     public DataCacheCopilotRepo() {
-        super("DataCacheCopilotRepository", Config.datacache_copilot_repository_check_interval_sec * 1000);
+        super("DataCacheCopilotRepo", Config.datacache_copilot_repo_check_interval_sec * 1000);
         lastFlushTimestamp = System.currentTimeMillis();
         lastClearTimestamp = System.currentTimeMillis();
     }
@@ -55,7 +56,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
 
     private boolean isSatisfyFlushCondition() {
         if ((System.currentTimeMillis() - lastFlushTimestamp) >
-                Config.datacache_copilot_repository_flush_interval_sec * 1000) {
+                Config.datacache_copilot_repo_flush_interval_sec * 1000) {
             return true;
         }
 
@@ -68,7 +69,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
 
     private boolean isSatisfyClearCondition() {
         if ((System.currentTimeMillis() - lastClearTimestamp) >
-                Config.datacache_copilot_repository_clean_interval_sec * 1000) {
+                Config.datacache_copilot_repo_clean_interval_sec * 1000) {
             return true;
         }
 
@@ -76,7 +77,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
     }
 
     public void flushStorageToBE() {
-        LOG.info("DataCacheCopilotRepository start to flush data");
+        LOG.info("DataCacheCopilotRepo start to flush data");
 
         lastFlushTimestamp = System.currentTimeMillis();
 
@@ -85,6 +86,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
             return;
         }
         try {
+            LOG.info("execute sql: {}", insertSQL.get());
             buildConnectContext().executeSql(insertSQL.get());
         } catch (Exception e) {
             LOG.warn("Failed to flush data to BE, error msg is ", e);
@@ -92,11 +94,11 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
     }
 
     private void clearStaleStats() {
-        LOG.info("DataCacheCopilotRepository start to drop outdated statistics");
+        LOG.info("DataCacheCopilotRepo start to drop outdated statistics");
         lastClearTimestamp = System.currentTimeMillis();
 
         try {
-            String dropSQL = SQLBuilder.buildClearStatsSQL();
+            String dropSQL = SQLBuilder.buildCleanStatsSQL();
             buildConnectContext().executeSql(dropSQL);
         } catch (Exception e) {
             LOG.warn("Failed to drop outdated data, error msg is ", e);
@@ -132,14 +134,17 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
     }
 
     private static class SQLBuilder {
-        private static final String CLEAR_SQL_TEMPLATE = "DELETE FROM %s.%s.%s WHERE %s <= from_unixtime(%d)";
+        private static final String CLEAN_SQL_TEMPLATE = "DELETE FROM `%s`.`%s`.`%s` WHERE `%s` <= %s";
 
-        public static String buildClearStatsSQL() {
-            return String.format(CLEAR_SQL_TEMPLATE, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+        public static String buildCleanStatsSQL() {
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            String deleteTime = simpleDateFormat.format(
+                    System.currentTimeMillis() / 1000 - Config.datacache_copilot_statistics_keep_sec);
+            return String.format(CLEAN_SQL_TEMPLATE, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     StatsConstants.STATISTICS_DB_NAME,
                     DataCacheCopilotConstants.DATACACHE_COPILOT_STATISTICS_TABLE_NAME,
                     DataCacheCopilotConstants.ACCESS_TIME_NAME,
-                    System.currentTimeMillis() / 1000 - Config.datacache_copilot_statistics_keep_sec);
+                    deleteTime);
         }
     }
 }
