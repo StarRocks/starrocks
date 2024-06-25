@@ -51,7 +51,6 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
@@ -224,9 +223,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             postProcess();
             if (FeConstants.runningUnitTest) {
                 runtimeProfile = new RuntimeProfile();
-                Tracers.toRuntimeProfile(runtimeProfile);
+                connectContext.getPlannerProfile().build(runtimeProfile);
             }
-            Tracers.close();
         }
     }
 
@@ -265,7 +263,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
             checked = true;
         }
-        Tracers.record("MVRefreshSyncPartitionsRetryTimes", String.valueOf(retryNum));
+        PlannerProfile.addCustomProperties("MVRefreshSyncPartitionsRetryTimes", String.valueOf(retryNum));
 
         LOG.info("materialized view {} after checking partitions change {} times: {}, costs: {} ms",
                 materializedView.getName(), retryNum, checked, stopwatch.elapsed(TimeUnit.MILLISECONDS));
@@ -343,8 +341,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         while (refreshFailedTimes < maxRefreshMaterializedViewRetryNum &&
                 lockFailedTimes < Config.max_mv_refresh_try_lock_failure_retry_times) {
             try {
-                Tracers.record("MVRefreshRetryTimes", String.valueOf(refreshFailedTimes));
-                Tracers.record("MVRefreshLockRetryTimes", String.valueOf(lockFailedTimes));
+                PlannerProfile.addCustomProperties("MVRefreshRetryTimes", String.valueOf(refreshFailedTimes));
+                PlannerProfile.addCustomProperties("MVRefreshLockRetryTimes", String.valueOf(lockFailedTimes));
                 return doRefreshMaterializedView(taskRunContext, mvEntity);
             } catch (LockTimeoutException e) {
                 // if lock timeout, retry to refresh
@@ -395,7 +393,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
 
         ///// 1. check to refresh partition names of base tables and materialized view
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("MVRefreshSyncAndCheckPartitions")) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("MVRefreshSyncAndCheckPartitions")) {
             if (!syncAndCheckPartitions(context, mvEntity)) {
                 throw new DmlException(String.format("materialized view %s refresh task failed: sync partition failed",
                         materializedView.getName()));
