@@ -735,8 +735,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void updateMeta(Set<String> mvRefreshedPartitions,
                             ExecPlan execPlan,
                             Map<TableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
-<<<<<<< HEAD
-=======
         LOG.info("start to update meta for mv:{}", materializedView.getName());
 
         // check
@@ -758,7 +756,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .map(t -> t.getId())
                 .collect(Collectors.toSet());
 
->>>>>>> 4507a4e21e ([BugFix] Fix mv refresh timer profile (#47384))
         Locker locker = new Locker();
         // update the meta if succeed
         if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
