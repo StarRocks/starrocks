@@ -1530,7 +1530,7 @@ public class AlterTest {
 
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testCatalogAddPartitionsZeroDay() throws Exception {
 
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -2415,7 +2415,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAutoPartitionTableUnsupported() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE site_access_date_trunc ADD PARTITION p20210101 VALUES [(\"2021-01-01\"), (\"2021-01-02\"));";

@@ -365,6 +365,7 @@ public class CreateTableAnalyzer {
             if (partitionDesc != null) {
                 if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
                     try {
+                        PartitionDescAnalyzer.analyze(partitionDesc);
                         partitionDesc.analyze(columnDefs, properties);
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
@@ -372,6 +373,7 @@ public class CreateTableAnalyzer {
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
+                        PartitionDescAnalyzer.analyze(partitionDesc);
                         expressionPartitionDesc.analyze(columnDefs, properties);
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
