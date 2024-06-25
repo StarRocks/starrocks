@@ -869,7 +869,8 @@ void TabletUpdates::_check_for_apply() {
         return;
     }
     _apply_running_lock.lock();
-    if (_apply_running || _apply_version_idx + 1 == _edit_version_infos.size()) {
+    if ((config::enable_retry_apply && _apply_schedule.load()) || _apply_running ||
+        _apply_version_idx + 1 == _edit_version_infos.size()) {
         _apply_running_lock.unlock();
         return;
     }
@@ -962,6 +963,7 @@ void TabletUpdates::do_apply() {
             std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
                                                   _tablet.tablet_id(), apply_st.to_string());
             LOG(WARNING) << msg;
+            _apply_schedule.store(true);
             break;
         } else {
             if (!apply_st.ok()) {

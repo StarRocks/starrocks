@@ -364,7 +364,10 @@ public:
 
     RowsetSharedPtr get_rowset(uint32_t rowset_id);
 
-    void check_for_apply() { _check_for_apply(); }
+    void check_for_apply() {
+        _apply_schedule.store(false);
+        _check_for_apply();
+    }
 
     // just for ut
     void reset_update_state() {
@@ -576,6 +579,8 @@ private:
     std::string _error_msg;
 
     std::atomic<double> _pk_index_write_amp_score{0.0};
+
+    std::atomic<bool> _apply_schedule{false};
 };
 
 } // namespace starrocks
