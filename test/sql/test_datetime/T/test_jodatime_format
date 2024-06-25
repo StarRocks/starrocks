@@ -18,6 +18,13 @@ select jodatime_format('2023-04-15', 'HH:mm:ss');
 
 select jodatime_format('2023-04-15', 'HH:mm:ss==a--b==cc--aa');
 
+select jodatime_format('2023-01-01 00:00:00.010000', "yyyy-MM-dd HH:mm:ss.SSSSSS");
+select jodatime_format('2023-01-01 00:00:00.038000', "yyyy-MM-dd HH:mm:ss.SSSSSS");
+select jodatime_format('2023-01-01 00:00:00.038000', "yyyy-MM-dd HH:mm:ss.SSSSS");
+select jodatime_format('2023-01-01 00:00:00.038000', "yyyy-MM-dd HH:mm:ss.SSSS");
+select jodatime_format('2023-01-01 00:00:00.038000', "yyyy-MM-dd HH:mm:ss.SSS");
+select jodatime_format('2023-01-01 00:00:00.038000', "yyyy-MM-dd HH:mm:ss.SS");
+select jodatime_format('2023-01-01 00:00:00.038000', "yyyy-MM-dd HH:mm:ss.S");
 
 -- result length is 126
 -- 8(yyyyMMdd)+2(--)+116('text')
