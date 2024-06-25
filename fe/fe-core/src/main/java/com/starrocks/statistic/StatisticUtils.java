@@ -72,11 +72,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -489,20 +489,52 @@ public class StatisticUtils {
     }
 
     public static String quoting(String... parts) {
-        StringJoiner joiner = new StringJoiner(".");
-        for (String part : parts) {
-            joiner.add(quoting(part));
-        }
-        return joiner.toString();
+        return Arrays.stream(parts).map(c -> "`" + c + "`").collect(Collectors.joining("."));
     }
 
-    public static String quoting(String identifier) {
-        String[] splits = identifier.split("\\.");
-        StringBuilder sb = new StringBuilder();
-        for (String split : splits) {
-            sb.append("`").append(split).append("`.");
+    public static String quoting(Table table, String columnName) {
+        if (!columnName.contains(".")) {
+            return quoting(columnName);
         }
-        return sb.substring(0, sb.length() - 1);
+        Column c = table.getColumn(columnName);
+        if (c != null) {
+            return quoting(columnName);
+        }
+
+        int start = 0;
+        int end;
+
+        StringBuilder sb = new StringBuilder();
+        while ((end = columnName.indexOf(".", start)) > 0) {
+            start = end + 1;
+            String name = columnName.substring(0, end);
+            c = table.getColumn(name);
+            if (c != null && c.getType().isStructType()) {
+                sb.append(quoting(name));
+                columnName = columnName.substring(end + 1);
+                Type type = c.getType();
+                if (!columnName.contains(".")) {
+                    sb.append(".").append(quoting(columnName));
+                } else {
+                    int subStart = 0;
+                    int pos = 0;
+                    int subEnd;
+                    while ((subEnd = columnName.indexOf(".", pos)) > 0 && type.isStructType()) {
+                        String subName = columnName.substring(subStart, subEnd);
+                        if (((StructType) type).containsField(subName)) {
+                            sb.append(".").append(quoting(subName));
+                            type = ((StructType) type).getField(subName).getType();
+                            subStart = subEnd + 1;
+                        }
+                        pos = subEnd + 1;
+                    }
+                    sb.append(".").append(quoting(columnName.substring(subStart)));
+                }
+                break;
+            }
+        }
+        Preconditions.checkState(sb.length() != 0, "column name is not found in table");
+        return sb.toString();
     }
 
     public static void dropStatisticsAfterDropTable(Table table) {
