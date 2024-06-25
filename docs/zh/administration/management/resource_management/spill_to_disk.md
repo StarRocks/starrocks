@@ -56,7 +56,7 @@ displayed_sidebar: "Chinese"
    | enable_spill | false      | 是否启用中间结果落盘。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。 |
    | spill_mode   | auto       | 中间结果落盘的执行方式。有效值：`auto`：达到内存使用阈值时，会自动触发落盘。`force`：无论内存使用情况如何，StarRocks 都会强制落盘所有相关算子的中间结果。此变量仅在变量 `enable_spill` 设置为 `true` 时生效。 |
 
-## 将中间结果落盘至对象存储
+## [Preview] 将中间结果落盘至对象存储
 
 自 v3.3.0 起，StarRocks 支持将中间结果落盘至对象存储。
 

@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# N-Gram bloom filter 索引
+# [Preview] N-Gram bloom filter 索引
 
 N-Gram bloom filter 索引是一种特殊的 [Bloom filter 索引](./Bloomfilter_index.md)，通常用于加速 LIKE 查询或 `ngram_search` 和 `ngram_search_case_insensitive` 函数的运算速度。
 
