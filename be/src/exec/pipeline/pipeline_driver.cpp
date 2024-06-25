@@ -50,8 +50,12 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state > OperatorStage::PREPARED && op_state != OperatorStage::CLOSED) {
-            auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
-                                   to_readable_string(), op->get_name(), func_name);
+            std::stringstream ss;
+            ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+               << " fragment_id="
+               << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
+            auto msg = fmt::format("{} close operator {}-{} failed, may leak resources when {}, please reflect to SR",
+                                   ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
             LOG(ERROR) << msg;
             DCHECK(false) << msg;
         }
