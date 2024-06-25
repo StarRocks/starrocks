@@ -162,6 +162,7 @@ public class TaskRunManager implements MemoryTrackable {
                     // update the state of the old TaskRun to MERGED in LEADER
                     oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
                     taskRunScheduler.removePendingTaskRun(oldTaskRun);
+                    taskRunHistory.addHistory(oldTaskRun.getStatus());
                 }
             }
         } finally {

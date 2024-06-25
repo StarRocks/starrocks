@@ -27,8 +27,8 @@ insert into mv_ice_tbl_${uuid0} values
 
 set catalog default_catalog;
 
-create database test_create_mv_with_params;
-use test_create_mv_with_params;
+create database db_${uuid0};
+use db_${uuid0};
 
 -- case 1: with specific param
 CREATE MATERIALIZED VIEW test_iceberg_mv0_${uuid0} PARTITION BY dt 
@@ -41,9 +41,13 @@ AS SELECT dt,sum(col_int)
 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 
 refresh materialized view test_iceberg_mv0_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv0_${uuid0}", 4)
 -- result should be > 1, because it refresh partitions one by one
+<<<<<<< HEAD
 select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
+=======
+select count(*) from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
+>>>>>>> 35d3974c5f ([BugFix] Make sure task run add into task history even it's merged (#47401))
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 drop materialized view test_iceberg_mv0_${uuid0};
 
@@ -57,9 +61,13 @@ AS SELECT dt,sum(col_int)
 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 
 refresh materialized view test_iceberg_mv1_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv1_${uuid0}", 4)
 -- result should be > 1, because it refresh partitions one by one
+<<<<<<< HEAD
 select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
+=======
+select count(*) from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
+>>>>>>> 35d3974c5f ([BugFix] Make sure task run add into task history even it's merged (#47401))
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 drop materialized view test_iceberg_mv1_${uuid0};
 
@@ -74,10 +82,50 @@ AS SELECT dt,sum(col_int)
 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 
 refresh materialized view test_iceberg_mv2_${uuid0} with sync mode;
-function: wait_async_materialized_view_finish("test_iceberg_mv2_${uuid0}")
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_iceberg_mv2_${uuid0}", 1)
 -- result should be 1, because it refresh partitions by sync
+<<<<<<< HEAD
 select count(*) = 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 drop materialized view test_iceberg_mv2_${uuid0};
 
 drop database test_create_mv_with_params;
+=======
+select count(*) from information_schema.task_runs where `database`='db_${uuid0}' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
+SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
+
+create table test_tbl_with_params (
+ k1 INT,
+  k2 string,
+  v1 INT,
+  v2 INT
+) ENGINE=OLAP
+PARTITION BY RANGE(`k1`)
+(
+  PARTITION `p1` VALUES LESS THAN ('3'),
+  PARTITION `p2` VALUES LESS THAN ('6'),
+  PARTITION `p3` VALUES LESS THAN ('9')
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into test_tbl_with_params values (1,'a',1,1), (4,'aa',1,1), (8,'aa',1,1);
+CREATE MATERIALIZED VIEW test_tbl_with_params_mv 
+PARTITION BY k1
+REFRESH DEFERRED MANUAL 
+properties (
+    "partition_refresh_number" = "1"
+)
+AS SELECT * from test_tbl_with_params;
+refresh materialized view test_tbl_with_params_mv;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_tbl_with_params_mv", 3)
+select count(*) from information_schema.task_runs where `database`="db_${uuid0}" and `DEFINITION` like "%test_tbl_with_params%";
+select * from test_tbl_with_params_mv order by 1;
+
+drop materialized view test_iceberg_mv2_${uuid0};
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0};
+>>>>>>> 35d3974c5f ([BugFix] Make sure task run add into task history even it's merged (#47401))
