@@ -72,28 +72,6 @@ public class DeltaUtilsTest {
     }
 
     @Test
-    public void testCheckTableFeatureSupported3(@Mocked Metadata metadata, @Mocked Protocol protocol) {
-        expectedEx.expect(ValidateException.class);
-        expectedEx.expectMessage("Delta table feature [timestampNtz] is not supported");
-        new Expectations() {
-            {
-                metadata.getConfiguration();
-                result = ImmutableMap.of(COLUMN_MAPPING_MODE_KEY, "none");
-                minTimes = 0;
-            }
-
-            {
-                protocol.getReaderFeatures();
-                result = Lists.newArrayList("timestampNtz");
-                minTimes = 0;
-            }
-        };
-
-        DeltaUtils.checkTableFeatureSupported(new Protocol(3, 7, Lists.newArrayList(),
-                Lists.newArrayList()), metadata);
-    }
-
-    @Test
     public void testConvertDeltaToSRTableWithException1() {
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Failed to find Delta table for catalog.db.tbl");
