@@ -63,7 +63,11 @@ public class Log4jConfig extends XmlConfiguration {
             "    </RollingFile>\n" +
             "    <RollingFile name=\"SysWF\" fileName=\"${sys_log_dir}/fe.warn.log\" filePattern=\"${sys_log_dir}/fe.warn.log.${sys_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
+<<<<<<< HEAD
             "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
+=======
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n %ex</Pattern>\n" +
+>>>>>>> 553e115f5b ([Enhancement] log stack trace in FE thrift service (#47491))
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
