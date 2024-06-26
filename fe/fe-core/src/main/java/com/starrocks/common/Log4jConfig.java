@@ -80,7 +80,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    </RollingFile>\n" +
             "    <RollingFile name=\"SysWF\" fileName=\"${sys_log_dir}/fe.warn.log\" filePattern=\"${sys_log_dir}/fe.warn.log.${sys_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
-            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n %ex</Pattern>\n" +
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
