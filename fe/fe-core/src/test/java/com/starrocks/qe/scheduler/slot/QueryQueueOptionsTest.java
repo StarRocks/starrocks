@@ -20,7 +20,6 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.system.BackendResourceStat;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
