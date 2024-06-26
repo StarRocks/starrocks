@@ -299,3 +299,35 @@ select @test = concat(upper('a'), '\'', '\\' 'b', '"');
 -- result:
 E: (1064, "Getting syntax error at line 1, column 45. Detail message: Unexpected input ''b'', the most similar input is {',', ')'}.")
 -- !result
+set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1;
+-- result:
+[]
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+5	6	7
+-- !result
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1;
+-- result:
+[]
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+6	7	8
+-- !result
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @eVar + 1;
+-- result:
+[]
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+6	7	None
+-- !result
+select /*+ SET_USER_VARIABLE (@aVarHint = 5, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+-- result:
+5	6
+-- !result
+select /*+ SET_USER_VARIABLE (@aVarHint = 6, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+-- result:
+6	7
+-- !result

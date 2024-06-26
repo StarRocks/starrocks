@@ -160,6 +160,19 @@ select @test = ["abc\\'"];
 set @test = concat(upper('a'), '\'', '\\' 'b', '"');
 select @test = concat(upper('a'), '\'', '\\' 'b', '"');
 
+set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1;
+select @aVar, @bVar, @cVar;
+
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1;
+select @aVar, @bVar, @cVar;
+
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @eVar + 1;
+select @aVar, @bVar, @cVar;
+
+select /*+ SET_USER_VARIABLE (@aVarHint = 5, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+select /*+ SET_USER_VARIABLE (@aVarHint = 6, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+
+
 
 
 
