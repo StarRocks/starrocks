@@ -9,6 +9,8 @@ create external catalog delta_test_${uuid0} PROPERTIES (
     "aws.s3.endpoint"="${oss_endpoint}"
 );
 
+update information_schema.be_configs set value="512" where name="primary_key_limit_size";
+
 -- test manual analyze
 analyze table delta_test_${uuid0}.delta_oss_db.delta_lake_data_type;
 select column_name, row_count, data_size, hll_cardinality(ndv), `max`, `min` from default_catalog._statistics_.external_column_statistics
