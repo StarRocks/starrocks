@@ -156,6 +156,8 @@ private:
                 _reserved_bytes = 0;
             }
         }
+        // release memory to reserved
+        void release_to_reserved(size_t release_bytes) { _reserved_bytes += release_bytes; }
 
         void release(int64_t size) {
             _cache_size -= size;
@@ -301,16 +303,24 @@ public:
 
     bool try_mem_reserve(int64_t size) {
         if (_mem_cache_manager.try_mem_reserve(size)) {
+            _reserve_mod = true;
             return true;
         }
         return false;
     }
 
-    void release_reserved() { _mem_cache_manager.release_reserved(); }
+    void release_reserved() {
+        _reserve_mod = false;
+        _mem_cache_manager.release_reserved();
+    }
 
     void mem_release(int64_t size) {
-        _mem_cache_manager.release(size);
-        _operator_mem_cache_manager.release(size);
+        if (_reserve_mod) {
+            _mem_cache_manager.release_to_reserved(size);
+        } else {
+            _mem_cache_manager.release(size);
+            _operator_mem_cache_manager.release(size);
+        }
     }
 
     static void mem_consume_without_cache(int64_t size) {
@@ -360,6 +370,7 @@ private:
     int32_t _driver_id = 0;
     bool _is_catched = false;
     bool _check = true;
+    bool _reserve_mod = false;
 };
 
 inline thread_local CurrentThread tls_thread_status;
