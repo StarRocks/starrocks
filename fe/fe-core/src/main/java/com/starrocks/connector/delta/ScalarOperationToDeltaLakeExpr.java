@@ -100,7 +100,7 @@ public class ScalarOperationToDeltaLakeExpr {
         private static DeltaDataType getColumnType(String qualifiedName, DeltaLakeContext context) {
             //TODO: nested type
             StructField field = context.getSchema().get(qualifiedName);
-            if (field != null) {
+            if (field != null && field.getDataType() != null) {
                 return DeltaDataType.instanceFrom(field.getDataType().getClass());
             } else {
                 return DeltaDataType.OTHER;
