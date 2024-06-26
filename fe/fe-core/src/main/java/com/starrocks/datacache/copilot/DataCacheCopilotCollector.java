@@ -36,7 +36,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public class DataCacheCopilotCollector {
 
@@ -110,22 +109,38 @@ public class DataCacheCopilotCollector {
                     return null;
             }
 
-            Map<ColumnRefOperator, Column> map = scanOperator.getColRefToColumnMetaMap();
-            Optional<ScanOperatorPredicates> predicates = Optional.empty();
+            // ignore full table scan
+            if (!enableFullCollect && checkIsFullColumnScan(table, scanOperator)) {
+                return null;
+            }
+
+            ScanOperatorPredicates predicates = null;
             try {
                 // ScanOperatorPredicates maybe nullptr
-                predicates = Optional.ofNullable(scanOperator.getScanOperatorPredicates());
+                predicates = scanOperator.getScanOperatorPredicates();
             } catch (AnalysisException e) {
                 LOG.warn("Failed to get ScanOperatorPredicates", e);
             }
+            if (predicates == null) {
+                LOG.warn("ScanOperatorPredicates can't be null");
+                return null;
+            }
 
-            List<PartitionKey> partitionKeyList = new LinkedList<>();
+            // ignore full partition scan
+            if (!enableFullCollect && checkIsFullPartitionScan(predicates)) {
+                return null;
+            }
+
+            List<PartitionKey> partitionKeyList = predicates.getSelectedPartitionKeys();
             List<String> partitionNameLists = table.getPartitionColumnNames();
-            predicates.ifPresent(scanOperatorPredicates -> partitionKeyList.addAll(
-                    scanOperatorPredicates.getSelectedPartitionKeys()));
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : map.entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : scanOperator.getColRefToColumnMetaMap().entrySet()) {
                 Column column = entry.getValue();
+                // TODO Ignore complex type collect in this pr
+                if (column.getType().isComplexType()) {
+                    continue;
+                }
+
                 // for none-partition table, partitionKeyList is one element with empty partition key
                 Preconditions.checkArgument(!partitionKeyList.isEmpty(), "PartitionKey must existed.");
                 for (PartitionKey partitionKey : partitionKeyList) {
@@ -140,6 +155,17 @@ public class DataCacheCopilotCollector {
 
         private List<AccessLog> getAccessLogs() {
             return accessLogs;
+        }
+
+        private boolean checkIsFullColumnScan(Table table, PhysicalScanOperator scanOperator) {
+            int usedColumns = scanOperator.getUsedColumns().size();
+            int totalColumns = table.getColumns().size();
+            return usedColumns == totalColumns;
+        }
+
+        private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates) {
+            return scanOperatorPredicates.getSelectedPartitionIds().size() ==
+                    scanOperatorPredicates.getIdToPartitionKey().size();
         }
     }
 }

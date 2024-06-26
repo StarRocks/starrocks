@@ -94,8 +94,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
                     insertSQLBuilder.addAccessLog(accessLog);
                 } else {
                     String insertSQL = insertSQLBuilder.build();
-                    LOG.debug("execute sql: {}", insertSQL);
-                    buildConnectContext().executeSql(insertSQL);
+                    executeSQL(insertSQL);
                     insertSQLBuilder.clear();
                 }
             }
@@ -103,8 +102,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
             // handle remain rows in InsertSQLBuilder
             if (insertSQLBuilder.size() > 0) {
                 String insertSQL = insertSQLBuilder.build();
-                LOG.debug("execute sql: {}", insertSQL);
-                buildConnectContext().executeSql(insertSQL);
+                executeSQL(insertSQL);
             }
         } catch (Exception e) {
             LOG.warn("Failed to flush data to BE, error msg is ", e);
@@ -116,8 +114,8 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
         lastClearTimestamp = System.currentTimeMillis();
 
         try {
-            String dropSQL = DeleteSQLBuilder.buildCleanStatsSQL();
-            buildConnectContext().executeSql(dropSQL);
+            String dropSQL = DeleteSQLBuilder.buildDeleteStatsSQL();
+            executeSQL(dropSQL);
         } catch (Exception e) {
             LOG.warn("Failed to drop outdated data, error msg is ", e);
         }
@@ -129,12 +127,19 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
         return executor.executeStatisticDQL(context, sql);
     }
 
+    private void executeSQL(String sql) throws Exception {
+        LOG.debug("execute sql: {}", sql);
+        buildConnectContext().executeSql(sql);
+    }
+
     private ConnectContext buildConnectContext() {
         ConnectContext context = new ConnectContext();
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setEnableProfile(false);
+        // enlarge group_concat max length from 1024 -> 65535
+        context.getSessionVariable().setGroupConcatMaxLen(65535);
         // context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         // context.getSessionVariable().setEnablePipelineEngine(true);
 
@@ -152,12 +157,12 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
     }
 
     private static class DeleteSQLBuilder {
-        private static final String CLEAN_SQL_TEMPLATE = "DELETE FROM `%s`.`%s`.`%s` WHERE `%s` <= %s";
+        private static final String CLEAN_SQL_TEMPLATE = "DELETE FROM `%s`.`%s`.`%s` WHERE `%s` <= '%s'";
 
-        public static String buildCleanStatsSQL() {
+        public static String buildDeleteStatsSQL() {
             SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
             String deleteTime = simpleDateFormat.format(
-                    System.currentTimeMillis() / 1000 - Config.datacache_copilot_statistics_keep_sec);
+                    System.currentTimeMillis() - Config.datacache_copilot_statistics_keep_sec * 1000L);
             return String.format(CLEAN_SQL_TEMPLATE, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     StatsConstants.STATISTICS_DB_NAME,
                     DataCacheCopilotConstants.DATACACHE_COPILOT_STATISTICS_TABLE_NAME,

@@ -22,7 +22,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -121,43 +120,12 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
             }
             return statisticsDataList;
         }
-
-        // If catalogName, databaseName, tableName and count are the same, we will merge it
-        //        public static List<StatisticsData> mergeIsomorphism(List<StatisticsData> tStatisticDataList) {
-        //            List<StatisticsData> merged = new ArrayList<>();
-        //            for (int left = 0; left < tStatisticDataList.size(); left++) {
-        //                StatisticsData leftData = tStatisticDataList.get(left);
-        //                final long count = leftData.count;
-        //                final String catalogName = leftData.catalogName;
-        //                final String databaseName = leftData.databaseName;
-        //                final String tableName = leftData.tableName;
-        //
-        //                ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
-        //                partitionNames.addAll(leftData.partitionNames);
-        //                ImmutableSet.Builder<String> columnNames = ImmutableSet.builder();
-        //                columnNames.addAll(leftData.columnNames);
-        //
-        //                for (int right = left + 1; right < tStatisticDataList.size(); right++) {
-        //                    StatisticsData rightData = tStatisticDataList.get(right);
-        //                    if (!catalogName.equals(rightData.catalogName) || !databaseName.equals(rightData.databaseName) ||
-        //                            !tableName.equals(rightData.tableName) || count != rightData.count) {
-        //                        break;
-        //                    }
-        //                    partitionNames.addAll(rightData.partitionNames);
-        //                    columnNames.addAll(rightData.columnNames);
-        //                }
-        //
-        //                merged.add(new StatisticsData(catalogName, databaseName, tableName, partitionNames.build(),
-        //                        columnNames.build(), count));
-        //            }
-        //            return merged;
-        //        }
     }
 
     private static class SQLBuilder {
         private static final String COLLECT_SQL_TEMPLATE =
                 "SELECT CAST($copilotVersion AS INT), `$catalogName`, `$databaseName`, `$tableName`, " +
-                        "GROUP_CONCAT(`$partitionName` SEPARATOR ','), " +
+                        "GROUP_CONCAT(`$partitionName` SEPARATOR ',') AS `partition_names`, " +
                         "GROUP_CONCAT(`$columnName` SEPARATOR ',') AS `column_names`, `$count` " +
                         "FROM `$internalCatalog`.`$statisticsDb`.`$copilotTable` $whereCondition " +
                         "GROUP BY `$catalogName`, `$databaseName`, `$tableName`, `$accessTime`, `$count` " +
@@ -175,6 +143,7 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
             context.put("tableName", DataCacheCopilotConstants.TABLE_NAME);
             context.put("partitionName", DataCacheCopilotConstants.PARTITION_NAME);
             context.put("columnName", DataCacheCopilotConstants.COLUMN_NAME);
+            context.put("accessTime", DataCacheCopilotConstants.ACCESS_TIME_NAME);
             context.put("count", DataCacheCopilotConstants.COUNT_NAME);
             context.put("internalCatalog", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             context.put("statisticsDb", StatsConstants.STATISTICS_DB_NAME);
@@ -191,6 +160,7 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
             List<String> conditions = new LinkedList<>();
 
             if (interval > 0) {
+                // `access_time` >= from_unixtime(xxx)
                 conditions.add(
                         String.format("`" + DataCacheCopilotConstants.ACCESS_TIME_NAME + "` >= from_unixtime(%d)",
                                 System.currentTimeMillis() / 1000 - interval));
@@ -200,13 +170,16 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
                 List<String> parts = qualifiedName.get().getParts();
                 for (int i = 0; i < parts.size(); i++) {
                     if (i == 0) {
+                        // `catalog_name` = 'xxxx'
                         conditions.add(String.format("`" + DataCacheCopilotConstants.CATALOG_NAME + "` = '%s'",
                                 parts.get(0)));
                     } else if (i == 1) {
+                        // `database_name` = 'xxxx'
                         conditions.add(String.format("`" + DataCacheCopilotConstants.DATABASE_NAME + "` = '%s'",
                                 parts.get(1)));
                     } else if (i == 2) {
-                        conditions.add(String.format("`" + DataCacheCopilotConstants.COLUMN_NAME + "` = '%s'",
+                        // `table_name` = 'xxxx'
+                        conditions.add(String.format("`" + DataCacheCopilotConstants.TABLE_NAME + "` = '%s'",
                                 parts.get(2)));
                     } else {
                         break;
@@ -232,7 +205,7 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
                         statisticsData.tableName);
 
                 VelocityContext context = new VelocityContext();
-                context.put("columnNames", buildColumnNames(statisticsData.columnNames));
+                context.put("columnNames", buildColumnNames(table, statisticsData.columnNames));
                 context.put("catalogName", statisticsData.catalogName);
                 context.put("databaseName", statisticsData.databaseName);
                 context.put("tableName", statisticsData.tableName);
@@ -246,33 +219,48 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
             }
         }
 
-        private static String buildColumnNames(ImmutableSet<String> columns) {
+        private static String buildColumnNames(Table table, ImmutableSet<String> columns) {
             List<String> list = new ArrayList<>(columns.size());
             for (String column : columns) {
+                // because group_concat() will truncate column_names, so here we have to validate column is valid
+                if (table.getColumn(column) == null) {
+                    LOG.warn("Handle column name {} failed, because of truncated", column);
+                    break;
+                }
                 list.add(String.format("`%s`", column));
             }
             return String.join(", ", list);
         }
 
-        private static String buildWhereCondition(Table table, ImmutableSet<String> partitionNames)
-                throws AnalysisException {
+        private static String buildWhereCondition(Table table, ImmutableSet<String> partitionNames) {
             if (partitionNames.isEmpty()) {
                 return "";
             }
             List<Column> partitionColumns = PartitionUtil.getPartitionColumns(table);
             List<String> orPredicates = new ArrayList<>(partitionNames.size());
             for (String partitionName : partitionNames) {
-                List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
-                PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues, partitionColumns, table);
-                List<LiteralExpr> keys = partitionKey.getKeys();
-                List<String> predicates = new ArrayList<>(keys.size());
-                for (int i = 0; i < keys.size(); i++) {
-                    predicates.add(String.format("`%s` = %s", partitionColumns.get(i).getName(),
-                            keys.get(i).getStringValue()));
+                // because group_concat() will truncate partition_names, so here we have to check it.
+                try {
+                    List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
+                    PartitionKey partitionKey =
+                            PartitionUtil.createPartitionKey(partitionValues, partitionColumns, table);
+                    List<LiteralExpr> keys = partitionKey.getKeys();
+                    List<String> predicates = new ArrayList<>(keys.size());
+                    for (int i = 0; i < keys.size(); i++) {
+                        predicates.add(String.format("`%s` = %s", partitionColumns.get(i).getName(),
+                                keys.get(i).getStringValue()));
+                    }
+                    orPredicates.add(String.join(" AND ", predicates));
+                } catch (Exception e) {
+                    LOG.warn("Handle partition name {} failed, because of truncated", partitionName);
+                    break;
                 }
-                orPredicates.add(String.join(" AND ", predicates));
             }
-            return "WHERE " + String.join(" OR ", orPredicates);
+            if (orPredicates.isEmpty()) {
+                return "";
+            } else {
+                return "WHERE " + String.join(" OR ", orPredicates);
+            }
         }
     }
 }

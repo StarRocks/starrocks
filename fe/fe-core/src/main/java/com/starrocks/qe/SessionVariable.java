@@ -2192,6 +2192,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         fullSortMaxBufferedRows = v;
     }
 
+    public void setGroupConcatMaxLen(int maxLength) {
+        this.groupConcatMaxLen = maxLength;
+    }
+
     public void setFullSortMaxBufferedBytes(long v) {
         fullSortMaxBufferedBytes = v;
     }
