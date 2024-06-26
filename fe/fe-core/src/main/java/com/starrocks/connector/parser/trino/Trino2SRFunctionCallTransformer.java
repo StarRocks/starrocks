@@ -349,8 +349,7 @@ public class Trino2SRFunctionCallTransformer {
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums,
                                                     FunctionCallExpr starRocksFunctionCall) {
-        FunctionCallTransformer transformer;
-        transformer = new FunctionCallTransformer(starRocksFunctionCall, trinoFnArgNums);
+        FunctionCallTransformer transformer = new FunctionCallTransformer(starRocksFunctionCall, trinoFnArgNums);
 
         List<FunctionCallTransformer> transformerList = TRANSFORMER_MAP.computeIfAbsent(trinoFnName,
                 k -> Lists.newArrayList());
