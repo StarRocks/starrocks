@@ -348,4 +348,100 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Assert.assertEquals(10, map.get(1000L).schemaVersion);
         Assert.assertEquals(20, map.get(1000L).schemaHash);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testWarehouse() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        GlobalStateMgr.getCurrentState().initDefaultWarehouse();
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public List<Long> getAllComputeNodeIds(long warehouseId) {
+                return Lists.newArrayList(1L);
+            }
+        };
+
+        String stmt = "alter table testDb1.testTable1 order by (v1, v2)";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        ReorderColumnsClause clause = (ReorderColumnsClause) alterTableStmt.getOps().get(0);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        AlterJobV2 alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
+        Assert.assertEquals(0L, alterJobV2.warehouseId);
+
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public List<Long> getAllComputeNodeIds(long warehouseId) {
+                return Lists.newArrayList();
+            }
+        };
+
+        try {
+            alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("no available compute nodes"));
+        }
+    }
+
+    @Test
+    public void testCancelPendingJobWithFlag() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        olapTable.setUseFastSchemaEvolution(false);
+        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
+
+        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assert.assertEquals(1, alterJobsV2.size());
+        SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
+        alterJobsV2.clear();
+
+        MaterializedIndex baseIndex = testPartition.getBaseIndex();
+        assertEquals(IndexState.NORMAL, baseIndex.getState());
+        assertEquals(PartitionState.NORMAL, testPartition.getState());
+        assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
+
+        LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
+        List<Replica> replicas = baseTablet.getImmutableReplicas();
+        Replica replica1 = replicas.get(0);
+
+        assertEquals(1, replica1.getVersion());
+        assertEquals(-1, replica1.getLastFailedVersion());
+        assertEquals(1, replica1.getLastSuccessVersion());
+
+        schemaChangeJob.setIsCancelling(true);
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.setIsCancelling(false);
+     
+        schemaChangeJob.setWaitingCreatingReplica(true);
+        schemaChangeJob.cancel("");
+        schemaChangeJob.setWaitingCreatingReplica(false);
+    }
+>>>>>>> db280a11a7 ([BugFix] Fix stuck in cancel alter table if create tablet take too long time (#47312))
 }

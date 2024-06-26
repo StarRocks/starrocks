@@ -70,10 +70,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+<<<<<<< HEAD
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
+=======
+import java.util.concurrent.atomic.AtomicBoolean;
+>>>>>>> db280a11a7 ([BugFix] Fix stuck in cancel alter table if create tablet take too long time (#47312))
 import javax.validation.constraints.NotNull;
 
 import static com.starrocks.catalog.TabletInvertedIndex.NOT_EXIST_TABLET_META;
@@ -301,7 +305,8 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
+                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                             AtomicBoolean isCancelling) throws AlterCancelException {
                 throw new AlterCancelException("Create tablet failed");
             }
 
@@ -983,4 +988,51 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testShow() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouseAllowNull(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        LakeTableSchemaChangeJob alterJobV2 =
+                new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+        alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
+
+        schemaChangeHandler.addAlterJobV2(alterJobV2);
+        System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouseAllowNull(long warehouseId) {
+                return null;
+            }
+        };
+
+        SchemaChangeHandler schemaChangeHandler2 = new SchemaChangeHandler();
+        alterJobV2 = new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+        alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
+        schemaChangeHandler2.addAlterJobV2(alterJobV2);
+        System.out.println(schemaChangeHandler2.getAlterJobInfosByDb(db));
+    }
+
+    @Test
+    public void testCancelPendingJobWithFlag() throws Exception {
+        schemaChangeJob.setIsCancelling(true);
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.setIsCancelling(false);
+     
+        schemaChangeJob.setWaitingCreatingReplica(true);
+        schemaChangeJob.cancel("");
+        schemaChangeJob.setWaitingCreatingReplica(false);
+    }
+>>>>>>> db280a11a7 ([BugFix] Fix stuck in cancel alter table if create tablet take too long time (#47312))
 }

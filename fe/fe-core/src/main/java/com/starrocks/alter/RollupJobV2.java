@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -71,7 +72,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
+=======
+import com.starrocks.common.Status;
+>>>>>>> db280a11a7 ([BugFix] Fix stuck in cancel alter table if create tablet take too long time (#47312))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -92,6 +97,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -113,6 +119,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -168,6 +175,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     // save all create rollup tasks
     private AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
+    // runtime variable for synchronization between cancel and runPendingJob
+    private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
+    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
+    private AtomicBoolean isCancelling = new AtomicBoolean(false);
+
     public RollupJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                        long baseIndexId, long rollupIndexId, String baseIndexName, String rollupIndexName,
                        int rollupSchemaVersion, List<Column> rollupSchema, Expr whereClause, int baseSchemaHash, 
@@ -207,6 +219,26 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return rollupIndexName;
     }
 
+    @VisibleForTesting
+    public void setIsCancelling(boolean isCancelling) {
+        this.isCancelling.set(isCancelling);
+    }
+
+    @VisibleForTesting
+    public boolean isCancelling() {
+        return this.isCancelling.get();
+    }
+
+    @VisibleForTesting
+    public void setWaitingCreatingReplica(boolean waitingCreatingReplica) {
+        this.waitingCreatingReplica.set(waitingCreatingReplica);
+    }
+
+    @VisibleForTesting
+    public boolean waitingCreatingReplica() {
+        return this.waitingCreatingReplica.get();
+    }
+
     /**
      * runPendingJob():
      * 1. Create all rollup replicas and wait them finished.
@@ -238,7 +270,13 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<Long, Long>(totalReplicaNum);
+<<<<<<< HEAD
         db.readLock();
+=======
+        createReplicaLatch = countDownLatch;
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+>>>>>>> db280a11a7 ([BugFix] Fix stuck in cancel alter table if create tablet take too long time (#47312))
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -314,10 +352,17 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     Config.max_create_table_timeout_second * 1000L);
             boolean ok = false;
             try {
+                waitingCreatingReplica.set(true);
+                if (isCancelling.get()) {
+                    AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                    return;
+                }
                 ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
                 ok = false;
+            } finally {
+                waitingCreatingReplica.set(false);
             }
 
             if (!ok || !countDownLatch.getStatus().ok()) {
@@ -702,6 +747,24 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         tbl.rebuildFullSchema();
         tbl.lastSchemaUpdateTime.set(System.nanoTime());
+    }
+
+    @Override
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                return cancelImpl(errMsg);
+            }
+        } finally {
+            isCancelling.set(false);
+        }
     }
 
     /**
