@@ -84,9 +84,6 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """set up"""
         super().setUp()
         self.connect_starrocks()
-        self.connect_trino()
-        self.connect_spark()
-        self.connect_hive()
 
     def tearDown(self):
         """tear down"""
