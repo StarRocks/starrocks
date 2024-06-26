@@ -10,7 +10,7 @@ python-Levenshtein
 PyGithub
 mysql-connector
 trino
-sasl
+pure-sasl
 thrift
 thrift-sasl
 PyHive
