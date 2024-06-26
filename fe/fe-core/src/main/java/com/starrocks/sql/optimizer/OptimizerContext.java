@@ -82,6 +82,7 @@ public class OptimizerContext {
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
+        this.queryMaterializationContext = new QueryMaterializationContext();
     }
 
     @VisibleForTesting

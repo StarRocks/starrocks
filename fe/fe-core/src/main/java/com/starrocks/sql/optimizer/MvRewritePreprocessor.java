@@ -214,6 +214,8 @@ public class MvRewritePreprocessor {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
+            QueryMaterializationContext queryMaterializationContext = connectContext.getQueryMVContext() != null ?
+                    connectContext.getQueryMVContext() : new QueryMaterializationContext();
             try {
                 // 1. get related mvs for all input tables
                 Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
@@ -236,6 +238,14 @@ public class MvRewritePreprocessor {
                 try (PlannerProfile.ScopedTimer t1 =
                         PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.MVValidateMv")) {
                     prepareRelatedMVs(queryTables, mvWithPlanContexts);
+                }
+
+                // To avoid disturbing queries without mv, only initialize materialized view context
+                // when there are candidate mvs.
+                if (Config.enable_mv_query_context_cache && context.getCandidateMvs() != null
+                        && !context.getCandidateMvs().isEmpty()) {
+                    context.setQueryMaterializationContext(queryMaterializationContext);
+                    connectContext.setQueryMVContext(queryMaterializationContext);
                 }
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
