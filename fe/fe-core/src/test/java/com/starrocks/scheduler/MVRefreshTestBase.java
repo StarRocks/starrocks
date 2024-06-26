@@ -13,10 +13,9 @@
 // limitations under the License.
 package com.starrocks.scheduler;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvRefreshArbiter;
-import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -25,11 +24,7 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
->>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -43,12 +38,9 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
-<<<<<<< HEAD
-=======
 import java.util.Map;
 import java.util.Set;
 
->>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
 public class MVRefreshTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
     protected static ConnectContext connectContext;
@@ -104,13 +96,10 @@ public class MVRefreshTestBase {
         Assert.assertNotNull(table);
         return table;
     }
-<<<<<<< HEAD
-=======
 
     protected TaskRun buildMVTaskRun(MaterializedView mv, String dbName) {
         Task task = TaskBuilder.buildMvTask(mv, dbName);
         Map<String, String> testProperties = task.getProperties();
-        testProperties.put(TaskRun.IS_TEST, "true");
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         return taskRun;
     }
@@ -119,20 +108,15 @@ public class MVRefreshTestBase {
         refreshMVRange(mvName, null, null, force);
     }
 
-    public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
-        return MvRefreshArbiter.getPartitionNamesToRefreshForMv(mv, true);
-    }
-
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
-        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getPartitionNamesToRefreshForMv(mv, true);
-        com.google.common.base.Preconditions.checkState(mvUpdateInfo != null);
-        return mvUpdateInfo.getMvToRefreshPartitionNames();
+        Set<String> toRefreshPartitions = Sets.newHashSet();
+        mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
+        return toRefreshPartitions;
     }
 
     PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
         Task task = TaskBuilder.buildMvTask(mv, dbName);
         Map<String, String> testProperties = task.getProperties();
-        testProperties.put(TaskRun.IS_TEST, "true");
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
@@ -161,5 +145,4 @@ public class MVRefreshTestBase {
         return GsonUtils.GSON.fromJson(cacheStats,
                 QueryMaterializationContext.QueryCacheStats.class);
     }
->>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
 }

@@ -74,10 +74,8 @@ public class IcebergPartitionTraits extends DefaultTraits {
             return Lists.newArrayList(table.getName());
         }
 
-        IcebergTable icebergTable = (IcebergTable) table;
-        long snapshotId = icebergTable.getSnapshot().isPresent() ? icebergTable.getSnapshot().get().snapshotId() : -1;
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                table.getCatalogName(), getDbName(), getTableName(), snapshotId);
+                table.getCatalogName(), getDbName(), getTableName());
     }
 
     @Override

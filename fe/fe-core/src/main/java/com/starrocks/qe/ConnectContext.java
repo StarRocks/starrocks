@@ -217,15 +217,10 @@ public class ConnectContext {
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
-<<<<<<< HEAD
-=======
-    private UUID sessionId;
-
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
 
->>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -746,17 +741,6 @@ public class ConnectContext {
         return this.forwardTimes;
     }
 
-<<<<<<< HEAD
-=======
-
-    public void setSessionId(UUID sessionId) {
-        this.sessionId = sessionId;
-    }
-
-    public UUID getSessionId() {
-        return this.sessionId;
-    }
-
     public QueryMaterializationContext getQueryMVContext() {
         return queryMVContext;
     }
@@ -765,7 +749,6 @@ public class ConnectContext {
         this.queryMVContext = queryMVContext;
     }
 
->>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
     // kill operation with no protect.
     public void kill(boolean killConnection, String cancelledMessage) {
         LOG.warn("kill query, {}, kill connection: {}",

@@ -127,7 +127,7 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     public List<Column> getPartitionColumns() {
-        return ((OlapTable) table).getPartitionInfo().getPartitionColumns(table.getIdToColumn());
+        return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
     }
 }
 

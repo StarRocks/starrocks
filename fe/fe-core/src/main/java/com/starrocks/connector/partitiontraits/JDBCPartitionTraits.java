@@ -56,7 +56,7 @@ public class JDBCPartitionTraits extends DefaultTraits {
     @Override
     public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException {
-        return PartitionUtil.getRangePartitionMapOfJDBCTable(
+        return PartitionUtil.getRangePartitionMapOfExternalTable(
                 table, partitionColumn, getPartitionNames(), partitionExpr);
     }
 

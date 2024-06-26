@@ -17,7 +17,6 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.util.RuntimeProfile;
@@ -37,12 +36,7 @@ import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 import java.time.Instant;
-<<<<<<< HEAD
-=======
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
->>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
 
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
@@ -269,10 +263,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         System.out.println("waiting for partition p2 to be visible:" + p2.getVisibleVersion());
                         Thread.sleep(1000);
                     }
-                    MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
-                    System.out.println(mvUpdateInfo);
-                    Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
-                    Assert.assertTrue(mvUpdateInfo.isValidRewrite());
                     partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
                     Assert.assertFalse(partitionsToRefresh1.isEmpty());
 
