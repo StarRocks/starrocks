@@ -1110,7 +1110,7 @@ TEST_F(ParquetFileWriterTest, TestUnknownCompression) {
     auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
     auto writer = std::make_unique<formats::ParquetFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::UNKNOWN_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+            TCompressionType::UNKNOWN_COMPRESSION, writer_options, []() {});
     ASSERT_ERROR(writer->init());
 }
 
