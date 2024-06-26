@@ -664,6 +664,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static int http_port = 8030;
 
+    @ConfField
+    public static boolean enable_query_queue_v2 = false;
+    @ConfField(mutable = true)
+    public static int query_queue_v2_num_rows_per_slot = 4096;
+
+    // TODO(lzh): add prop min=1
+    @ConfField(mutable = true)
+    public static int query_queue_v2_concurrency_level = 4;
+
     /**
      * Number of worker threads for http server to deal with http requests which may do
      * some I/O operations. If set with a non-positive value, it will use netty's default
@@ -1215,7 +1224,7 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view_metrics_collect = true;
 
     @ConfField(mutable = true, comment = "whether to enable text based rewrite by default, if true it will " +
-               "build ast tree in materialized view initialization")
+            "build ast tree in materialized view initialization")
     public static boolean enable_materialized_view_text_based_rewrite = true;
 
     /**

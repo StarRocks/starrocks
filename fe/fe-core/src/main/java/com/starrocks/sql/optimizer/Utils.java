@@ -607,6 +607,10 @@ public class Utils {
         return num < 0 ? 1 : num + 1;
     }
 
+    public static int log2(int n) {
+        return 31 - Integer.numberOfLeadingZeros(n);
+    }
+
     /**
      * Check the input expression is not nullable or not.
      * @param nullOutputColumnOps the nullable column reference operators.

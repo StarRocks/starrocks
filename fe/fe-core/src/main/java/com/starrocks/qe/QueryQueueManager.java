@@ -20,6 +20,9 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.qe.scheduler.slot.SlotEstimator;
+import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
@@ -53,7 +56,7 @@ public class QueryQueueManager {
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
         try {
-            LogicalSlot slotRequirement = createSlot(coord);
+            LogicalSlot slotRequirement = createSlot(context, coord);
             coord.setSlot(slotRequirement);
 
             isPending = true;
@@ -104,7 +107,7 @@ public class QueryQueueManager {
         }
     }
 
-    private LogicalSlot createSlot(DefaultCoordinator coord) throws UserException {
+    private LogicalSlot createSlot(ConnectContext context, DefaultCoordinator coord) throws UserException {
         Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(selfIpAndPort.first);
         if (frontend == null) {
@@ -123,11 +126,26 @@ public class QueryQueueManager {
         int numFragments = coord.getFragments().size();
         int pipelineDop = coord.getJobSpec().getQueryOptions().getPipeline_dop();
         if (!coord.getJobSpec().isStatisticsJob() && !coord.isLoadType()
-                && ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnablePipelineAdaptiveDop()) {
+                && context.getSessionVariable().isEnablePipelineAdaptiveDop()) {
             pipelineDop = 0;
         }
 
-        return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), groupId, 1, expiredPendingTimeMs,
+        int numSlots = estimateNumSlots(context, coord);
+
+        return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), groupId, numSlots, expiredPendingTimeMs,
                 expiredAllocatedTimeMs, frontend.getStartTime(), numFragments, pipelineDop);
     }
+
+    private int estimateNumSlots(ConnectContext context, DefaultCoordinator coord) {
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coord);
+
+        SlotEstimator estimator = SlotEstimatorFactory.create(opts);
+        int numSlots = estimator.estimateSlots(opts, context, coord);
+        if (opts.isEnableQueryQueueV2()) {
+            context.auditEventBuilder.setNumSlots(numSlots);
+        }
+
+        return numSlots;
+    }
+
 }
