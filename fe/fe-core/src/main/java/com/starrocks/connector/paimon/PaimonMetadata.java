@@ -187,7 +187,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             databases.put(dbName, db);
             return db;
         } else {
-            LOG.error("Paimon database {}.{} done not exist.", catalogName, dbName);
+            LOG.error("Paimon database {}.{} does not exist.", catalogName, dbName);
             return null;
         }
     }

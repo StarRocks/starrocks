@@ -211,6 +211,8 @@ struct HdfsScannerParams {
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
+    std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file = nullptr;
+
     bool use_datacache = false;
     bool enable_populate_datacache = false;
     bool enable_datacache_async_populate_mode = false;

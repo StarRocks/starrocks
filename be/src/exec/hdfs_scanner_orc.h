@@ -52,6 +52,7 @@ private:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _eval_conjunct_ctxs_by_materialized_slot{};
 
     Status build_iceberg_delete_builder();
+    Status build_paimon_delete_file_builder();
     Status build_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes);
     Status build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes);
     Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);

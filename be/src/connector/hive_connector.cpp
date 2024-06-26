@@ -570,6 +570,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
         scanner_params.iceberg_equal_delete_schema = tbl->get_iceberg_equal_delete_schema();
     }
+    if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
+        scanner_params.paimon_deletion_file = std::make_shared<TPaimonDeletionFile>(scan_range.paimon_deletion_file);
+    }
     scanner_params.use_datacache = _use_datacache;
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
     scanner_params.enable_datacache_async_populate_mode = _enable_datacache_aync_populate_mode;

@@ -170,14 +170,14 @@ public class ConnectorPlanTestBase extends PlanTestBase {
     public static void createPaimonTable(Catalog catalog, String db) throws Exception {
         catalog.createDatabase(db, false);
 
-        // create partitioned table
-        createParitionedTable(catalog, db);
+        // create unpartitioned table
+        createPaimonUnpartitionedTable(catalog, db);
 
         // create partitioned table
-        createUnPartitionedTable(catalog, db);
+        createPaimonParitionedTable(catalog, db);
     }
 
-    private static void createUnPartitionedTable(Catalog catalog, String db) throws Exception {
+    private static void createPaimonUnpartitionedTable(Catalog catalog, String db) throws Exception {
         Identifier identifier = Identifier.create(db, "unpartitioned_table");
         Schema schema = new Schema(
                 Lists.newArrayList(
@@ -204,7 +204,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         batchTableCommit.commit(batchTableWrite.prepareCommit());
     }
 
-    private static void createParitionedTable(Catalog catalog, String db) throws Exception {
+    private static void createPaimonParitionedTable(Catalog catalog, String db) throws Exception {
         Identifier identifier = Identifier.create(db, "partitioned_table");
         Schema schema = new Schema(
                 Lists.newArrayList(
