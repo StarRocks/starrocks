@@ -67,8 +67,8 @@ message DeltaColumnGroupMetadataPB {
 }
 
 message DelfileWithRowsetId {
-    optional string del_file = 1;
-    optional uint64 del_file_size = 2;
+    optional string name = 1;
+    optional uint64 size = 2;
     // origin rowset that generate this del file.
     optional uint32 origin_rowset_id = 3;
 }
@@ -143,6 +143,7 @@ message TxnLogPB {
         repeated string dels = 3;
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
+        // record the file size of `dels`, used for reduce `get_file_size` call.
         repeated uint64 del_file_sizes = 5;
     }
 

@@ -444,10 +444,10 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         RowsetMetadataPB rowset_metadata;
         rowset_metadata.add_segments("bbb.dat");
         DelfileWithRowsetId delfile;
-        delfile.set_del_file("bbb1.del");
+        delfile.set_name("bbb1.del");
         delfile.set_origin_rowset_id(metadata->next_rowset_id());
         rowset_metadata.add_del_files()->CopyFrom(delfile);
-        delfile.set_del_file("bbb2.del");
+        delfile.set_name("bbb2.del");
         rowset_metadata.add_del_files()->CopyFrom(delfile);
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
@@ -477,9 +477,9 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         // check unpersistent del files
         EXPECT_TRUE(metadata->rowsets_size() == 1);
         EXPECT_TRUE(metadata->rowsets(0).del_files_size() == 2);
-        EXPECT_TRUE(metadata->rowsets(0).del_files(0).del_file() == "bbb1.del");
+        EXPECT_TRUE(metadata->rowsets(0).del_files(0).name() == "bbb1.del");
         EXPECT_TRUE(metadata->rowsets(0).del_files(0).origin_rowset_id() == 111);
-        EXPECT_TRUE(metadata->rowsets(0).del_files(1).del_file() == "bbb2.del");
+        EXPECT_TRUE(metadata->rowsets(0).del_files(1).name() == "bbb2.del");
         EXPECT_TRUE(metadata->rowsets(0).del_files(1).origin_rowset_id() == 111);
         EXPECT_TRUE(metadata->compaction_inputs_size() == 2);
         EXPECT_TRUE(metadata->compaction_inputs(0).del_files_size() == 0);

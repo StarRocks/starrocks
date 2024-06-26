@@ -259,7 +259,7 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
         }
         for (const auto& del_file : rowset.del_files()) {
-            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.del_file())));
+            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
         }
         *garbage_data_size += rowset.data_size();
     }

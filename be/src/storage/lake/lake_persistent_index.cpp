@@ -228,7 +228,7 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
 }
 
 // Used to rebuild delete operation.
-Status LakePersistentIndex::insert_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
+Status LakePersistentIndex::replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
                                          uint32_t rowset_id) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_delete_us");
     RETURN_IF_ERROR(_memtable->erase_with_filter(n, keys, filter, version, rowset_id));
@@ -484,11 +484,10 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
     for (const auto& del : rowset->metadata().del_files()) {
-        ASSIGN_OR_RETURN(auto read_file,
-                         fs::new_random_access_file(_tablet_mgr->del_location(_tablet_id, del.del_file())));
+        ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(_tablet_mgr->del_location(_tablet_id, del.name())));
         int64_t file_size = 0;
-        if (del.del_file_size() > 0) {
-            file_size = del.del_file_size();
+        if (del.size() > 0) {
+            file_size = del.size();
         } else {
             // Upgraded from old version SR.
             ASSIGN_OR_RETURN(file_size, read_file->get_size());
@@ -525,7 +524,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             RETURN_IF_ERROR(get(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), found_values.data()));
             generate_filter_fn();
             // 2. insert delete operations to pk index.
-            RETURN_IF_ERROR(insert_erase(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), filter,
+            RETURN_IF_ERROR(replay_erase(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), filter,
                                          rowset_version, rowset->id()));
         } else {
             std::vector<Slice> keys;
@@ -539,7 +538,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             RETURN_IF_ERROR(get(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), found_values.data()));
             generate_filter_fn();
             // 2. insert delete operations to pk index.
-            RETURN_IF_ERROR(insert_erase(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), filter,
+            RETURN_IF_ERROR(replay_erase(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), filter,
                                          rowset_version, rowset->id()));
         }
     }
@@ -547,7 +546,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
 }
 
 // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
-bool LakePersistentIndex::rowset_rebuild_checker(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
+bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
     if (rowset.segments_size() > 0 && (rowset.id() + rowset.segments_size() <= rebuild_rss_id)) {
         // All segments and del files under this rowset are not need to rebuild.
         // E.g.
@@ -603,7 +602,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
-        if (!rowset_rebuild_checker(rowset->metadata(), rebuild_rss_id)) {
+        if (!needs_rowset_rebuild(rowset->metadata(), rebuild_rss_id)) {
             continue;
         }
         const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;

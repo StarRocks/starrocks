@@ -337,7 +337,7 @@ TEST_F(LakePersistentIndexTest, test_insert_delete) {
             filter[i] = true;
         }
     }
-    ASSERT_OK(index->insert_erase(N, key_slices.data(), filter, 0, 0));
+    ASSERT_OK(index->replay_erase(N, key_slices.data(), filter, 0, 0));
     // 4. check result
     std::vector<IndexValue> new_get_values(keys.size());
     ASSERT_TRUE(index->get(N, key_slices.data(), new_get_values.data()).ok());

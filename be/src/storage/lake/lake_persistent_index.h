@@ -127,7 +127,7 @@ public:
     // |filter| : used for filter keys that need to skip. `True` means need skip.
     // |version|: version of values
     // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
-    Status insert_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
+    Status replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
                         uint32_t rowset_id);
 
     Status minor_compact();
@@ -147,7 +147,7 @@ public:
                                         std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
 
     // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
-    static bool rowset_rebuild_checker(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
+    static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
 
 private:
     Status flush_memtable();

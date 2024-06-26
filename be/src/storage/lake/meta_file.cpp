@@ -121,9 +121,9 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     DCHECK(op_write.del_file_sizes_size() == 0 || op_write.del_file_sizes_size() == op_write.dels_size());
     for (int i = 0; i < op_write.dels_size(); i++) {
         DelfileWithRowsetId del_file_with_rid;
-        del_file_with_rid.set_del_file(op_write.dels(i));
+        del_file_with_rid.set_name(op_write.dels(i));
         if (op_write.del_file_sizes_size() > 0) {
-            del_file_with_rid.set_del_file_size(op_write.del_file_sizes(i));
+            del_file_with_rid.set_size(op_write.del_file_sizes(i));
         }
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
@@ -190,7 +190,7 @@ void MetaFileBuilder::_collect_del_files_above_rebuild_point(RowsetMetadataPB* r
     // Rebuild persistent index from `rebuild_rss_rowid_point`
     const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
-    if (rowset->del_files_size() > 0 && LakePersistentIndex::rowset_rebuild_checker(*rowset, rebuild_rss_id)) {
+    if (rowset->del_files_size() > 0 && LakePersistentIndex::needs_rowset_rebuild(*rowset, rebuild_rss_id)) {
         // Above rebuild point
         for (const auto& each : rowset->del_files()) {
             collect_del_files->push_back(each);

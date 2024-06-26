@@ -258,6 +258,14 @@ void LakePrimaryIndex::set_local_pk_index_write_amp_score(double score) {
     }
 }
 
+static void old_values_to_deletes(const std::vector<uint64_t>& old_values, DeletesMap* deletes) {
+    for (uint64_t old : old_values) {
+        if (old != NullIndexValue) {
+            (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+        }
+    }
+}
+
 Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
                                uint32_t rowset_id) {
     // No need to setup rebuild point for in-memory index and local persistent index,
@@ -279,11 +287,7 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
             // Cloud native index need to setup rowset id as rebuild point when erase.
             RETURN_IF_ERROR(lake_persistent_index->erase(pks.size(), vkeys,
                                                          reinterpret_cast<IndexValue*>(old_values.data()), rowset_id));
-            for (unsigned long old : old_values) {
-                if (old != NullIndexValue) {
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                }
-            }
+            old_values_to_deletes(old_values, deletes);
             return Status::OK();
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
