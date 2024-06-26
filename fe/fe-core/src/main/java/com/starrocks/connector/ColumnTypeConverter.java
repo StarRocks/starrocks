@@ -462,6 +462,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case TIMESTAMP:
+            case TIMESTAMP_NTZ:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:

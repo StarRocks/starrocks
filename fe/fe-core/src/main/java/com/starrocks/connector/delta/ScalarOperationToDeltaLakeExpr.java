@@ -36,7 +36,6 @@ import io.delta.kernel.expressions.Literal;
 import io.delta.kernel.expressions.Or;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.types.StructField;
-import io.delta.kernel.types.StructType;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -100,19 +99,9 @@ public class ScalarOperationToDeltaLakeExpr {
 
         private static DeltaDataType getColumnType(String qualifiedName, DeltaLakeContext context) {
             //TODO: nested type
-            StructType structType = context.getSchema();
-            StructField field = structType.get(qualifiedName);
-            if (field != null) {
-                DeltaDataType type = DeltaDataType.instanceFrom(field.getDataType().getClass());
-                // Note: A timestamp value in a partition value doesn't store the time zone due to historical reasons.
-                // It means its behavior looks similar to timestamp without time zone when it is used
-                // in a partition column.
-                // https://github.com/delta-io/delta/blob/master/PROTOCOL.md#partition-value-serialization
-                if (type == DeltaDataType.TIMESTAMP && context.isPartitionColumn(qualifiedName)) {
-                    return DeltaDataType.TIMESTAMP_NTZ;
-                } else {
-                    return type;
-                }
+            StructField field = context.getSchema().get(qualifiedName);
+            if (field != null && field.getDataType() != null) {
+                return DeltaDataType.instanceFrom(field.getDataType().getClass());
             } else {
                 return DeltaDataType.OTHER;
             }
@@ -166,7 +155,7 @@ public class ScalarOperationToDeltaLakeExpr {
             Column column = context.getColumn(columnName);
 
             DeltaDataType resultType = getResultType(columnName, context);
-            Literal literal = getLiteral(operator.getChild(1), resultType);
+            Literal literal = getLiteral(operator.getChild(1), resultType, context.isPartitionColumn(columnName));
 
             if (literal == null) {
                 return null;
@@ -195,16 +184,23 @@ public class ScalarOperationToDeltaLakeExpr {
             return null;
         }
 
-        private static Literal getLiteral(ScalarOperator operator, DeltaDataType deltaDataType) {
+        private static Literal getLiteral(ScalarOperator operator, DeltaDataType deltaDataType,
+                                          boolean isPartitionCol) {
             if (operator == null) {
                 return null;
             }
 
-            return operator.accept(new ExtractLiteralValue(), deltaDataType);
+            return operator.accept(new ExtractLiteralValue(isPartitionCol), deltaDataType);
         }
     }
 
     private static class ExtractLiteralValue extends ScalarOperatorVisitor<Literal, DeltaDataType> {
+        private final boolean isPartitionColumn;
+
+        public ExtractLiteralValue(boolean isPartitionColumn) {
+            this.isPartitionColumn = isPartitionColumn;
+        }
+
         private boolean needCast(PrimitiveType srcType, DeltaDataType destType) {
             switch (srcType) {
                 case BOOLEAN:
@@ -315,17 +311,24 @@ public class ScalarOperationToDeltaLakeExpr {
                 case DATE:
                     return Literal.ofDate((int) operator.getDate().toLocalDate().toEpochDay());
                 case DATETIME:
+                    LocalDateTime localDateTime = operator.getDatetime();
+                    ZoneId zoneOffset = ZoneOffset.UTC;
                     if (type == DeltaDataType.TIMESTAMP) {
-                        ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
-                        LocalDateTime localDateTime = operator.getDatetime();
-                        long value = localDateTime.atZone(zoneId).toEpochSecond() * 1000 * 1000
+                        if (!isPartitionColumn) {
+                            // Note: A timestamp value in a partition value doesn't store
+                            // the time zone due to historical reasons.
+                            // It means its behavior looks similar to timestamp without time zone when it is used
+                            // in a partition column.
+                            // https://github.com/delta-io/delta/blob/master/PROTOCOL.md#partition-value-serialization
+                            zoneOffset = TimeUtils.getTimeZone().toZoneId();
+                        }
+                        long value = localDateTime.atZone(zoneOffset).toEpochSecond() * 1000 * 1000
                                 + localDateTime.getNano() / 1000;
                         return Literal.ofTimestamp(value);
                     } else {
-                        LocalDateTime localDateTime = operator.getDatetime();
-                        long value = localDateTime.atZone(ZoneOffset.UTC).toEpochSecond() * 1000 * 1000
+                        long value = localDateTime.atZone(zoneOffset).toEpochSecond() * 1000 * 1000
                                 + localDateTime.getNano() / 1000;
-                        return Literal.ofTimestamp(value);
+                        return Literal.ofTimestampNtz(value);
                     }
                 case CHAR:
                 case VARCHAR:
