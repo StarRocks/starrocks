@@ -196,7 +196,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
 StatusOr<std::shared_ptr<::parquet::WriterProperties>> ParquetBuildHelper::make_properties(
         const ParquetBuilderOptions& options) {
     ::parquet::WriterProperties::Builder builder;
-    builder.version(::parquet::ParquetVersion::PARQUET_2_0);
+    builder.version(::parquet::ParquetVersion::PARQUET_2_6);
     options.use_dict ? builder.enable_dictionary() : builder.disable_dictionary();
     ASSIGN_OR_RETURN(auto compression_codec,
                      parquet::ParquetBuildHelper::convert_compression_type(options.compression_type));

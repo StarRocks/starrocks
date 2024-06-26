@@ -15,6 +15,8 @@
 package com.starrocks.connector;
 
 import com.starrocks.connector.paimon.Partition;
+import com.starrocks.connector.partitiontraits.DefaultTraits;
+import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -34,14 +36,14 @@ public class ConnectorPartitionTraitsTest {
         Partition p2 = new Partition("p2", 200);
         fakePartitionInfo.put("p1", p1);
         fakePartitionInfo.put("p2", p2);
-        new MockUp<ConnectorPartitionTraits.DefaultTraits>() {
+        new MockUp<DefaultTraits>() {
             @Mock
             public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
                 return fakePartitionInfo;
             }
         };
 
-        Optional<Long> result = new ConnectorPartitionTraits.PaimonPartitionTraits().maxPartitionRefreshTs();
+        Optional<Long> result = new PaimonPartitionTraits().maxPartitionRefreshTs();
         Assert.assertTrue(result.isPresent());
         Assert.assertEquals(200L, result.get().longValue());
     }

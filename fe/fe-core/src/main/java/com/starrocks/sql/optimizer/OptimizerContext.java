@@ -94,6 +94,7 @@ public class OptimizerContext {
         this.candidateMvs = Lists.newArrayList();
         this.queryId = UUID.randomUUID();
         this.allLogicalOlapScanOperators = Collections.emptyList();
+        this.queryMaterializationContext = new QueryMaterializationContext();
     }
 
     @VisibleForTesting

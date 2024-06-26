@@ -51,6 +51,7 @@ public class TableWithPartitions {
             return Lists.newArrayList();
         }
         return partitionNames.stream()
+                .filter(partitinRangeMap::containsKey)
                 .map(p -> new PartitionRange(p, partitinRangeMap.get(p)))
                 .sorted(PartitionRange::compareTo)
                 .collect(Collectors.toList());

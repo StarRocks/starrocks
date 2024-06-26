@@ -384,7 +384,7 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                         for (int i = 0; i < sqls.length; i++) {
                             System.out.println("start to test case " + i);
                             String query = sqls[i];
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
                             PlanTestBase.assertContains(plan, expects[i * 2]);
                             PlanTestBase.assertContains(plan, expects[i * 2 + 1]);
