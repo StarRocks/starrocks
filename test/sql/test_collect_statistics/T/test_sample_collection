@@ -1,4 +1,6 @@
 -- name: test_sample_collection
+create database test_sample_collection;
+use test_sample_collection;
 create table test_778899(
 c0 int not null,
 c1 date not null,

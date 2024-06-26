@@ -1,4 +1,10 @@
 -- name: test_sample_collection
+create database test_sample_collection;
+-- result:
+-- !result
+use test_sample_collection;
+-- result:
+-- !result
 create table test_778899(
 c0 int not null,
 c1 date not null,
@@ -127,13 +133,13 @@ VALUES
 -- !result
 analyze sample table test_778899;
 -- result:
-test_db_c270604433c711efac7a2207f0c28981.test_778899	sample	status	OK
+test_sample_collection.test_778899	sample	status	OK
 -- !result
 analyze sample table test_778899 (c4.a, c4.b, c6.c.a, c6.d);
 -- result:
-test_db_c270604433c711efac7a2207f0c28981.test_778899	sample	status	OK
+test_sample_collection.test_778899	sample	status	OK
 -- !result
 analyze sample table test_80col;
 -- result:
-test_db_c270604433c711efac7a2207f0c28981.test_80col	sample	status	OK
+test_sample_collection.test_80col	sample	status	OK
 -- !result
