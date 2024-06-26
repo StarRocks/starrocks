@@ -234,5 +234,4 @@ public class PartitionDiffer {
         int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
         return !(lowerCmp >= 0 || upperCmp <= 0);
     }
-
 }

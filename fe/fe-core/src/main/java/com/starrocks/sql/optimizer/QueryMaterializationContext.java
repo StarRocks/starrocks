@@ -18,8 +18,12 @@ package com.starrocks.sql.optimizer;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -28,6 +32,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Predicate
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -45,6 +50,31 @@ public class QueryMaterializationContext {
             .maximumSize(Config.mv_query_context_cache_max_size)
             .recordStats()
             .build();
+
+    private final QueryCacheStats queryCacheStats = new QueryCacheStats();
+
+    /**
+     * It's used to record the cache stats of `mvQueryContextCache`.
+     */
+    public class QueryCacheStats {
+        @SerializedName("counter")
+        private final Map<String, Long> counter = Maps.newHashMap();
+        public QueryCacheStats() {
+        }
+
+        public void incr(String key) {
+            counter.put(key, counter.getOrDefault(key, 0L) + 1);
+        }
+
+        public Map<String, Long> getCounter() {
+            return counter;
+        }
+
+        @Override
+        public String toString() {
+            return GsonUtils.GSON.toJson(this);
+        }
+    }
 
     public QueryMaterializationContext() {
     }
@@ -90,6 +120,10 @@ public class QueryMaterializationContext {
         });
     }
 
+    public QueryCacheStats getQueryCacheStats() {
+        return queryCacheStats;
+    }
+
     // Invalidate all caches by hand to avoid memory allocation after query optimization.
     public void clear() {
         if (ConnectContext.get() != null) {
@@ -99,6 +133,9 @@ public class QueryMaterializationContext {
                         mvQueryContextCache.stats(), mvQueryContextCache.estimatedSize());
             }
         }
+        // record cache stats
+        PlannerProfile.addCustomProperties("MVQueryContextCacheStats", mvQueryContextCache.stats().toString());
+        PlannerProfile.addCustomProperties("MVQueryCacheStats", queryCacheStats.toString());
         this.mvQueryContextCache.invalidateAll();
     }
 }

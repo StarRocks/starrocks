@@ -96,6 +96,7 @@ import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -197,6 +198,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     public void processTaskRun(TaskRunContext context) {
         IMaterializedViewMetricsEntity mvEntity = null;
         ConnectContext connectContext = context.getCtx();
+        QueryMaterializationContext queryMVContext = new QueryMaterializationContext();
+        connectContext.setQueryMVContext(queryMVContext);
         try {
             // prepare
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("MVRefreshPrepare")) {
@@ -220,11 +223,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             connectContext.getState().setError(e.getMessage());
             throw e;
         } finally {
-            postProcess();
+            // reset query mv context to avoid affecting other tasks
+            queryMVContext.clear();
+            connectContext.setQueryMVContext(null);
+
             if (FeConstants.runningUnitTest) {
                 runtimeProfile = new RuntimeProfile();
                 connectContext.getPlannerProfile().build(runtimeProfile);
             }
+            postProcess();
         }
     }
 
