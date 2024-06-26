@@ -1492,6 +1492,23 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 }
+                case FunctionSet.ARRAY_FLATTEN: {
+                    if (node.getChildren().size() != 1) {
+                        throw new SemanticException(fnName + " should have only one input", node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The only one input of " + fnName +
+                                " should be an array of arrays, rather than " + node.getChild(0).getType().toSql(),
+                                node.getPos());
+                    }
+                    if (node.getChild(0).getType().isArrayType() && !((ArrayType) node.getChild(0).getType())
+                            .getItemType().isArrayType()) {
+                        throw new SemanticException("The only one input of " + fnName +
+                                " should be an array of arrays, rather than " + node.getChild(0).getType().toSql(),
+                                node.getPos());
+                    }
+                    break;
+                }
             }
         }
 
