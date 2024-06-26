@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -32,9 +33,11 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 
@@ -97,10 +100,18 @@ public class JDBCScanner {
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
-            resultColumnClassNames.add(resultSetMetaData.getColumnClassName(i));
-            Class<?> clazz = classLoader.loadClass(resultSetMetaData.getColumnClassName(i));
+            String className = resultSetMetaData.getColumnClassName(i);
+            resultColumnClassNames.add(className);
+            if (className.equals("byte[]") || className.equals("[B")) {
+                resultChunk.add((Object[]) Array.newInstance(byte[].class, scanContext.getStatementFetchSize()));
+                continue;
+            }
+            Class<?> clazz = classLoader.loadClass(className);
             if (isGeneralJDBCClassType(clazz)) {
                 resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
+            } else if (null != mapEngineSpecificClassType(clazz)) {
+                Class targetClass = mapEngineSpecificClassType(clazz);
+                resultChunk.add((Object[]) Array.newInstance(targetClass, scanContext.getStatementFetchSize()));
             } else {
                 resultChunk.add((Object[]) Array.newInstance(String.class, scanContext.getStatementFetchSize()));
             }
@@ -125,6 +136,15 @@ public class JDBCScanner {
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
+    }
+
+    private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
+            put("oracle.jdbc.OracleBlob", Blob.class);
+        }};
+
+    private Class mapEngineSpecificClassType(Class<?> clazz) {
+        String className = clazz.getName();
+        return ENGINE_SPECIFIC_CLASS_MAPPING.get(className);
     }
 
     // used for cpp interface
@@ -162,6 +182,10 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
                 } else if (dataColumn instanceof Double[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
+                } else if (resultObject instanceof byte[]) {
+                    dataColumn[resultNumRows] = resultObject;
+                } else if (resultObject instanceof Blob) {
+                    dataColumn[resultNumRows] = resultObject;
                 } else if (dataColumn instanceof String[] && resultObject instanceof String) {
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;
