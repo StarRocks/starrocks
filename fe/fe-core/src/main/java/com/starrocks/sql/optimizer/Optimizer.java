@@ -131,15 +131,16 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
-        prepare(connectContext, logicOperatorTree, columnRefFactory);
-
-        OptExpression result = optimizerConfig.isRuleBased() ?
-                optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns) :
-                optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
-
-        // clear caches in OptimizerContext
-        context.clear();
-
+        OptExpression result = null;
+        try {
+            prepare(connectContext, logicOperatorTree, columnRefFactory);
+            result = optimizerConfig.isRuleBased() ?
+                    optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns) :
+                    optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+        } finally {
+            // clear caches in OptimizerContext
+            context.clear();
+        }
         return result;
     }
 
