@@ -59,7 +59,19 @@ enum TResultSinkType {
     MYSQL_PROTOCAL,
     FILE,
     STATISTIC,
+<<<<<<< HEAD
     VARIABLE
+=======
+    VARIABLE,
+    HTTP_PROTOCAL,
+    METADATA_ICEBERG,
+    CUSTOMIZED
+}
+
+enum TResultSinkFormatType {
+    JSON,
+    OTHERS
+>>>>>>> f9a665c1d8 ([Refactor] Extract some common utils from automv (#47449))
 }
 
 struct TParquetOptions {

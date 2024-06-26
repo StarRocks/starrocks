@@ -88,6 +88,15 @@ set(RUNTIME_FILES
     schema_table_sink.cpp
     command_executor.cpp
     iceberg_table_sink.cpp
+<<<<<<< HEAD
+=======
+    hive_table_sink.cpp
+    table_function_table_sink.cpp
+    blackhole_table_sink.cpp
+    dictionary_cache_sink.cpp
+    type_pack.cpp
+    customized_result_writer.cpp
+>>>>>>> f9a665c1d8 ([Refactor] Extract some common utils from automv (#47449))
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

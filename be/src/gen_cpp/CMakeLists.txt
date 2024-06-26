@@ -95,6 +95,12 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/version.cpp
     ${GEN_CPP_DIR}/CloudConfiguration_constants.cpp
     ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
+<<<<<<< HEAD
+=======
+    ${GEN_CPP_DIR}/ShortCircuit_types.cpp
+    ${GEN_CPP_DIR}/DataCache_types.cpp
+    ${GEN_CPP_DIR}/Row_types.cpp
+>>>>>>> f9a665c1d8 ([Refactor] Extract some common utils from automv (#47449))
 )
 
 # keep everything in one library, the object files reference
