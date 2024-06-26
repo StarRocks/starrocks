@@ -24,6 +24,7 @@ extension/spark-doris-connector/target
 contrib/trino-connector/target/
 fe/log
 **/ut_ports
+venv/
 custom_env.sh
 ut_dir
 log/
