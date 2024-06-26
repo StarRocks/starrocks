@@ -18,7 +18,11 @@ package com.starrocks.sql.optimizer;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
@@ -30,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -53,6 +58,31 @@ public class QueryMaterializationContext {
             .maximumSize(Config.mv_query_context_cache_max_size)
             .recordStats()
             .build();
+
+    private final QueryCacheStats queryCacheStats = new QueryCacheStats();
+
+    /**
+     * It's used to record the cache stats of `mvQueryContextCache`.
+     */
+    public class QueryCacheStats {
+        @SerializedName("counter")
+        private final Map<String, Long> counter = Maps.newHashMap();
+        public QueryCacheStats() {
+        }
+
+        public void incr(String key) {
+            counter.put(key, counter.getOrDefault(key, 0L) + 1);
+        }
+
+        public Map<String, Long> getCounter() {
+            return counter;
+        }
+
+        @Override
+        public String toString() {
+            return GsonUtils.GSON.toJson(this);
+        }
+    }
 
     public QueryMaterializationContext() {
     }
@@ -98,6 +128,10 @@ public class QueryMaterializationContext {
         });
     }
 
+    public QueryCacheStats getQueryCacheStats() {
+        return queryCacheStats;
+    }
+
     public OptExpression getLogicalTreeWithView() {
         return logicalTreeWithView;
     }
@@ -123,6 +157,9 @@ public class QueryMaterializationContext {
                         mvQueryContextCache.stats(), mvQueryContextCache.estimatedSize());
             }
         }
+        // record cache stats
+        Tracers.record(Tracers.Module.BASE, "MVQueryContextCacheStats", mvQueryContextCache.stats().toString());
+        Tracers.record(Tracers.Module.BASE, "MVQueryCacheStats", queryCacheStats.toString());
         this.mvQueryContextCache.invalidateAll();
     }
 }
