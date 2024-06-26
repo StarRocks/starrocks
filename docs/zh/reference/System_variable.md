@@ -491,6 +491,18 @@ SELECT /*+ SET_VAR
 * 默认值：true
 * 引入版本：v2.5
 
+### enable_datacache_io_adaptor
+
+* 描述：是否开启 Data Cache I/O 自适应开关。`true` 表示开启。开启后，系统会根据当前磁盘 I/O 负载自动将一部分缓存请求路由到远端存储来减少磁盘压力。
+* 默认值：true
+* 引入版本：v3.3.0
+
+### enable_file_metacache
+
+* 描述：是否启用远端文件元数据缓存（Footer Cache）。`true` 表示开启。Footer Cache 通过将解析后生成 Footer 对象直接缓存在内存中，在后续访问相同文件 Footer 时，可以直接从缓存中获得该对象句柄进行使用，避免进行重复解析。该功能依赖 Data Cache 的内存缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值后才会生效。
+* 默认值：true
+* 引入版本：v3.3.0
+
 ### enable_tablet_internal_parallel
 
 * 描述：是否开启自适应 Tablet 并行扫描，使用多个线程并行分段扫描一个 Tablet，可以减少 Tablet 数量对查询能力的限制。
