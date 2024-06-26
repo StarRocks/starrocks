@@ -1551,7 +1551,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 LocalDateTime startTime =
                         DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
                 schedule.setStartTime(startTime.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond());
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
                         timePos);
             }
@@ -2371,7 +2371,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     collect(toList());
             TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
             List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
-            return new CreateAnalyzeJobStmt(tableName, columns, context.SAMPLE() != null, properties, pos);
+            return new CreateAnalyzeJobStmt(tableName, columns, context.FULL() == null, properties, pos);
         } else {
             return new CreateAnalyzeJobStmt(context.FULL() == null, properties, pos);
         }
@@ -7118,7 +7118,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
                     startTime = tempStartTime;
                     defineStartTime = true;
-                } catch (AnalysisException e) {
+                } catch (SemanticException e) {
                     throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
                             timePos);
                 }

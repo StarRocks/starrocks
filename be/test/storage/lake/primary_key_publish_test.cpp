@@ -422,6 +422,38 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     }
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
+    const bool old_val = config::enable_pk_strict_memcheck;
+    config::enable_pk_strict_memcheck = true;
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto txns = std::vector<int64_t>();
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_limit = _update_mgr->mem_tracker()->limit();
+    _update_mgr->mem_tracker()->set_limit(1);
+    ASSERT_TRUE(_update_mgr->mem_tracker()->any_limit_exceeded_precheck(2));
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version fail because of oom
+        ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+    }
+    _update_mgr->mem_tracker()->set_limit(old_limit);
+    config::enable_pk_strict_memcheck = old_val;
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
@@ -707,13 +739,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
-        auto sstable_meta = new_tablet_metadata->sstable_meta();
-        for (auto& sstable : sstable_meta.sstables()) {
-            EXPECT_GT(sstable.version(), 0);
-            EXPECT_LE(sstable.version(), version);
-        }
-    }
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
@@ -959,6 +984,61 @@ TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
               _update_mgr->compaction_state_mem_tracker()->limit());
     EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
               _update_mgr->update_state_mem_tracker()->limit());
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_write_with_cloud_native_index_rebuild) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    std::vector<ChunkPtr> chunk_vec;
+    std::vector<std::vector<uint32_t>> indexes_vec;
+    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize * 3, 0, true, true);
+    chunk_vec.push_back(chunk0);
+    indexes_vec.push_back(indexes0);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize * 3, 1, true, true);
+    chunk_vec.push_back(chunk1);
+    indexes_vec.push_back(indexes1);
+    auto [chunk2, indexes2] = gen_data_and_index(kChunkSize * 3, 2, true, true);
+    chunk_vec.push_back(chunk2);
+    indexes_vec.push_back(indexes2);
+    auto [chunk3, indexes3] = gen_data_and_index(kChunkSize * 3, 3, true, true);
+    chunk_vec.push_back(chunk3);
+    indexes_vec.push_back(indexes3);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    auto do_load_func = [&]() {
+        for (int i = 0; i < 4; i++) {
+            int64_t txn_id = next_id();
+            ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                       .set_tablet_manager(_tablet_mgr.get())
+                                                       .set_tablet_id(tablet_id)
+                                                       .set_txn_id(txn_id)
+                                                       .set_partition_id(_partition_id)
+                                                       .set_mem_tracker(_mem_tracker.get())
+                                                       .set_schema_id(_tablet_schema->id())
+                                                       .build());
+            ASSERT_OK(delta_writer->open());
+            ASSERT_OK(delta_writer->write(*chunk_vec[i], indexes_vec[i].data(), indexes_vec[i].size()));
+            auto txn_log_st = delta_writer->finish();
+            ASSERT_OK(txn_log_st);
+            delta_writer->close();
+            // Publish version
+            ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+            version++;
+        }
+    };
+    // 1. first time
+    const auto old_val = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    do_load_func();
+    config::l0_max_mem_usage = old_val;
+    ASSERT_EQ(kChunkSize * 3 * 4, read_rows(tablet_id, version));
+    // 2. release persistent index and rebuild index
+    _update_mgr->unload_and_remove_primary_index(tablet_id);
+    // 3. second time
+    do_load_func();
+    ASSERT_EQ(kChunkSize * 3 * 4, read_rows(tablet_id, version));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,

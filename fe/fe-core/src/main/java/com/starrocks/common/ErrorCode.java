@@ -289,7 +289,7 @@ public enum ErrorCode {
                     "A default storage volume can be created by following these steps: " +
                     "1. Create a storage volume. 2. Set the storage volume as default"),
     ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
-                "Can not enable replicated storage when the table has GIN"),
+            "Can not enable replicated storage when the table has GIN"),
 
     /**
      * 5600 - 5699: DML operation failure
@@ -307,7 +307,26 @@ public enum ErrorCode {
             "Inserted target column count: %d doesn't match select/value column count: %d"),
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
-            "Current error rows: %d is more than max error num: %d. Check the 'TrackingSQL' field for detailed information"),
+            "%s. Check the 'TrackingSQL' field for detailed information. If you are sure that the data has many errors, " +
+                    "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job."),
+    ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
+            "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
+            "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job."),
+
+    /**
+     * 5700 - 5799: Partition
+     */
+    ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE(5700, new byte[] {'4', '2', '0', '0', '0'},
+            "Cannot add a Range partition to a table that partition type is not of Range"),
+
+    ERR_ADD_PARTITION_WITH_ERROR_STEP_LENGTH(5701, new byte[] {'4', '2', '0', '0', '0'},
+            "Step length [%d] in the operation is not equal to the partition step length [%d] stored in the table"),
+
+    ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE(5702, new byte[] {'4', '2', '0', '0', '0'},
+            "Can't add multi range partition to multi partition column table"),
+
+    ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
+            "The interval of the Multi-Range Partition must be greater than 0"),
 
     /**
      * 10000 - 10099: warehouse
@@ -321,8 +340,7 @@ public enum ErrorCode {
     ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
 
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
-            "unsupported statement in shared_nothing mode")
-    ;
+            "unsupported statement in shared_nothing mode");
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";

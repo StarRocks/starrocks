@@ -47,7 +47,7 @@ public class TaskRunManager implements MemoryTrackable {
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
 
-    private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock();
+    private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock(true);
 
     public SubmitResult submitTaskRun(TaskRun taskRun, ExecuteOption option) {
         LOG.info("submit task run:{}", taskRun);
@@ -161,6 +161,7 @@ public class TaskRunManager implements MemoryTrackable {
                     // update the state of the old TaskRun to MERGED in LEADER
                     oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
                     taskRunScheduler.removePendingTaskRun(oldTaskRun);
+                    taskRunHistory.addHistory(oldTaskRun.getStatus());
                 }
             }
         } finally {

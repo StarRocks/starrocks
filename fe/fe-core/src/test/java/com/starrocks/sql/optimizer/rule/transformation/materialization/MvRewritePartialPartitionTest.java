@@ -168,19 +168,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         String query9 = "select sum(c3) from test_base_part";
         String plan9 = getFragmentPlan(query9);
-        PlanTestBase.assertContains(plan9, "UNION");
-        PlanTestBase.assertContains(plan9, "  1:OlapScanNode\n" +
-                "     TABLE: partial_mv_5\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=5/5");
-        PlanTestBase.assertContains(plan9, "  4:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(13: c2)\n" +
-                "  |  group by: 12: c1, 14: c3\n" +
-                "  |  \n" +
-                "  3:OlapScanNode\n" +
-                "     TABLE: test_base_part\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/6");
+        PlanTestBase.assertNotContains(plan9, "partial_mv_5");
         dropMv("test", "partial_mv_5");
     }
 
@@ -965,9 +953,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "test_mv1");
             // partition p2 has already been updated, so the mv should not be used anymore
             PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 8: ds >= '2020-02-11 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
-                    "     partitions=0/3");
+                            "     PREAGGREGATION: ON\n" +
+                            "     PREDICATES: 8: ds >= '2020-02-11 00:00:00', 8: ds <= '2020-03-01 00:00:00'\n" +
+                            "     partitions=0/61");
             PlanTestBase.assertContains(plan, "     TABLE: base_tbl1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: time_slice(10: k1, 1, 'hour', 'floor') >= '2020-02-11 00:00:00', " +

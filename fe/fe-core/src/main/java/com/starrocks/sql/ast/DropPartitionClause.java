@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
 import java.util.Map;
 
 // clause which is used to add one column to
@@ -27,6 +27,9 @@ public class DropPartitionClause extends AlterTableClause {
     // true if this is to drop a temp partition
     private final boolean isTempPartition;
     private final boolean forceDrop;
+
+    //Object Resolved by Analyzer
+    private List<String> resolvedPartitionNames;
 
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition, boolean forceDrop) {
         this(ifExists, partitionName, isTempPartition, forceDrop, NodePosition.ZERO);
@@ -40,6 +43,14 @@ public class DropPartitionClause extends AlterTableClause {
         this.isTempPartition = isTempPartition;
         this.needTableStable = false;
         this.forceDrop = forceDrop;
+    }
+
+    public List<String> getResolvedPartitionNames() {
+        return resolvedPartitionNames;
+    }
+
+    public void setResolvedPartitionNames(List<String> resolvedPartitionNames) {
+        this.resolvedPartitionNames = resolvedPartitionNames;
     }
 
     public boolean isSetIfExists() {

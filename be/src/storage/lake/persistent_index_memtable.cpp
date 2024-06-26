@@ -44,9 +44,9 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
             nfound += old_value.get_value() != NullIndexValue;
             update_index_value(&old_index_value_vers, version, value);
         }
+        _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
     }
     *num_found = nfound;
-    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
@@ -65,8 +65,8 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
             return Status::AlreadyExist(msg);
         }
         _keys_size += key.capacity() + sizeof(std::string);
+        _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
     }
-    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
@@ -90,7 +90,6 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
         }
     }
     *num_found = nfound;
-    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 
@@ -106,8 +105,8 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
         } else {
             _keys_size += key.capacity() + sizeof(std::string);
         }
+        _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
     }
-    _max_version = std::max(_max_version, version);
     return Status::OK();
 }
 

@@ -660,13 +660,13 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // rss_id -> update file id -> <rowid, update rowid>
     std::map<uint32_t, UptidToRowidPairs> rss_upt_id_to_rowid_pairs;
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
-        for (const auto& each : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
-            auto rssid = (uint32_t)(each.first >> 32);
-            auto rowid = (uint32_t)(each.first & ROWID_MASK);
-            rss_upt_id_to_rowid_pairs[rssid][upt_id].emplace_back(rowid, each.second);
+        for (const auto& each_rss : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
+            for (const auto& each : each_rss.second) {
+                rss_upt_id_to_rowid_pairs[each_rss.first][upt_id].emplace_back(each.first, each.second);
+            }
+            update_rows += each_rss.second.size();
         }
         insert_rows += _partial_update_states[upt_id].insert_rowids.size();
-        update_rows += _partial_update_states[upt_id].rss_rowid_to_update_rowid.size();
     }
     cost_str << " [generate delta column group writer] " << watch.elapsed_time();
     watch.reset();

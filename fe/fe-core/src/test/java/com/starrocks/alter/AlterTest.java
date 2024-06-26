@@ -53,6 +53,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -70,6 +71,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -1229,7 +1231,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testCatalogAddPartitionsDayConflictException() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_exception (\n" +
@@ -1505,15 +1507,15 @@ public class AlterTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
-        String alterSQL = "ALTER TABLE test_partition ADD\n" +
-                "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 1 day);";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         try {
+            String alterSQL = "ALTER TABLE test_partition ADD\n" +
+                    "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 1 day);";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+            AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
             Assert.fail();
-        } catch (DdlException ex) {
+        } catch (AnalysisException ex) {
 
         }
 
@@ -1554,11 +1556,11 @@ public class AlterTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
-        String alterSQL = "ALTER TABLE test_partition_0day ADD\n" +
-                "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 0 day);";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         try {
+            String alterSQL = "ALTER TABLE test_partition_0day ADD\n" +
+                    "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 0 day);";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+            AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_0day", addPartitionClause);
             Assert.fail();
@@ -1723,7 +1725,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testCatalogAddPartitionsShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test_partition_exists3 (\n" +
@@ -1826,11 +1828,14 @@ public class AlterTest {
         multiValues.add(values);
         PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p3", multiValues, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+                .getTable("test_partition");
+
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
+        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
 
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
-                .getTable("test_partition");
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         Map<Long, List<List<String>>> idToValues = partitionInfo.getIdToMultiValues();
 
@@ -1891,11 +1896,11 @@ public class AlterTest {
         List<String> values = Lists.newArrayList("shanxi", "shanghai");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p3", values, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        OlapTable table = (OlapTable) db.getTable("test_partition");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
+        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition", addPartitionClause);
-
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
-                .getTable("test_partition");
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         Map<Long, List<String>> idToValues = partitionInfo.getIdToValues();
 
@@ -1907,7 +1912,6 @@ public class AlterTest {
         String dropSQL = "drop table test_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
-
     }
 
     @Test
@@ -2068,7 +2072,7 @@ public class AlterTest {
         file.delete();
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testAddSingleListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_1 (\n" +
@@ -2095,11 +2099,16 @@ public class AlterTest {
         List<String> values = Lists.newArrayList("shanxi", "heilongjiang");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p1", values, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+
+        Table table = db.getTable("test_partition_1");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
+        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
+
         GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_1", addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testAddMultiListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_2 (\n" +
@@ -2130,11 +2139,15 @@ public class AlterTest {
         multiValues.add(values2);
         PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p1", multiValues, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+
+        Table table = db.getTable("test_partition_2");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
+        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_2", addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testAddSingleListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_3 (\n" +
@@ -2161,11 +2174,12 @@ public class AlterTest {
         List<String> values = Lists.newArrayList("beijing", "chongqing");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p3", values, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
-        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_3", addPartitionClause);
+        Table table = db.getTable("test_partition_3");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
+        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testAddMultiItemListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_4 (\n" +
@@ -2194,8 +2208,10 @@ public class AlterTest {
         multiValues.add(values);
         PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p3", multiValues, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
-        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .addPartitions(Util.getOrCreateConnectContext(), db, "test_partition_4", addPartitionClause);
+
+        Table table = db.getTable("test_partition_4");
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(table);
+        analyzer.analyze(Util.getOrCreateConnectContext(), addPartitionClause);
     }
 
     @Test
@@ -2415,7 +2431,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAutoPartitionTableUnsupported() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE site_access_date_trunc ADD PARTITION p20210101 VALUES [(\"2021-01-01\"), (\"2021-01-02\"));";
@@ -2497,7 +2513,7 @@ public class AlterTest {
         Assert.assertEquals(1L, mv.getWarehouseId());
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = ErrorReportException.class)
     public void testAlterListPartitionUseBatchBuildPartition() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE t2 (\n" +
                 "    dt datetime  not null,\n" +

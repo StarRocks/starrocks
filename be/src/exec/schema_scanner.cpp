@@ -233,11 +233,7 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
 
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
-        auto type_desc = TypeDescriptor(_columns[i].type);
-        if (_columns[i].type == LogicalType::TYPE_VARCHAR || _columns[i].type == LogicalType::TYPE_CHAR) {
-            type_desc.len = _columns[i].size;
-        }
-
+        const TypeDescriptor& type_desc = _columns[i].type;
         t_slot_desc.__set_id(i + 1);
         t_slot_desc.__set_slotType(type_desc.to_thrift());
         t_slot_desc.__set_colName(_columns[i].name);

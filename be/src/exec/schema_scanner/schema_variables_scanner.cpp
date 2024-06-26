@@ -23,16 +23,16 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
         //   name,       type,          size
-        {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"VARIABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VARIABLE_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_verbose_vars_columns[] = {
         //   name,       type,          size
-        {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_CHANGED", TYPE_BOOLEAN, 1, false},
+        {"VARIABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"VARIABLE_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFAULT_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"IS_CHANGED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
 };
 
 SchemaVariablesScanner::SchemaVariablesScanner(TVarType::type type)
