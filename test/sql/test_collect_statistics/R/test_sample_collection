@@ -10,8 +10,8 @@ c6 struct<a int, b int, c struct<a int, b int>,d array<int>>)
 duplicate key(c0)
 partition by (c1)
 distributed by hash(c0) buckets 200 properties('replication_num'='1');
-
-
+-- result:
+-- !result
 CREATE TABLE test_80col (
     column1 INT NOT NULL,
     column2 INT NOT NULL,
@@ -97,12 +97,14 @@ CREATE TABLE test_80col (
 duplicate key(column1)
 partition by (column1)
 distributed by hash(column2) buckets 5 properties('replication_num'='1');
-
+-- result:
+-- !result
 insert into test_778899 values
 (1, '2021-01-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3])),
 (2, '2021-02-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3])),
 (3, '2021-03-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3]));
-
+-- result:
+-- !result
 INSERT INTO test_80col
 VALUES
 (1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
@@ -121,9 +123,17 @@ VALUES
 131, 132, 133, 134, 135, 136, 137, 138, 139, 140,
 141, 142, 143, 144, 145, 146, 147, 148, 149, 150,
 151, 152, 153, 154, 155, 156, 157, 158, 159, 160);
-
+-- result:
+-- !result
 analyze sample table test_778899;
-
+-- result:
+test_db_c270604433c711efac7a2207f0c28981.test_778899	sample	status	OK
+-- !result
 analyze sample table test_778899 (c4.a, c4.b, c6.c.a, c6.d);
-
+-- result:
+test_db_c270604433c711efac7a2207f0c28981.test_778899	sample	status	OK
+-- !result
 analyze sample table test_80col;
+-- result:
+test_db_c270604433c711efac7a2207f0c28981.test_80col	sample	status	OK
+-- !result
