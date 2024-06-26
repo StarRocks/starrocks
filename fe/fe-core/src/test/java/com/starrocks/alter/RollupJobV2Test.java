@@ -296,4 +296,29 @@ public class RollupJobV2Test extends DDLTestBase {
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
         rollupJob.replay(rollupJob);
     }
+
+    @Test
+    public void testCancelPendingJobWithFlag() throws Exception {
+        MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+
+        // add a rollup job
+        ArrayList<AlterClause> alterClauses = new ArrayList<>();
+        alterClauses.add(clause);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
+        materializedViewHandler.process(alterClauses, db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
+        assertEquals(1, alterJobsV2.size());
+        RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
+        materializedViewHandler.clearJobs(); // Disable the execution of job in background thread
+
+        rollupJob.setIsCancelling(true);
+        rollupJob.runPendingJob();
+        rollupJob.setIsCancelling(false);
+     
+        rollupJob.setWaitingCreatingReplica(true);
+        rollupJob.cancel("");
+        rollupJob.setWaitingCreatingReplica(false);
+    }
 }
