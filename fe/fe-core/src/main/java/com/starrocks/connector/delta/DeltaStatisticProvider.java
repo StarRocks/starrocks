@@ -241,7 +241,8 @@ public class DeltaStatisticProvider {
         } else {
             builder.setNullsFraction(nullCount * 1.0 / Math.max(fileStats.getRecordCount(), 1));
         }
-        builder.setAverageRowSize(1);
+        builder.setAverageRowSize(fileStats.getSize() * 1.0 / Math.max(fileStats.getRecordCount(), 1));
+        builder.setDistinctValuesCount(1);
 
         return builder.build();
     }

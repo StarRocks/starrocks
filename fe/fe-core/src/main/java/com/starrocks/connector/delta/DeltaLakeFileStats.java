@@ -24,7 +24,13 @@ import io.delta.kernel.types.LongType;
 import io.delta.kernel.types.ShortType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
+import io.delta.kernel.types.TimestampNTZType;
+import io.delta.kernel.types.TimestampType;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +41,10 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class DeltaLakeFileStats {
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
+    private static final DateTimeFormatter TIME_ZONE_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+
     private final StructType schema;
     private final List<String> nonPartitionPrimitiveColumns;
     private long recordCount;
@@ -233,6 +243,14 @@ public class DeltaLakeFileStats {
         return (Double) left + (Double) value;
     }
 
+    private static OffsetDateTime parseTimestampWithTimeZone(String str) {
+        return OffsetDateTime.parse(str, TIME_ZONE_FORMAT);
+    }
+
+    private static LocalDateTime parseTimestampNTZ(String str) {
+        return LocalDateTime.parse(str, TIME_FORMAT);
+    }
+
     public static Optional<Double> convertObjectToOptionalDouble(DataType type, Object value) {
         // TODO: Timestamp, TimestampNTZ, Date, Decimal
         double result;
@@ -249,6 +267,12 @@ public class DeltaLakeFileStats {
             result = (double) value;
         } else if (type instanceof DoubleType) {
             result = (double) value;
+        } else if (type instanceof TimestampNTZType) {
+            LocalDateTime localDateTime = parseTimestampNTZ((String) value);
+            result = localDateTime.atZone(ZoneOffset.UTC).toEpochSecond();
+        } else if (type instanceof TimestampType) {
+            OffsetDateTime time = parseTimestampWithTimeZone((String) value);
+            result = time.toEpochSecond();
         } else {
             return Optional.empty();
         }
