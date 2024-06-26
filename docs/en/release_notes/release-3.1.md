@@ -4,9 +4,25 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
-Release date: May 30, 2024
+## 3.1.13
+
+Release date: June 26, 2024
+
+### Improvements
+
+- The Broker process supports access to Tencent Cloud COS Posix buckets. Users can load data from COS Posix buckets using Broker Load or unload data to COS Posix buckets using the SELECT INTO OUTFILE statement. [#46597](https://github.com/StarRocks/starrocks/pull/46597)
+- Supports viewing comments of Hive tables in Hive Catalogs using SHOW CREATE TABLE. [#37686](https://github.com/StarRocks/starrocks/pull/37686)
+- Optimized the evaluation time of Conjunct in WHERE clauses, such as multiple LIKE clauses on the same column or CASE WHEN expressions. [#46914](https://github.com/StarRocks/starrocks/pull/46914)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- DELETE statements fail in shared-data clusters if there are excessive number of partitions to be deleted. [#46229](https://github.com/StarRocks/starrocks/pull/46229)
 
 ## 3.1.12
+
+Release date: May 30, 2024
 
 ### New Features
 

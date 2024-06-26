@@ -4,6 +4,22 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.13
+
+发布日期：2024 年 6 月 26 日
+
+### 功能优化
+
+- Broker 进程支持访问腾讯云 COS 融合桶，从而可以通过 Broker Load 从 COS 融合桶导入数据，以及通过 SELECT INTO OUTFILE 导出数据到 COS 融合桶。[#46597](https://github.com/StarRocks/starrocks/pull/46597)
+- 通过 SHOW CREATE TABLE 能够查看 Hive Catalog 中 Hive 外表的 Comment。[#37686](https://github.com/StarRocks/starrocks/pull/37686)
+- 优化 WHERE 子句中的 Conjunct 的评估时间，包括同一个 Column 有多个 LIKE 语句或 CASE WHEN 表达式。[#46914](https://github.com/StarRocks/starrocks/pull/46914)
+
+### 问题修复
+
+修复了如下问题：
+
+- 存算分离集群中使用 DELETE 语句时因为要删除的分区比较多而导致失败。[#46229](https://github.com/StarRocks/starrocks/pull/46229)
+
 ## 3.1.12
 
 发布日期：2024 年 5 月 30 日
