@@ -298,9 +298,6 @@ public class Trino2SRFunctionCallTransformer {
     }
 
     private static void registerMapFunctionTransformer() {
-        // map(array, array) -> map_from_arrays
-        registerFunctionTransformer("map", 2, "map_from_arrays",
-                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerBinaryFunctionTransformer() {
