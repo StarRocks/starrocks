@@ -25,6 +25,7 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
@@ -36,6 +37,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -383,7 +385,15 @@ public class AstToSQLBuilder {
             }
 
             // target
-            sb.append(insert.getTableName().toSql()).append(" ");
+            if (insert.useTableFunctionAsTargetTable()) {
+                sb.append(visitFileTableFunction(
+                        new FileTableFunctionRelation(insert.getTableFunctionProperties(), NodePosition.ZERO), context));
+            } else if (insert.useBlackHoleTableAsTargetTable()) {
+                sb.append("blackhole()");
+            } else {
+                sb.append(insert.getTableName().toSql());
+            }
+            sb.append(" ");
 
             // target partition
             if (insert.getTargetPartitionNames() != null &&
