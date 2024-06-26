@@ -75,6 +75,11 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
         return fn;
     }
 
+    // From PostgreSQL: n*d / (n - f1 + f1*n/N)
+    // (https://github.com/postgres/postgres/blob/master/src/backend/commands/analyze.c)
+    // and paper: ESTIMATING THE NUMBER OF CLASSES IN A FINITE POPULATION
+    // (http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.93.8637&rep=rep1&type=pdf)
+    // sample_row * count_distinct / ( sample_row - once_count + once_count * sample_row / total_row)
     @Override
     public String getDistinctCount(double rowSampleRatio) {
         String sampleRows = "SUM(t1.count)";

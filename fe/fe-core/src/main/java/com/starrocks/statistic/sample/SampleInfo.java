@@ -196,7 +196,7 @@ public class SampleInfo {
         }
 
         if (sql.length() == 0) {
-            sql.append("SELECT * FROM ").append(fullQualifiedName).append(" LIMIT ").append(
+            sql.append("SELECT").append(columnNames).append(" FROM ").append(fullQualifiedName).append(" LIMIT ").append(
                     Config.statistic_sample_collect_rows);
         }
         return sql.toString();
