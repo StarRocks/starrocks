@@ -130,8 +130,9 @@ else
     fi
 fi
 
-# detect xmx
-# if detect_jvm_xmx failed to detect xmx, xmx will be empty
+# Auto detect jvm -Xmx parameter in case $FE_ENABLE_AUTO_JVM_XMX_DETECT = true
+#  default to 70% of total available mem and can be tuned by env var: FE_JVM_XMX_PERCENTAGE
+# NOTE: the feature is only supported in container env
 xmx=$(detect_jvm_xmx)
 final_java_opt="${final_java_opt} ${xmx}"
 
