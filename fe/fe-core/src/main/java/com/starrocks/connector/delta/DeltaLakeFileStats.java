@@ -14,9 +14,11 @@
 
 package com.starrocks.connector.delta;
 
+import com.starrocks.common.util.DateUtils;
 import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.BooleanType;
 import io.delta.kernel.types.DataType;
+import io.delta.kernel.types.DateType;
 import io.delta.kernel.types.DoubleType;
 import io.delta.kernel.types.FloatType;
 import io.delta.kernel.types.IntegerType;
@@ -243,16 +245,23 @@ public class DeltaLakeFileStats {
         return (Double) left + (Double) value;
     }
 
-    private static OffsetDateTime parseTimestampWithTimeZone(String str) {
-        return OffsetDateTime.parse(str, TIME_ZONE_FORMAT);
+    private static double parseTimestampWithTimeZone(String str) {
+        OffsetDateTime time = OffsetDateTime.parse(str, TIME_ZONE_FORMAT);
+        return time.toEpochSecond();
     }
 
-    private static LocalDateTime parseTimestampNTZ(String str) {
-        return LocalDateTime.parse(str, TIME_FORMAT);
+    private static double parseTimestampNTZ(String str) {
+        LocalDateTime time = LocalDateTime.parse(str, TIME_FORMAT);
+        return time.atZone(ZoneOffset.UTC).toEpochSecond();
+    }
+
+    private static double parseDate(String str) {
+        LocalDateTime time = LocalDateTime.parse(str, DateUtils.DATE_FORMATTER_UNIX);
+        return time.atZone(ZoneOffset.UTC).toEpochSecond();
     }
 
     public static Optional<Double> convertObjectToOptionalDouble(DataType type, Object value) {
-        // TODO: Timestamp, TimestampNTZ, Date, Decimal
+        // TODO: Decimal
         double result;
 
         if (type instanceof BooleanType) {
@@ -268,11 +277,11 @@ public class DeltaLakeFileStats {
         } else if (type instanceof DoubleType) {
             result = (double) value;
         } else if (type instanceof TimestampNTZType) {
-            LocalDateTime localDateTime = parseTimestampNTZ((String) value);
-            result = localDateTime.atZone(ZoneOffset.UTC).toEpochSecond();
+            result = parseTimestampNTZ((String) value);
         } else if (type instanceof TimestampType) {
-            OffsetDateTime time = parseTimestampWithTimeZone((String) value);
-            result = time.toEpochSecond();
+            result = parseTimestampWithTimeZone((String) value);
+        } else if (type instanceof DateType) {
+            result = parseDate((String) value);
         } else {
             return Optional.empty();
         }
