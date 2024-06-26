@@ -62,7 +62,13 @@ enum TResultSinkType {
     FILE,
     STATISTIC,
     VARIABLE,
+<<<<<<< HEAD
     HTTP_PROTOCAL
+=======
+    HTTP_PROTOCAL,
+    METADATA_ICEBERG,
+    CUSTOMIZED
+>>>>>>> f9a665c1d8 ([Refactor] Extract some common utils from automv (#47449))
 }
 
 enum TResultSinkFormatType {
