@@ -1514,7 +1514,7 @@ public class AstToStringBuilder {
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
                     sb.append(",\n");
-                    sb.append("  ").append(index.toSql());
+                    sb.append("  ").append(index.toSql(table));
                 }
             }
         }

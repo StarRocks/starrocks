@@ -333,7 +333,7 @@ public class MaterializedViewHandler extends AlterHandler {
             mvKeysType = olapTable.getKeysType();
         }
         // get rollup schema hash
-        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, olapTable.getCopiedBfColumns(),
+        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, olapTable.getBfColumnNames(),
                 olapTable.getBfFpp());
         // get short key column count
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
