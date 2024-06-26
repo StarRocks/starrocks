@@ -88,6 +88,10 @@ public class ExpressionContext {
         return groupExpression.getOp();
     }
 
+    public OptExpression getExpression() {
+        return expression;
+    }
+
     public int arity() {
         if (expression != null) {
             return expression.arity();
