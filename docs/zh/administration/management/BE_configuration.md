@@ -3142,7 +3142,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。
+- 描述：BE 和 CN 的额外 Agent 服务端口。
 - 引入版本：-
 
 <!--
