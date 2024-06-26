@@ -46,8 +46,8 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
 
     @Test
     public void testZeroConcurrencyLevel() {
-        Assert.assertThrows("concurrencyLevel should be positive", IllegalStateException.class,
-                () -> new QueryQueueOptions(true, new QueryQueueOptions.V2(0, 0, 0, 0, 0)));
+        QueryQueueOptions.V2 opts = new QueryQueueOptions.V2(0, 0, 0, 0, 0);
+        assertThat(opts.getTotalSlots()).isEqualTo(4);
     }
 
     @Test
