@@ -30,12 +30,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class MVTaskRunExtraMessage implements Writable {
-    // max reserve size for set/map to avoid too long metadata in fe
-    private static final int MAX_RESERVE_SIZE = 32;
-
     @SerializedName("forceRefresh")
     private boolean forceRefresh;
     @SerializedName("partitionStart")
@@ -57,11 +53,6 @@ public class MVTaskRunExtraMessage implements Writable {
     private String nextPartitionStart;
     @SerializedName("nextPartitionEnd")
     private String nextPartitionEnd;
-
-    // task run starts to process time
-    // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
-    @SerializedName("processStartTime")
-    private long processStartTime = 0;
 
     @SerializedName("executeOption")
     private ExecuteOption executeOption = new ExecuteOption(true);
@@ -98,7 +89,7 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        this.mvPartitionsToRefresh = trimHashSet(mvPartitionsToRefresh);
+        this.mvPartitionsToRefresh = mvPartitionsToRefresh;
     }
 
     public Map<String, Set<String>> getBasePartitionsToRefreshMap() {
@@ -109,24 +100,9 @@ public class MVTaskRunExtraMessage implements Writable {
         return refBasePartitionsToRefreshMap;
     }
 
-    private Set<String> trimHashSet(Set<String> set) {
-        if (set != null && set.size() > MAX_RESERVE_SIZE) {
-            return set.stream().limit(MAX_RESERVE_SIZE).collect(Collectors.toSet());
-        }
-        return set;
-    }
-
-    private Map<String, Set<String>> trimHashMap(Map<String, Set<String>> map) {
-        if (map != null && map.size() > MAX_RESERVE_SIZE) {
-            return map.entrySet().stream()
-                    .limit(MAX_RESERVE_SIZE)
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        }
-        return map;
-    }
-
-    public void setRefBasePartitionsToRefreshMap(Map<String, Set<String>> refBasePartitionsToRefreshMap) {
-        this.refBasePartitionsToRefreshMap = trimHashMap(refBasePartitionsToRefreshMap);
+    public void setRefBasePartitionsToRefreshMap(
+            Map<String, Set<String>> refBasePartitionsToRefreshMap) {
+        this.refBasePartitionsToRefreshMap = refBasePartitionsToRefreshMap;
     }
 
     public String getMvPartitionsToRefreshString() {
@@ -147,8 +123,9 @@ public class MVTaskRunExtraMessage implements Writable {
         }
     }
 
-    public void setBasePartitionsToRefreshMap(Map<String, Set<String>> basePartitionsToRefreshMap) {
-        this.basePartitionsToRefreshMap = trimHashMap(basePartitionsToRefreshMap);
+    public void setBasePartitionsToRefreshMap(
+            Map<String, Set<String>> basePartitionsToRefreshMap) {
+        this.basePartitionsToRefreshMap = basePartitionsToRefreshMap;
     }
 
     public static MVTaskRunExtraMessage read(DataInput in) throws IOException {
@@ -178,14 +155,6 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public void setNextPartitionEnd(String nextPartitionEnd) {
         this.nextPartitionEnd = nextPartitionEnd;
-    }
-
-    public long getProcessStartTime() {
-        return processStartTime;
-    }
-
-    public void setProcessStartTime(long processStartTime) {
-        this.processStartTime = processStartTime;
     }
 
     @Override
