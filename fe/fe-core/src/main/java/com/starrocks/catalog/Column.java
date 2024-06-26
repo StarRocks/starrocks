@@ -230,7 +230,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
-        this.generatedColumnExpr = column.generatedColumnExpr();
+        this.generatedColumnExpr = column.generatedColumnExpr;
     }
 
     public Column deepCopy() {
