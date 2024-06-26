@@ -14,17 +14,14 @@
 
 package com.starrocks.connector;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -35,23 +32,31 @@ import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
+=======
+>>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.NullablePartitionKey;
-import com.starrocks.catalog.OdpsPartitionKey;
-import com.starrocks.catalog.OdpsTable;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PaimonPartitionKey;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.iceberg.IcebergPartitionUtils;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
+import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
+import com.starrocks.connector.partitiontraits.HivePartitionTraits;
+import com.starrocks.connector.partitiontraits.HudiPartitionTraits;
+import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
+import com.starrocks.connector.partitiontraits.JDBCPartitionTraits;
+import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
+import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
+import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
+import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import org.apache.commons.lang.NotImplementedException;
+<<<<<<< HEAD
 import org.apache.iceberg.PartitionField;
+=======
+>>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,7 +65,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * Abstract the partition-related interfaces for different connectors, including Iceberg/Hive/....
@@ -68,9 +72,10 @@ import java.util.stream.Collectors;
 public abstract class ConnectorPartitionTraits {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConnectorPartitionTraits.class);
+
     private static final Map<Table.TableType, Supplier<ConnectorPartitionTraits>> TRAITS_TABLE =
             ImmutableMap.<Table.TableType, Supplier<ConnectorPartitionTraits>>builder()
-                    // Consider all native table as OLAP
+                    // Consider all native tables as OLAP
                     .put(Table.TableType.OLAP, OlapPartitionTraits::new)
                     .put(Table.TableType.MATERIALIZED_VIEW, OlapPartitionTraits::new)
                     .put(Table.TableType.CLOUD_NATIVE, OlapPartitionTraits::new)
@@ -97,44 +102,79 @@ public abstract class ConnectorPartitionTraits {
                 "traits not supported: " + tableType).get();
     }
 
+    /**
+     * Build the partition traits for the table, if the current thread has a ConnectContext, use the cache if possible.
+     * @param ctx the connect context
+     * @param table the table to build partition traits
+     * @return the partition traits
+     */
+    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
+        ConnectorPartitionTraits delegate = buildWithoutCache(table);
+        if (ctx != null && ctx.getQueryMVContext() != null) {
+            QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
+            Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
+            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
+        } else {
+            return delegate;
+        }
+    }
+
+    /**
+     * Build the partition traits for the table, if the current thread has a ConnectContext, use the cache if possible.
+     * @param table the table to build partition traits
+     * @return the partition traits
+     */
     public static ConnectorPartitionTraits build(Table table) {
+        ConnectContext ctx = ConnectContext.get();
+        return buildWithCache(ctx, table);
+    }
+
+    private static ConnectorPartitionTraits buildWithoutCache(Table table) {
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;
     }
 
+    public Table getTable() {
+        return this.table;
+    }
+
+    public String getTableName() {
+        return table.getName();
+    }
+
     /**
      * Build a partition key for the table, some of them have specific representations for null values
      */
-    abstract PartitionKey createEmptyKey();
+    public abstract PartitionKey createEmptyKey();
 
-    abstract String getDbName();
+    public abstract String getDbName();
 
     /**
      * Whether this table support partition-granular refresh as ref-table
      */
     public abstract boolean supportPartitionRefresh();
 
-    abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
+    public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
-    abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+    public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
             throws AnalysisException;
     /**
      * Get all partitions' name
      */
-    abstract List<String> getPartitionNames();
+    public abstract List<String> getPartitionNames();
 
     /**
      * Get partition columns
      */
-    abstract List<Column> getPartitionColumns();
+    public abstract List<Column> getPartitionColumns();
 
     /**
      * Get partition range map with the specified partition column and expression
      *
      * @apiNote it must be a range-partitioned table
      */
-    abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+    public abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException;
 
     /**
@@ -142,10 +182,19 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
+    public abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
+<<<<<<< HEAD
+=======
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames);
+
+    public List<PartitionInfo> getPartitions(List<String> names) {
+        throw new NotImplementedException("getPartitions is not implemented for this table type: " + table.getType());
+    }
+
+>>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
     /**
      * The max of refresh ts for all partitions
      */
@@ -157,6 +206,7 @@ public abstract class ConnectorPartitionTraits {
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
 
+<<<<<<< HEAD
     // ========================================= Implementations ==============================================
 
     public abstract static class DefaultTraits extends ConnectorPartitionTraits {
@@ -389,17 +439,20 @@ public abstract class ConnectorPartitionTraits {
         }
     }
 
+=======
+>>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
     /**
      * Check whether the base table's partition has changed or not.
      * </p>
      * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
      * version and modified time.
      */
-    private static boolean isBaseTableChanged(Partition partition,
-                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
+    public static boolean isBaseTableChanged(Partition partition,
+                                             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
         return partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
                 || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
+<<<<<<< HEAD
 
     static class HivePartitionTraits extends DefaultTraits {
 
@@ -651,4 +704,6 @@ public abstract class ConnectorPartitionTraits {
             return null;
         }
     }
+=======
+>>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
 }

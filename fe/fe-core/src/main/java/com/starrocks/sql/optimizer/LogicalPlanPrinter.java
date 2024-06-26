@@ -377,6 +377,19 @@ public class LogicalPlanPrinter {
             return visitScanCommon(optExpression, step, "ICEBERG SCAN");
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+        public OperatorStr visitPhysicalIcebergMetadataScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "ICEBERG METADATA SCAN");
+        }
+
+        @Override
+        public OperatorStr visitPhysicalPaimonScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "PAIMON SCAN");
+        }
+
+>>>>>>> 0494b2804b ([BugFix] [Refactor] Add CachedPartitionTraits to cache partition trait results in mv refresh and rewrite (#47278))
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
         }
