@@ -2791,5 +2791,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
                     Assert.assertTrue(partitionsToRefresh1.isEmpty());
                 });
+
     }
 }
