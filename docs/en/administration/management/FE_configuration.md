@@ -2596,7 +2596,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The cloud-native meta service RPC port.
+- Description: FE cloud-native metadata server RPC listen port.
 - Introduced in: -
 
 <!--
