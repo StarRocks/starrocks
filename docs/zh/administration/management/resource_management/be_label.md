@@ -78,3 +78,43 @@ ALTER TABLE example_table1
 ```
 
 :::
+### 为表添加标签
+
+如果您需要指定表的数据分布的位置，比如分布在两个机架中 rack1 和 rack2，则您可以为表添加标签。
+
+添加标签后，表中相同 Tablet 的副本按 Round Robin 的方式选取所在的标签。并且同一标签中如果同一 Tablet 的副本存在多个，则这些同一 Tablet 的多个副本会尽可能均匀分布在该标签内的不同的 BE 节点上。
+
+:::note
+
+- 表所在标签中的全部 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
+- 为表添加的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+
+:::
+
+#### 建物化视图时
+
+建物化视图时指定物化视图的数据分布在 rack 1 和 rack 2，则可以执行如下语句：
+
+```SQL
+CREATE MATERIALIZED VIEW mv_example_table
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"labels.location" = "rack:rack1,rack:rack2")
+as 
+select order_id, dt from example_table
+```
+
+对于新建的物化视图，属性 `labels.location` 默认为 `*` ，表示副本在所有标签中均匀分布。
+
+如果新建的物化视图的数据分布无需感知集群中服务器的地理位置信息，可以手动设置物化视图属性 `"labels.location" ``= ``""`。
+
+#### 建物化视图后
+
+建物化视图后如果需要修改物化视图的数据分布位置，例如修改为 rack 1、rack 2 和 rack 3，则可以执行如下语句：
+
+```SQL
+ALTER MATERIALIZED VIEW mv_example_table
+    SET ("labels.location" = "rack:rack1,rack:rack2,rack:rack3");
+```
+
+:::note
