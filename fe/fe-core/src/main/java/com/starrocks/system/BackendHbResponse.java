@@ -61,6 +61,8 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private String version = "";
     @SerializedName(value = "cpuCores")
     private int cpuCores;
+    @SerializedName(value = "mlb")
+    private long memLimitBytes;
     @SerializedName(value = "rebootTime")
     private long rebootTime = -1L;
     private boolean isSetStoragePath = false;
@@ -70,13 +72,14 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     }
 
     public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
-                             int starletPort, long hbTime, String version, int cpuCores, boolean isSetStoragePath) {
-        this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
+                             int starletPort, long hbTime, String version, int cpuCores, long memLimitBytes,
+                             boolean isSetStoragePath) {
+        this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores, memLimitBytes);
         this.isSetStoragePath = isSetStoragePath;
     }
 
     public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
-                             int starletPort, long hbTime, String version, int cpuCores) {
+                             int starletPort, long hbTime, String version, int cpuCores, long memLimitBytes) {
         super(HeartbeatResponse.Type.BACKEND);
         this.beId = beId;
         this.status = HbStatus.OK;
@@ -87,6 +90,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.hbTime = hbTime;
         this.version = version;
         this.cpuCores = cpuCores;
+        this.memLimitBytes = memLimitBytes;
     }
 
     public BackendHbResponse(long beId, String errMsg) {
@@ -130,6 +134,10 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public int getCpuCores() {
         return cpuCores;
+    }
+
+    public long getMemLimitBytes() {
+        return memLimitBytes;
     }
 
     public boolean isSetStoragePath() {
