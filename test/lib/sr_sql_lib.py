@@ -644,14 +644,17 @@ class StarrocksSQLApiLib(object):
 
     def trino_execute_sql(self, sql):
         """trino execute query"""
+        self.connect_trino()
         return self.conn_execute_sql(self.trino_lib.connector, sql)
 
     def spark_execute_sql(self, sql):
         """spark execute query"""
+        self.connect_spark()
         return self.conn_execute_sql(self.spark_lib.connector, sql)
 
     def hive_execute_sql(self, sql):
         """hive execute query"""
+        self.connect_hive()
         return self.conn_execute_sql(self.hive_lib.connector, sql)
 
     def delete_from(self, args_dict):
