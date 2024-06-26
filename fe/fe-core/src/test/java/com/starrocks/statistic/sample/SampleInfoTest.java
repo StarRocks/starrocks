@@ -14,7 +14,9 @@
 
 package com.starrocks.statistic.sample;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -104,6 +106,25 @@ public class SampleInfoTest extends PlanTestBase {
         Assert.assertTrue(unionRelation.getRelations().get(0) instanceof SelectRelation);
         SelectRelation selectRelation = (SelectRelation) unionRelation.getRelations().get(0);
         Assert.assertTrue(selectRelation.getSelectList().getItems().size() == 12);
+    }
+
+    @Test
+    public void generateSubFieldTypeColumnTask() {
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo("test", "t_struct");
+        List<String> columnNames = Lists.newArrayList("c1", "c4.b", "c6.c.b");
+        List<Type> columnTypes = Lists.newArrayList(Type.DATE, new ArrayType(Type.ANY_STRUCT), Type.INT);
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
+                sampleInfo);
+        List<List<ColumnStats>> columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
+        String sql = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(), db.getId(), table.getName(),
+                db.getFullName(), columnStatsBatch.get(0), tabletSampleManager);
+
+        List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
+        Assert.assertTrue(stmt.get(0) instanceof InsertStmt);
+        InsertStmt insertStmt = (InsertStmt) stmt.get(0);
+        Assert.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof UnionRelation);
+        UnionRelation unionRelation = (UnionRelation) insertStmt.getQueryStatement().getQueryRelation();
+        Assert.assertTrue(unionRelation.getRelations().size() == 2);
     }
 
 

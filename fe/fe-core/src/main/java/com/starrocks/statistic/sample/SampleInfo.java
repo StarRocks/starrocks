@@ -15,6 +15,7 @@
 package com.starrocks.statistic.sample;
 
 import com.starrocks.common.Config;
+import org.apache.commons.lang.StringEscapeUtils;
 
 import java.util.List;
 import java.util.StringJoiner;
@@ -99,7 +100,8 @@ public class SampleInfo {
             builder.append(tableId).append(sep);
             builder.append(addSingleQuote(columnStats.getColumnName())).append(sep);
             builder.append(dbId).append(sep);
-            builder.append("'").append(dbName).append(".").append(tableName).append("'").append(sep);
+            builder.append("'").append(StringEscapeUtils.escapeSql(dbName)).append(".")
+                    .append(StringEscapeUtils.escapeSql(tableName)).append("'").append(sep);
             builder.append(addSingleQuote(dbName)).append(sep);
             builder.append(columnStats.getRowCount()).append(sep);
             builder.append(columnStats.getDateSize()).append(sep);
@@ -213,24 +215,25 @@ public class SampleInfo {
     private String generateQueryColumnSql(long tableId, long dbId, String tableName, String dbName,
                                           ColumnStats columnStats) {
         String sep = ", ";
-        StringBuilder sql = new StringBuilder();
-        sql.append("SELECT ");
-        sql.append(tableId).append(sep);
-        sql.append(addSingleQuote(columnStats.getColumnName())).append(sep);
-        sql.append(dbId).append(sep);
-        sql.append("'").append(dbName).append(".").append(tableName).append("'").append(sep);
-        sql.append(addSingleQuote(dbName)).append(sep);
-        sql.append(columnStats.getRowCount()).append(sep);
-        sql.append(columnStats.getDateSize()).append(sep);
-        sql.append(columnStats.getDistinctCount(rowSampleRatio)).append(sep);
-        sql.append(columnStats.getNullCount()).append(sep);
-        sql.append(columnStats.getMax()).append(sep);
-        sql.append(columnStats.getMin()).append(sep);
-        sql.append("NOW() FROM (");
-        sql.append("SELECT t0.`column_key`, COUNT(1) as count FROM (SELECT ");
-        sql.append(columnStats.getQuotedColumnName())
+        StringBuilder builder = new StringBuilder();
+        builder.append("SELECT ");
+        builder.append(tableId).append(sep);
+        builder.append(addSingleQuote(columnStats.getColumnName())).append(sep);
+        builder.append(dbId).append(sep);
+        builder.append("'").append(StringEscapeUtils.escapeSql(dbName)).append(".")
+                .append(StringEscapeUtils.escapeSql(tableName)).append("'").append(sep);
+        builder.append(addSingleQuote(dbName)).append(sep);
+        builder.append(columnStats.getRowCount()).append(sep);
+        builder.append(columnStats.getDateSize()).append(sep);
+        builder.append(columnStats.getDistinctCount(rowSampleRatio)).append(sep);
+        builder.append(columnStats.getNullCount()).append(sep);
+        builder.append(columnStats.getMax()).append(sep);
+        builder.append(columnStats.getMin()).append(sep);
+        builder.append("NOW() FROM (");
+        builder.append("SELECT t0.`column_key`, COUNT(1) as count FROM (SELECT ");
+        builder.append(columnStats.getQuotedColumnName())
                 .append(" AS column_key FROM `base_cte_table`) as t0 GROUP BY t0.column_key) AS t1");
-        return sql.toString();
+        return builder.toString();
     }
 
     private String addSingleQuote(String str) {

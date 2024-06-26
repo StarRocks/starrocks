@@ -26,6 +26,7 @@ public class SubFieldColumnStats extends ColumnStats {
 
     public SubFieldColumnStats(List<String> names, Type columnType) {
         super(names.stream().collect(Collectors.joining(".")), columnType);
+        this.names = names;
         if (columnType.canStatistic()) {
             columnStats = new PrimitiveTypeColumnStats("name", columnType);
         } else {

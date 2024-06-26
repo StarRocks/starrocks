@@ -1,0 +1,19 @@
+-- name: test_sample_collection
+create table test_778899(
+c0 int not null,
+c1 date not null,
+c2 varchar(255),
+`escape['0']` decimal(10, 2),
+c4 struct<a int, b array<struct<a int, b int>>>,
+c5 struct<a int, b int>,
+c6 struct<a int, b int, c struct<a int, b int>,d array<int>>)
+duplicate key(c0)
+partition by (c1)
+distributed by hash(c0) buckets 200 properties('replication_num'='1');
+
+insert into t_struct values
+(1, '2021-01-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3])),
+(2, '2021-02-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3])),
+(3, '2021-03-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3]));
+
+analyze sample table t_struct;
