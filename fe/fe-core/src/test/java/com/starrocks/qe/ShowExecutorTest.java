@@ -77,6 +77,7 @@ import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -169,15 +170,15 @@ public class ShowExecutorTest {
         Column column2 = new Column("col2", Type.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(column1.getColumnId(), column1);
+        idToColumn.put(column2.getColumnId(), column2);
+
         // mock index 1
         MaterializedIndex index1 = new MaterializedIndex();
 
         // mock index 2
         MaterializedIndex index2 = new MaterializedIndex();
-
-        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
-        idToColumn.put(column1.getColumnId(), column1);
-        idToColumn.put(column2.getColumnId(), column2);
 
         // mock partition
         Partition partition = Deencapsulation.newInstance(Partition.class);
@@ -204,6 +205,10 @@ public class ShowExecutorTest {
                 table.getBaseSchema();
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
+
+                table.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
 
                 table.getKeysType();
                 minTimes = 0;
@@ -266,6 +271,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = 1000L;
 
+                mv.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
+
                 mv.getViewDefineSql();
                 minTimes = 0;
                 result = "select col1, col2 from table1";
@@ -286,8 +295,8 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new ExpressionRangePartitionInfo(
                         Collections.singletonList(
-                                new SlotRef(
-                                        new TableName("test", "testMv"), column1.getName())),
+                                ColumnIdExpr.create(new SlotRef(
+                                        new TableName("test", "testMv"), column1.getName()))),
                         Collections.singletonList(column1), PartitionType.RANGE);
 
                 mv.getDefaultDistributionInfo();

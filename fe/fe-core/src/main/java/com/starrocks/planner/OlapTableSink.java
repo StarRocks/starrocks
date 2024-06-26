@@ -502,7 +502,7 @@ public class OlapTableSink extends DataSink {
                 }
                 if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
                     ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
-                    List<Expr> partitionExprs = exprPartitionInfo.getPartitionExprs();
+                    List<Expr> partitionExprs = exprPartitionInfo.getPartitionExprs(table.getIdToColumn());
                     Preconditions.checkArgument(partitionExprs.size() == 1,
                             "Number of partition expr is not 1 for automatic partition table, expr num="
                                     + partitionExprs.size());
@@ -519,10 +519,11 @@ public class OlapTableSink extends DataSink {
                             break;
                         }
                     }
-                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo
+                            .getPartitionExprs(table.getIdToColumn())));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
-                    List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs();
+                    List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn());
                     Preconditions.checkArgument(partitionExprs.size() == 1,
                             "Number of partition expr is not 1 for expression partition table, expr num="
                                     + partitionExprs.size());
@@ -539,7 +540,8 @@ public class OlapTableSink extends DataSink {
                             break;
                         }
                     }
-                    partitionParam.setPartition_exprs(Expr.treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs()));
+                    partitionParam.setPartition_exprs(Expr
+                            .treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn())));
                 }
                 break;
             }
