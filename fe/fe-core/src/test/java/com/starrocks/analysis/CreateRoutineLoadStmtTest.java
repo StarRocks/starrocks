@@ -611,7 +611,7 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadStmt finalCreateRoutineLoadStmt = createRoutineLoadStmt;
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "kafka_partitions ' 1 2 3 ' must be a number string with comma-separated",
+                "kafka partition '1 2 3' is invalid. It must be an integer",
                 () -> CreateRoutineLoadAnalyzer.analyze(finalCreateRoutineLoadStmt, connectContext));
 
         // 6. invalid offset a
