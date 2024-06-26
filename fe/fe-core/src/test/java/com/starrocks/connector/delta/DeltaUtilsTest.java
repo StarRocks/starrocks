@@ -81,12 +81,6 @@ public class DeltaUtilsTest {
                 result = ImmutableMap.of(COLUMN_MAPPING_MODE_KEY, "none");
                 minTimes = 0;
             }
-
-            {
-                protocol.getReaderFeatures();
-                result = Lists.newArrayList("timestampNtz");
-                minTimes = 0;
-            }
         };
 
         DeltaUtils.checkTableFeatureSupported(new Protocol(3, 7, Lists.newArrayList(),
