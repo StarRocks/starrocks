@@ -160,7 +160,6 @@ public class MVRefreshTestBase {
 
     PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
         Task task = TaskBuilder.buildMvTask(mv, dbName);
-        Map<String, String> testProperties = task.getProperties();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();

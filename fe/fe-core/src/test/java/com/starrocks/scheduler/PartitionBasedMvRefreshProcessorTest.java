@@ -2767,6 +2767,9 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "'force_external_table_query_rewrite' = 'true' " +
+                        ")\n" +
                         "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;",
                 () -> {
                     MaterializedView mv = getMv("test", "test_mv1");
@@ -2774,9 +2777,11 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
                     QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                     Assert.assertTrue(queryCacheStats != null);
+                    QueryMaterializationContext queryMVContext = connectContext.getQueryMVContext();
+                    Assert.assertTrue(queryMVContext == null);
                     queryCacheStats.getCounter().forEach((key, value) -> {
                         if (key.contains("cache_partitionNames")) {
-                            Assert.assertEquals(2L, value.longValue());
+                            Assert.assertEquals(1L, value.longValue());
                         } else if (key.contains("cache_getPartitionKeyRange")) {
                             Assert.assertEquals(3L, value.longValue());
                         } else {

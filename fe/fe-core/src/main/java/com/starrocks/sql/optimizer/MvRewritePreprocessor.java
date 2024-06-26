@@ -242,7 +242,8 @@ public class MvRewritePreprocessor {
 
                 // To avoid disturbing queries without mv, only initialize materialized view context
                 // when there are candidate mvs.
-                if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
+                if (Config.enable_mv_query_context_cache && context.getCandidateMvs() != null
+                        && !context.getCandidateMvs().isEmpty()) {
                     context.setQueryMaterializationContext(queryMaterializationContext);
                     connectContext.setQueryMVContext(queryMaterializationContext);
                 }
