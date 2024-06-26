@@ -518,7 +518,7 @@ public class OlapTable extends Table {
         // change ExpressionRangePartitionInfo
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprsSize() == 1);
             expressionRangePartitionInfo.renameTableName("", newName);
         }
     }
@@ -2801,7 +2801,7 @@ public class OlapTable extends Table {
         }
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, automatic partition only supports one expression
-        Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+        Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
         // for Partition slot ref, the SlotDescriptor is not serialized, so should
         // recover it here.
         // the SlotDescriptor is used by toThrift, which influences the execution

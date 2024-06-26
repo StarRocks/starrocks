@@ -394,7 +394,7 @@ public class OptOlapPartitionPruner {
         // EXPR_RANGE_V2 type like partition by RANGE(cast(substring(col, 3)) as int)) is unsupported
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs();
+            List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs(olapScanOperator.getTable().getIdToColumn());
             if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr.get(0);
                 String functionName = functionCallExpr.getFnName().getFunction();

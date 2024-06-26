@@ -32,6 +32,8 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
@@ -184,7 +186,9 @@ public class ColumnFilterConverter {
 
         if (table != null && table.isExprPartitionTable()) {
             OlapTable olapTable = (OlapTable) table;
-            predicate = convertPredicate(predicate, (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo());
+            predicate = convertPredicate(predicate,
+                    (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo(),
+                    table.getIdToColumn());
         }
 
         if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
@@ -201,12 +205,13 @@ public class ColumnFilterConverter {
     // Replace the predicate of the query with the predicate of the partition expression and evaluate.
     // If the condition is not met, there will be no change to the predicate.
     public static ScalarOperator convertPredicate(ScalarOperator predicate,
-                                                  ExpressionRangePartitionInfoV2 exprRangePartitionInfo) {
+                                                  ExpressionRangePartitionInfoV2 exprRangePartitionInfo,
+                                                  Map<ColumnId, Column> idToColumn) {
         // Currently only one partition column is supported
-        if (exprRangePartitionInfo.getPartitionExprs().size() != 1) {
+        if (exprRangePartitionInfo.getPartitionExprsSize() != 1) {
             return predicate;
         }
-        Expr firstPartitionExpr = exprRangePartitionInfo.getPartitionExprs().get(0);
+        Expr firstPartitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
         Expr predicateExpr = firstPartitionExpr.clone();
 
         // only support binary predicate
@@ -268,7 +273,7 @@ public class ColumnFilterConverter {
                 return false;
             }
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(),
+            return checkPartitionExprsContainsOperator(expressionRangePartitionInfo.getPartitionExprs(table.getIdToColumn()),
                     (CallOperator) right);
         }
 

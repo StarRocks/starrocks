@@ -729,8 +729,14 @@ public class MvPartitionCompensator {
         }
 
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
+<<<<<<< HEAD
             ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
             Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
+=======
+            ExpressionRangePartitionInfo partitionInfo =
+                    (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
+            Expr partitionExpr = partitionInfo.getPartitionExprs(olapTable.getIdToColumn()).get(0);
+>>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionExpr.collect(SlotRef.class, slotRefs);
             Preconditions.checkState(slotRefs.size() == 1);

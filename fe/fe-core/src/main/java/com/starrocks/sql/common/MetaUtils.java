@@ -342,4 +342,12 @@ public class MetaUtils {
         }
         return column;
     }
+
+    public static Map<String, Column> buildNameToColumn(List<Column> schema) {
+        Map<String, Column> result = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Column column : schema) {
+            result.put(column.getName(), column);
+        }
+        return result;
+    }
 }

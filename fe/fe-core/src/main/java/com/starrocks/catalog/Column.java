@@ -49,13 +49,19 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
+<<<<<<< HEAD
 import com.starrocks.sql.parser.SqlParser;
+=======
+import com.starrocks.sql.ast.IndexDef;
+>>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
 import com.starrocks.thrift.TColumn;
 
 import java.io.DataInput;
@@ -65,6 +71,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -129,8 +136,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private int uniqueId;
 
     @SerializedName(value = "materializedColumnExpr")
-    private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
-    private Expr generatedColumnExpr;
+    private ExpressionSerializedObject generatedColumnExprSerialized;
+    private ColumnIdExpr generatedColumnExpr;
 
     // Only for persist
     public Column() {
@@ -239,7 +246,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return col;
     }
 
-    public ColumnDef toColumnDef() {
+    public ColumnDef toColumnDef(Table table) {
         ColumnDef.DefaultValueDef defaultDef = null;
         if (defaultValue == null) {
             if (defaultExpr != null) {
@@ -260,9 +267,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 defaultValueDef = new ColumnDef.DefaultValueDef(false, null);
             }
         }
-        ColumnDef col = new ColumnDef(name, new TypeDef(type), null, isKey, aggregationType, isAllowNull,
-                defaultValueDef, isAutoIncrement, generatedColumnExpr, comment);
-        return col;
+        return new ColumnDef(name, new TypeDef(type), null, isKey, aggregationType, isAllowNull,
+                defaultValueDef, isAutoIncrement,
+                generatedColumnExpr != null ? generatedColumnExpr.convertToColumnNameExpr(table.getIdToColumn()) : null,
+                comment);
     }
 
     public void setName(String newName) {
@@ -522,17 +530,25 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         defineExpr = expr;
     }
 
-    public Expr generatedColumnExpr() {
+    public Expr getGeneratedColumnExpr(Map<ColumnId, Column> idToColumn) {
         if (generatedColumnExpr == null) {
             return null;
         }
-        return generatedColumnExpr.clone();
+        return generatedColumnExpr.convertToColumnNameExpr(idToColumn).clone();
     }
 
-    public Expr getGeneratedColumnExpr() {
-        return generatedColumnExpr;
+    public Expr getGeneratedColumnExpr(List<Column> schema) {
+        if (generatedColumnExpr == null) {
+            return null;
+        }
+        return generatedColumnExpr.convertToColumnNameExpr(schema).clone();
     }
+<<<<<<< HEAD
     public void setGeneratedColumnExpr(Expr expr) {
+=======
+
+    public void setGeneratedColumnExpr(ColumnIdExpr expr) {
+>>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
         generatedColumnExpr = expr;
     }
 
@@ -546,17 +562,17 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
     }
 
-    public List<SlotRef> getGeneratedColumnRef() {
+    public List<SlotRef> getGeneratedColumnRef(Map<ColumnId, Column> idToColumn) {
         List<SlotRef> slots = new ArrayList<>();
         if (generatedColumnExpr == null) {
             return null;
         } else {
-            generatedColumnExpr.collect(SlotRef.class, slots);
+            generatedColumnExpr.convertToColumnNameExpr(idToColumn).collect(SlotRef.class, slots);
             return slots;
         }
     }
 
-    public String toSql() {
+    public String toSql(Map<ColumnId, Column> idToColumn) {
         StringBuilder sb = new StringBuilder();
         sb.append("`").append(name).append("` ");
         String typeStr = type.toSql();
@@ -581,7 +597,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         } else if (defaultValue != null && !type.isOnlyMetricType()) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         } else if (isGeneratedColumn()) {
-            sb.append("AS " + generatedColumnExpr.toSql() + " ");
+            String generatedColumnSql;
+            if (idToColumn != null) {
+                generatedColumnSql = AstToSQLBuilder.toSQL(generatedColumnExpr.convertToColumnNameExpr(idToColumn));
+            } else {
+                generatedColumnSql = generatedColumnExpr.toSql();
+            }
+            sb.append("AS ").append(generatedColumnSql).append(" ");
         }
         sb.append("COMMENT \"").append(getDisplayComment()).append("\"");
 
@@ -675,7 +697,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return null;
     }
 
-    public String toSqlWithoutAggregateTypeName() {
+    public String toSqlWithoutAggregateTypeName(Map<ColumnId, Column> idToColumn) {
         StringBuilder sb = new StringBuilder();
         sb.append("`").append(name).append("` ");
         String typeStr = type.toSql();
@@ -699,7 +721,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
         if (isGeneratedColumn()) {
-            sb.append("AS " + generatedColumnExpr.toSql() + " ");
+            String generatedColumnSql;
+            if (idToColumn != null) {
+                generatedColumnSql = AstToSQLBuilder.toSQL(generatedColumnExpr.convertToColumnNameExpr(idToColumn));
+            } else {
+                generatedColumnSql = generatedColumnExpr.toSql();
+            }
+            sb.append("AS ").append(generatedColumnSql).append(" ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
@@ -708,7 +736,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     @Override
     public String toString() {
-        return toSql();
+        return toSql(null);
     }
 
     @Override
@@ -752,7 +780,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             return false;
         }
         if (this.isGeneratedColumn() &&
-                !this.generatedColumnExpr().equals(other.generatedColumnExpr())) {
+                !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
             return false;
         }
 
@@ -795,9 +823,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     @Override
     public void gsonPostProcess() throws IOException {
-        if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.expressionSql != null) {
-            generatedColumnExpr = SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql,
-                    SqlModeHelper.MODE_DEFAULT);
+        if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.getExpressionSql() != null) {
+            generatedColumnExpr = generatedColumnExprSerialized.deserialize();
         }
 
         if (columnId == null || Strings.isNullOrEmpty(columnId.getId())) {
@@ -808,7 +835,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @Override
     public void gsonPreProcess() throws IOException {
         if (generatedColumnExpr != null) {
-            generatedColumnExprSerialized = new GsonUtils.ExpressionSerializedObject(generatedColumnExpr.toSql());
+            generatedColumnExprSerialized = ExpressionSerializedObject.create(generatedColumnExpr);
         }
     }
 
