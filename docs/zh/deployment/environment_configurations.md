@@ -18,7 +18,7 @@ StarRocks 为不同的服务使用特定的端口。如果您在这些实例上�
 - `9020`：FE Thrift Server 端口（`rpc_port`）
 - `9030`：FE MySQL Server 端口（`query_port`）
 - `9010`：FE 内部通讯端口（`edit_log_port`）
-- `6090`：FE 云原生元数据服务器 RPC 监听端口（`cloud_native_meta_port`）
+- `6090`：FE 云原生元数据服务 RPC 监听端口（`cloud_native_meta_port`）
 
 在 FE 实例上执行如下命令查看这些端口是否被占用：
 
