@@ -856,6 +856,8 @@ alterClause
     | compactionClause
     | modifyCommentClause
     | optimizeClause
+    | addFieldClause
+    | dropFieldClause
 
     //Alter partition clause
     | addPartitionClause
@@ -1004,6 +1006,22 @@ rollupRenameClause
 
 compactionClause
     : (BASE | CUMULATIVE)? COMPACT (identifier | identifierList)?
+    ;
+
+subfieldName
+    : identifier | ARRAY_ELEMENT
+    ;
+
+nestedFieldName
+    : subfieldName (DOT_IDENTIFIER | '.' subfieldName)*
+    ;
+
+addFieldClause
+    : MODIFY COLUMN identifier ADD FIELD subfieldDesc (FIRST | AFTER identifier)? properties?
+    ;
+
+dropFieldClause
+    : MODIFY COLUMN identifier DROP FIELD nestedFieldName properties?
     ;
 
 // ---------Alter partition clause---------
@@ -2526,7 +2544,7 @@ mapType
     ;
 
 subfieldDesc
-    : identifier type
+    : (identifier | nestedFieldName) type
     ;
 
 subfieldDescs
@@ -2663,4 +2681,6 @@ nonReserved
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT | NGRAMBF
+    | FIELD
+    | ARRAY_ELEMENT
     ;
