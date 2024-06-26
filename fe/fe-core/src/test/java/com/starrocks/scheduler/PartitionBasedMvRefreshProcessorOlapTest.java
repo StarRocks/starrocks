@@ -2886,9 +2886,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             "MVRefreshUpdateMeta",
                             "MVRefreshLockRetryTimes",
                             "MVRefreshRetryTimes",
-                            "MVRefreshSyncPartitionsRetryTimes"
+                            "MVRefreshSyncPartitionsRetryTimes",
+                            "MVQueryContextCacheStats",
+                            "MVQueryCacheStats"
                     );
                     for (Map.Entry<String, String> e : result.entrySet()) {
+                        System.out.println(e.getKey() + ": " + e.getValue());
                         Assert.assertTrue(mvRefreshProfileKeys.stream().anyMatch(k -> e.getKey().contains(k)));
                     }
                 });

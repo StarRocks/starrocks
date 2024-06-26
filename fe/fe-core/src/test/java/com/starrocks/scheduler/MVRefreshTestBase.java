@@ -15,13 +15,18 @@ package com.starrocks.scheduler;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -36,6 +41,7 @@ import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.util.Map;
+import java.util.Set;
 
 public class MVRefreshTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
@@ -105,6 +111,26 @@ public class MVRefreshTestBase {
         refreshMVRange(mvName, null, null, force);
     }
 
+    public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
+        return MvRefreshArbiter.getPartitionNamesToRefreshForMv(mv, true);
+    }
+
+    public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
+        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getPartitionNamesToRefreshForMv(mv, true);
+        com.google.common.base.Preconditions.checkState(mvUpdateInfo != null);
+        return mvUpdateInfo.getMvToRefreshPartitionNames();
+    }
+
+    PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
+        Task task = TaskBuilder.buildMvTask(mv, dbName);
+        Map<String, String> testProperties = task.getProperties();
+        testProperties.put(TaskRun.IS_TEST, "true");
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        return (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+    }
+
     protected void refreshMVRange(String mvName, String start, String end, boolean force) throws Exception {
         StringBuilder sb = new StringBuilder();
         sb.append("refresh materialized view " + mvName);
@@ -119,5 +145,12 @@ public class MVRefreshTestBase {
         starRocksAssert.getCtx().executeSql(sql);
     }
 
-
+    protected QueryMaterializationContext.QueryCacheStats getQueryCacheStats(RuntimeProfile profile) {
+        Map<String, String> infoStrings = profile.getInfoStrings();
+        Assert.assertTrue(infoStrings.containsKey("MVQueryCacheStats"));
+        String cacheStats = infoStrings.get("MVQueryCacheStats");
+        System.out.println(cacheStats);
+        return GsonUtils.GSON.fromJson(cacheStats,
+                QueryMaterializationContext.QueryCacheStats.class);
+    }
 }
