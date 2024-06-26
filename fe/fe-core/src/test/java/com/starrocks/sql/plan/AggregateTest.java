@@ -20,7 +20,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -205,7 +205,7 @@ public class AggregateTest extends PlanTestBase {
             int cpuCores = 8;
             int expectedTotalDop = cpuCores / 2;
             {
-                BackendCoreStat.setDefaultCoresOfBe(cpuCores);
+                BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
                 assertContains(explainString, "2:Project\n" +
@@ -256,7 +256,7 @@ public class AggregateTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setPipelineDop(originPipelineDop);
             connectContext.getSessionVariable().setPipelineDop(originInstanceNum);
-            BackendCoreStat.setDefaultCoresOfBe(1);
+            BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(1);
         }
     }
 
@@ -2732,7 +2732,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 1: v1\n" +
                 "  |  having: abs(1) > abs(2)");
 
-
         sql = "select count(*), abs(1) as a, abs(2) as b from t0 group by a + b, v1 having a > b";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:Project\n" +
@@ -2791,5 +2790,19 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output columns:\n" +
                 "  |  5 <-> [5: avg, DECIMAL128(38,18), true]\n" +
                 "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testHavingAggregate() throws Exception {
+        String sql = "select * from (" +
+                "select sum(v1), f2, v3 from " +
+                "   (select v1, v2, v2 + 2 as f2, v3 from t0) cc " +
+                "group by v2, f2, v3 having (f2 + sum(v1)) > 0" +
+                ") xx ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: 2: v2, 3: v3\n" +
+                "  |  having: 2: v2 + 2 + 5: sum > 0");
     }
 }

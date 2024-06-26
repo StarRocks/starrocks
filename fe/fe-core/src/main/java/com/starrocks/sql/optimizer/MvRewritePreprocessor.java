@@ -52,6 +52,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -231,7 +232,7 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
+        try (Timer ignored = Tracers.watchScope("MVPreprocess")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
@@ -242,23 +243,23 @@ public class MvRewritePreprocessor {
 
                 // 2. choose best related mvs by user's config or related mv limit
                 Set<MaterializedView> selectedRelatedMVs;
-                try (Timer t1 = Tracers.watchScope("chooseCandidates")) {
+                try (Timer t1 = Tracers.watchScope("MVChooseCandidates")) {
                     selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
                 }
 
                 // 3. convert to mv with planContext, skip if mv has no valid plan(not SPJG)
                 Set<MvWithPlanContext> mvWithPlanContexts;
-                try (Timer t2 = Tracers.watchScope("generateMvPlan")) {
+                try (Timer t2 = Tracers.watchScope("MVGenerateMvPlan")) {
                     mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
                 }
 
                 // 4. process related mvs to candidates
-                try (Timer t3 = Tracers.watchScope("validateMv")) {
+                try (Timer t3 = Tracers.watchScope("MVValidateMv")) {
                     prepareRelatedMVs(queryTables, mvWithPlanContexts);
                 }
 
                 // 5. process relate mvs with views
-                try (Timer t4 = Tracers.watchScope("mvWithView")) {
+                try (Timer t4 = Tracers.watchScope("MVProcessWithView")) {
                     processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
                             queryColumnRefFactory, requiredColumns);
                 }
@@ -680,9 +681,9 @@ public class MvRewritePreprocessor {
                         indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toSet());
                 if (baseTableDistributionInfo.getType() == DistributionInfoType.HASH) {
                     HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) baseTableDistributionInfo;
-                    Set<String> distributedColumns =
-                            hashDistributionInfo.getDistributionColumns().stream().map(Column::getName)
-                                    .collect(Collectors.toSet());
+                    Set<String> distributedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+                    distributedColumns.addAll(MetaUtils.getColumnNamesByColumnIds(
+                            olapTable.getIdToColumn(), hashDistributionInfo.getDistributionColumns()));
                     // NOTE: SyncMV's column may not be equal to base table's exactly.
                     List<Column> newDistributionColumns = Lists.newArrayList();
                     for (Column mvColumn : indexMeta.getSchema()) {
@@ -702,7 +703,8 @@ public class MvRewritePreprocessor {
                 PartitionInfo mvPartitionInfo = basePartitionInfo;
                 // Set single partition if sync mv' columns do not contain partition by columns.
                 if (basePartitionInfo.isPartitioned()) {
-                    if (basePartitionInfo.getPartitionColumns().stream()
+                    List<Column> partitionColumns = basePartitionInfo.getPartitionColumns(olapTable.getIdToColumn());
+                    if (partitionColumns.stream()
                             .anyMatch(x -> !mvColumnNames.contains(x.getName())) ||
                             !(basePartitionInfo instanceof ExpressionRangePartitionInfo)) {
                         mvPartitionInfo = new SinglePartitionInfo();
@@ -1018,7 +1020,8 @@ public class MvRewritePreprocessor {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+            List<Column> distributedColumns = MetaUtils.getColumnsByColumnIds(mv,
+                    hashDistributionInfo.getDistributionColumns());
             List<Integer> hashDistributeColumns = new ArrayList<>();
             for (Column distributedColumn : distributedColumns) {
                 hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());

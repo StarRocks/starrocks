@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
@@ -37,13 +38,16 @@ public class CompactionJob {
     private volatile long finishTs;
     private VisibleStateWaiter visibleStateWaiter;
     private List<CompactionTask> tasks = Collections.emptyList();
+    private boolean allowPartialSuccess = false;
 
-    public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId) {
+    public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
+            boolean allowPartialSuccess) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.txnId = txnId;
         this.startTs = System.currentTimeMillis();
+        this.allowPartialSuccess = allowPartialSuccess;
     }
 
     Database getDb() {
@@ -58,12 +62,9 @@ public class CompactionJob {
         this.tasks = Objects.requireNonNull(tasks, "tasks is null");
     }
 
-    public boolean isFailed() {
-        return tasks.stream().anyMatch(CompactionTask::isFailed);
-    }
-
     public String getFailMessage() {
-        CompactionTask task = tasks.stream().filter(CompactionTask::isFailed).findAny().orElse(null);
+        CompactionTask task = tasks.stream().filter(t ->
+                t.getResult() != CompactionTask.TaskResult.ALL_SUCCESS).findAny().orElse(null);
         return task != null ? task.getFailMessage() : null;
     }
 
@@ -83,8 +84,36 @@ public class CompactionJob {
         return tasks.stream().map(CompactionTask::buildTabletCommitInfo).flatMap(List::stream).collect(Collectors.toList());
     }
 
-    public boolean isCompleted() {
-        return tasks.stream().allMatch(CompactionTask::isCompleted);
+    public CompactionTask.TaskResult getResult() {
+        int allSuccess = 0;
+        int partialSuccess = 0;
+        int noneSuccess = 0;
+        for (CompactionTask task : tasks) {
+            CompactionTask.TaskResult subTaskResult = task.getResult();
+            switch (subTaskResult) {
+                case NOT_FINISHED:
+                    return subTaskResult; // early return
+                case PARTIAL_SUCCESS:
+                    partialSuccess++;
+                    break;
+                case NONE_SUCCESS:
+                    noneSuccess++;
+                    break;
+                case ALL_SUCCESS:
+                    allSuccess++;
+                    break;
+                default:
+                    Preconditions.checkArgument(false, "unhandled compaction task result: %s", subTaskResult.name());
+                    break;
+            }
+        }
+        if (allSuccess == tasks.size()) {
+            return CompactionTask.TaskResult.ALL_SUCCESS;
+        } else if (noneSuccess == tasks.size()) {
+            return CompactionTask.TaskResult.NONE_SUCCESS;
+        } else {
+            return CompactionTask.TaskResult.PARTIAL_SUCCESS;
+        }
     }
 
     public int getNumTabletCompactionTasks() {
@@ -125,5 +154,9 @@ public class CompactionJob {
 
     public String getDebugString() {
         return String.format("TxnId=%d partition=%s", txnId, getFullPartitionName());
+    }
+
+    public boolean getAllowPartialSuccess() {
+        return allowPartialSuccess;
     }
 }

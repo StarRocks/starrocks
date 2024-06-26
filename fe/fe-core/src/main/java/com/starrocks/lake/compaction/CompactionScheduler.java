@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.compaction;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
@@ -69,9 +68,9 @@ import javax.validation.constraints.NotNull;
 public class CompactionScheduler extends Daemon {
     private static final Logger LOG = LogManager.getLogger(CompactionScheduler.class);
     private static final String HOST_NAME = FrontendOptions.getLocalHostAddress();
-    private static final long LOOP_INTERVAL_MS = 200L;
-    private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = LOOP_INTERVAL_MS * 2;
-    private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = LOOP_INTERVAL_MS * 10;
+    private static final long LOOP_INTERVAL_MS = 1000L;
+    private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = LOOP_INTERVAL_MS * 10;
+    private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = LOOP_INTERVAL_MS * 60;
     private static final long PARTITION_CLEAN_INTERVAL_SECOND = 30;
     private final CompactionMgr compactionManager;
     private final SystemInfoService systemInfoService;
@@ -150,20 +149,29 @@ public class CompactionScheduler extends Daemon {
             if (!job.transactionHasCommitted()) {
                 String errorMsg = null;
 
-                if (job.isCompleted()) {
+                CompactionTask.TaskResult taskResult = job.getResult();
+                if (taskResult == CompactionTask.TaskResult.ALL_SUCCESS ||
+                        (Config.lake_compaction_allow_partial_success &&
+                        job.getAllowPartialSuccess() &&
+                        taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS)) {
                     job.getPartition().setMinRetainVersion(0);
                     try {
-                        commitCompaction(partition, job);
+                        commitCompaction(partition, job,
+                                taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS /* forceCommit */);
                         assert job.transactionHasCommitted();
                     } catch (Exception e) {
                         LOG.error("Fail to commit compaction. {} error={}", job.getDebugString(), e.getMessage());
                         errorMsg = "fail to commit transaction: " + e.getMessage();
                     }
-                } else if (job.isFailed()) {
+                } else if (taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS ||
+                           taskResult == CompactionTask.TaskResult.NONE_SUCCESS) {
                     job.getPartition().setMinRetainVersion(0);
                     errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
                     LOG.error("Compaction job {} failed: {}", job.getDebugString(), errorMsg);
                     job.abort(); // Abort any executing task, if present.
+                } else if (taskResult != CompactionTask.TaskResult.NOT_FINISHED) {
+                    errorMsg = String.format("Unexpected compaction result: %s, %s", taskResult.name(), job.getDebugString());
+                    LOG.error(errorMsg);
                 }
 
                 if (errorMsg != null) {
@@ -187,7 +195,8 @@ public class CompactionScheduler extends Daemon {
                     LOG.debug("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
                             cost / 1000, runningCompactions.size());
                 }
-                compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS);
+                int factor = (statistics != null) ? statistics.getPunishFactor() : 1;
+                compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS * factor);
             }
         }
 
@@ -301,16 +310,17 @@ public class CompactionScheduler extends Daemon {
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
-        CompactionJob job = new CompactionJob(db, table, partition, txnId);
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success);
         try {
-            List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId);
+            List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
+                    job.getAllowPartialSuccess());
             for (CompactionTask task : tasks) {
                 task.sendRequest();
             }
             job.setTasks(tasks);
             return job;
         } catch (Exception e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
             partition.setMinRetainVersion(0);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(job, e.getMessage());
@@ -323,8 +333,8 @@ public class CompactionScheduler extends Daemon {
     }
 
     @NotNull
-    private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId)
-            throws UserException, RpcException {
+    private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
+            boolean allowPartialSuccess) throws UserException, RpcException {
         List<CompactionTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -339,6 +349,7 @@ public class CompactionScheduler extends Daemon {
             request.txnId = txnId;
             request.version = currentVersion;
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
+            request.allowPartialSuccess = allowPartialSuccess;
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
@@ -384,10 +395,8 @@ public class CompactionScheduler extends Daemon {
                 loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
     }
 
-    private void commitCompaction(PartitionIdentifier partition, CompactionJob job)
+    private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)
             throws UserException {
-        Preconditions.checkState(job.isCompleted());
-
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
         Database db = stateMgr.getDb(partition.getDbId());
@@ -406,8 +415,12 @@ public class CompactionScheduler extends Daemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         try {
+            CompactionTxnCommitAttachment attachment = null;
+            if (forceCommit) { // do not write extra info if no need to force commit
+                attachment = new CompactionTxnCommitAttachment(true /* forceCommit */);
+            }
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
-                    Collections.emptyList(), null);
+                    Collections.emptyList(), attachment);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         }

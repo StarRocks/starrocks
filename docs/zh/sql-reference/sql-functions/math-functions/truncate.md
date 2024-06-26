@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # truncate
 
-## 功能
+
 
 返回数值 `x` 保留到小数点后 `y` 位的值。
 

@@ -144,7 +144,7 @@ public class MetadataParser {
                 try {
                     Thread.sleep(50);
                 } catch (InterruptedException e) {
-                    LOG.error(e);
+                    LOG.error(e.getMessage(), e);
                 }
             }
         }

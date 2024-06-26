@@ -16,6 +16,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exprs/expr_context.h"
+#include "exprs/in_const_predicate.hpp"
 #include "formats/parquet/schema.h"
 #include "runtime/types.h"
 
@@ -23,9 +25,17 @@ namespace starrocks::parquet {
 
 class StatisticsHelper {
 public:
+    enum StatSupportedFilter { FILTER_IN, IS_NULL, IS_NOT_NULL };
+
     static Status decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
                                            const TypeDescriptor& type, const ParquetField* field,
                                            const std::string& timezone);
+
+    static bool can_be_used_for_statistics_filter(ExprContext* ctx, StatSupportedFilter& filter_type);
+
+    static Status in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
+                                            const std::vector<std::string>& max_values, ExprContext* ctx,
+                                            const ParquetField* field, const std::string& timezone, Filter& selected);
 };
 
 } // namespace starrocks::parquet

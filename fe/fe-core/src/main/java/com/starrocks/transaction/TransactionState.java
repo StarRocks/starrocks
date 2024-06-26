@@ -49,7 +49,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
@@ -342,7 +341,7 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
-    private final ReentrantReadWriteLock txnLock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
         if (Config.lock_manager_enable_using_fine_granularity_lock) {
@@ -713,6 +712,11 @@ public class TransactionState implements Writable {
         this.txnCommitAttachment = txnCommitAttachment;
     }
 
+    public boolean isVersionOverwrite() {
+        return txnCommitAttachment instanceof InsertTxnCommitAttachment
+                && ((InsertTxnCommitAttachment) txnCommitAttachment).getIsVersionOverwrite();
+    }
+
     // return true if txn is in final status and label is expired
     public boolean isExpired(long currentMillis) {
         return transactionStatus.isFinalStatus() && (currentMillis - finishTime) / 1000 > Config.label_keep_max_second;
@@ -874,6 +878,9 @@ public class TransactionState implements Writable {
         for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
             TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
                     commitInfo.getVersion(), 0);
+            if (commitInfo.isDoubleWrite()) {
+                version.setIs_double_write(true);
+            }
             partitionVersions.add(version);
         }
 
@@ -890,7 +897,8 @@ public class TransactionState implements Writable {
                     createTime,
                     this,
                     Config.enable_sync_publish,
-                    this.getTxnType());
+                    this.getTxnType(),
+                    isVersionOverwrite());
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }

@@ -61,7 +61,7 @@ public class BinlogManager {
 
     public static final long INVALID = -1;
 
-    QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock();
+    QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
 
     public BinlogManager() {
         tableIdToReportedNum = new HashMap<>();
@@ -183,7 +183,7 @@ public class BinlogManager {
                         tableIdToPartitions.remove(table.getId());
                     }
                 } catch (AnalysisException e) {
-                    LOG.warn(e);
+                    LOG.warn("Failed to execute", e);
                 } finally {
                     locker.unLockDatabase(db, LockType.WRITE);
                 }

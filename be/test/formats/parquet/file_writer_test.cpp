@@ -100,7 +100,8 @@ protected:
                         const std::shared_ptr<::parquet::schema::GroupNode>& schema) {
         ASSIGN_OR_ABORT(auto file, _fs.new_writable_file(_file_path));
         ASSIGN_OR_RETURN(auto properties, parquet::ParquetBuildHelper::make_properties(ParquetBuilderOptions()));
-        auto file_writer = std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs);
+        auto file_writer =
+                std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs, _runtime_state);
         file_writer->init();
         auto st = file_writer->write(chunk.get());
         if (!st.ok()) {
@@ -359,17 +360,18 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
         auto data_column = TimestampColumn::create();
         {
             Datum datum;
-            datum.set_timestamp(TimestampValue::create(1999, 9, 9, 0, 0, 0));
+            datum.set_timestamp(TimestampValue::create(2023, 9, 9, 23, 59, 59));
             data_column->append_datum(datum);
             datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
             data_column->append_datum(datum);
-            datum.set_timestamp(TimestampValue::create(1999, 9, 11, 2, 2, 2));
+            datum.set_timestamp(TimestampValue::create(1970, 1, 1, 0, 0, 0));
             data_column->append_datum(datum);
-            data_column->append_default();
+            datum.set_timestamp(TimestampValue::create(1970, 1, 1, 1, 1, 1));
+            data_column->append_datum(datum);
         }
 
         auto null_column = UInt8Column::create();
-        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        std::vector<uint8_t> nulls = {0, 0, 0, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
         auto nullable_column = NullableColumn::create(data_column, null_column);
         chunk->append_column(nullable_column, chunk->num_columns());

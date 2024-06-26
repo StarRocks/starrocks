@@ -233,7 +233,7 @@ public class StarRocksFE {
         try {
             cmd = commandLineParser.parse(options, args);
         } catch (final ParseException e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
             System.err.println("Failed to parse command line. exit now");
             System.exit(-1);
         }

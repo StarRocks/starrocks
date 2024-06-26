@@ -36,7 +36,6 @@ import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
@@ -72,6 +71,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.ResourceMgr.NEED_MAPPING_CATALOG_RESOURCES;
@@ -83,7 +83,7 @@ public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
     private final Map<String, Catalog> catalogs = Maps.newConcurrentMap();
     private final ConnectorMgr connectorMgr;
-    private final ReadWriteLock catalogLock = new FairReentrantReadWriteLock();
+    private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
     public static final ImmutableList<String> CATALOG_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Catalog").add("Type").add("Comment")
@@ -116,15 +116,6 @@ public class CatalogMgr {
         writeLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
-            if (null == connector) {
-                LOG.error("{} connector [{}] create failed", type, catalogName);
-                throw new DdlException("connector create failed");
-            }
-            long id = isResourceMappingCatalog(catalogName) ?
-                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
-                    GlobalStateMgr.getCurrentState().getNextId();
-            Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             String serviceName = properties.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
@@ -136,6 +127,16 @@ public class CatalogMgr {
                 Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
             }
 
+            // TODO：please keep connector and catalog create together, they need keep in consistent asap.
+            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            if (null == connector) {
+                LOG.error("{} connector [{}] create failed", type, catalogName);
+                throw new DdlException("connector create failed");
+            }
+            long id = isResourceMappingCatalog(catalogName) ?
+                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
+                    GlobalStateMgr.getCurrentState().getNextId();
+            Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             catalogs.put(catalogName, catalog);
 
             if (!isResourceMappingCatalog(catalogName)) {
@@ -262,17 +263,6 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        try {
-            CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
-            if (catalogConnector == null) {
-                LOG.error("{} connector [{}] create failed.", type, catalogName);
-                throw new DdlException("connector create failed");
-            }
-        } catch (StarRocksConnectorException e) {
-            LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
-            throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
-        }
-
         Map<String, String> properties = catalog.getConfig();
         String serviceName = properties.get("ranger.plugin.hive.service.name");
         if (serviceName == null || serviceName.isEmpty()) {
@@ -283,6 +273,18 @@ public class CatalogMgr {
             }
         } else {
             Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+        }
+
+        // TODO：please keep connector and catalog create together, they need keep in consistent asap.
+        try {
+            CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+            if (catalogConnector == null) {
+                LOG.error("{} connector [{}] create failed.", type, catalogName);
+                throw new DdlException("connector create failed");
+            }
+        } catch (StarRocksConnectorException e) {
+            LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
+            throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
         }
 
         writeLock();

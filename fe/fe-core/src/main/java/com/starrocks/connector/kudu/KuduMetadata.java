@@ -44,6 +44,7 @@ import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduException;
 import org.apache.kudu.client.KuduPredicate;
 import org.apache.kudu.client.KuduScanToken;
+import org.apache.kudu.client.RpcRemoteException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -231,7 +232,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                 partColNames.add(fieldName);
                             }
                         }
-                        return new KuduTable(masterAddresses, this.catalogName, dbName, tblName, columns, partColNames);
+                        return new KuduTable(masterAddresses, this.catalogName, dbName, tblName, fullTableName,
+                                columns, partColNames);
                     });
         } catch (KuduException e) {
             throw new StarRocksConnectorException("Failed to get table %s.", fullTableName, e);
@@ -244,8 +246,12 @@ public class KuduMetadata implements ConnectorMetadata {
     }
 
     private String getKuduFullTableName(String dbName, String tblName) {
-        return schemaEmulationEnabled ?
-                (schemaEmulationPrefix + dbName + DATABASE_TABLE_JOINER + tblName) : tblName;
+        return schemaEmulationEnabled ? (schemaEmulationPrefix + dbName + DATABASE_TABLE_JOINER + tblName) : tblName;
+    }
+
+    private String getKuduFullTableName(KuduTable table) {
+        return table.getKuduTableName().orElse(
+                getKuduFullTableName(table.getDbName(), table.getTableName()));
     }
 
     @Override
@@ -254,7 +260,7 @@ public class KuduMetadata implements ConnectorMetadata {
                                                    List<String> fieldNames, long limit) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         KuduTable kuduTable = (KuduTable) table;
-        String kuduTableName = getKuduFullTableName(kuduTable.getDbName(), kuduTable.getTableName());
+        String kuduTableName = getKuduFullTableName(kuduTable);
         org.apache.kudu.client.KuduTable nativeTable;
         try {
             nativeTable = kuduClient.openTable(kuduTableName);
@@ -269,7 +275,7 @@ public class KuduMetadata implements ConnectorMetadata {
         addConstraintPredicates(nativeTable, builder, predicate);
         List<KuduScanToken> tokens = builder.build();
         List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                RemoteFileDesc.createKuduRemoteFileDesc(tokens));
+                KuduRemoteFileDesc.createKuduRemoteFileDesc(tokens));
         remoteFileInfo.setFiles(remoteFileDescs);
         return Lists.newArrayList(remoteFileInfo);
     }
@@ -312,16 +318,26 @@ public class KuduMetadata implements ConnectorMetadata {
             HivePartitionStats tableStatistics =
                     metastore.get().getTableStatistics(kuduTable.getDbName(), kuduTable.getTableName());
             rowCount = tableStatistics.getCommonStats().getRowNums();
-
         } else {
             try {
-                String kuduTableName = getKuduFullTableName(kuduTable.getDbName(), kuduTable.getTableName());
+                String kuduTableName = getKuduFullTableName(kuduTable);
                 rowCount = kuduClient.openTable(kuduTableName).getTableStatistics().getLiveRowCount();
+            } catch (RpcRemoteException e) {
+                if (isGetTableStatisticsUnsupported(e)) {
+                    LOG.warn("GetTableStatistics method not supported. Fallback to return default row count 1.");
+                    rowCount = 1;
+                } else {
+                    throw new RuntimeException("RPC error while getting table statistics", e);
+                }
             } catch (KuduException e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException("Error while accessing Kudu table", e);
             }
         }
         builder.setOutputRowCount(rowCount);
         return builder.build();
+    }
+
+    private static boolean isGetTableStatisticsUnsupported(RpcRemoteException e) {
+        return e.getMessage().contains("invalid method name: GetTableStatistics");
     }
 }

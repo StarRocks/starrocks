@@ -75,6 +75,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
@@ -82,7 +83,6 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
-import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -98,7 +98,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -253,7 +252,7 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
-        if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
+        if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             // Some information like username, password in the stmt should not be printed.
             ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQL(parsedStmt));
         } else if (parsedStmt == null) {
@@ -323,36 +322,6 @@ public class ConnectProcessor {
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
-    protected void addRunningQueryDetail(StatementBase parsedStmt) {
-        if (!Config.enable_collect_query_detail_info) {
-            return;
-        }
-        String sql;
-        if (!ctx.getState().isQuery() && parsedStmt.needAuditEncryption()) {
-            sql = AstToSQLBuilder.toSQL(parsedStmt);
-        } else {
-            sql = parsedStmt.getOrigStmt().originStmt;
-        }
-
-        boolean isQuery = parsedStmt instanceof QueryStatement;
-        QueryDetail queryDetail = new QueryDetail(
-                DebugUtil.printId(ctx.getQueryId()),
-                isQuery,
-                ctx.connectionId,
-                ctx.getMysqlChannel() != null ?
-                        ctx.getMysqlChannel().getRemoteIp() : "System",
-                ctx.getStartTime(), -1, -1,
-                QueryDetail.QueryMemState.RUNNING,
-                ctx.getDatabase(),
-                sql,
-                ctx.getQualifiedUser(),
-                Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
-                ctx.getCurrentCatalog());
-        ctx.setQueryDetail(queryDetail);
-        // copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addQueryDetail(queryDetail.copy());
-    }
-
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
@@ -372,7 +341,8 @@ public class ConnectProcessor {
                 .setAuthorizedUser(
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
-                .setCatalog(ctx.getCurrentCatalog());
+                .setCatalog(ctx.getCurrentCatalog())
+                .setWarehouse(ctx.getCurrentWarehouseName());
         Tracers.register(ctx);
 
         // execute this query.
@@ -406,11 +376,6 @@ public class ConnectProcessor {
                 }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
-                // Only add the last running stmt for multi statement,
-                // because the audit log will only show the last stmt.
-                if (i == stmts.size() - 1) {
-                    addRunningQueryDetail(parsedStmt);
-                }
 
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);
@@ -831,6 +796,10 @@ public class ConnectProcessor {
 
         if (request.isSetQueryId()) {
             ctx.setQueryId(UUIDUtil.fromTUniqueid(request.getQueryId()));
+        }
+
+        if (request.isSetWarehouse_id()) {
+            ctx.setCurrentWarehouseId(request.getWarehouse_id());
         }
 
         if (request.isSetForward_times()) {

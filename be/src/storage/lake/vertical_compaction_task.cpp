@@ -63,7 +63,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     for (size_t i = 0; i < column_group_size; ++i) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
-            return Status::Cancelled("background worker stopped");
+            return Status::Aborted("background worker stopped");
         }
 
         bool is_key = (i == 0);
@@ -100,6 +100,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
+    op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
@@ -177,11 +178,11 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
-            return Status::Cancelled("background worker stopped");
+            return Status::Aborted("background worker stopped");
         }
-        if (cancel_func()) {
-            return Status::Cancelled("cancelled");
-        }
+
+        RETURN_IF_ERROR(cancel_func());
+
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif

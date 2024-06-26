@@ -63,7 +63,7 @@ public:
                 return init_fulltext_index();
             }
             return Status::NotFound("Field type not supported");
-        } catch (CLuceneError e) {
+        } catch (CLuceneError& e) {
             LOG(WARNING) << "Inverted index writer init error occurred: " << e.what();
             return Status::InternalError("Inverted index writer init error occurred");
         }
@@ -99,7 +99,7 @@ public:
             _analyzer = std::make_unique<lucene::analysis::SimpleAnalyzer>();
         }
         _index_writer = std::make_unique<lucene::index::IndexWriter>(_directory.c_str(), _analyzer.get(), create);
-        _index_writer->setMaxBufferedDocs(MAX_BUFFER_DOCS);
+        _index_writer->setMaxBufferedDocs(-1);
         _index_writer->setRAMBufferSizeMB(RAMBufferSizeMB);
         _index_writer->setMaxFieldLength(MAX_FIELD_LEN);
         _index_writer->setMergeFactor(MERGE_FACTOR);
@@ -113,6 +113,7 @@ public:
             field_config |= int(lucene::document::Field::INDEX_TOKENIZED);
         }
         _field = new lucene::document::Field(_field_name.c_str(), field_config);
+        _field->setOmitNorms(true);
         _doc->add(*_field);
         return Status::OK();
     }
@@ -121,8 +122,25 @@ public:
         if constexpr (is_string_type(field_type)) {
             auto* _val = (Slice*)values;
             for (int i = 0; i < count; ++i) {
-                new_fulltext_field(_val->data, _val->size);
-                _index_writer->addDocument(_doc.get());
+                const char* s = _val->data;
+                size_t size = _val->size;
+                // Data in Slice does not contained any null-terminated. Any api in Boost/std
+                // which write the result into a given memory area does not fit in this case.
+                // So we still use boost::locale::conv::utf_to_utf<TCHAR> to construct a new
+                // wstring in every loop for the correctness.
+                std::wstring tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + size);
+
+                if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
+                    _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
+                    _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
+                    _char_string_reader->init(tchar.c_str(), tchar.size(), false);
+                    auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
+                    _field->setValue(stream);
+                    _index_writer->addDocument(_doc.get());
+                } else {
+                    _field->setValueRef(const_cast<TCHAR*>(tchar.c_str()));
+                    _index_writer->addDocument(_doc.get());
+                }
                 ++_val;
                 _rid++;
             }
@@ -131,35 +149,23 @@ public:
         }
     }
 
-    void new_fulltext_field(const char* field_value_data, size_t field_value_size) {
-        if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
-            _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
-            _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
-            new_char_token_stream(field_value_data, field_value_size, _field);
-        } else {
-            new_field_value(field_value_data, field_value_size, _field);
-        }
-    }
-
-    void new_char_token_stream(const char* s, size_t len, lucene::document::Field* field) {
-        auto tchar = boost::locale::conv::utf_to_utf<TCHAR>(s, s + len);
-        _char_string_reader->init(tchar.c_str(), len, true);
-        auto stream = _analyzer->reusableTokenStream(field->name(), _char_string_reader.get());
-        field->setValue(stream);
-    }
-
-    void new_field_value(const char* s, size_t len, lucene::document::Field* field) {
-        auto field_value = boost::locale::conv::utf_to_utf<TCHAR>(s, s + len);
-        field->setValue(field_value.data(), true);
-    }
-
     void add_nulls(uint32_t count) override {
         _null_bitmap.addRange(_rid, _rid + count);
         _rid += count;
+        TCHAR* data = const_cast<TCHAR*>(empty_value.data());
         if constexpr (is_string_type(field_type)) {
             for (int i = 0; i < count; ++i) {
-                new_fulltext_field(empty_value.c_str(), 0);
-                _index_writer->addDocument(_doc.get());
+                if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
+                    _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
+                    _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
+                    _char_string_reader->init(data, 0, false);
+                    auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
+                    _field->setValue(stream);
+                    _index_writer->addDocument(_doc.get());
+                } else {
+                    _field->setValueRef(data);
+                    _index_writer->addDocument(_doc.get());
+                }
             }
         }
     }

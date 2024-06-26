@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # from_base64
 
-## 功能
+
 
 将 Base64 编码过的字符串 `str` 进行解码。反向函数为 [to_base64](to_base64.md)。
 

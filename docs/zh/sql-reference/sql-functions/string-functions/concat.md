@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # concat
 
-## 功能
+
 
 将多个字符串连接起来。如果参数中任意一个值是 NULL，那么返回的结果为 NULL。
 

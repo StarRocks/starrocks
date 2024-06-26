@@ -153,8 +153,8 @@ public:
     static TimestampValue MIN_TIMESTAMP_VALUE;
 
     /**
-     * Milliseconds since January 1, 2000, 00:00:00. A negative number indicates the number of
-     * milliseconds before January 1, 2000, 00:00:00.
+     * Microseconds since January 1, 2000, 00:00:00. A negative number indicates the number of
+     * microseconds before January 1, 2000, 00:00:00.
      */
     Timestamp _timestamp;
 };

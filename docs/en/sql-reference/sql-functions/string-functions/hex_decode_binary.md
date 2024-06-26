@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # hex_decode_binary
 
-## Description
+
 
 Decodes a hex encoded string to a binary.
 

@@ -110,12 +110,21 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 } else {
                     return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
                 }
-            case Types.BLOB:
             case Types.CLOB:
             case Types.NCLOB:
             // LONG
             case Types.LONGVARCHAR:
                 return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+            case Types.BLOB:
+            case Types.BINARY:
+            case Types.VARBINARY:
+            // raw
+            case 23:
+                if (columnSize > 0) {
+                    return ScalarType.createVarbinary(columnSize);
+                } else {
+                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;

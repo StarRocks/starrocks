@@ -58,7 +58,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.storagevolume.StorageVolume;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
@@ -294,7 +294,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PRUNE_COLUMN_AFTER_INDEX_FILTER =
             "enable_prune_column_after_index_filter";
-    
+
     public static final String ENABLE_GIN_FILTER = "enable_gin_filter";
 
     // the maximum time, in seconds, waiting for an insert statement's transaction state
@@ -352,6 +352,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
+    public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
+    public static final String CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE = "cbo_push_down_groupingset_reshuffle";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
@@ -440,6 +442,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
+    public static final String ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS = "enable_analyze_phase_prune_columns";
+
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
@@ -467,6 +471,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
     public static final String ENABLE_DATACACHE_ASYNC_POPULATE_MODE = "enable_datacache_async_populate_mode";
     public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
+    public static final String DATACACHE_EVICT_PROBABILITY = "datacache_evict_probability";
 
     // The following configurations will be deprecated, and we use the `datacache` suffix instead.
     // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -754,6 +759,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_CONSTANT_EXECUTE_IN_FE = "enable_constant_execute_in_fe";
 
+    // A group of like predicates with the same column and concatenated by OR, can be consolidated into
+    // regexp predicate, only the number of like predicates is not less that `like_predicate_consolidate_min`
+    // would be consolidated, since when the number of like predicates is too small, its corresponding
+    // regexp predicate is less efficient than like predicates.
+    public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1004,6 +1015,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_REUSE)
     private boolean cboCteReuse = true;
 
+    // -1 (< 0): disable cte, force inline. 0: force cte; other (> 0): compute by costs * ratio
     @VarAttr(name = CBO_CTE_REUSE_RATE_V2, flag = VariableMgr.INVISIBLE, alias = CBO_CTE_REUSE_RATE,
             show = CBO_CTE_REUSE_RATE)
     private double cboCTERuseRatio = 1.15;
@@ -1386,6 +1398,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticCollectParallelism = 1;
 
+    @VarAttr(name = ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS, flag = VariableMgr.INVISIBLE)
+    private boolean enableAnalyzePhasePruneColumns = false;
+
     @VarAttr(name = ENABLE_SHOW_ALL_VARIABLES, flag = VariableMgr.INVISIBLE)
     private boolean enableShowAllVariables = false;
 
@@ -1400,6 +1415,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // auto, global, local
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
     private String cboPushDownAggregate = "global";
+
+    @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownGroupingSet = true;
+
+    @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownGroupingSetReshuffle = true;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
@@ -1613,6 +1634,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_IO_ADAPTOR)
     private boolean enableDataCacheIOAdaptor = true;
+
+    @VariableMgr.VarAttr(name = DATACACHE_EVICT_PROBABILITY, flag = VariableMgr.INVISIBLE)
+    private int datacacheEvictProbability = 100;
+
+    private int datacachePriority = 0;
+
+    private long datacacheTTLSeconds = 0L;
 
     @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
     private boolean enableDynamicPruneScanRange = true;
@@ -2147,6 +2175,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
     private boolean enableConstantExecuteInFE = true;
 
+    @VarAttr(name = LIKE_PREDICATE_CONSOLIDATE_MIN)
+    private int likePredicateConsolidateMin = 2;
+
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2250,6 +2281,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableDataCacheIOAdaptor = enableDataCacheIOAdaptor;
     }
 
+    public void setDataCacheEvictProbability(int datacacheEvictProbability) {
+        this.datacacheEvictProbability = datacacheEvictProbability;
+    }
+
+    public void setDataCachePriority(int dataCachePriority) {
+        this.datacachePriority = dataCachePriority;
+    }
+
+    public void setDatacacheTTLSeconds(long datacacheTTLSeconds) {
+        this.datacacheTTLSeconds = datacacheTTLSeconds;
+    }
+
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
     }
@@ -2269,6 +2312,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setStatisticCollectParallelism(int parallelism) {
         this.statisticCollectParallelism = parallelism;
+    }
+
+    public boolean isEnableAnalyzePhasePruneColumns() {
+        return enableAnalyzePhasePruneColumns;
+    }
+
+    public void setEnableAnalyzePhasePruneColumns(boolean enableAnalyzePhasePruneColumns) {
+        this.enableAnalyzePhasePruneColumns = enableAnalyzePhasePruneColumns;
     }
 
     public int getUseComputeNodes() {
@@ -2502,9 +2553,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return BackendCoreStat.getDefaultDOP();
+                return BackendResourceStat.getInstance().getDefaultDOP();
             }
-            return Math.min(maxPipelineDop, BackendCoreStat.getDefaultDOP());
+            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
@@ -2516,9 +2567,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return BackendCoreStat.getSinkDefaultDOP();
+                return BackendResourceStat.getInstance().getSinkDefaultDOP();
             }
-            return Math.min(maxPipelineDop, BackendCoreStat.getSinkDefaultDOP());
+            return Math.min(maxPipelineDop, BackendResourceStat.getInstance().getSinkDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
@@ -3141,6 +3192,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return singleNodeExecPlan;
     }
 
+    // -1 (< 0): disable cte, force inline. 0: force cte; other (> 0): compute by costs * ratio
     public double getCboCTERuseRatio() {
         return cboCTERuseRatio;
     }
@@ -3163,6 +3215,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownAggregate(String cboPushDownAggregate) {
         this.cboPushDownAggregate = cboPushDownAggregate;
+    }
+
+    public boolean isCboPushDownGroupingSet() {
+        return cboPushDownGroupingSet;
+    }
+
+    public void setCboPushDownGroupingSet(boolean cboPushDownGroupingSet) {
+        this.cboPushDownGroupingSet = cboPushDownGroupingSet;
+    }
+
+    public boolean isCboPushDownGroupingSetReshuffle() {
+        return cboPushDownGroupingSetReshuffle;
+    }
+
+    public void setCboPushDownGroupingSetReshuffle(boolean cboPushDownGroupingSetReshuffle) {
+        this.cboPushDownGroupingSetReshuffle = cboPushDownGroupingSetReshuffle;
     }
 
     public void setCboPushDownDistinctBelowWindow(boolean flag) {
@@ -3886,6 +3954,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableConstantExecuteInFE = enableConstantExecuteInFE;
     }
 
+    public int getLikePredicateConsolidateMin() {
+        return likePredicateConsolidateMin;
+    }
+
+    public void setLikePredicateConsolidateMin(int value) {
+        this.likePredicateConsolidateMin = value;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -4001,6 +4077,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_populate_datacache(enablePopulateDataCache);
         tResult.setEnable_datacache_async_populate_mode(enableDataCacheAsyncPopulateMode);
         tResult.setEnable_datacache_io_adaptor(enableDataCacheIOAdaptor);
+        tResult.setDatacache_evict_probability(datacacheEvictProbability);
+        tResult.setDatacache_priority(datacachePriority);
+        tResult.setDatacache_ttl_seconds(datacacheTTLSeconds);
         tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);

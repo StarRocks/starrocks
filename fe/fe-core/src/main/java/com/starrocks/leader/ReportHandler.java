@@ -45,7 +45,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
-import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -617,7 +616,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         LOG.debug("begin to handle resource usage report from backend {}", backendId);
         long start = System.currentTimeMillis();
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(
-                backendId, usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
+                backendId, usage.getNum_running_queries(), usage.getMem_used_bytes(),
                 usage.getCpu_used_permille(), usage.isSetGroup_usages() ? usage.getGroup_usages() : null);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
                 backendId, (System.currentTimeMillis() - start));
@@ -1634,8 +1633,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                 for (Column column : indexMeta.getSchema()) {
                     TColumn tColumn = column.toThrift();
-                    tColumn.setColumn_name(
-                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
+                    tColumn.setColumn_name(column.getColumnId().getId());
                     column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
                     columnsDesc.add(tColumn);
                 }

@@ -143,6 +143,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -444,7 +445,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 try {
                     tbl = metadataMgr.getTable(catalogName, params.db, tableName);
                 } catch (Exception e) {
-                    LOG.warn(e.getMessage());
+                    LOG.warn(e.getMessage(), e);
                 }
 
                 if (tbl == null) {
@@ -1977,7 +1978,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             result = updateImmutablePartitionInternal(request);
         } catch (Throwable t) {
-            LOG.warn(t);
+            LOG.warn(t.getMessage(), t);
             result = new TImmutablePartitionResult();
             TStatus errorStatus = new TStatus(RUNTIME_ERROR);
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
@@ -2112,7 +2113,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(physicalPartition.getParentId());
-            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            int partColNum = rangePartitionInfo.getPartitionColumnsSize();
             // set start keys
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
@@ -2344,6 +2345,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+            analyzer.analyze(ctx, addPartitionClause);
             state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to cancel alter operation", e);
@@ -2479,7 +2482,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
-            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            int partColNum = rangePartitionInfo.getPartitionColumnsSize();
             // set start keys
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {

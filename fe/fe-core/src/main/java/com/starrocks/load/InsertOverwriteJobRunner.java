@@ -40,6 +40,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -286,7 +287,7 @@ public class InsertOverwriteJobRunner {
         try {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
-            LOG.warn(ex);
+            LOG.warn(ex.getMessage(), ex);
             throw new RuntimeException(ex);
         }
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
@@ -294,9 +295,11 @@ public class InsertOverwriteJobRunner {
         Database db = state.getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+            analyzer.analyze(context, addPartitionClause);
             state.getLocalMetastore().addPartitions(context, db, olapTable.getName(), addPartitionClause);
         } catch (Exception ex) {
-            LOG.warn(ex);
+            LOG.warn(ex.getMessage(), ex);
             throw new RuntimeException(ex);
         }
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();

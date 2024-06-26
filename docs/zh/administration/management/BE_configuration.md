@@ -48,7 +48,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：以 CIDR 形式指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。
+- 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
+- 引入版本：-
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：用于控制在未指定 `priority_networks` 时是否优先使用 IPv6 地址的布尔值。`true` 表示当托管节点的服务器同时具有 IPv4 和 IPv6 地址且未指定 `priority_networks` 时，允许系统优先使用 IPv6 地址。
 - 引入版本：-
 
 ##### mem_limit
@@ -1593,11 +1602,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### stale_memtable_flush_time_sec
 
-- 默认值：30
+- 默认值：0
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
-- 描述：
+- 描述：0表示禁止，其他上次更新时间大于stale_memtable_flush_time_sec的memtable会在内存不足时持久化
 - 引入版本：-
 -->
 

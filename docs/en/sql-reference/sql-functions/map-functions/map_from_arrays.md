@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # map_from_arrays
 
-## Description
+
 
 Creates a MAP value from the given pair of key item array and value item array.
 

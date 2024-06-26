@@ -172,6 +172,7 @@ public class HiveMetaClientTest {
         Assert.assertNull(blankDesc.getLineDelim());
         Assert.assertNull(blankDesc.getCollectionDelim());
         Assert.assertNull(blankDesc.getMapkeyDelim());
+        Assert.assertEquals(0, blankDesc.getSkipHeaderLineCount());
 
         // Check is using OpenCSVSerde
         Map<String, String> openCSVParameters = new HashMap<>();
@@ -188,11 +189,16 @@ public class HiveMetaClientTest {
         parameters.put("line.delim", "\004");
         parameters.put("collection.delim", "\006");
         parameters.put("mapkey.delim", ":");
+        parameters.put("skip.header.line.count", "2");
         TextFileFormatDesc customDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(parameters);
         Assert.assertEquals(",", customDesc.getFieldDelim());
         Assert.assertEquals("\004", customDesc.getLineDelim());
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
+        Assert.assertEquals(2, customDesc.getSkipHeaderLineCount());
+        parameters.put("skip.header.line.count", "-10");
+        customDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(parameters);
+        Assert.assertEquals(0, customDesc.getSkipHeaderLineCount());
     }
 
     @Test

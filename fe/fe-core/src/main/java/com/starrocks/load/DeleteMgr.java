@@ -85,7 +85,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.delete.LakeDeleteJob;
@@ -147,7 +146,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // this lock is protect List<MultiDeleteInfo> add / remove dbToDeleteInfos is use newConcurrentMap
     // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
     // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final Set<Long> killJobSet;
 
     public DeleteMgr() {
@@ -334,7 +333,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             partitionNames.addAll(olapTable.getPartitionNames());
         } else {
             RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
-                    rangePartitionInfo.getPartitionColumns(), columnFilters);
+                    rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn()), columnFilters);
             Collection<Long> selectedPartitionIds = pruner.prune();
 
             if (selectedPartitionIds == null) {
@@ -353,7 +352,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                                                                    List<Predicate> conditions)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(table.getIdToColumn());
         List<Predicate> deleteConditions = conditions;
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column column : table.getBaseSchema()) {

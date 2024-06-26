@@ -66,6 +66,7 @@ struct HdfsScanStats {
     int64_t footer_cache_read_count = 0;
     int64_t footer_cache_write_count = 0;
     int64_t footer_cache_write_bytes = 0;
+    int64_t footer_cache_write_fail_count = 0;
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
@@ -214,6 +215,9 @@ struct HdfsScannerParams {
     bool enable_populate_datacache = false;
     bool enable_datacache_async_populate_mode = false;
     bool enable_datacache_io_adaptor = false;
+    int32_t datacache_evict_probability = 0;
+    int8_t datacache_priority = 0;
+    int64_t datacache_ttl_seconds = 0;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
@@ -286,6 +290,8 @@ struct HdfsScannerContext {
 
     bool use_file_metacache = false;
 
+    int32_t datacache_evict_probability = 0;
+
     std::string timezone;
 
     const TIcebergSchema* iceberg_schema = nullptr;
@@ -355,6 +361,7 @@ public:
 
 protected:
     Status open_random_access_file();
+    static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
 

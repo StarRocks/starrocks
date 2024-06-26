@@ -1187,32 +1187,26 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
 
-    def wait_async_materialized_view_finish(self, mv_name, check_count=None):
+    def wait_async_materialized_view_finish(self, current_db, mv_name, check_count=None):
         """
         wait async materialized view job finish and return status
         """
-        current_db_sql = "select database();"
-        res = self.execute_sql(current_db_sql, True)
-        if not res["status"]:
-            tools.assert_true(False, "acquire current database error")
-        current_db = res["result"][0][-1]
-
         show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
         print(show_sql)
 
         def is_all_finished(results):
             for res in results:
-                if res[0] != "SUCCESS":
+                if res[0] != "SUCCESS" and res[0] != "MERGED":
                     return False
             return True
         def get_success_count(results):
             cnt = 0
             for res in results:
-                if res[0] == "SUCCESS":
+                if res[0] == "SUCCESS" or res[0] == "MERGED":
                     cnt += 1
             return cnt 
         
-        MAX_LOOP_COUNT = 60 
+        MAX_LOOP_COUNT = 30 
         is_all_ok = False
         count = 0
         if check_count is None:
@@ -1224,9 +1218,9 @@ class StarrocksSQLApiLib(object):
                 is_all_ok = is_all_finished(res["result"])
                 if is_all_ok:
                     # sleep another 5s to avoid FE's async action.
-                    time.sleep(3)
+                    time.sleep(2)
                     break
-                time.sleep(3)
+                time.sleep(2)
                 count += 1
         else:
             while count < MAX_LOOP_COUNT:
@@ -1243,6 +1237,29 @@ class StarrocksSQLApiLib(object):
                 time.sleep(2)
                 count += 1
         tools.assert_equal(True, is_all_ok, "wait aysnc materialized view finish error")
+
+    def wait_mv_refresh_count(self, db_name, mv_name, expect_count):
+        show_sql = """select count(*) from information_schema.materialized_views 
+        join information_schema.task_runs using(task_name)
+        where table_schema='{}' and table_name='{}' and (state = 'SUCCESS' or state = 'MERGED')
+        """.format(db_name, mv_name)
+        print(show_sql)
+        
+        cnt = 1
+        refresh_count = 0
+        while cnt < 60:
+            res = self.execute_sql(show_sql, True)
+            print(res)
+            refresh_count = res["result"][0][0]
+            if refresh_count >= expect_count:
+                return
+            else:
+                print("current refresh count is {}, expect is {}".format(refresh_count, expect_count))
+                time.sleep(1)
+            cnt += 1
+            
+        tools.assert_equal(expect_count, refresh_count, "wait too long for the refresh count")
+
 
     def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
         """
@@ -1775,7 +1792,7 @@ class StarrocksSQLApiLib(object):
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect {} is not found in plan {}".format(expect, res['result']))
 
     def assert_explain_not_contains(self, query, *expects):
         """

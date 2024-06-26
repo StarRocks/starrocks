@@ -19,6 +19,7 @@
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
+#include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 
 namespace starrocks {
@@ -135,6 +136,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
+    ctx.datacache_evict_probability = _scanner_params.datacache_evict_probability;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_app_stats;
@@ -234,6 +236,8 @@ Status HdfsScanner::open_random_access_file() {
         _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
         _cache_input_stream->set_enable_async_populate_mode(_scanner_params.enable_datacache_async_populate_mode);
         _cache_input_stream->set_enable_cache_io_adaptor(_scanner_params.enable_datacache_io_adaptor);
+        _cache_input_stream->set_priority(_scanner_params.datacache_priority);
+        _cache_input_stream->set_ttl_seconds(_scanner_params.datacache_ttl_seconds);
         _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
         _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
         input_stream = _cache_input_stream;
@@ -625,6 +629,14 @@ void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* s
     if (split_tasks->size() > 0) {
         _scanner_ctx.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
     }
+}
+
+CompressionTypePB HdfsScanner::get_compression_type_from_path(const std::string& filename) {
+    ssize_t end = filename.size() - 1;
+    while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
+    if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
+    const std::string& ext = filename.substr(end + 1);
+    return CompressionUtils::to_compression_pb(ext);
 }
 
 } // namespace starrocks

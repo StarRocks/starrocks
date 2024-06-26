@@ -43,7 +43,6 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -77,6 +76,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 
 import static com.starrocks.http.HttpMetricRegistry.TXN_STREAM_LOAD_BEGIN_LATENCY_MS;
@@ -111,7 +111,7 @@ public class TransactionLoadAction extends RestBaseAction {
     // Map operation name to metrics
     private final Map<TransactionOperation, OpMetrics> opMetricsMap = new HashMap<>();
 
-    private final ReadWriteLock txnNodeMapAccessLock = new FairReentrantReadWriteLock();
+    private final ReadWriteLock txnNodeMapAccessLock = new ReentrantReadWriteLock();
     private final Map<String, Long> txnNodeMap = new LinkedHashMap<>(512, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {

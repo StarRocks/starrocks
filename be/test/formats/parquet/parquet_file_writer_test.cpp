@@ -506,17 +506,18 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetime) {
         auto data_column = TimestampColumn::create();
         {
             Datum datum;
-            datum.set_timestamp(TimestampValue::create(1999, 9, 9, 0, 0, 0));
+            datum.set_timestamp(TimestampValue::create(2023, 9, 9, 23, 59, 59));
             data_column->append_datum(datum);
             datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
             data_column->append_datum(datum);
-            datum.set_timestamp(TimestampValue::create(1999, 9, 11, 2, 2, 2));
+            datum.set_timestamp(TimestampValue::create(1970, 1, 1, 0, 0, 0));
             data_column->append_datum(datum);
-            data_column->append_default();
+            datum.set_timestamp(TimestampValue::create(1970, 1, 1, 1, 1, 1));
+            data_column->append_datum(datum);
         }
 
         auto null_column = UInt8Column::create();
-        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        std::vector<uint8_t> nulls = {0, 0, 0, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
         auto nullable_column = NullableColumn::create(data_column, null_column);
         chunk->append_column(nullable_column, chunk->num_columns());
@@ -1096,6 +1097,21 @@ TEST_F(ParquetFileWriterTest, TestWriteWithFieldID) {
 
     ASSERT_TRUE(result.io_status.ok());
     ASSERT_EQ(result.file_statistics.record_count, 8);
+}
+
+TEST_F(ParquetFileWriterTest, TestUnknownCompression) {
+    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    std::vector<TypeDescriptor> type_descs{type_bool};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs.new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<parquet::ParquetOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
+    auto writer = std::make_unique<formats::ParquetFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            TCompressionType::UNKNOWN_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(ParquetFileWriterTest, TestFactory) {

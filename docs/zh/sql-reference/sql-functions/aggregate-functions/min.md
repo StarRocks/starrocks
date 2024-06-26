@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # min
 
-## 功能
+
 
 返回 expr 表达式的最小值。
 

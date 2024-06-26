@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # acos
 
-## Description
+
 
 Computes the arc cosine of an argument.
 

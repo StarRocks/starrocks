@@ -394,7 +394,7 @@ StatusOr<orc::CompressionKind> ORCFileWriter::_convert_compression_type(TCompres
         break;
     }
     default: {
-        return Status::NotSupported(fmt::format("not supported compression type {}", type));
+        return Status::NotSupported(fmt::format("not supported compression type {}", to_string(type)));
     }
     }
 

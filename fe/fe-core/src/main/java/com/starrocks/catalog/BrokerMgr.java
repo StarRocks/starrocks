@@ -49,7 +49,6 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ModifyBrokerClause;
@@ -79,7 +78,7 @@ public class BrokerMgr implements GsonPostProcessable {
     // we need IP to find the co-location broker.
     // { BrokerName -> { IP -> [FsBroker] } }
     private final Map<String, ArrayListMultimap<String, FsBroker>> brokersMap = Maps.newHashMap();
-    private final ReentrantLock lock = new FairReentrantLock();
+    private final ReentrantLock lock = new ReentrantLock();
     private BrokerProcNode procNode = null;
 
     public BrokerMgr() {

@@ -65,6 +65,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
+import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
@@ -125,6 +126,7 @@ import com.starrocks.lake.RecycleLakeRangePartitionInfo;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.load.loadv2.BrokerLoadJob;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
@@ -255,6 +257,7 @@ public class GsonUtils {
                     .registerSubtype(RollupJobV2.class, "RollupJobV2")
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
                     .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
+                    .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2")
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
                     .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob");
@@ -349,7 +352,8 @@ public class GsonUtils {
                     .registerSubtype(MiniLoadTxnCommitAttachment.class, "MiniLoadTxnCommitAttachment")
                     .registerSubtype(RLTaskTxnCommitAttachment.class, "RLTaskTxnCommitAttachment")
                     .registerSubtype(StreamLoadTxnCommitAttachment.class, "StreamLoadTxnCommitAttachment")
-                    .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment");
+                    .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment")
+                    .registerSubtype(CompactionTxnCommitAttachment.class, "CompactionTxnCommitAttachment");
 
     public static final RuntimeTypeAdapterFactory<RoutineLoadProgress> ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(RoutineLoadProgress.class, "clazz")

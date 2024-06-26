@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # database
 
-## 功能
+
 
 查询当前会话所在的数据库。如果未选定数据库，返回空值。
 

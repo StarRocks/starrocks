@@ -380,7 +380,8 @@ CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_mInt32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
-CONF_mInt64(stale_memtable_flush_time_sec, "30");
+// 0 means disable
+CONF_mInt64(stale_memtable_flush_time_sec, "0");
 
 // delta writer hang after this time, be will exit since storage is in error state
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");
@@ -847,6 +848,7 @@ CONF_Int32(orc_loading_buffer_size, "8388608");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
+CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -986,7 +988,9 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
-CONF_mInt32(lake_pk_index_sst_max_compaction_bytes, /*1GB*/ "1073741824");
+CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
+// When the ratio of cumulative level to base level is greater than this config, use base merge.
+CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
@@ -1032,6 +1036,8 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
 CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
+// min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
+CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -1140,7 +1146,7 @@ CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
 // if l0_mem_size exceeds this value, l0 need snapshot
 CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
-CONF_mBool(enable_parallel_get_and_bf, "true");
+CONF_mBool(enable_parallel_get_and_bf, "false");
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
@@ -1316,10 +1322,14 @@ CONF_mInt64(arrow_read_batch_size, "4096");
 CONF_mBool(brpc_socket_keepalive, "false");
 CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 
+
 // connector sink memory watermark
 CONF_mDouble(connector_sink_mem_high_watermark_ratio, "0.3");
 CONF_mDouble(connector_sink_mem_low_watermark_ratio, "0.1");
 CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
+
+// .crm file can be removed after 1day.
+CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
 
 // python envs config
 // create time worker timeout
@@ -1330,5 +1340,6 @@ CONF_Strings(python_envs, "");
 CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
+CONF_mBool(enable_pk_strict_memcheck, "true");
 
 } // namespace starrocks::config

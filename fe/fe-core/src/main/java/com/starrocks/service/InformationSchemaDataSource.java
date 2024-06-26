@@ -206,7 +206,7 @@ public class InformationSchemaDataSource {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
         int idx = 0;
-        for (Column column : partitionInfo.getPartitionColumns()) {
+        for (Column column : partitionInfo.getPartitionColumns(table.getIdToColumn())) {
             if (idx != 0) {
                 partitionKeySb.append(", ");
             }
@@ -230,7 +230,7 @@ public class InformationSchemaDataSource {
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type(distributionInfo.getType().name());
-        tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey());
+        tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
 
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -326,13 +326,13 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setVisible_version_time(physicalPartition.getVisibleVersionTime() / 1000);
         // PARTITION_KEY
         partitionMetaInfo.setPartition_key(
-                Joiner.on(", ").join(PartitionsProcDir.findPartitionColNames(partitionInfo)));
+                Joiner.on(", ").join(partitionInfo.getPartitionColumns(table.getIdToColumn())));
         // PARTITION_VALUE
         partitionMetaInfo.setPartition_value(
                 PartitionsProcDir.findRangeOrListValues(partitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
-        partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(distributionInfo));
+        partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
         // BUCKETS
         partitionMetaInfo.setBuckets(distributionInfo.getBucketNum());
         // REPLICATION_NUM
@@ -413,7 +413,7 @@ public class InformationSchemaDataSource {
                     try {
                         table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
                     } catch (Exception e) {
-                        LOG.warn(e.getMessage());
+                        LOG.warn(e.getMessage(), e);
                     }
                     if (table == null) {
                         continue;

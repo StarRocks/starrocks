@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# Flat JSON
+# [Preview] Flat JSON
 
 本文介绍 Flat JSON 的基本概念，以及如何使用该功能。
 

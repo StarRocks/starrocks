@@ -826,8 +826,12 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
         LOG(INFO) << "try to perform path gc by rowsetid!";
         // perform path gc by rowset id
         ((DataDir*)arg)->perform_path_gc_by_rowsetid();
+
+        LOG(INFO) << "try to perform path gc by dcg files!";
         // perform dcg files gc
         ((DataDir*)arg)->perform_delta_column_files_gc();
+        // perform crm files gc
+        ((DataDir*)arg)->perform_crm_gc(config::unused_crm_file_threshold_second);
 
         int32_t interval = config::path_gc_check_interval_second;
         if (interval <= 0) {
@@ -854,6 +858,7 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         LOG(INFO) << "try to perform path scan!";
         ((DataDir*)arg)->perform_path_scan();
+        ((DataDir*)arg)->perform_tmp_path_scan();
 
         int32_t interval = config::path_scan_interval_second;
         if (interval <= 0) {

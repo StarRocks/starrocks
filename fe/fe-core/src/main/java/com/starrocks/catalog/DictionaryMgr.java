@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -30,7 +31,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -55,6 +55,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -67,6 +68,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.Warehouse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,6 +84,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class DictionaryMgr implements Writable, GsonPostProcessable {
     private static final Logger LOG = LoggerFactory.getLogger(DictionaryMgr.class);
@@ -101,7 +104,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     // use last successful txn id as next readable version
     private ConcurrentHashMap<Long, Long> dictionaryIdTolastSuccessVersion = new ConcurrentHashMap<>();
 
-    private final Lock lock = new FairReentrantLock();
+    private final Lock lock = new ReentrantLock();
 
     private final ExecutorService executor =
             ThreadPoolManager.newDaemonFixedThreadPool(
@@ -541,6 +544,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
             context.setStartTime();
             context.setThreadLocalInfo();
+            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = manager.getBackgroundWarehouse();
+            context.setCurrentWarehouse(warehouse.getName());
             return context;
         }
 

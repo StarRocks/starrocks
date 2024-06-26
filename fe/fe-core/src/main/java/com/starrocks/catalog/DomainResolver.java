@@ -39,7 +39,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -63,7 +62,7 @@ public class DomainResolver extends FrontendDaemon {
     private static final String BNS_RESOLVER_TOOLS_PATH = "/usr/bin/get_instance_by_service";
 
     private AuthenticationMgr authenticationManager;
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public DomainResolver(AuthenticationMgr authenticationManager) {
         super("domain resolver", 10L * 1000);
@@ -190,7 +189,7 @@ public class DomainResolver extends FrontendDaemon {
                     bufferedReader.close();
                 }
             } catch (IOException e) {
-                LOG.error("Close bufferedReader error! " + e);
+                LOG.error("Close bufferedReader error! ", e);
             }
         }
     }

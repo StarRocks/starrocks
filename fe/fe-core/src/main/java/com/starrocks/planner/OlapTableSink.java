@@ -64,6 +64,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -260,6 +261,40 @@ public class OlapTableSink extends DataSink {
         if (canUseColocateMVIndex(dstTable)) {
             tSink.setEnable_colocate_mv_index(true);
         }
+
+        Map<Long, Long> doubleWritePartitions = dstTable.getDoubleWritePartitions();
+        if (!doubleWritePartitions.isEmpty()) {
+            List<Long> doubleWritePartitionIds = new ArrayList<>();
+            for (Long partitionId : partitionIds) {
+                if (doubleWritePartitions.containsKey(partitionId)) {
+                    doubleWritePartitionIds.add(doubleWritePartitions.get(partitionId));
+                }
+            }
+
+            if (!doubleWritePartitionIds.isEmpty()) {
+                TOlapTableSink tSink2 = new TOlapTableSink(tSink);
+                tSink2.unsetPartition();
+                tSink2.unsetLocation();
+                TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
+                        enableAutomaticPartition, automaticBucketSize, doubleWritePartitionIds);
+                tSink2.setPartition(partitionParam2);
+                tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, warehouseId));
+                tSink2.setIgnore_out_of_partition(true);
+
+                TDataSink tDataSink2 = new TDataSink();
+                tDataSink2.setType(TDataSinkType.OLAP_TABLE_SINK);
+                tDataSink2.setOlap_table_sink(tSink2);
+
+                TDataSink newDataSink = new TDataSink(TDataSinkType.MULTI_OLAP_TABLE_SINK);
+                tDataSink.setSink_id(0);
+                newDataSink.addToMulti_olap_table_sinks(tDataSink);
+                tDataSink2.setSink_id(1);
+                newDataSink.addToMulti_olap_table_sinks(tDataSink2);
+                tDataSink = newDataSink;
+            }
+        }
+
+        LOG.debug("tDataSink: {}", tDataSink);
     }
 
     @Override
@@ -310,7 +345,7 @@ public class OlapTableSink extends DataSink {
                     .collect(Collectors.toList()));
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
-                tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
+                tColumn.setColumn_name(column.getColumnId().getId());
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumns());
                 columnsDesc.add(tColumn);
             }
@@ -393,8 +428,8 @@ public class OlapTableSink extends DataSink {
         switch (distInfo.getType()) {
             case HASH: {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distInfo;
-                for (Column column : hashDistributionInfo.getDistributionColumns()) {
-                    distColumns.add(column.getColumnId().getId());
+                for (ColumnId columnId : hashDistributionInfo.getDistributionColumns()) {
+                    distColumns.add(columnId.getId());
                 }
                 break;
             }
@@ -430,12 +465,13 @@ public class OlapTableSink extends DataSink {
         partitionParam.setEnable_automatic_partition(enableAutomaticPartition);
 
         PartitionType partType = table.getPartitionInfo().getType();
+        List<Column> partitionColumns = table.getPartitionInfo().getPartitionColumns(table.getIdToColumn());
         switch (partType) {
             case RANGE:
             case EXPR_RANGE:
             case EXPR_RANGE_V2: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-                for (Column partCol : rangePartitionInfo.getPartitionColumns()) {
+                for (Column partCol : partitionColumns) {
                     partitionParam.addToPartition_columns(partCol.getColumnId().getId());
                 }
                 DistributionInfo selectedDistInfo = null;
@@ -509,7 +545,7 @@ public class OlapTableSink extends DataSink {
             }
             case LIST:
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
-                for (Column partCol : listPartitionInfo.getPartitionColumns()) {
+                for (Column partCol : partitionColumns) {
                     partitionParam.addToPartition_columns(partCol.getColumnId().getId());
                 }
                 DistributionInfo selectedDistInfo = null;
@@ -623,7 +659,7 @@ public class OlapTableSink extends DataSink {
 
     private static void setRangeKeys(RangePartitionInfo rangePartitionInfo, Partition partition,
                                      TOlapTablePartition tPartition) {
-        int partColNum = rangePartitionInfo.getPartitionColumns().size();
+        int partColNum = rangePartitionInfo.getPartitionColumnsSize();
         Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
         // set start keys
         if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {

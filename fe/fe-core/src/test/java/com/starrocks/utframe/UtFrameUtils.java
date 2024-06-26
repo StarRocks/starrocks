@@ -126,7 +126,7 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
@@ -522,6 +522,22 @@ public class UtFrameUtils {
         }
     }
 
+    public static String getFragmentPlan(ConnectContext connectContext, String sql, String traceModule) {
+        try {
+            Pair<String, Pair<ExecPlan, String>> result =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+            Pair<ExecPlan, String> execPlanWithQuery = result.second;
+            String traceLog = execPlanWithQuery.second;
+            if (!Strings.isNullOrEmpty(traceLog)) {
+                System.out.println(traceLog);
+            }
+            return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+            return null;
+        }
+    }
+
     public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
             ConnectContext connectContext, String sql, String module) throws Exception {
         if (Strings.isNullOrEmpty(module)) {
@@ -773,9 +789,9 @@ public class UtFrameUtils {
 
         // mock be core stat
         for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
+            BackendResourceStat.getInstance().setNumHardwareCoresOfBe(entry.getKey(), entry.getValue());
         }
-        BackendCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
+        BackendResourceStat.getInstance().setCachedAvgNumHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
 
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
@@ -915,6 +931,16 @@ public class UtFrameUtils {
 
     public static void tearDownTestDump() {
         tearMockEnv();
+    }
+
+    public static ExecPlan getPlanFragmentFromQueryDump(ConnectContext connectContext, QueryDumpInfo dumpInfo)
+            throws Exception {
+        String q = initMockEnv(connectContext, dumpInfo);
+        try {
+            return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
+        } finally {
+            tearMockEnv();
+        }
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,

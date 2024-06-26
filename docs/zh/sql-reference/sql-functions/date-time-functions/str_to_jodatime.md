@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # str_to_jodatime
 
-## 功能
+
 
 将某一个 Joda 格式的字符串转换为指定的 Joda DateTime 格式（如 `yyyy-MM-dd HH:mm:ss`）的 DATETIME 值。
 

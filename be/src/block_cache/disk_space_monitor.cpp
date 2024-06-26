@@ -168,8 +168,14 @@ void DiskSpaceMonitor::_init_spaces_by_cache_dir() {
     _total_cache_usage = 0;
     for (auto& dir_space : _dir_spaces) {
         auto ret = _fs->directory_size(dir_space.path);
-        if (ret.ok()) {
-            _total_cache_usage += ret.value();
+        if (ret.ok() && ret.value() > 0) {
+            int disk_id = _fs->disk_id(dir_space.path);
+            auto& disk = _disk_stats[disk_id];
+            // The space under datacache directories can be reused, so ignore their usage.
+            disk.available_bytes += ret.value();
+            if (disk.available_bytes > disk.capacity_bytes) {
+                disk.available_bytes = disk.capacity_bytes;
+            }
         }
         _total_cache_quota += dir_space.size;
     }

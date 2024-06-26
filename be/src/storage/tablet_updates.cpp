@@ -617,7 +617,8 @@ Status TabletUpdates::get_apply_version_and_rowsets(int64_t* version, std::vecto
     return Status::OK();
 }
 
-Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
+Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
+                                    bool is_version_overwrite, bool is_double_write) {
     auto span = Tracer::Instance().start_trace("rowset_commit");
     auto scope_span = trace::Scope(span);
     if (_error) {
@@ -641,8 +642,9 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                          << " txn_id: " << rowset->txn_id();
             _ignore_rowset_commit(version, rowset);
             return Status::OK();
-        } else if (version > _edit_version_infos.back()->version.major_number() + 1) {
-            if (_pending_commits.size() >= config::tablet_max_pending_versions) {
+        } else if (version > _edit_version_infos.back()->version.major_number() + 1 && !is_version_overwrite) {
+            // for double write tablet, no need to limit pending rowset
+            if (_pending_commits.size() >= config::tablet_max_pending_versions && !is_double_write) {
                 // there must be something wrong, return error rather than accepting more commits
                 string msg = strings::Substitute(
                         "rowset commit failed too many pending rowsets tablet:$0 version:$1 txn_id: $2 #pending:$3",
@@ -2485,7 +2487,7 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         } else {
             dcg_deleted = res.value();
         }
-        LOG(INFO) << strings::Substitute(
+        VLOG(1) << strings::Substitute(
                 "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
                 "#delvec:$5 #dcgs:$6",
                 _debug_version_info(true), expire_time, min_readable_version, num_version_removed, num_rowset_removed,
@@ -4234,7 +4236,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
         if (!status.ok()) {
-            LOG(INFO) << err_msg_header << "build rowset writer failed";
+            LOG(WARNING) << err_msg_header << "build rowset writer failed";
             return Status::InternalError(err_msg_header + "build rowset writer failed");
         }
 
@@ -4458,7 +4460,7 @@ void TabletUpdates::_remove_unused_rowsets(bool drop_tablet) {
         _unused_rowsets.blocking_put(std::move(r));
     }
     if (removed > 0) {
-        LOG(INFO) << "_remove_unused_rowsets remove " << removed << " rowsets, tablet:" << _tablet.tablet_id();
+        VLOG(1) << "_remove_unused_rowsets remove " << removed << " rowsets, tablet:" << _tablet.tablet_id();
     }
 }
 
@@ -4976,18 +4978,18 @@ static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext&
 static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDeltaColumnContext& ctx,
                                                                          const std::shared_ptr<FileSystem>& fs,
                                                                          ColumnIteratorOptions& iter_opts,
-                                                                         uint32_t ucid,
+                                                                         const TabletColumn& column,
                                                                          const TabletSchemaCSPtr& read_tablet_schema) {
     // build column iter from delta column group
     int32_t col_index = 0;
-    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, ucid, &col_index, read_tablet_schema));
+    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, column.unique_id(), &col_index, read_tablet_schema));
     if (dcg_segment != nullptr) {
         if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
             ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_info()));
             ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
         }
         iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
-        return dcg_segment->new_column_iterator(ucid, nullptr);
+        return dcg_segment->new_column_iterator(column, nullptr);
     }
     return nullptr;
 }
@@ -5090,12 +5092,12 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                                                              *full_row_column, column_ids, columns));
         } else {
             for (auto i = 0; i < column_ids.size(); ++i) {
+                const auto& column = read_tablet_schema->column(column_ids[i]);
                 // try to build iterator from delta column file first
                 ASSIGN_OR_RETURN(auto col_iter,
-                                 new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
+                                 new_dcg_column_iterator(ctx, fs, iter_opts, column, read_tablet_schema));
                 if (col_iter == nullptr) {
                     // not found in delta column file, build iterator from main segment
-                    const auto& column = read_tablet_schema->column(column_ids[i]);
                     ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
                     iter_opts.read_file = read_file.get();
                 }
@@ -5130,9 +5132,9 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         iter_opts.stats = &stats;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_info()));
         for (auto i = 0; i < column_ids.size(); ++i) {
+            const auto& column = read_tablet_schema->column(column_ids[i]);
             // try to build iterator from delta column file first
-            ASSIGN_OR_RETURN(auto col_iter,
-                             new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
+            ASSIGN_OR_RETURN(auto col_iter, new_dcg_column_iterator(ctx, fs, iter_opts, column, read_tablet_schema));
             if (col_iter == nullptr) {
                 // not found in delta column file, build iterator from main segment
                 // use partial segment column offset id to get the column
@@ -5252,7 +5254,7 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
         if (versions.empty()) {
             string msg = strings::Substitute("get_rowsets_for_snapshot: no version to clone $0 request_version:$1,",
                                              _debug_version_info(false), missing_version_ranges.back());
-            LOG(INFO) << msg;
+            VLOG(1) << msg;
             return Status::NotFound(msg);
         }
         size_t num_rowset_full_clone = _edit_version_infos.back()->rowsets.size();

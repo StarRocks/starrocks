@@ -120,3 +120,107 @@ ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
 function: wait_optimize_table_finish()
 
 
+-- name: test_online_optimize_table
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+
+show create table t;
+alter table t distributed by hash(k);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
+select sleep(1);
+-- show partitions from t;
+select count(*) from t;
+function: wait_optimize_table_finish()
+show create table t;
+-- show partitions from t;
+select count(*) from t;
+
+-- name: test_online_optimize_table_pk
+create table t(k int) primary key(k) distributed by hash(k) buckets 10;
+show create table t;
+insert into t values(1);
+alter table t distributed by hash(k);
+insert into t values(2);
+select sleep(1);
+insert into t values(3);
+select sleep(1);
+insert into t values(4);
+select sleep(1);
+insert into t values(5);
+select sleep(1);
+insert into t values(6);
+select sleep(1);
+insert into t values(7);
+select sleep(1);
+insert into t values(8);
+select sleep(1);
+insert into t values(9);
+select sleep(1);
+insert into t values(10);
+select sleep(1);
+insert into t values(11);
+select sleep(1);
+insert into t values(12);
+select sleep(1);
+insert into t values(13);
+select sleep(1);
+insert into t values(14);
+select sleep(1);
+insert into t values(15);
+select sleep(1);
+insert into t values(16);
+select sleep(1);
+insert into t values(17);
+select sleep(1);
+insert into t values(18);
+select sleep(1);
+insert into t values(19);
+select sleep(1);
+insert into t values(20);
+select * from t;
+function: wait_optimize_table_finish()
+show create table t;
+select * from t;

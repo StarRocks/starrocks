@@ -96,17 +96,40 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### Set variables in a single query statement
 
-In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement. Example:
+In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement.
+
+StarRocks supports using `SET_VAR` in the following statements;
+
+- SELECT
+- INSERT (from v3.1.12 and v3.2.0 onwards)
+- UPDATE (from v3.1.12 and v3.2.0 onwards)
+- DELETE (from v3.1.12 and v3.2.0 onwards)
+
+`SET_VAR` can only be placed after the above keywords and enclosed in `/*+...*/`.
+
+Example:
 
 ```sql
 SELECT /*+ SET_VAR(query_mem_limit = 8589934592) */ name FROM people ORDER BY name;
 
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
-```
 
-> **NOTE**
->
-> `SET_VAR` can only be placed after the `SELECT` keyword and enclosed in `/*+...*/`.
+UPDATE /*+ SET_VAR(query_timeout=100) */ tbl SET c1 = 2 WHERE c1 = 1;
+
+DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
+FROM my_table PARTITION p1
+WHERE k1 = 3;
+
+INSERT /*+ SET_VAR(query_timeout = 10000000) */
+INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
+```
 
 You can also set multiple variables in a single statement. Example:
 
@@ -222,6 +245,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: ms
 * **Introduced in**: v3.1.9, v3.2.5
 
+### enable_materialized_view_agg_pushdown_rewrite
+
+* **Description**: Whether to enable aggregation pushdown for materialized view query rewrite. If it is set to `true`, aggregate functions will be pushed down to Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance. For detailed information about the scenarios and limitations of this feature, see [Aggregation pushdown](../using_starrocks/query_rewrite_with_materialized_views.md#aggregation-pushdown).
+* **Default**: false
+* **Introduced in**: v3.3.0
+
 ### enable_materialized_view_text_match_rewrite
 
 * **Description**: Whether to enable text-based materialized view rewrite. When this item is set to true, the optimizer will compare the query with the existing materialized views. A query will be rewritten if the abstract syntax tree of the materialized view's definition matches that of the query or its sub-query.
@@ -292,6 +321,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: uncompressed
 * **Data type**: String
 * **Introduced in**: v3.2.3
+
+### connector_sink_target_max_file_size
+
+* **Description**: Specifies the maximum size of target file for writing data into Hive tables or Iceberg tables, or exporting data with Files(). The limit is not exact and is applied on a best-effort basis.
+* **Unit**: Bytes
+* **Default**: 1073741824
+* **Data type**: Long
+* **Introduced in**: v3.3.0
 
 ### count_distinct_column_buckets
 
@@ -446,6 +483,23 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
+
+
+### enable_lake_tablet_internal_parallel
+
+* **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v3.3.0
+
+### tablet_internal_parallel_mode
+
+* **Description**: Internal Parallel Scan strategy of tablets. Valid Values:
+  * `auto`: When the number of Tablets to be scanned on BE or CN nodes is less than the Degree of Parallelism (DOP), the system automatically determines whether Parallel Scan is needed based on the estimated size of the Tablets.
+  * `force_split`: Forces the splitting of Tablets and performs Parallel Scan.
+* **Default**: auto
+* **Data type**: String
+* **Introduced in**: v2.5.0
 
 ### enable_scan_datacache
 

@@ -1735,6 +1735,56 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         scanner->close();
     }
     {
+        // compressed file with offset != 0
+        auto* range = _create_scan_range(compressed_file, 1, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        ASSERT_EQ(0, scanner->estimated_mem_usage());
+        scanner->close();
+    }
+    {
+        // compressed file with skip_header_line_count
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(50);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        READ_SCANNER_ROWS(scanner, 50);
+        scanner->close();
+    }
+    {
+        // compressed file with skip_header_line_count > total line count
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(200);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+        READ_SCANNER_ROWS(scanner, 0);
+        scanner->close();
+    }
+    {
         auto* range = _create_scan_range(compressed_file, 0, 0);
         // Forcr to parse csv as uncompressed data.
         range->text_file_desc.__set_compression_type(TCompressionType::NO_COMPRESSION);
@@ -1984,6 +2034,56 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
 
         EXPECT_EQ("['5c3ffda0d1d7']", chunk->debug_row(0));
         EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(1));
+        scanner->close();
+    }
+
+    {
+        // bom + skip 2 line
+        auto* range = _create_scan_range(bom_file, 0, 0);
+        range->text_file_desc.__set_skip_header_line_count(2);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(1, chunk->num_rows());
+
+        EXPECT_EQ("['6358db89e73b']", chunk->debug_row(0));
+        scanner->close();
+    }
+
+    {
+        // offset + bom + skip 1 line, but bom and skip_header_line_count will not take effect because of start offset != 0
+        auto* range = _create_scan_range(bom_file, 20, 0);
+        range->text_file_desc.__set_skip_header_line_count(1);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(2, chunk->num_rows());
+        EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(0));
+        EXPECT_EQ("['6358db89e73b']", chunk->debug_row(1));
         scanner->close();
     }
 }

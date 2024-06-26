@@ -261,7 +261,7 @@ static void BM_primitive(benchmark::State& state) {
         size_t totalNumRows = 0;
         while (rr->next(*batch, &pos)) {
             ColumnPtr column = ColumnHelper::create_column(c0Type, isNullable);
-            orcColumnReader->get_next(c0, column, 0, columnSize);
+            CHECK(orcColumnReader->get_next(c0, column, 0, columnSize).ok());
             DCHECK_EQ(columnSize, column->size());
             totalNumRows += columnSize;
         }

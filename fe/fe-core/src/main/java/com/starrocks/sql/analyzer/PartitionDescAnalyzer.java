@@ -20,6 +20,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
@@ -30,9 +31,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 
 import java.time.DayOfWeek;
@@ -40,6 +44,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
 
 public class PartitionDescAnalyzer {
     public static void analyze(PartitionDesc partitionDesc) {
@@ -71,14 +76,38 @@ public class PartitionDescAnalyzer {
 
     public static void analyzePartitionDescWithExistsTable(PartitionDesc partitionDesc, OlapTable table) {
         PartitionInfo partitionInfo = table.getPartitionInfo();
-        if (!(partitionInfo instanceof RangePartitionInfo)) {
-            ErrorReport.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
+
+        if (!partitionInfo.isRangePartition() && partitionInfo.getType() != PartitionType.LIST) {
+            throw new SemanticException("Only support adding partition to range/list partitioned table");
         }
 
+        boolean isAutomaticPartition = partitionInfo.isAutomaticPartition();
+
         if (partitionDesc instanceof SingleRangePartitionDesc) {
+            if (!(partitionInfo instanceof RangePartitionInfo)) {
+                ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
+            }
+
             analyzeSingleRangePartitionDescWithExistsTable((SingleRangePartitionDesc) partitionDesc, partitionInfo);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
-            analyzeMultiRangePartitionDescWithExistsTable((MultiRangePartitionDesc) partitionDesc, partitionInfo);
+            if (!(partitionInfo instanceof RangePartitionInfo)) {
+                ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
+            }
+
+            analyzeMultiRangePartitionDescWithExistsTable((MultiRangePartitionDesc) partitionDesc, partitionInfo,
+                    table.getIdToColumn());
+        } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
+            SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
+            if (isAutomaticPartition && singleItemListPartitionDesc.getValues().size() > 1) {
+                throw new SemanticException("Automatically partitioned tables does not support " +
+                        "multiple values in the same partition");
+            }
+        } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
+            MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
+            if (isAutomaticPartition && multiItemListPartitionDesc.getMultiValues().size() > 1) {
+                throw new SemanticException("Automatically partitioned tables does not support " +
+                        "multiple values in the same partition");
+            }
         }
     }
 
@@ -91,10 +120,11 @@ public class PartitionDescAnalyzer {
     }
 
     public static void analyzeMultiRangePartitionDescWithExistsTable(MultiRangePartitionDesc multiRangePartitionDesc,
-                                                                     PartitionInfo partitionInfo) {
+                                                                     PartitionInfo partitionInfo,
+                                                                     Map<ColumnId, Column> idToColumn) {
 
 
-        List<Column> partitionColumns = partitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = partitionInfo.getPartitionColumns(idToColumn);
         if (partitionColumns.size() != 1) {
             ErrorReport.report(ErrorCode.ERR_MULTI_PARTITION_COLUMN_NOT_SUPPORT_ADD_MULTI_RANGE);
         }
@@ -135,12 +165,14 @@ public class PartitionDescAnalyzer {
             }
 
             checkManualAddPartitionDateAlignedWithExprRangePartition((ExpressionRangePartitionInfo) partitionInfo,
-                    multiRangePartitionDesc.getPartitionBegin(), multiRangePartitionDesc.getPartitionEnd(), 1, 1);
+                    idToColumn, multiRangePartitionDesc.getPartitionBegin(),
+                    multiRangePartitionDesc.getPartitionEnd(), 1, 1);
         }
     }
 
     public static void checkManualAddPartitionDateAlignedWithExprRangePartition(
             ExpressionRangePartitionInfo exprRangePartitionInfo,
+            Map<ColumnId, Column> idToColumn,
             String partitionBegin,
             String partitionEnd,
             int dayOfWeek,
@@ -170,7 +202,7 @@ public class PartitionDescAnalyzer {
         checkManualAddPartitionDateAligned(partitionBeginDateTime, partitionEndDateTime,
                 partitionGranularity, partitionStep,
                 dayOfWeek, dayOfMonth,
-                exprRangePartitionInfo.getPartitionColumns().get(0).getType());
+                exprRangePartitionInfo.getPartitionColumns(idToColumn).get(0).getType());
     }
 
     public static void checkManualAddPartitionDateAligned(

@@ -31,3 +31,97 @@ SELECT count(*) FROM partitions2_keys311 AS table1 RIGHT JOIN partitions2_keys31
 -- result:
 980
 -- !result
+CREATE TABLE partitions_multi_column_1 (
+    c1 int NOT NULL,
+    c2 int NOT NULL,
+    c3 int
+)
+PARTITION BY (c1, c2);
+-- result:
+-- !result
+INSERT INTO partitions_multi_column_1 VALUES(1,1,1);
+-- result:
+-- !result
+INSERT INTO partitions_multi_column_1 VALUES(2,2,2);
+-- result:
+-- !result
+INSERT INTO partitions_multi_column_1 VALUES(3,3,3);
+-- result:
+-- !result
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2=1;
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2<>1;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2=1;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2<>1;
+-- result:
+2
+-- !result
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND TRUE;
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM partitions_multi_column_1 WHERE TRUE AND c2=1 ;
+-- result:
+1
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2=1', 'partitions=1/4')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2<>1', 'EMPTYSET')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2=1', 'EMPTYSET')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2<>1', 'partitions=2/4')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND TRUE', 'partitions=1/4')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE TRUE AND c2=1', 'partitions=1/4')
+-- result:
+None
+-- !result
+INSERT INTO partitions_multi_column_1 VALUES(1,2,4);
+-- result:
+-- !result
+INSERT INTO partitions_multi_column_1 VALUES(2,3,5);
+-- result:
+-- !result
+INSERT INTO partitions_multi_column_1 VALUES(3,4,6);
+-- result:
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND c2<>1', 'partitions=1/7')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2=1', 'EMPTYSET')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1<>1 AND c2=2', 'partitions=1/7')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE c1=1 AND TRUE', 'partitions=2/7')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT COUNT(*) FROM partitions_multi_column_1 WHERE TRUE AND c2=1', 'partitions=1/7')
+-- result:
+None
+-- !result

@@ -541,7 +541,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
 
     if (close_channel) {
-        _load_channel->remove_tablets_channel(_index_id);
+        _load_channel->remove_tablets_channel(_key);
         if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
             _txn_log_collector.notify();
         }
@@ -578,6 +578,9 @@ static void null_callback(const Status& status) {
 }
 
 void LakeTabletsChannel::_flush_stale_memtables() {
+    if (_immutable_partition_ids.empty() && config::stale_memtable_flush_time_sec <= 0) {
+        return;
+    }
     bool high_mem_usage = false;
     if (_mem_tracker->limit_exceeded_by_ratio(70) ||
         (_mem_tracker->parent() != nullptr && _mem_tracker->parent()->limit_exceeded_by_ratio(70))) {
@@ -597,7 +600,7 @@ void LakeTabletsChannel::_flush_stale_memtables() {
                     log_flushed = true;
                     writer->flush(null_callback);
                 }
-            } else {
+            } else if (config::stale_memtable_flush_time_sec > 0) {
                 if (high_mem_usage && now - last_write_ts > config::stale_memtable_flush_time_sec) {
                     log_flushed = true;
                     writer->flush(null_callback);
@@ -669,6 +672,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_immutable_tablet_size(params.immutable_tablet_size())
                                               .set_mem_tracker(_mem_tracker)
                                               .set_schema_id(schema_id)
+                                              .set_partial_update_mode(params.partial_update_mode())
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

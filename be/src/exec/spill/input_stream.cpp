@@ -476,13 +476,16 @@ StatusOr<InputStreamPtr> BlockGroupSet::build_ordered_stream(std::vector<BlockGr
                                                              RuntimeState* state, const SerdePtr& serde,
                                                              Spiller* spiller, const SortExecExprs* sort_exprs,
                                                              const SortDescs* sort_descs) {
+    BlockReaderOptions read_options;
+    if (spiller->options().enable_buffer_read && block_groups.size() > 0) {
+        size_t max_buffer_bytes = spiller->options().max_read_buffer_bytes / block_groups.size();
+        if (max_buffer_bytes > config::spill_read_buffer_min_bytes) {
+            read_options.enable_buffer_read = true;
+            read_options.max_buffer_bytes = max_buffer_bytes;
+        }
+    }
     std::vector<InputStreamPtr> streams;
     for (const auto& group : block_groups) {
-        BlockReaderOptions read_options;
-        if (spiller->options().enable_buffer_read) {
-            read_options.enable_buffer_read = true;
-            read_options.max_buffer_bytes = spiller->options().max_read_buffer_bytes / group->blocks().size();
-        }
         auto stream = std::make_shared<SequenceInputStream>(group->blocks(), serde, read_options);
         streams.emplace_back(std::make_shared<BufferedInputStream>(chunk_buffer_max_size, stream, spiller));
     }

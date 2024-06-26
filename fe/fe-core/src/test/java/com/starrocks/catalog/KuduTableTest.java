@@ -49,7 +49,9 @@ public class KuduTableTest {
         String catalogName = "testCatalog";
         String dbName = "testDB";
         String tableName = "testTable";
-        KuduTable kuduTable = new KuduTable("localhost:7051", catalogName, dbName, tableName, fullSchema, partColNames);
+        String kuduTableName = "impala::testDB.testTable";
+        KuduTable kuduTable = new KuduTable("localhost:7051", catalogName, dbName, tableName,
+                kuduTableName, fullSchema, partColNames);
         List<Column> partitionColumns = kuduTable.getPartitionColumns();
         Assertions.assertThat(partitionColumns).hasSameElementsAs(partitionSchema);
     }
@@ -70,7 +72,8 @@ public class KuduTableTest {
         String catalogName = "testCatalog";
         String dbName = "testDB";
         String tableName = "testTable";
-        KuduTable kuduTable = new KuduTable("localhost:7051", catalogName, dbName, tableName, fullSchema, new ArrayList<>());
+        KuduTable kuduTable = new KuduTable("localhost:7051", catalogName, dbName, tableName,
+                null, fullSchema, new ArrayList<>());
 
         TTableDescriptor tTableDescriptor = kuduTable.toThrift(null);
         Assert.assertEquals(tTableDescriptor.getDbName(), dbName);

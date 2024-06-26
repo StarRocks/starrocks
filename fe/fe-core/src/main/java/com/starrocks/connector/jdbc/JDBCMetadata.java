@@ -71,7 +71,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             String driverName = getDriverName();
             Class.forName(driverName);
         } catch (ClassNotFoundException e) {
-            LOG.warn(e.getMessage());
+            LOG.warn(e.getMessage(), e);
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
         }
         if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
@@ -84,6 +84,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             schemaResolver = new ClickhouseSchemaResolver(properties);
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
             schemaResolver = new OracleSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
+            schemaResolver = new SqlServerSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");

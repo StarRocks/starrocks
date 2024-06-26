@@ -48,8 +48,17 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses.
+- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as `10.10.10.0/24`. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
 - Introduced in: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to use IPv6 addresses preferentially when `priority_networks` is not specified. `true` indicates to allow the system to use an IPv6 address preferentially when the server that hosts the node has both IPv4 and IPv6 addresses and `priority_networks` is not specified.
+- Introduced in: v3.3.0
 
 ##### mem_limit
 
@@ -1653,11 +1662,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### stale_memtable_flush_time_sec
 
-- Default: 30
+- Default: 0
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description:
+- Description: 0 means prohibited. Other memtables whose last update time is greater than stale_memtable_flush_time_sec will be persisted when memory is insufficient.
 - Introduced in: -
 -->
 

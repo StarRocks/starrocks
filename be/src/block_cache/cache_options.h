@@ -47,6 +47,7 @@ struct CacheOptions {
 };
 
 struct WriteCacheOptions {
+    int8_t priority = 0;
     // If ttl_seconds=0 (default), no ttl restriction will be set. If an old one exists, remove it.
     uint64_t ttl_seconds = 0;
     // If overwrite=true, the cache value will be replaced if it already exists.
@@ -56,6 +57,11 @@ struct WriteCacheOptions {
     // the write finish. So the cache library can use the buffer directly without copying it to another buffer.
     bool allow_zero_copy = false;
     std::function<void(int, const std::string&)> callback = nullptr;
+
+    // The probability to evict other items if the cache space is full, which can help avoid frequent cache replacement
+    // and improve cache hit rate sometimes.
+    // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
+    int32_t evict_probability = 100;
 
     struct Stats {
         int64_t write_mem_bytes = 0;

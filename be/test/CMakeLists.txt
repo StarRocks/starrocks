@@ -77,6 +77,7 @@ set(EXEC_FILES
         ./exec/json_parser_test.cpp
         ./exec/json_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
+        ./exec/multi_olap_table_sink_test.cpp
         ./exec/avro_scanner_test.cpp
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
@@ -187,6 +188,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/page_index_test.cpp
+        ./formats/parquet/statistics_helper_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -333,6 +335,7 @@ set(EXEC_FILES
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
+        ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
         ./runtime/buffer_control_block_test.cpp

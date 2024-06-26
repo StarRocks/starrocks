@@ -338,7 +338,7 @@ public class NodeMgr {
                         Thread.sleep(5000);
                         continue;
                     } catch (InterruptedException e) {
-                        LOG.warn(e);
+                        LOG.warn("Failed to execute sleep", e);
                         System.exit(-1);
                     }
                 }
@@ -631,7 +631,7 @@ public class NodeMgr {
                 System.exit(-1);
             }
         } catch (UnknownHostException e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
             System.exit(-1);
         }
         LOG.debug("get self node: {}", selfNode);

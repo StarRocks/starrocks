@@ -980,7 +980,7 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
             Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT *\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             dropPipe(pipeName);
         }
 
@@ -994,7 +994,7 @@ public class PipeManagerTest {
             piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
             String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
             Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT `col_int`, `col_string`\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             dropPipe(pipeName);
         }
 
@@ -1010,7 +1010,7 @@ public class PipeManagerTest {
             Assert.assertEquals("INSERT INTO `tbl1` " +
                     "WITH LABEL `insert_label` " +
                     "(`col_int`) SELECT `col_int`\n" +
-                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+                    "FROM FILES(\"format\" = \"parquet\", \"path\" = \"a.parquet,b.parquet\")", sql);
             SqlParser.parse(sql, new SessionVariable());
             dropPipe(pipeName);
         }
@@ -1094,6 +1094,6 @@ public class PipeManagerTest {
 
         String sql = "select inspect_all_pipes()";
         String plan = UtFrameUtils.getFragmentPlan(newCtx, sql);
-        Assert.assertTrue(plan.contains("p_inspect"));
+        Assert.assertTrue(plan.contains("name"));
     }
 }

@@ -143,7 +143,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         VelocityContext context = new VelocityContext();
 
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
-        String quoteColumnName = StatisticUtils.quoting(columnName);
+        String quoteColumnName = StatisticUtils.quoting(table, columnName);
 
         String nullValue;
         if (table.isIcebergTable()) {
@@ -157,7 +157,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("partitionNameStr", PartitionUtil.normalizePartitionName(partitionName,
                 table.getPartitionColumnNames(), nullValue));
         context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", fullAnalyzeGetDataSize(columnName, columnType));
+        context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnName, columnType));
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("catalogName", this.catalogName);

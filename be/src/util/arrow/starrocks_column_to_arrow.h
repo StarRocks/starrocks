@@ -25,7 +25,7 @@
 #include <arrow/status.h>
 #include <arrow/type.h>
 #include <arrow/visitor.h>
-#include <arrow/visitor_inline.h>
+#include <arrow/visitor_generate.h>
 
 #include <memory>
 

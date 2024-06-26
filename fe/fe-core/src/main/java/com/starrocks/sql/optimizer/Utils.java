@@ -899,4 +899,19 @@ public class Utils {
         }
         return false;
     }
+
+    @SuppressWarnings("unchecked")
+    public static <T, S extends T> Optional<S> downcast(T obj, Class<S> klass) {
+        Preconditions.checkArgument(obj != null);
+        if (obj.getClass().equals(Objects.requireNonNull(klass))) {
+            return Optional.of((S) obj);
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    public static <T, S extends T> S mustCast(T obj, Class<S> klass) {
+        return downcast(obj, klass)
+                .orElseThrow(() -> new IllegalArgumentException("Cannot cast " + obj.getClass() + " to " + klass));
+    }
 }

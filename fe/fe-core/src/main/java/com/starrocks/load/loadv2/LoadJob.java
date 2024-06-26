@@ -58,7 +58,6 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
@@ -193,7 +192,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // During committing, the load job could not be cancelled.
     protected boolean isCommitting = false;
 
-    protected ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
@@ -520,7 +519,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                LOG.warn(e);
+                LOG.warn("Failed to execute submitTask", e);
             }
         }
     }
@@ -537,7 +536,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                LOG.warn(e);
+                LOG.warn("Failed to execute sleep", e);
             }
         }
     }

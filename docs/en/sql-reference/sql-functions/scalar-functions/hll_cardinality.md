@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # hll_cardinality
 
-## Description
+
 
 Calculates the cardinality of a single HLL type value.
 

@@ -253,7 +253,7 @@ StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_t
         break;
     }
     default: {
-        return Status::NotSupported(fmt::format("not supported compression type {}", type));
+        return Status::NotSupported(fmt::format("not supported compression type {}", to_string(type)));
     }
     }
 
@@ -330,7 +330,6 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
                                                       ::parquet::Type::INT32, -1, file_column_id.field_id);
     }
     case TYPE_DATETIME: {
-        // TODO(letian-jiang): set isAdjustedToUTC to true, and normalize datetime value
         // Apache Hive version 3 or lower does not support reading timestamps encoded as INT64
         if (_writer_options->use_int96_timestamp_encoding) {
             return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::Type::INT96,
@@ -338,7 +337,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
         } else {
             return ::parquet::schema::PrimitiveNode::Make(
                     name, rep_type,
-                    ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
+                    ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MICROS),
                     ::parquet::Type::INT64, -1, file_column_id.field_id);
         }
     }
@@ -429,6 +428,8 @@ Status ParquetFileWriter::init() {
 
     ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
     _properties = std::make_unique<::parquet::WriterProperties::Builder>()
+                          ->version(::parquet::ParquetVersion::PARQUET_2_6)
+                          ->enable_write_page_index()
                           ->data_pagesize(_writer_options->page_size)
                           ->write_batch_size(_writer_options->write_batch_size)
                           ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)

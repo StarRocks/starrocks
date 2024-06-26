@@ -731,7 +731,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         aggCall.toString());
                 return null;
             }
-            // Aggregate must be CallOperator
             CallOperator newAggregate = getRollupAggregateFunc(aggCall, (ColumnRefOperator) targetColumn, false);
             if (newAggregate == null) {
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),

@@ -132,6 +132,17 @@ fi
 
 echo "machine type : $MACHINE_TYPE"
 
+if [[ -z ${THIRD_PARTY_BUILD_WITH_AVX2} ]]; then
+    THIRD_PARTY_BUILD_WITH_AVX2=ON
+fi
+
+if [ -e /proc/cpuinfo ] ; then
+    # detect cpuinfo
+    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
+        THIRD_PARTY_BUILD_WITH_AVX2=OFF
+    fi
+fi
+
 check_if_source_exist() {
     if [ -z $1 ]; then
         echo "dir should specified to check if exist."
@@ -1210,7 +1221,6 @@ build_libdeflate() {
 
 #clucene
 build_clucene() {
-
     check_if_source_exist "${CLUCENE_SOURCE}"
     cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
 
@@ -1228,6 +1238,7 @@ build_clucene() {
         -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" \
         -DUSE_STAT64=0 \
         -DCMAKE_BUILD_TYPE=Release \
+        -DUSE_AVX2=$THIRD_PARTY_BUILD_WITH_AVX2 \
         -DBUILD_CONTRIBS_LIB=ON ..
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
@@ -1287,6 +1298,21 @@ build_grpc() {
         -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
         -DCMAKE_CXX_STANDARD=17 ..
         
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+}
+
+build_simdutf() {
+    check_if_source_exist "${SIMDUTF_SOURCE}"
+    cd "$TP_SOURCE_DIR/${SIMDUTF_SOURCE}"
+
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR"    \
+        -DSIMDUTF_TESTS=OFF \
+        -DSIMDUTF_TOOLS=OFF \
+        -DSIMDUTF_ICONV=OFF
+
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
 }
@@ -1383,7 +1409,7 @@ build_async_profiler
 build_fiu
 build_llvm
 build_clucene
-
+build_simdutf
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

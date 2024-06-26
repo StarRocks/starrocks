@@ -236,6 +236,9 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
         DCHECK(write_offset_cursor % _block_size == 0);
         WriteCacheOptions options{};
         options.async = _enable_async_populate_mode;
+        options.evict_probability = _datacache_evict_probability;
+        options.priority = _priority;
+        options.ttl_seconds = _ttl_seconds;
         const int64_t write_size = std::min(_block_size, write_end_offset - write_offset_cursor);
 
         SharedBufferPtr sb = nullptr;
@@ -252,16 +255,15 @@ Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t 
             }
         }
         Status r = _cache->write_buffer(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
-        if (r.ok()) {
+        if (r.ok() || r.is_already_exist()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += write_size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
             _stats.write_disk_cache_bytes += options.stats.write_disk_bytes;
-        } else if (!r.is_already_exist() && !r.is_resource_busy() && !r.is_capacity_limit_exceeded()) {
+        } else if (!_can_ignore_populate_error(r)) {
             _stats.write_cache_fail_count += 1;
             _stats.write_cache_fail_bytes += write_size;
             LOG(WARNING) << "write block cache failed, errmsg: " << r.message();
-            // Failed to write cache, but we can keep processing query.
         }
         src_cursor += write_size;
         write_offset_cursor += write_size;
@@ -430,6 +432,9 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
         options.async = _enable_async_populate_mode;
+        options.evict_probability = _datacache_evict_probability;
+        options.priority = _priority;
+        options.ttl_seconds = _ttl_seconds;
         if (options.async) {
             auto cb = [sb](int code, const std::string& msg) {
                 // We only need to keep the shared buffer pointer
@@ -439,15 +444,12 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
             options.allow_zero_copy = true;
         }
         Status r = _cache->write_buffer(_cache_key, off, size, buf, &options);
-        if (r.ok()) {
+        if (r.ok() || r.is_already_exist()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += size;
             _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
             _stats.write_disk_cache_bytes += options.stats.write_disk_bytes;
-        } else if (r.is_cancelled()) {
-            _stats.skip_write_cache_count += 1;
-            _stats.skip_write_cache_bytes += size;
-        } else if (!r.is_already_exist() && !r.is_resource_busy() && !r.is_capacity_limit_exceeded()) {
+        } else if (!_can_ignore_populate_error(r)) {
             _stats.write_cache_fail_count += 1;
             _stats.write_cache_fail_bytes += size;
             LOG(WARNING) << "write block cache failed, errmsg: " << r.message();
@@ -461,6 +463,13 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         p += size;
     }
     return;
+}
+
+bool CacheInputStream::_can_ignore_populate_error(const Status& status) const {
+    if (status.is_resource_busy() || status.is_mem_limit_exceeded() || status.is_capacity_limit_exceeded()) {
+        return true;
+    }
+    return false;
 }
 
 } // namespace starrocks::io

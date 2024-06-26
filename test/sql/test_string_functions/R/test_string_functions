@@ -268,8 +268,8 @@ values ('1', 'https://starrocks.com/doc?k1=10&k2=3&k1=100'),
 -- !result
 select url_extract_host(url) from test_url_extract_host;
 -- result:
-starrocks.快速.com
 starrocks.com
+starrocks.快速.com
 -- !result
 -- name: test_url_encode
 select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
@@ -494,5 +494,21 @@ select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757",4) as a from 
 -- !result
 select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey,4) from string_table;
 -- result:
-E: (1064, "ngram function's second parameter must be const")
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 67. Detail message: ngram_search function 's second parameter and third parameter must be constant.")
+-- !result
+select ngram_search("chi","chi",0);
+-- result:
+E: (1064, "ngram search's third parameter must be a positive number")
+-- !result
+select ngram_search("chi","chi",-1);
+-- result:
+E: (1064, "ngram search's third parameter must be a positive number")
+-- !result
+select ngram_search(date('2020-06-23'), "2020", 4);
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 49. Detail message: ngram_search function 's first parameter and second parameter must be string type.")
+-- !result
+select sum(result) from ( select ngram_search("normal_string", "normal_string", 5) as result from (   select generate_series    from TABLE(generate_series(0, 4097 - 1)) ) as t1) as t2;
+-- result:
+4097.0
 -- !result

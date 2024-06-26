@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # group_concat
 
-## 功能
+
 
 将分组中的多个非 NULL 值连接成一个字符串，参数 `sep` 为字符串之间的连接符，该参数可选，默认为 `,`。该函数在连接时会忽略 NULL 值。
 

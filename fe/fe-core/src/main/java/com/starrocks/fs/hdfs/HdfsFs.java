@@ -17,7 +17,6 @@
 
 package com.starrocks.fs.hdfs;
 
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.logging.log4j.LogManager;
@@ -44,7 +43,7 @@ public class HdfsFs {
 
     public HdfsFs(HdfsFsIdentity identity) {
         this.identity = identity;
-        this.lock = new FairReentrantLock();
+        this.lock = new ReentrantLock();
         this.dfsFileSystem = null;
         this.lastAccessTimestamp = System.currentTimeMillis();
         this.fileSystemId = UUID.randomUUID();

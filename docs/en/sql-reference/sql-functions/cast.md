@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # CAST
 
-## Description
+
 
 Converts an input into the specified type. For example, `cast (input as BIGINT)` converts the input into a BIGINT value.
 

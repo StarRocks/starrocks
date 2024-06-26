@@ -198,6 +198,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     info.set_txn_type(TXN_NORMAL);
                     info.set_combined_txn_log(false);
                     info.set_commit_time(request->commit_time());
+                    info.set_force_publish(false);
                 }
             }
 

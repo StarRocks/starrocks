@@ -80,7 +80,7 @@ Status LakePrimaryKeyRecover::rowset_iterator(
     // so we can generate correct delvecs
     RETURN_IF_ERROR(sort_rowsets(&rowsets));
     for (auto& rowset : rowsets) {
-        auto res = rowset->get_each_segment_iterator(pkey_schema, &stats);
+        auto res = rowset->get_each_segment_iterator(pkey_schema, false, &stats);
         if (!res.ok()) {
             return res.status();
         }

@@ -51,12 +51,14 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -114,7 +116,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
@@ -178,6 +180,18 @@ public class StarRocksAssert {
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database `" + dbName + "`;", ctx);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        return this;
+    }
+
+    public StarRocksAssert createDatabaseIfNotExists(String dbName) throws Exception {
+        try {
+            CreateDbStmt createDbStmt =
+                    (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database if not exists `"
+                            + dbName + "`;", ctx);
+            GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        } catch (AlreadyExistsException e) {
+            // ignore
+        }
         return this;
     }
 
@@ -369,7 +383,7 @@ public class StarRocksAssert {
     public StarRocksAssert withTable(PseudoCluster cluster,
                                      MTable mTable,
                                      ExceptionRunnable action) {
-        return withTableValues(cluster, List.of(mTable), action);
+        return withMTables(cluster, List.of(mTable), action);
     }
 
     public StarRocksAssert withTable(MTable mTable,
@@ -379,23 +393,29 @@ public class StarRocksAssert {
 
     public StarRocksAssert withTables(List<MTable> mTables,
                                       ExceptionRunnable action) {
-        return withTableValues(null, mTables, action);
+        return withMTables(null, mTables, action);
     }
-    private StarRocksAssert withTableValues(PseudoCluster cluster,
-                                            List<MTable> mTables,
-                                            ExceptionRunnable action) {
-        List<String> names = Lists.newArrayList();
+
+    public StarRocksAssert withMTables(PseudoCluster cluster,
+                                       List<MTable> mTables,
+                                       ExceptionRunnable action) {
+        List<Pair<String, String>> names = Lists.newArrayList();
         try {
             for (MTable mTable : mTables) {
+                String dbName = mTable.getDbName();
+                if (!Strings.isNullOrEmpty(dbName)) {
+                    this.createDatabaseIfNotExists(dbName);
+                    this.useDatabase(dbName);
+                }
                 String sql = mTable.getCreateTableSql();
                 System.out.println(sql);
                 CreateTableStmt createTableStmt =
                         (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
                 utCreateTableWithRetry(createTableStmt, ctx);
-                names.add(mTable.getTableName());
+                names.add(Pair.create(dbName, mTable.getTableName()));
 
                 if (cluster != null) {
-                    String dbName = createTableStmt.getDbName();
+                    dbName = createTableStmt.getDbName();
                     String insertSQL = mTable.getGenerateDataSQL();
                     if (!Strings.isNullOrEmpty(insertSQL)) {
                         cluster.runSql(dbName, insertSQL);
@@ -409,9 +429,12 @@ public class StarRocksAssert {
             e.printStackTrace();
             Assert.fail("create table failed");
         } finally {
-            for (String t : names) {
+            for (Pair<String, String> t : names) {
                 try {
-                    dropTable(t);
+                    if (!Strings.isNullOrEmpty(t.first)) {
+                        useDatabase(t.first);
+                    }
+                    dropTable(t.second);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -422,6 +445,7 @@ public class StarRocksAssert {
 
     /**
      * Create tables and do insert datas and later actions.
+     *
      * @param cluster : insert into datas into table if it's not null.
      * @param tables  : tables which needs to be created and inserted.
      * @param action  : actions which will be used to do later.
@@ -451,7 +475,7 @@ public class StarRocksAssert {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail("Do action failed:" +  e.getMessage());
+            Assert.fail("Do action failed:" + e.getMessage());
         } finally {
             if (action != null) {
                 for (String table : tables) {
@@ -850,6 +874,46 @@ public class StarRocksAssert {
         return this;
     }
 
+    /**
+     * Wait the input mv refresh task finished.
+     * @param mvId: mv id
+     * @return true if the mv refresh task finished, otherwise false.
+     */
+    public boolean waitRefreshFinished(long mvId) {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = tm.getTask(TaskBuilder.getMvTaskName(mvId));
+        Assert.assertTrue(task != null);
+        TaskRunManager taskRunManager = tm.getTaskRunManager();
+        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+        TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
+        int maxTimes = 120;
+        int count = 0;
+        while (taskRun != null && count < maxTimes) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(300L);
+            taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
+            count += 1;
+        }
+        return taskRun == null;
+    }
+
+    /**
+     * Refresh materialized view asynchronously.
+     * @param ctx connnect context
+     * @param mvName mv's name
+     */
+    public StarRocksAssert refreshMV(ConnectContext ctx, String mvName) throws Exception {
+        String sql = "REFRESH MATERIALIZED VIEW " + mvName;
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+        TableName tableName = refreshMaterializedViewStatement.getMvName();
+        Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+        Table table = db.getTable(tableName.getTbl());
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table instanceof MaterializedView);
+        ctx.executeSql(sql);
+        return this;
+    }
+
     public StarRocksAssert refreshMV(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
@@ -862,14 +926,7 @@ public class StarRocksAssert {
         getCtx().executeSql(sql);
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
-        Task task = tm.getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        TaskRunManager taskRunManager = tm.getTaskRunManager();
-        TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
-        TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
-        while (taskRun != null) {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
-            taskRun = taskRunScheduler.getRunnableTaskRun(task.getId());
-        }
+        waitRefreshFinished(mv.getId());
         return this;
     }
 
@@ -918,7 +975,7 @@ public class StarRocksAssert {
 
     public void executeResourceGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
 
@@ -930,7 +987,7 @@ public class StarRocksAssert {
 
     public List<List<String>> executeResourceGroupShowSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
 
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statement, ctx);
@@ -945,7 +1002,7 @@ public class StarRocksAssert {
         StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(stmt, ctx);
 
-        ShowResultSet res =  ShowExecutor.execute((ShowStmt) stmt, ctx);
+        ShowResultSet res = ShowExecutor.execute((ShowStmt) stmt, ctx);
         String header = res.getMetaData().getColumns().stream().map(Column::getName).collect(Collectors.joining("|"));
         String body = res.getResultRows().stream()
                 .map(row -> String.join("|", row))
