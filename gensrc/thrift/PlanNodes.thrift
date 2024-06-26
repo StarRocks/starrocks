@@ -300,6 +300,12 @@ struct TIcebergDeleteFile {
     4: optional i64 length
 }
 
+struct TPaimonDeletionFile {
+    1: optional string path
+    2: optional i64 offset
+    3: optional i64 length
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -358,7 +364,9 @@ struct THdfsScanRange {
     20: optional map<string, string> odps_split_infos
 
     // delete columns slots like iceberg equality delete column slots
-    21: optional list<Types.TSlotId> delete_column_slot_ids;
+    21: optional list<Types.TSlotId> delete_column_slot_ids
+
+    27: optional TPaimonDeletionFile paimon_deletion_file;
 }
 
 struct TBinlogScanRange {

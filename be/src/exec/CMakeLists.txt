@@ -110,6 +110,7 @@ set(EXEC_FILES
     schema_scan_node.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
+    paimon/paimon_delete_file_builder.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp

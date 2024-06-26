@@ -32,6 +32,7 @@ import org.apache.paimon.data.BinaryRowWriter;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.stats.BinaryTableStats;
 import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.junit.Assert;
 import org.junit.Test;
@@ -77,12 +78,12 @@ public class PaimonScanNodeTest {
 
         List<DataFileMeta> meta1 = new ArrayList<>();
         meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
         meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
 
-        DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).withDataFiles(meta1)
-                .isStreaming(false).build();
+        DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
+                .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build();
 
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
@@ -102,12 +103,12 @@ public class PaimonScanNodeTest {
 
         List<DataFileMeta> meta1 = new ArrayList<>();
         meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
         meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
 
-        DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).withDataFiles(meta1)
-                .isStreaming(false).build();
+        DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
+                .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build();
 
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
@@ -132,14 +133,15 @@ public class PaimonScanNodeTest {
 
         List<DataFileMeta> meta1 = new ArrayList<>();
 
-        BinaryTableStats dataTableStats = new BinaryTableStats(BinaryRow.EMPTY_ROW, BinaryRow.EMPTY_ROW, new Long[]{0L});
+        BinaryTableStats dataTableStats
+                = new BinaryTableStats(BinaryRow.EMPTY_ROW, BinaryRow.EMPTY_ROW, BinaryArray.fromLongArray(new Long[]{0L}));
         meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, dataTableStats,
-                1, 1, 1, DUMMY_LEVEL));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
         meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, dataTableStats,
-                1, 1, 1, DUMMY_LEVEL));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
 
-        DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).withDataFiles(meta1)
-                .isStreaming(false).build();
+        DataSplit split = DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
+                .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build();
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         new Expectations() {
             {
@@ -149,9 +151,9 @@ public class PaimonScanNodeTest {
         };
         desc.setTable(table);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-
-        scanNode.splitRawFileScanRangeLocations(rawFile);
-        scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024);
+        DeletionFile deletionFile = new DeletionFile("dummy", 1, 22);
+        scanNode.splitRawFileScanRangeLocations(rawFile, deletionFile);
+        scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024, null);
         scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024);
     }
 }

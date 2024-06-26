@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
@@ -37,6 +38,7 @@ import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPaimonDeletionFile;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
@@ -47,10 +49,12 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.utils.InstantiationUtil;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -145,8 +149,13 @@ public class PaimonScanNode extends ScanNode {
                     List<RawFile> rawFiles = optionalRawFiles.get();
                     boolean validFormat = rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
                     if (validFormat) {
-                        for (RawFile rawFile : rawFiles) {
-                            splitRawFileScanRangeLocations(rawFile);
+                        Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
+                        for (int i = 0; i < rawFiles.size(); i++) {
+                            if (deletionFiles.isPresent()) {
+                                splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
+                            } else {
+                                splitRawFileScanRangeLocations(rawFiles.get(i), null);
+                            }
                         }
                     } else {
                         long totalFileLength = getTotalFileLength(dataSplit);
@@ -185,11 +194,45 @@ public class PaimonScanNode extends ScanNode {
         return tHdfsFileFormat;
     }
 
-    private void addRawFileScanRangeLocations(RawFile rawFile) {
-        addRawFileScanRangeLocations(rawFile, rawFile.offset(), rawFile.length());
+    public void splitRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
+        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+        long splitSize = sv.getConnectorMaxSplitSize();
+        long totalSize = rawFile.length();
+        long offset = rawFile.offset();
+        boolean needSplit = totalSize > splitSize;
+        if (needSplit) {
+            splitScanRangeLocations(rawFile, offset, totalSize, splitSize, deletionFile);
+        } else {
+            addRawFileScanRangeLocations(rawFile, deletionFile);
+        }
     }
 
-    private void addRawFileScanRangeLocations(RawFile rawFile, long offset, long length) {
+    @VisibleForTesting
+    public void splitScanRangeLocations(RawFile rawFile,
+                                        long offset,
+                                        long length,
+                                        long splitSize,
+                                        @Nullable DeletionFile deletionFile) {
+        long remainingBytes = length;
+        do {
+            if (remainingBytes < 2 * splitSize) {
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, remainingBytes, deletionFile);
+                remainingBytes = 0;
+            } else {
+                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, splitSize, deletionFile);
+                remainingBytes -= splitSize;
+            }
+        } while (remainingBytes > 0);
+    }
+
+    private void addRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
+        addRawFileScanRangeLocations(rawFile, rawFile.offset(), rawFile.length(), deletionFile);
+    }
+
+    private void addRawFileScanRangeLocations(RawFile rawFile,
+                                              long offset,
+                                              long length,
+                                              @Nullable DeletionFile deletionFile) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -199,6 +242,14 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setFile_length(rawFile.length());
         hdfsScanRange.setLength(length);
         hdfsScanRange.setFile_format(fromType(rawFile.format()));
+
+        if (null != deletionFile) {
+            TPaimonDeletionFile paimonDeletionFile = new TPaimonDeletionFile();
+            paimonDeletionFile.setPath(deletionFile.path());
+            paimonDeletionFile.setOffset(deletionFile.offset());
+            paimonDeletionFile.setLength(deletionFile.length());
+            hdfsScanRange.setPaimon_deletion_file(paimonDeletionFile);
+        }
 
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
@@ -210,34 +261,8 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    protected void splitRawFileScanRangeLocations(RawFile rawFile) {
-        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
-        long splitSize = sv.getConnectorMaxSplitSize();
-
-        long totalSize = rawFile.length();
-        long offset = rawFile.offset();
-        boolean needSplit = totalSize > splitSize;
-        if (needSplit) {
-            splitScanRangeLocations(rawFile, offset, totalSize, splitSize);
-        } else {
-            addRawFileScanRangeLocations(rawFile);
-        }
-    }
-
-    protected void splitScanRangeLocations(RawFile rawFile, long offset, long length, long splitSize) {
-        long remainingBytes = length;
-        do {
-            if (remainingBytes < 2 * splitSize) {
-                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, remainingBytes);
-                remainingBytes = 0;
-            } else {
-                addRawFileScanRangeLocations(rawFile, offset + length - remainingBytes, splitSize);
-                remainingBytes -= splitSize;
-            }
-        } while (remainingBytes > 0);
-    }
-
-    protected void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
+    @VisibleForTesting
+    public void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
