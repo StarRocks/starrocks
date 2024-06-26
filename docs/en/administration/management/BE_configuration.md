@@ -3199,7 +3199,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: An extra agent service port for CN (BE in v3.0) in a shared-data cluster.
+- Description: An extra agent service port for BE and CN.
 - Introduced in: -
 
 <!--
