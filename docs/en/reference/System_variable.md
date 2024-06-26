@@ -296,6 +296,27 @@ This variable is supported from v2.5.18 and v3.1.7.
 
   Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, and 3.1.4.
 
+### tablet_internal_parallel_mode
+
+* **Description**: Internal Parallel Scan strategy of tablets. Valid Values:
+  * `auto`: When the number of Tablets to be scanned on BE or CN nodes is less than the Degree of Parallelism (DOP), the system automatically determines whether Parallel Scan is needed based on the estimated size of the Tablets.
+  * `force_split`: Forces the splitting of Tablets and performs Parallel Scan.
+* **Default**: auto
+* **Data type**: String
+* **Introduced in**: v2.5.0
+
+### enable_scan_datacache
+
+* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
+* **Default**: false
+* **Introduced in**: v2.5
+
+### enable_populate_datacache
+
+* **Description**: Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5. In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
+* **Default**: true
+* **Introduced in**: v2.5
+
 ### enable_global_runtime_filter
 
   Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby speeding up the query.
