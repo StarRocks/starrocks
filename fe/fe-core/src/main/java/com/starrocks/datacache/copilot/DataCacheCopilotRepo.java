@@ -30,11 +30,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.Optional;
 
 public class DataCacheCopilotRepo extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(DataCacheCopilotRepo.class);
+    private static final int INSERT_BATCH_SIZE = 5000;
     private long lastFlushTimestamp = 0L;
     private long lastClearTimestamp = 0L;
 
@@ -81,13 +82,30 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
 
         lastFlushTimestamp = System.currentTimeMillis();
 
-        Optional<String> insertSQL = DataCacheCopilotStorage.getInstance().exportInsertSQL();
-        if (insertSQL.isEmpty()) {
-            return;
-        }
+        List<AccessLog> accessLogs = DataCacheCopilotStorage.getInstance().exportAccessLogs();
+
         try {
-            LOG.info("execute sql: {}", insertSQL.get());
-            buildConnectContext().executeSql(insertSQL.get());
+            InsertSQLBuilder insertSQLBuilder = new InsertSQLBuilder(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    StatsConstants.STATISTICS_DB_NAME,
+                    DataCacheCopilotConstants.DATACACHE_COPILOT_STATISTICS_TABLE_NAME);
+            // because we have insert limit 'expr_children_limit'(default value is 10,000) in FE conf, so we need to insert batch by batch
+            for (AccessLog accessLog : accessLogs) {
+                if (insertSQLBuilder.size() < INSERT_BATCH_SIZE) {
+                    insertSQLBuilder.addAccessLog(accessLog);
+                } else {
+                    String insertSQL = insertSQLBuilder.build();
+                    LOG.debug("execute sql: {}", insertSQL);
+                    buildConnectContext().executeSql(insertSQL);
+                    insertSQLBuilder.clear();
+                }
+            }
+
+            // handle remain rows in InsertSQLBuilder
+            if (insertSQLBuilder.size() > 0) {
+                String insertSQL = insertSQLBuilder.build();
+                LOG.debug("execute sql: {}", insertSQL);
+                buildConnectContext().executeSql(insertSQL);
+            }
         } catch (Exception e) {
             LOG.warn("Failed to flush data to BE, error msg is ", e);
         }
@@ -98,7 +116,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
         lastClearTimestamp = System.currentTimeMillis();
 
         try {
-            String dropSQL = SQLBuilder.buildCleanStatsSQL();
+            String dropSQL = DeleteSQLBuilder.buildCleanStatsSQL();
             buildConnectContext().executeSql(dropSQL);
         } catch (Exception e) {
             LOG.warn("Failed to drop outdated data, error msg is ", e);
@@ -133,7 +151,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
         return context;
     }
 
-    private static class SQLBuilder {
+    private static class DeleteSQLBuilder {
         private static final String CLEAN_SQL_TEMPLATE = "DELETE FROM `%s`.`%s`.`%s` WHERE `%s` <= %s";
 
         public static String buildCleanStatsSQL() {
@@ -145,6 +163,43 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
                     DataCacheCopilotConstants.DATACACHE_COPILOT_STATISTICS_TABLE_NAME,
                     DataCacheCopilotConstants.ACCESS_TIME_NAME,
                     deleteTime);
+        }
+    }
+
+    private static class InsertSQLBuilder {
+        private final String targetCatalogName;
+        private final String targetDbName;
+        private final String targetTblName;
+        private final List<String> values = new LinkedList<>();
+
+        private InsertSQLBuilder(String targetCatalogName, String targetDbName, String targetTblName) {
+            this.targetCatalogName = targetCatalogName;
+            this.targetDbName = targetDbName;
+            this.targetTblName = targetTblName;
+        }
+
+        private void addAccessLog(AccessLog accessLog) {
+            String s = String.format("('%s', '%s', '%s', '%s', '%s', from_unixtime(%d, 'yyyy-MM-dd HH:mm:ss'), %d)",
+                    accessLog.getCatalogName(), accessLog.getDbName(), accessLog.getTableName(),
+                    accessLog.getPartitionName(), accessLog.getColumnName(), accessLog.getAccessTimeSec(),
+                    accessLog.getCount());
+            values.add(s);
+        }
+
+        private void clear() {
+            values.clear();
+        }
+
+        private int size() {
+            return values.size();
+        }
+
+        private String build() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("INSERT INTO `%s`.`%s`.`%s` VALUES ", targetCatalogName, targetDbName,
+                    targetTblName));
+            sb.append(String.join(", ", values));
+            return sb.toString();
         }
     }
 }

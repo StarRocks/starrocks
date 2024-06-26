@@ -226,12 +226,13 @@ public class StatementPlanner {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
         }
-        try (Timer ignored = Tracers.watchScope("DataCacheCopilotCollect")) {
-            if (session.getSessionVariable().isEnableDataCacheCopilot()) {
-                // todo ignore star scan
-                DataCacheCopilotCollector.collectFromPhysicalPlan(optimizedPlan);
+        if (session.getSessionVariable().isEnableDataCacheCopilot()) {
+            try (Timer ignored = Tracers.watchScope("DataCacheCopilotCollect")) {
+                DataCacheCopilotCollector.collectFromPhysicalPlan(optimizedPlan,
+                        session.getSessionVariable().isEnableDataCacheCopilotFullCollect());
             }
         }
+
         try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
             // 3. Build fragment exec plan
             /*

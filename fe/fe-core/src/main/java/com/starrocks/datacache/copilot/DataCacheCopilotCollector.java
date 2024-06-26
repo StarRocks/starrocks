@@ -42,18 +42,20 @@ public class DataCacheCopilotCollector {
 
     private static final Logger LOG = LogManager.getLogger(DataCacheCopilotCollector.class);
 
-    public static void collectFromPhysicalPlan(OptExpression expr) {
-        DataCacheCopilotOptVisitor visitor = new DataCacheCopilotOptVisitor();
+    public static void collectFromPhysicalPlan(OptExpression expr, boolean enableFullCollect) {
+        DataCacheCopilotOptVisitor visitor = new DataCacheCopilotOptVisitor(enableFullCollect);
         expr.getOp().accept(visitor, expr, null);
         List<AccessLog> logs = visitor.getAccessLogs();
-        DataCacheCopilotStorage.getInstance().addAccessItems(logs);
+        DataCacheCopilotStorage.getInstance().addAccessLogs(logs);
     }
 
     private static class DataCacheCopilotOptVisitor extends OptExpressionVisitor<Void, Void> {
+        private final boolean enableFullCollect;
         private final List<AccessLog> accessLogs = new LinkedList<>();
         private final long curAccessTimeSec;
 
-        private DataCacheCopilotOptVisitor() {
+        private DataCacheCopilotOptVisitor(boolean enableFullCollect) {
+            this.enableFullCollect = enableFullCollect;
             // only accurate to hour, to reduce cardinality
             this.curAccessTimeSec = System.currentTimeMillis() / 1000 / 3600 * 3600;
         }

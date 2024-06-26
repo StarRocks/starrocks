@@ -21,15 +21,22 @@ public class AccessLog {
     private final String partitionName;
     private final String columnName;
     private final long accessTimeSec;
+    private final long count;
 
     public AccessLog(String catalogName, String dbName, String tableName, String partitionName,
                      String columnName, long accessTimeSec) {
+        this(catalogName, dbName, tableName, partitionName, columnName, accessTimeSec, 1);
+    }
+
+    public AccessLog(String catalogName, String dbName, String tableName, String partitionName,
+                     String columnName, long accessTimeSec, long count) {
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
         this.partitionName = partitionName;
         this.columnName = columnName;
         this.accessTimeSec = accessTimeSec;
+        this.count = count;
     }
 
     public String getCatalogName() {
@@ -54,5 +61,9 @@ public class AccessLog {
 
     public long getAccessTimeSec() {
         return accessTimeSec;
+    }
+
+    public long getCount() {
+        return count;
     }
 }

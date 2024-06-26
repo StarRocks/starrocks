@@ -471,7 +471,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
     public static final String DATACACHE_EVICT_PROBABILITY = "datacache_evict_probability";
     public static final String ENABLE_DATACACHE_COPILOT = "enable_datacache_copilot";
-    public static final String ENABLE_DATACACHE_COPILOT_IGNORE_STAR_SCAN = "enable_datacache_copilot_ignore_star_scan";
+    public static final String ENABLE_DATACACHE_COPILOT_FULL_COLLECT = "enable_datacache_copilot_full_collect";
 
     // The following configurations will be deprecated, and we use the `datacache` suffix instead.
     // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -1618,8 +1618,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_COPILOT)
     private boolean enableDataCacheCopilot = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_DATACACHE_COPILOT_IGNORE_STAR_SCAN)
-    private boolean enableDataCacheCopilotIgnoreStarScan = true;
+    @VariableMgr.VarAttr(name = ENABLE_DATACACHE_COPILOT_FULL_COLLECT)
+    private boolean enableDataCacheCopilotFullCollect = false;
 
     @VariableMgr.VarAttr(name = CATALOG, flag = VariableMgr.SESSION_ONLY)
     private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -2299,8 +2299,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableDataCacheCopilot;
     }
 
-    public boolean isEnableDataCacheCopilotIgnoreStarScan() {
-        return this.enableDataCacheCopilotIgnoreStarScan;
+    public boolean isEnableDataCacheCopilotFullCollect() {
+        return this.enableDataCacheCopilotFullCollect;
     }
 
     public boolean isCboUseDBLock() {

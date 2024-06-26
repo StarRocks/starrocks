@@ -14,14 +14,10 @@
 
 package com.starrocks.datacache.copilot;
 
-import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.statistic.StatsConstants;
-
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -36,12 +32,12 @@ public class DataCacheCopilotStorage {
         return STORAGE;
     }
 
-    public void addAccessItems(List<AccessLog> accessItems) {
+    public void addAccessLogs(List<AccessLog> accessLogs) {
         writeLock();
 
         try {
-            for (AccessLog accessItem : accessItems) {
-                catalogMapping.update(accessItem);
+            for (AccessLog accessLog : accessLogs) {
+                catalogMapping.update(accessLog);
             }
         } finally {
             writeUnLock();
@@ -58,16 +54,13 @@ public class DataCacheCopilotStorage {
         }
     }
 
-    public Optional<String> exportInsertSQL() {
+    public List<AccessLog> exportAccessLogs() {
         writeLock();
         try {
+            List<AccessLog> accessLogs = new LinkedList<>();
             if (estimateMemorySize == 0) {
-                return Optional.empty();
+                return accessLogs;
             }
-
-            SQLBuilder sqlBuilder =
-                    new SQLBuilder(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, StatsConstants.STATISTICS_DB_NAME,
-                            DataCacheCopilotConstants.DATACACHE_COPILOT_STATISTICS_TABLE_NAME);
 
             // catalog level
             for (Map.Entry<String, DbMapping> catalogEntry : catalogMapping.mapping.entrySet()) {
@@ -94,8 +87,9 @@ public class DataCacheCopilotStorage {
                                     long accessTime = accessTimeEntry.getKey();
                                     long count = accessTimeEntry.getValue();
 
-                                    sqlBuilder.addAccessLog(catalogName, dbName, tblName, partitionName, columnName,
-                                            accessTime, count);
+                                    accessLogs.add(
+                                            new AccessLog(catalogName, dbName, tblName, partitionName, columnName,
+                                                    accessTime, count));
                                 }
                             }
                         }
@@ -103,7 +97,7 @@ public class DataCacheCopilotStorage {
                 }
             }
 
-            return Optional.of(sqlBuilder.build());
+            return accessLogs;
         } finally {
             catalogMapping.clear();
             estimateMemorySize = 0L;
@@ -130,15 +124,15 @@ public class DataCacheCopilotStorage {
     private class CatalogMapping {
         private final Map<String, DbMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessItem) {
-            String catalogName = accessItem.getCatalogName();
+        protected void update(AccessLog accessLog) {
+            String catalogName = accessLog.getCatalogName();
             DbMapping dbMapping = mapping.get(catalogName);
             if (dbMapping == null) {
                 dbMapping = new DbMapping();
                 mapping.put(catalogName, dbMapping);
                 estimateMemorySize += catalogName.length();
             }
-            dbMapping.update(accessItem);
+            dbMapping.update(accessLog);
         }
 
         protected void clear() {
@@ -149,102 +143,74 @@ public class DataCacheCopilotStorage {
     private class DbMapping {
         private final Map<String, TblMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessItem) {
-            String dbName = accessItem.getDbName();
+        protected void update(AccessLog accessLog) {
+            String dbName = accessLog.getDbName();
             TblMapping tblMapping = mapping.get(dbName);
             if (tblMapping == null) {
                 tblMapping = new TblMapping();
                 mapping.put(dbName, tblMapping);
                 estimateMemorySize += dbName.length();
             }
-            tblMapping.update(accessItem);
+            tblMapping.update(accessLog);
         }
     }
 
     private class TblMapping {
         private final Map<String, PartitionMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessItem) {
-            String tblName = accessItem.getTableName();
+        protected void update(AccessLog accessLog) {
+            String tblName = accessLog.getTableName();
             PartitionMapping partitionMapping = mapping.get(tblName);
             if (partitionMapping == null) {
                 partitionMapping = new PartitionMapping();
                 mapping.put(tblName, partitionMapping);
                 estimateMemorySize += tblName.length();
             }
-            partitionMapping.update(accessItem);
+            partitionMapping.update(accessLog);
         }
     }
 
     private class PartitionMapping {
         private final Map<String, ColumnMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessItem) {
-            String partitionName = accessItem.getPartitionName();
+        protected void update(AccessLog accessLog) {
+            String partitionName = accessLog.getPartitionName();
             ColumnMapping columnMapping = mapping.get(partitionName);
             if (columnMapping == null) {
                 columnMapping = new ColumnMapping();
                 mapping.put(partitionName, columnMapping);
                 estimateMemorySize += partitionName.length();
             }
-            columnMapping.update(accessItem);
+            columnMapping.update(accessLog);
         }
     }
 
     private class ColumnMapping {
         private final Map<String, AccessTimeMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessItem) {
-            String columnName = accessItem.getColumnName();
+        protected void update(AccessLog accessLog) {
+            String columnName = accessLog.getColumnName();
             AccessTimeMapping accessTimeMapping = mapping.get(columnName);
             if (accessTimeMapping == null) {
                 accessTimeMapping = new AccessTimeMapping();
                 mapping.put(columnName, accessTimeMapping);
                 estimateMemorySize += columnName.length();
             }
-            accessTimeMapping.update(accessItem);
+            accessTimeMapping.update(accessLog);
         }
     }
 
     private class AccessTimeMapping {
         private final Map<Long, Long> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessItem) {
-            long accessTime = accessItem.getAccessTimeSec();
+        protected void update(AccessLog accessLog) {
+            long accessTime = accessLog.getAccessTimeSec();
             Long count = mapping.get(accessTime);
             if (count == null) {
-                count = 0L;
+                count = accessLog.getCount();
                 estimateMemorySize += 16;
             }
-            mapping.put(accessTime, count + 1);
-        }
-    }
-
-    private static class SQLBuilder {
-        private final String targetCatalogName;
-        private final String targetDbName;
-        private final String targetTblName;
-        private final List<String> values = new LinkedList<>();
-
-        private SQLBuilder(String targetCatalogName, String targetDbName, String targetTblName) {
-            this.targetCatalogName = targetCatalogName;
-            this.targetDbName = targetDbName;
-            this.targetTblName = targetTblName;
-        }
-
-        private void addAccessLog(String catalogName, String dbName, String tblName, String partitionName,
-                                  String columnName, long accessTime, long count) {
-            String s = String.format("('%s', '%s', '%s', '%s', '%s', from_unixtime(%d, 'yyyy-MM-dd HH:mm:ss'), %d)",
-                    catalogName, dbName, tblName, partitionName, columnName, accessTime, count);
-            values.add(s);
-        }
-
-        private String build() {
-            StringBuilder sb = new StringBuilder();
-            sb.append(String.format("INSERT INTO `%s`.`%s`.`%s` VALUES ", targetCatalogName, targetDbName,
-                    targetTblName));
-            sb.append(String.join(", ", values));
-            return sb.toString();
+            mapping.put(accessTime, count + accessLog.getCount());
         }
     }
 }
