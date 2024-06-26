@@ -26,7 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -81,7 +81,7 @@ public class ReplayFromDumpTestBase {
 
     @Before
     public void before() throws Exception {
-        BackendCoreStat.reset();
+        BackendResourceStat.getInstance().reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
