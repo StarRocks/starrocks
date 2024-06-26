@@ -5640,4 +5640,23 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
         EXPECT_EQ(1, result->get(2).get_int8());
     }
 }
+
+TEST_F(ArrayFunctionsTest, array_flatten_int) {
+    // array_flatten(NULL): NULL
+    // array_flatten([[1, 2], [1, 4]]): [1,2,1,4]
+    // array_flatten([[1, 2], [3]]): [1,2,3]
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{DatumArray{1, 2}, DatumArray{1, 4}});
+
+
+
+        auto result = ArrayFunctions::array_flatten(nullptr, {array}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->get(0).is_null());
+        EXPECT_EQ("[1,2,1,4]", result->debug_item(1));
+        EXPECT_EQ("[1,2,3]", result->debug_item(2));
+    }
+}
 } // namespace starrocks
