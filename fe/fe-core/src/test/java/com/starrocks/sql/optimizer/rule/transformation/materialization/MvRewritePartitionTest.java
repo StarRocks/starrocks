@@ -644,7 +644,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                                     " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
                                     " where %s " +
                                     " group by a.t1a,a.id_date;", expect.partitionPredicate);
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             if (expect.isExpectRewrite) {
                                 if (expect.isCompensateUnionAll) {
                                     PlanTestBase.assertContains(plan, "UNION");
