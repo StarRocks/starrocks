@@ -99,6 +99,7 @@ You can find a built-in function based on the following categories:
 - [arrays_overlap](./array-functions/arrays_overlap.md)
 - [array_to_bitmap](./array-functions/array_to_bitmap.md)
 - [array_unique_agg](./array-functions/array_unique_agg.md)
+- [array_flatten](./array-functions/array_flatten.md)
 - [cardinality](./array-functions/cardinality.md)
 - [element_at](./array-functions/element_at.md)
 - [reverse](./string-functions/reverse.md)
