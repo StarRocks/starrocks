@@ -51,7 +51,7 @@ public class SchemaInfo {
     @SerializedName("indexes")
     private final List<Index> indexes;
     @SerializedName("bfColumns")
-    private final Set<String> bloomFilterColumnNames;
+    private final Set<ColumnId> bloomFilterColumnNames;
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
 
@@ -106,7 +106,7 @@ public class SchemaInfo {
         return indexes;
     }
 
-    public Set<String> getBloomFilterColumnNames() {
+    public Set<ColumnId> getBloomFilterColumnNames() {
         return bloomFilterColumnNames;
     }
 
@@ -128,7 +128,7 @@ public class SchemaInfo {
         for (Column column : columns) {
             TColumn tColumn = column.toThrift();
             // is bloom filter column
-            if (bloomFilterColumnNames != null && bloomFilterColumnNames.contains(column.getName())) {
+            if (bloomFilterColumnNames != null && bloomFilterColumnNames.contains(column.getColumnId())) {
                 tColumn.setIs_bloom_filter_column(true);
             }
             tColumns.add(tColumn);
@@ -166,7 +166,7 @@ public class SchemaInfo {
         private List<Integer> sortKeyIndexes;
         private List<Integer> sortKeyUniqueIds;
         private List<Index> indexes;
-        private Set<String> bloomFilterColumnNames;
+        private Set<ColumnId> bloomFilterColumnNames;
         private double bloomFilterFpp; // false positive probability
 
         private Builder() {
@@ -231,7 +231,7 @@ public class SchemaInfo {
             return this;
         }
 
-        public Builder setBloomFilterColumnNames(Collection<String> bloomFilterColumnNames) {
+        public Builder setBloomFilterColumnNames(Collection<ColumnId> bloomFilterColumnNames) {
             Preconditions.checkState(this.bloomFilterColumnNames == null);
             if (bloomFilterColumnNames != null) {
                 this.bloomFilterColumnNames = new HashSet<>(bloomFilterColumnNames);

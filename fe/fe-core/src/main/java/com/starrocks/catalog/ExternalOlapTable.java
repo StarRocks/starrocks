@@ -31,6 +31,11 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> 3ffbe92c15 ([Refactor] Introduce ColumnId to support Column renaming (part3) (#45757))
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
@@ -377,7 +382,8 @@ public class ExternalOlapTable extends OlapTable {
         if (meta.isSetIndex_infos()) {
             List<Index> indexList = new ArrayList<>();
             for (TIndexInfo indexInfo : meta.getIndex_infos()) {
-                Index index = new Index(indexInfo.getIndex_name(), indexInfo.getColumns(),
+                Index index = new Index(indexInfo.getIndex_name(),
+                        MetaUtils.getColumnIdsByColumnNames(this, indexInfo.getColumns()),
                         IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment(),
                         Collections.emptyMap());
                 indexList.add(index);

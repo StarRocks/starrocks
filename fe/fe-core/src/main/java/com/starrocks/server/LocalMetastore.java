@@ -1895,7 +1895,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 .setIndexes(table.getIndexes())
                 .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                 .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
-                .setBloomFilterColumnNames(table.getBfColumns())
+                .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
                 .addColumns(indexMeta.getSchema())
                 .build().toTabletSchema();
@@ -3635,7 +3635,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private void renameColumnInternal(OlapTable olapTable, String colName, String newColName) {
         olapTable.renameColumn(colName, newColName);
 
-        Set<String> bfColumns = olapTable.getBfColumns();
+        Set<String> bfColumns = olapTable.getBfColumnNames();
         if (bfColumns != null) {
             Iterator<String> iterator = bfColumns.iterator();
             while (iterator.hasNext()) {

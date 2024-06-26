@@ -48,6 +48,7 @@ import com.google.common.collect.Table;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.KeysType;
@@ -915,7 +916,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                                     + " and it is lost. create an empty replica to recover it",
                                             tabletId, replica.getId(), backendId);
                                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
-                                    Set<String> bfColumns = olapTable.getCopiedBfColumns();
+                                    Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
                                     double bfFpp = olapTable.getBfFpp();
                                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                                             .setId(indexMeta.getSchemaId())
@@ -1629,14 +1630,13 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                List<String> columns = Lists.newArrayList();
                 List<TColumn> columnsDesc = Lists.newArrayList();
                 List<Integer> columnSortKeyUids = Lists.newArrayList();
 
                 for (Column column : indexMeta.getSchema()) {
                     TColumn tColumn = column.toThrift();
                     tColumn.setColumn_name(column.getColumnId().getId());
-                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
+                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumnIds());
                     columnsDesc.add(tColumn);
                 }
                 if (indexMeta.getSortKeyUniqueIds() != null) {

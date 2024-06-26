@@ -2201,8 +2201,9 @@ public class ShowExecutor {
                 } else if (table instanceof OlapTable) {
                     List<Index> indexes = ((OlapTable) table).getIndexes();
                     for (Index index : indexes) {
+                        List<String> indexColumnNames = MetaUtils.getColumnNamesByColumnIds(table, index.getColumns());
                         rows.add(Lists.newArrayList(statement.getTableName().toString(), "",
-                                index.getIndexName(), "", String.join(",", index.getColumns()), "", "", "", "",
+                                index.getIndexName(), "", String.join(",", indexColumnNames), "", "", "", "",
                                 "", String.format("%s%s", index.getIndexType().name(), index.getPropertiesString()),
                                 index.getComment()));
                     }

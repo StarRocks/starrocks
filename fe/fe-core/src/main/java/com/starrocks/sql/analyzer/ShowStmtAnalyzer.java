@@ -409,7 +409,7 @@ public class ShowStmtAnalyzer {
                     if (table.isNativeTableOrMaterializedView()) {
                         node.setOlapTable(true);
                         OlapTable olapTable = (OlapTable) table;
-                        Set<String> bfColumns = olapTable.getCopiedBfColumns();
+                        Set<String> bfColumns = olapTable.getBfColumnNames();
                         Map<Long, List<Column>> indexIdToSchema = olapTable.getIndexIdToSchema();
 
                         // indices order

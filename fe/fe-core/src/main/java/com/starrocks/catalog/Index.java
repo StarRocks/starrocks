@@ -45,6 +45,12 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> 3ffbe92c15 ([Refactor] Introduce ColumnId to support Column renaming (part3) (#45757))
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 
@@ -74,7 +80,7 @@ public class Index implements Writable {
     @SerializedName(value = "indexName")
     private String indexName;
     @SerializedName(value = "columns")
-    private List<String> columns;
+    private List<ColumnId> columns;
     @SerializedName(value = "indexType")
     private IndexDef.IndexType indexType;
     @SerializedName(value = "comment")
@@ -82,17 +88,17 @@ public class Index implements Writable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
-    public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment) {
+    public Index(String indexName, List<ColumnId> columns, IndexDef.IndexType indexType, String comment) {
         this(-1, indexName, columns, indexType, comment, Collections.emptyMap());
     }
 
-    public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
+    public Index(String indexName, List<ColumnId> columns, IndexDef.IndexType indexType, String comment,
                  Map<String, String> properties) {
         this(-1, indexName, columns, indexType, comment, properties);
     }
 
-    public Index(long indexId, String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
-                 Map<String, String> properties) {
+    public Index(long indexId, String indexName, List<ColumnId> columns, IndexDef.IndexType indexType,
+                 String comment, Map<String, String> properties) {
         this.indexId = indexId;
         this.indexName = indexName;
         this.columns = columns;
@@ -126,11 +132,11 @@ public class Index implements Writable {
         this.indexName = indexName;
     }
 
-    public List<String> getColumns() {
+    public List<ColumnId> getColumns() {
         return columns;
     }
 
-    public void setColumns(List<String> columns) {
+    public void setColumns(List<ColumnId> columns) {
         this.columns = columns;
     }
 
@@ -203,7 +209,7 @@ public class Index implements Writable {
 
     @Override
     public String toString() {
-        return toSql();
+        return toSql(null);
     }
 
     public String getPropertiesString() {
@@ -215,18 +221,24 @@ public class Index implements Writable {
                 new PrintableMap<>(properties, "=", true, false, ","));
     }
 
-    public String toSql() {
+    public String toSql(Table table) {
         StringBuilder sb = new StringBuilder("INDEX ");
         sb.append(indexName);
         sb.append(" (");
         boolean first = true;
-        for (String col : columns) {
+        List<String> columnNames;
+        if (table != null) {
+            columnNames = MetaUtils.getColumnNamesByColumnIds(table, columns);
+        } else {
+            columnNames = columns.stream().map(ColumnId::getId).collect(Collectors.toList());
+        }
+        for (String col : columnNames) {
             if (first) {
                 first = false;
             } else {
                 sb.append(",");
             }
-            sb.append("`" + col + "`");
+            sb.append("`").append(col).append("`");
         }
         sb.append(")");
         if (indexType != null) {
@@ -245,7 +257,7 @@ public class Index implements Writable {
         TOlapTableIndex tIndex = new TOlapTableIndex();
         tIndex.setIndex_id(indexId);
         tIndex.setIndex_name(indexName);
-        tIndex.setColumns(columns);
+        tIndex.setColumns(columns.stream().map(ColumnId::getId).collect(Collectors.toList()));
         tIndex.setIndex_type(TIndexType.valueOf(indexType.toString()));
         if (columns != null) {
             tIndex.setComment(comment);

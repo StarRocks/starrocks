@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections4.CollectionUtils;
@@ -638,7 +639,7 @@ public class DesensitizedSQLBuilder {
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
                     sb.append(",\n");
-                    sb.append("  ").append(desensitizeIndexDef(index));
+                    sb.append("  ").append(desensitizeIndexDef(olapTable, index));
                 }
             }
 
@@ -683,11 +684,11 @@ public class DesensitizedSQLBuilder {
             sb.append(1).append("\"");
 
             // bloom filter
-            Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
+            Set<String> bfColumnNames = olapTable.getBfColumnNames();
             if (bfColumnNames != null) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                         .append("\" = \"");
-                List<String> desensitizedCols = olapTable.getCopiedBfColumns().stream()
+                List<String> desensitizedCols = olapTable.getBfColumnNames().stream()
                         .map(e -> desensitizeValue(e, COLUMN)).
                         collect(toList());
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
@@ -771,12 +772,12 @@ public class DesensitizedSQLBuilder {
             return sb.toString();
         }
 
-        private String desensitizeIndexDef(Index index) {
+        private String desensitizeIndexDef(Table table, Index index) {
             StringBuilder sb = new StringBuilder("INDEX ");
             sb.append(index.getIndexName());
             sb.append(" (");
             List<String> indexCols = Lists.newArrayList();
-            for (String col : index.getColumns()) {
+            for (String col : MetaUtils.getColumnNamesByColumnIds(table, index.getColumns())) {
                 indexCols.add(desensitizeValue(StringUtils.lowerCase(col), COLUMN));
             }
             sb.append(Joiner.on(", ").join(indexCols));
