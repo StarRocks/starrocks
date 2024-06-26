@@ -294,19 +294,7 @@ This variable is supported from v2.5.18 and v3.1.7.
 
   However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
 
-<<<<<<< HEAD
   Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, and 3.1.4.
-=======
-* **Default**: false, which means the system selects a replica for each query.
-* **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
-
-
-### enable_lake_tablet_internal_parallel
-
-* **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
-* **Default**: false
-* **Data type**: Boolean
-* **Introduced in**: v3.3.0
 
 ### tablet_internal_parallel_mode
 
@@ -328,36 +316,6 @@ This variable is supported from v2.5.18 and v3.1.7.
 * **Description**: Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5. In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true
 * **Introduced in**: v2.5
-
-### enable_tablet_internal_parallel
-
-* **Description**: Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency.
-* **Default**: true
-* **Introduced in**: v2.3
-
-### enable_query_cache
-
-* **Description**: Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/query_cache.md#application-scenarios).
-* **Default**: false
-* **Introduced in**: v2.5
-
-### enable_adaptive_sink_dop
-
-* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
-* **Default**: false
-* **Introduced in**: v2.5
-
-### enable_pipeline_engine
-
-* **Description**: Specifies whether to enable the pipeline execution engine. `true` indicates enabled and `false` indicates the opposite. Default value: `true`.
-* **Default**: true
-
-### enable_sort_aggregate
-
-* **Description**: Specifies whether to enable sorted streaming. `true` indicates sorted streaming is enabled to sort data in data streams.
-* **Default**: false
-* **Introduced in**: v2.5
->>>>>>> 17c2eded73 ([Doc] Doc for shared-data tablet parallel Scan (#47458))
 
 ### enable_global_runtime_filter
 
