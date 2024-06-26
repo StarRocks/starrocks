@@ -378,7 +378,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 if (table.isExprPartitionTable() && !rangePartitionInfo.isAutomaticPartition()) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 =
                             (ExpressionRangePartitionInfoV2) rangePartitionInfo;
-                    Expr partitionExpr = expressionRangePartitionInfoV2.getPartitionExprs().get(0);
+                    Expr partitionExpr = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn()).get(0);
                     List<FunctionCallExpr> functionCallExprs = new ArrayList<>();
                     partitionExpr.collect((com.google.common.base.Predicate<Expr>) arg -> arg instanceof FunctionCallExpr,
                             functionCallExprs);
@@ -610,7 +610,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
 
             // set schema column name
-            slotRef.setCol(column.getName());
+            slotRef.setColumnName(column.getName());
         }
         // check materialized index.
         // only need check the first partition because each partition has same materialized view

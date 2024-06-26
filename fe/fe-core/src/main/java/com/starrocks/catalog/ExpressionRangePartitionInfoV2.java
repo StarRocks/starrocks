@@ -24,15 +24,14 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,7 +53,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
     private static final Logger LOG = LogManager.getLogger(ExpressionRangePartitionInfoV2.class);
 
-    private List<Expr> partitionExprs;
+    private List<ColumnIdExpr> partitionExprs;
 
     @SerializedName("serializedPartitionExprs")
     private List<String> serializedPartitionExprs;
@@ -69,7 +68,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         this.type = PartitionType.EXPR_RANGE_V2;
     }
 
-    public ExpressionRangePartitionInfoV2(List<Expr> partitionExprs, List<Column> columns) {
+    public ExpressionRangePartitionInfoV2(List<ColumnIdExpr> partitionExprs, List<Column> columns) {
         super(columns);
         this.type = PartitionType.EXPR_RANGE_V2;
         this.partitionExprs = partitionExprs;
@@ -84,7 +83,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
     public void gsonPreProcess() throws IOException {
         super.gsonPreProcess();
         this.serializedPartitionExprs = new ArrayList<>();
-        for (Expr partitionExpr : partitionExprs) {
+        for (ColumnIdExpr partitionExpr : partitionExprs) {
             serializedPartitionExprs.add(partitionExpr.toSql());
         }
     }
@@ -94,12 +93,12 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         super.gsonPostProcess();
         partitionExprs = Lists.newArrayList();
         for (String expressionSql : serializedPartitionExprs) {
-            Expr expr = SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
-            partitionExprs.add(expr);
+            partitionExprs.add(ColumnIdExpr.fromSql(expressionSql));
         }
         // Analyze partition expr
         SlotRef slotRef;
-        for (Expr expr : partitionExprs) {
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            Expr expr = columnIdExpr.getExpr();
             if (expr instanceof FunctionCallExpr) {
                 slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
             } else if (expr instanceof CastExpr) {
@@ -128,7 +127,8 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         sb.append("PARTITION BY ");
         if (table instanceof MaterializedView) {
             sb.append("(");
-            for (Expr expr : partitionExprs) {
+            for (ColumnIdExpr columnIdExpr : partitionExprs) {
+                Expr expr = columnIdExpr.convertToColumnNameExpr(table.getIdToColumn());
                 if (expr instanceof SlotRef) {
                     SlotRef slotRef = (SlotRef) expr.clone();
                     sb.append("`").append(slotRef.getColumnName()).append("`").append(",");
@@ -153,7 +153,8 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
             sb.append("RANGE(");
         }
         List<String> partitionExprDesc = Lists.newArrayList();
-        for (Expr partitionExpr : partitionExprs) {
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            Expr partitionExpr = columnIdExpr.convertToColumnNameExpr(table.getIdToColumn());
             if (partitionExpr instanceof CastExpr && isTimestampFunction(partitionExpr)) {
                 partitionExprDesc.add(partitionExpr.getChild(0).toSql());
             } else {
@@ -234,27 +235,27 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         return false;
     }
 
-    public List<Expr> getPartitionExprs() {
-        return partitionExprs;
+    public List<Expr> getPartitionExprs(Map<ColumnId, Column> idToColumn) {
+        List<Expr> result = new ArrayList<>(partitionExprs.size());
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            result.add(columnIdExpr.convertToColumnNameExpr(idToColumn));
+        }
+        return result;
     }
 
-    public void setPartitionExprs(List<Expr> partitionExprs) {
+    public int getPartitionExprsSize() {
+        return partitionExprs.size();
+    }
+
+    public void setPartitionExprs(List<ColumnIdExpr> partitionExprs) {
         this.partitionExprs = partitionExprs;
-    }
-
-    public List<String> getSerializedPartitionExprs() {
-        return serializedPartitionExprs;
-    }
-
-    public void setSerializedPartitionExprs(List<String> serializedPartitionExprs) {
-        this.serializedPartitionExprs = serializedPartitionExprs;
     }
 
     @Override
     public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
         List<Column> columns = MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds);
         for (int i = 0; i < columns.size(); i++) {
-            Expr expr = partitionExprs.get(i);
+            Expr expr = partitionExprs.get(i).convertToColumnNameExpr(idToColumn);
             Column column = columns.get(i);
             if (expr.getType().getPrimitiveType() != PrimitiveType.INVALID_TYPE
                     && expr.getType().getPrimitiveType() != column.getType().getPrimitiveType()) {
@@ -274,14 +275,6 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
     @Override
     public boolean isAutomaticPartition() {
         return automaticPartition;
-    }
-
-    public void setAutomaticPartition(Boolean automaticPartition) {
-        this.automaticPartition = automaticPartition;
-    }
-
-    public List<Type> getSourcePartitionTypes() {
-        return sourcePartitionTypes;
     }
 
     public void setSourcePartitionTypes(List<Type> sourcePartitionTypes) {

@@ -303,7 +303,7 @@ public class MaterializedViewTest {
         Assert.assertNotNull(mv);
         Assert.assertEquals("mv_new_name", mv.getName());
         ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) mv.getPartitionInfo();
-        List<Expr> exprs = partitionInfo.getPartitionExprs();
+        List<Expr> exprs = partitionInfo.getPartitionExprs(mv.getIdToColumn());
         Assert.assertEquals(1, exprs.size());
         Assert.assertTrue(exprs.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) exprs.get(0);
@@ -318,7 +318,7 @@ public class MaterializedViewTest {
         Assert.assertNotNull(mv2);
         Assert.assertEquals("mv_new_name2", mv2.getName());
         ExpressionRangePartitionInfo partitionInfo2 = (ExpressionRangePartitionInfo) mv2.getPartitionInfo();
-        List<Expr> exprs2 = partitionInfo2.getPartitionExprs();
+        List<Expr> exprs2 = partitionInfo2.getPartitionExprs(mv2.getIdToColumn());
         Assert.assertEquals(1, exprs2.size());
         Assert.assertTrue(exprs2.get(0) instanceof FunctionCallExpr);
         Expr rightChild = exprs2.get(0).getChild(1);

@@ -66,8 +66,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
-import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
@@ -3727,23 +3725,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     bfColumns.add(newColName);
                     break;
                 }
-            }
-        }
-
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (partitionInfo.isRangePartition()) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            // for expression range partition will also modify the inner slotRef
-            if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-                ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                        (ExpressionRangePartitionInfo) rangePartitionInfo;
-                Expr expr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-                AnalyzerUtils.renameSlotRef(expr, newColName);
-            } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
-                ExpressionRangePartitionInfoV2 expressionRangePartitionInfo =
-                        (ExpressionRangePartitionInfoV2) rangePartitionInfo;
-                Expr expr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-                AnalyzerUtils.renameSlotRef(expr, newColName);
             }
         }
     }
