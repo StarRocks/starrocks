@@ -209,8 +209,10 @@ public class DataCacheCopilotStorage {
             if (count == null) {
                 count = accessLog.getCount();
                 estimateMemorySize += 16;
+            } else {
+                count += accessLog.getCount();
             }
-            mapping.put(accessTime, count + accessLog.getCount());
+            mapping.put(accessTime, count);
         }
     }
 }
