@@ -602,9 +602,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             return;
         }
 
+        Map<String, Range<PartitionKey>>  mvRangePartitionMap = materializedView.getRangePartitionMap();
         Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();
         for (String partitionName : partitionsToRefresh) {
-            mappedPartitionsToRefresh.put(partitionName, rangePartitionMap.get(partitionName));
+            if (!mvRangePartitionMap.containsKey(partitionName)) {
+                LOG.warn("Partition {} is not in the materialized view's partition range map for mv:{}",
+                        partitionName, materializedView.getName());
+                continue;
+            }
+            mappedPartitionsToRefresh.put(partitionName, mvRangePartitionMap.get(partitionName));
         }
         LinkedList<String> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
@@ -2139,16 +2145,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             OlapTable olapTable = (OlapTable) baseTable;
             for (String partitionName : refreshedPartitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
+                if (partition == null) {
+                    LOG.warn("Partition {} not found in base table {} in refreshing {}, refreshedPartitionNames:{}",
+                            partitionName, baseTable.getName(), materializedView.getName(), refreshedPartitionNames);
+                    continue;
+                }
                 MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
                         partition.getId(), partition.getVisibleVersion(), partition.getVisibleVersionTime());
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
             LOG.info("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
             return partitionInfos;
-        } else if (baseTable.isHiveTable() || baseTable.isIcebergTable() || baseTable.isJDBCTable() ||
-                baseTable.isPaimonTable()) {
-            return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames),
-                    baseTableInfo);
+        } else if (ConnectorPartitionTraits.isSupported(baseTable.getType())) {
+            return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames), baseTableInfo);
         } else {
             // FIXME: base table does not support partition-level refresh and does not update the meta
             //  in materialized view.
