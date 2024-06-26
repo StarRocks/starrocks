@@ -316,9 +316,6 @@ public class Trino2SRFunctionCallTransformer {
     }
 
     private static void registerHLLFunctionTransformer() {
-        // cardinality -> hll_cardinality
-        registerFunctionTransformer("cardinality", 1, "hll_cardinality", List.of(Expr.class));
-
         // approx_set -> HLL_HASH
         registerFunctionTransformer("approx_set", 1, "hll_hash", List.of(Expr.class));
 

@@ -448,9 +448,6 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         String sql = "select empty_approx_set()";
         assertPlanContains(sql, "<slot 2> : HLL_EMPTY()");
 
-        sql = "select cardinality(empty_approx_set())";
-        assertPlanContains(sql, "<slot 2> : hll_cardinality(HLL_EMPTY())");
-
         sql = "select approx_set(\"tc\") from tall";
         assertPlanContains(sql, "<slot 12> : hll_hash(CAST(3: tc AS VARCHAR))");
 
