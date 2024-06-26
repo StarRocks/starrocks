@@ -147,7 +147,7 @@ public class SampleInfo {
         String fullQualifiedName = "`" + dbName + "`.`" + tableName + "`";
         StringJoiner joiner = new StringJoiner(", ");
         for (int i = 0; i < primitiveTypeStats.size(); i++) {
-            joiner.add(primitiveTypeStats.get(i).getQuotedColumnName() + " as col_" + i);
+            joiner.add(primitiveTypeStats.get(i).getQuotedColumnName() + " as col_" + (i + 1));
         }
         String columnNames = joiner.toString();
         if (!highWeightTablets.isEmpty()) {
