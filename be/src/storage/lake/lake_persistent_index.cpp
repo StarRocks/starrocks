@@ -485,19 +485,11 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // Iterate all del files and insert into index.
     for (const auto& del : rowset->metadata().del_files()) {
         ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(_tablet_mgr->del_location(_tablet_id, del.name())));
-        int64_t file_size = 0;
-        if (del.size() > 0) {
-            file_size = del.size();
-        } else {
-            // Upgraded from old version SR.
-            ASSIGN_OR_RETURN(file_size, read_file->get_size());
-        }
-        std::vector<uint8_t> read_buffer(file_size);
-        // read from del file
-        RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+        ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
         // serialize to column
         auto pkc = pk_column->clone();
-        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), pkc.get()) == nullptr) {
+        if (serde::ColumnArraySerde::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), pkc.get()) ==
+            nullptr) {
             // Deserialze will fail when del file is corrupted.
             return Status::InternalError("column deserialization failed");
         }

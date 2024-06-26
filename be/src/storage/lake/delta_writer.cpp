@@ -444,7 +444,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             op_write->mutable_rowset()->add_segment_size(f.size.value());
         } else if (is_del(f.path)) {
             op_write->add_dels(std::move(f.path));
-            op_write->add_del_file_sizes(f.size.value());
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }

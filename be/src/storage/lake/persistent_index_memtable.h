@@ -38,6 +38,15 @@ public:
     Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds, size_t* num_found,
                  int64_t version, uint32_t rowset_id);
 
+    // Erase from index, used when rebuild index.
+    // |n| : key count
+    // |keys| : key array as raw buffer
+    // |filter| : used for filter keys that need to skip. `True` means need skip.
+    // |version|: version of index values
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    Status erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
+                             uint32_t rowset_id);
+
     // |version|: version of index values
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes,
                    int64_t version);
@@ -53,15 +62,6 @@ public:
     // |version|: version of values
     Status get(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes, KeyIndexSet* found_key_indexes,
                int64_t version) const;
-
-    // Erase from index, used when rebuild index.
-    // |n| : key count
-    // |keys| : key array as raw buffer
-    // |filter| : used for filter keys that need to skip. `True` means need skip.
-    // |version|: version of index values
-    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
-    Status erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
-                             uint32_t rowset_id);
 
     size_t memory_usage() const;
 
