@@ -51,7 +51,6 @@ import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -75,7 +74,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
-                .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+                .add("DataUsedPct").add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
                 .add("DataCacheMetrics")
                 .add("Location");
         TITLE_NAMES = builder.build();
@@ -211,7 +210,8 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(String.format("%.2f", dataUsed) + " %");
 
             // Num CPU cores
-            backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
+            backendInfo.add(backend.getCpuCores());
+            backendInfo.add(DebugUtil.getPrettyStringBytes(backend.getMemLimitBytes()));
 
             backendInfo.add(backend.getNumRunningQueries());
             double memUsedPct = backend.getMemUsedPct();

@@ -26,7 +26,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
@@ -155,7 +155,7 @@ public class ResourceGroupAnalyzer {
     // ('cpu_weight'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
     public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties)
             throws SemanticException {
-        final int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+        final int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
         for (Map.Entry<String, String> e : properties.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();
@@ -170,7 +170,7 @@ public class ResourceGroupAnalyzer {
             }
             if (key.equalsIgnoreCase(ResourceGroup.EXCLUSIVE_CPU_CORES)) {
                 final int exclusiveCpuCores = Integer.parseInt(value);
-                final int minCoreNum = BackendCoreStat.getMinNumHardwareCoresOfBe();
+                final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
                 if (exclusiveCpuCores >= minCoreNum) {
                     throw new SemanticException(String.format(
                             "%s cannot exceed the minimum number of CPU cores available on the backends minus one [%d]",

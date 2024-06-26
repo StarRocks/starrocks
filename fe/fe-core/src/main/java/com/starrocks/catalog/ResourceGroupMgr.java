@@ -41,7 +41,7 @@ import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
@@ -139,7 +139,7 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException("This type Resource Group need define classifiers.");
             }
 
-            final int minCoreNum = BackendCoreStat.getMinNumHardwareCoresOfBe();
+            final int minCoreNum = BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe();
             if (wg.getNormalizedExclusiveCpuCores() > 0 &&
                     sumExclusiveCpuCores + wg.getNormalizedExclusiveCpuCores() >= minCoreNum) {
                 throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
@@ -378,10 +378,10 @@ public class ResourceGroupMgr implements Writable {
 
                 if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
                     if (sumExclusiveCpuCores + exclusiveCpuCores - wg.getNormalizedExclusiveCpuCores() >=
-                            BackendCoreStat.getMinNumHardwareCoresOfBe()) {
+                            BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe()) {
                         throw new DdlException(String.format(EXCEED_TOTAL_EXCLUSIVE_CPU_CORES_ERR_MSG,
                                 ResourceGroup.EXCLUSIVE_CPU_CORES,
-                                BackendCoreStat.getMinNumHardwareCoresOfBe() - 1));
+                                BackendResourceStat.getInstance().getMinNumHardwareCoresOfBe() - 1));
                     }
                     if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
                         throw new SemanticException(SHORT_QUERY_SET_EXCLUSIVE_CPU_CORES_ERR_MSG);
@@ -653,7 +653,7 @@ public class ResourceGroupMgr implements Writable {
                 return;
             }
 
-            final int avgCpuCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+            final int avgCpuCores = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
 
             Map<String, String> defaultWgProperties = ImmutableMap.of(
                     ResourceGroup.CPU_WEIGHT, Integer.toString(avgCpuCores),
