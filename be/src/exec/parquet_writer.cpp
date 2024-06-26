@@ -48,7 +48,7 @@ Status RollingAsyncParquetWriter::init() {
     ASSIGN_OR_RETURN(auto compression_codec,
                      parquet::ParquetBuildHelper::convert_compression_type(_table_info.compress_type));
     builder.compression(compression_codec);
-    builder.version(::parquet::ParquetVersion::PARQUET_2_0);
+    builder.version(::parquet::ParquetVersion::PARQUET_2_6);
     _properties = builder.build();
 
     return Status::OK();
