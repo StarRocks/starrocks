@@ -800,5 +800,17 @@ std::pair<ORC_UNIQUE_PTR<Type>, size_t> TypeImpl::parseType(const std::string& i
     std::string category = input.substr(start, pos - start);
     return std::make_pair(parseCategory(category, input, pos, nextPos), endPos);
 }
+const Type* TypeImpl::getTypeByColumnId(uint64_t colIdx) const {
+    if (getColumnId() == colIdx) {
+        return this;
+    }
+    for (uint64_t i = 0; i != getSubtypeCount(); ++i) {
+        const Type* ret = getSubtype(i)->getTypeByColumnId(colIdx);
+        if (ret != nullptr) {
+            return ret;
+        }
+    }
+    return nullptr;
+}
 
 } // namespace orc

@@ -202,6 +202,7 @@ public:
         }
         return Status::OK();
     }
+    virtual std::string get_property_by_key(std::string key) const;
 
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
@@ -212,6 +213,7 @@ protected:
     std::vector<TColumn> _partition_columns;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
     std::string _table_location;
+    std::map<std::string , std::string> _properties;
 };
 
 class HdfsTableDescriptor : public HiveTableDescriptor {

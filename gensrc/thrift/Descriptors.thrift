@@ -417,6 +417,9 @@ struct THdfsTable {
 
     // timezone
     11: optional string time_zone
+
+    // The properties in this table
+    12: optional map<string,string> properties
 }
 
 struct TFileTable {

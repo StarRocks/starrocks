@@ -88,6 +88,7 @@ public:
     std::string getAttributeValue(const std::string& key) const override;
 
     std::string toString() const override;
+    const Type* getTypeByColumnId(uint64_t colIdx) const override;
 
     Type* addStructField(const std::string& fieldName, std::unique_ptr<Type> fieldType) override;
     Type* addUnionChild(std::unique_ptr<Type> fieldType) override;

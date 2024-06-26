@@ -112,6 +112,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public static final String HIVE_TABLE_COLUMN_TYPES = "hive.table.column.types";
 
+    public static final String ORC_ENCRYPT_EZK = "orc.encrypt.ezk";
+
+    public static final String ORC_DECRYPT_EZK = "orc.decrypt.ezk";
     private String catalogName;
     @SerializedName(value = "dn")
     private String hiveDbName;
@@ -379,6 +382,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),
                 0, hiveTableName, hiveDbName);
+        tHdfsTable.setProperties(this.getProperties());
         tTableDescriptor.setHdfsTable(tHdfsTable);
         return tTableDescriptor;
     }

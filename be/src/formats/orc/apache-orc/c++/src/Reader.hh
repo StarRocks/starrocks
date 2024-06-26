@@ -42,7 +42,9 @@
 #include "orc/Int128.hh"
 #include "orc/OrcFile.hh"
 #include "orc/Reader.hh"
+#include "io/InputStream.hh"
 #include "sargs/SargsApplier.hh"
+#include "security/ReaderEncryption.hh"
 
 namespace orc {
 
@@ -70,9 +72,13 @@ public:
   */
 struct FileContents {
     std::unique_ptr<InputStream> stream;
+    std::unique_ptr<proto::FileTail> tail;
     std::unique_ptr<proto::PostScript> postscript;
     std::unique_ptr<proto::Footer> footer;
     std::unique_ptr<Type> schema;
+    std::vector<std::shared_ptr<StripeInformation>> stripeList;
+    // encryption
+    std::unique_ptr<ReaderEncryption> encryption;
     uint64_t blockSize;
     CompressionKind compression;
     MemoryPool* pool;
@@ -215,6 +221,7 @@ private:
     void buildIORanges(std::vector<InputStream::IORange>* io_ranges);
 
 public:
+    ReaderEncryption* getReaderEncryption() const;
     /**
     * Constructor that lets the user specify additional options.
     * @param contents of the file
@@ -271,7 +278,7 @@ private:
     void getRowIndexStatistics(const proto::StripeInformation& stripeInfo, uint64_t stripeIndex,
                                const proto::StripeFooter& currentStripeFooter,
                                std::vector<std::vector<proto::ColumnStatistics> >* indexStats) const;
-
+    void parseStripeList_();
     // metadata
     mutable bool isMetadataLoaded;
 
@@ -332,6 +339,7 @@ public:
     uint64_t getFileFooterLength() const override;
     uint64_t getFilePostscriptLength() const override;
     uint64_t getFileLength() const override;
+    uint64_t getEncryptStripeStatisticsOffset() const;
 
     std::unique_ptr<Statistics> getStatistics() const override;
 
@@ -366,5 +374,7 @@ public:
     std::map<uint32_t, BloomFilterIndex> getBloomFilters(uint32_t stripeIndex,
                                                          const std::set<uint32_t>& included) const override;
 };
-
+    orc::proto::FileStatistics* decryptFileStats(std::shared_ptr<FileContents> contents,ReaderEncryptionVariant* variant);
+    void updateCryptedFileStatistics_(std::shared_ptr<FileContents> contents);
+    std::vector<orc::proto::ColumnStatistics*> getAllFileStat(std::shared_ptr<FileContents> contents);
 } // namespace orc

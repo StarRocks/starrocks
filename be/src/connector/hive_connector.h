@@ -177,6 +177,7 @@ private:
     // ======================================
     // The following are profile metrics
     HdfsScanProfile _profile;
+    std::string _decrypt_key;
 };
 
 } // namespace starrocks::connector

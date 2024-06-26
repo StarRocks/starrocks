@@ -52,7 +52,7 @@
 // clang-format on
 
 namespace orc {
-
+class KeyProvider;
 /**
    * Expose the reader metrics including the latency and
    * number of calls of the decompression/decoding/IO modules.
@@ -154,7 +154,11 @@ public:
      * Get the reader metrics.
      */
     ReaderMetrics* getReaderMetrics() const;
-};
+
+    ReaderOptions& setKeyProvider(std::shared_ptr<KeyProvider> keyProvider);
+
+    std::shared_ptr<KeyProvider> getKeyProvider() const;
+  };
 
 /**
    * Options for creating a RowReader.

@@ -35,7 +35,12 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 
+import org.apache.commons.lang.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
@@ -60,10 +65,12 @@ public class HdfsScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     private DescriptorTable descTbl;
+    private static final Logger LOG = LogManager.getLogger(HdfsScanNode.class);
 
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         hiveTable = (HiveTable) desc.getTable();
+        decryptMasterKey();
         setupCloudCredential();
     }
 
@@ -87,7 +94,20 @@ public class HdfsScanNode extends ScanNode {
         this.descTbl = descTbl;
         scanRangeLocations.setup(descTbl, hiveTable, scanNodePredicates);
     }
-
+    private void decryptMasterKey(){
+        Map<String, String> hivePros =  hiveTable.getProperties();
+        if(hivePros.containsKey(HiveTable.ORC_DECRYPT_EZK)){
+            return;
+        }
+        String masterKey = hivePros.get(HiveTable.ORC_ENCRYPT_EZK);
+        if(!StringUtils.isEmpty(masterKey)){
+            //TODO decrypt Master Key
+            String decryptMasterKey = "";
+            LOG.info("table:{},masterKey:{},decryptMasterKey:{}",hiveTable.getName()
+                    ,masterKey,decryptMasterKey);
+            hivePros.put(HiveTable.ORC_DECRYPT_EZK,decryptMasterKey);
+        }
+    }
     private void setupCloudCredential() {
         String catalog = hiveTable.getCatalogName();
         if (catalog == null) {

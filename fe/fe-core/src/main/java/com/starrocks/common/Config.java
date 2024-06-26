@@ -40,6 +40,7 @@ import com.starrocks.catalog.Replica;
 
 public class Config extends ConfigBase {
 
+
     /**
      * The max size of one sys log and audit log
      */

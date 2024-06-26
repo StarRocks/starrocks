@@ -247,7 +247,10 @@ configure_file (
     TypeImpl.cc
     Vector.cc
     bit_packing.cc
-    Writer.cc)
+    Writer.cc
+    security/InMemoryKeystore.cc
+    security/ReaderEncryption.cc
+    )
   
   if(BUILD_LIBHDFSPP)
     set(SOURCE_FILES ${SOURCE_FILES} OrcHdfsFile.cc)

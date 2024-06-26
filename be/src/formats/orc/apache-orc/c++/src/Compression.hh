@@ -34,7 +34,9 @@ namespace orc {
 std::unique_ptr<SeekableInputStream> createDecompressor(CompressionKind kind,
                                                         std::unique_ptr<SeekableInputStream> input, uint64_t bufferSize,
                                                         MemoryPool& pool, ReaderMetrics* metrics);
-
+  std::unique_ptr<SeekableInputStream> createDecompressorAndDecryption(CompressionKind kind, std::unique_ptr<SeekableInputStream> input, uint64_t blockSize,
+                                                                       MemoryPool& pool, ReaderMetrics* metrics,std::vector<unsigned char> key,
+                                                                       std::vector<unsigned char> iv,const EVP_CIPHER* cipher);
 /**
    * Create a compressor for the given compression kind.
    * @param kind the compression type to implement
