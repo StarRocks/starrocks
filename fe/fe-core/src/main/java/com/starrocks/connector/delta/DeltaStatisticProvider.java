@@ -33,7 +33,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -84,10 +83,8 @@ public class DeltaStatisticProvider {
             fileStats = deltaLakeFileStatsMap.get(key);
             fileStats.incrementRecordCount(fileStat.numRecords);
             fileStats.incrementSize(status.getSize());
-            updateSummaryMin(fileStats, nonPartitionPrimitiveColumn, fileStat.minValues,
-                    fileStat.nullCount, fileStat.numRecords);
-            updateSummaryMax(fileStats, nonPartitionPrimitiveColumn, fileStat.maxValues,
-                    fileStat.nullCount, fileStat.numRecords);
+            updateSummaryMin(fileStats, fileStat.minValues, fileStat.nullCount, fileStat.numRecords);
+            updateSummaryMax(fileStats, fileStat.maxValues, fileStat.nullCount, fileStat.numRecords);
             fileStats.updateNullCount(fileStat.nullCount, nonPartitionPrimitiveColumn);
         } else {
             fileStats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumn, fileStat.numRecords,
@@ -97,7 +94,6 @@ public class DeltaStatisticProvider {
     }
 
     private void updateSummaryMin(DeltaLakeFileStats deltaLakeFileStats,
-                                  List<String> partitionCols,
                                   Map<String, Object> lowerBounds,
                                   Map<String, Object> nullCounts,
                                   long recordCount) {
@@ -105,7 +101,6 @@ public class DeltaStatisticProvider {
     }
 
     private void updateSummaryMax(DeltaLakeFileStats deltaLakeFileStats,
-                                  List<String> partitionCols,
                                   Map<String, Object> upperBounds,
                                   Map<String, Object> nulCounts,
                                   long recordCount) {
@@ -132,8 +127,7 @@ public class DeltaStatisticProvider {
         }
 
         builder.setOutputRowCount(deltaLakeFileStats.getRecordCount());
-        builder.addColumnStatistics(buildColumnStatistics(deltaLakeTable, schema,
-                columnRefOperatorColumnMap, deltaLakeFileStats));
+        builder.addColumnStatistics(buildColumnStatistics(schema, columnRefOperatorColumnMap, deltaLakeFileStats));
 
         return builder.build();
     }
@@ -151,7 +145,7 @@ public class DeltaStatisticProvider {
     }
 
     private Map<ColumnRefOperator, ColumnStatistic> buildColumnStatistics(
-            DeltaLakeTable table, StructType schema, Map<ColumnRefOperator, Column> columnRefOperatorColumns,
+            StructType schema, Map<ColumnRefOperator, Column> columnRefOperatorColumns,
             DeltaLakeFileStats fileStats) {
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = new HashMap<>();
 
@@ -172,37 +166,7 @@ public class DeltaStatisticProvider {
 
     private ColumnStatistic buildColumnStatistic(Column column, DeltaLakeFileStats fileStats) {
         ColumnStatistic.Builder builder = ColumnStatistic.builder();
-        String colName = column.getName();
-
-        if (fileStats.canUseStats(colName, fileStats.getMinValues())) {
-            if (column.getType().isStringType()) {
-                String minString = fileStats.getMinValues().get(colName).toString();
-                builder.setMinString(minString);
-            } else {
-                Optional<Double> res = fileStats.getMinValue(colName);
-                res.ifPresent(builder::setMinValue);
-            }
-        }
-
-        if (fileStats.canUseStats(colName, fileStats.getMaxValues())) {
-            if (column.getType().isStringType()) {
-                String maxString = fileStats.getMaxValues().get(colName).toString();
-                builder.setMaxString(maxString);
-            } else {
-                Optional<Double> res = fileStats.getMaxValue(colName);
-                res.ifPresent(builder::setMaxValue);
-            }
-        }
-
-        Long nullCount = fileStats.getNullCount(colName);
-        if (nullCount == null) {
-            builder.setNullsFraction(0);
-        } else {
-            builder.setNullsFraction(nullCount * 1.0 / Math.max(fileStats.getRecordCount(), 1));
-        }
-        builder.setAverageRowSize(fileStats.getSize() * 1.0 / Math.max(fileStats.getRecordCount(), 1));
-        builder.setDistinctValuesCount(1);
-
+        fileStats.fillColumnStats(builder, column);
         return builder.build();
     }
 }

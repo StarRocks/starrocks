@@ -14,7 +14,9 @@
 
 package com.starrocks.connector.delta;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.BooleanType;
 import io.delta.kernel.types.DataType;
@@ -34,7 +36,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,11 +76,9 @@ public class DeltaLakeFileStats {
             this.corruptedStats = null;
             this.hasValidColumnMetrics = false;
         } else {
-            this.minValues = new HashMap<>(minValues);
-            this.maxValues = new HashMap<>(maxValues);
-            this.nullCounts = nonPartitionPrimitiveColumns.stream()
-                    .filter(col -> !nullCounts.containsKey(col))
-                    .collect(Collectors.toMap(col -> col, nullCounts::get));
+            this.minValues = minValues;
+            this.maxValues = maxValues;
+            this.nullCounts = nullCounts;
             this.corruptedStats = nonPartitionPrimitiveColumns.stream()
                     .filter(col -> !minValues.containsKey(col) &&
                             (!nullCounts.containsKey(col) || ((Double) nullCounts.get(col)).longValue() != recordCount))
@@ -100,82 +99,51 @@ public class DeltaLakeFileStats {
         this.hasValidColumnMetrics = false;
     }
 
-    public List<String> getNonPartitionPrimitiveColumns() {
-        return nonPartitionPrimitiveColumns;
-    }
-
     public long getRecordCount() {
         return recordCount;
     }
 
-    public long getSize() {
-        return size;
-    }
-
-    public StructType getSchema() {
-        return schema;
-    }
-
-    public Map<String, Object> getMinValues() {
-        return minValues;
-    }
-
-    public Optional<Double> getMinValue(String colName) {
-        return getBoundStatistic(colName, minValues);
-    }
-
-    public boolean canUseStats(String colName, Map<String, Object> values) {
-        if (schema == null || values == null) {
-            return false;
+    public void fillColumnStats(ColumnStatistic.Builder builder, Column col) {
+        if (schema == null) {
+            return;
         }
 
-        return schema.get(colName) != null && values.get(colName) != null;
-    }
+        builder.setAverageRowSize(size * 1.0 / Math.max(recordCount, 1));
+        builder.setDistinctValuesCount(1);
 
-    private Optional<Double> getBoundStatistic(String colName, Map<String, Object> boundValues) {
-        if (boundValues == null) {
-            return Optional.empty();
+        String colName = col.getName();
+        if (!nonPartitionPrimitiveColumns.contains(colName)) {
+            return;
         }
-        StructField field = schema.get(colName);
-        if (field == null) {
-            return Optional.empty();
+
+        if (minValues != null) {
+            if (col.getType().isStringType()) {
+                String minString = getBoundStatistic(colName, minValues).toString();
+                builder.setMinString(minString);
+            } else {
+                Optional<Double> res = getBoundStatistic(colName, minValues);
+                res.ifPresent(builder::setMinValue);
+            }
         }
-        Object value = boundValues.get(colName);
-        if (value == null) {
-            return Optional.empty();
+
+        if (maxValues != null) {
+            if (col.getType().isStringType()) {
+                String maxString = getBoundStatistic(colName, maxValues).toString();
+                builder.setMinString(maxString);
+            } else {
+                Optional<Double> res = getBoundStatistic(colName, maxValues);
+                res.ifPresent(builder::setMaxValue);
+            }
         }
-        return convertObjectToOptionalDouble(field.getDataType(), value);
-    }
 
-    public Optional<Double> getMaxValue(String colName) {
-        return getBoundStatistic(colName, maxValues);
-    }
-
-    public Map<String, Object> getMaxValues() {
-        return maxValues;
-    }
-
-    public Map<String, Object> getNullCounts() {
-        return nullCounts;
-    }
-
-    public Long getNullCount(String col) {
-        if (nullCounts == null) {
-            return null;
+        if (nullCounts != null) {
+            Long nullCount = getNullCount(colName);
+            if (nullCount == null) {
+                builder.setNullsFraction(0);
+            } else {
+                builder.setNullsFraction(nullCount * 1.0 / Math.max(recordCount, 1));
+            }
         }
-        Object v = nullCounts.get(col);
-        if (v == null) {
-            return null;
-        }
-        return ((Double) v).longValue();
-    }
-
-    public Set<String> getCorruptedStats() {
-        return corruptedStats;
-    }
-
-    public boolean isHasValidColumnMetrics() {
-        return hasValidColumnMetrics;
     }
 
     public void incrementRecordCount(long count) {
@@ -202,6 +170,25 @@ public class DeltaLakeFileStats {
         }
 
         updateStats(this.maxValues, newStat, nullCounts, recordCount, predicate);
+    }
+
+    private static Object sumNullCount(Object left, Object value) {
+        return (Double) left + (Double) value;
+    }
+
+    private Optional<Double> getBoundStatistic(String colName, Map<String, Object> boundValues) {
+        if (boundValues == null) {
+            return Optional.empty();
+        }
+        StructField field = schema.get(colName);
+        if (field == null) {
+            return Optional.empty();
+        }
+        Object value = boundValues.get(colName);
+        if (value == null) {
+            return Optional.empty();
+        }
+        return convertObjectToOptionalDouble(field.getDataType(), value);
     }
 
     private void updateStats(Map<String, Object> curStat,
@@ -256,10 +243,6 @@ public class DeltaLakeFileStats {
         }
     }
 
-    public static Object sumNullCount(Object left, Object value) {
-        return (Double) left + (Double) value;
-    }
-
     private static double parseTimestampWithTimeZone(String str) {
         OffsetDateTime time = OffsetDateTime.parse(str, TIME_ZONE_FORMAT);
         return time.toEpochSecond();
@@ -302,5 +285,13 @@ public class DeltaLakeFileStats {
         }
 
         return Optional.of(result);
+    }
+
+    private Long getNullCount(String col) {
+        Object v = nullCounts.get(col);
+        if (v == null) {
+            return null;
+        }
+        return ((Double) v).longValue();
     }
 }
