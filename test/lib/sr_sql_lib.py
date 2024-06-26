@@ -1300,14 +1300,14 @@ class StarrocksSQLApiLib(object):
         """
         wait async materialized view job finish and return status
         """
-        show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
-        print(show_sql)
-
+        # show materialized veiws result
         def is_all_finished(results):
             for res in results:
-                if res[0] != "SUCCESS" and res[0] != "MERGED":
+                last_refresh_state = res[12]
+                if last_refresh_state != "SUCCESS" and last_refresh_state != "MERGED":
                     return False
             return True
+        # infomation_schema.task_runs result
         def get_success_count(results):
             cnt = 0
             for res in results:
@@ -1319,8 +1319,10 @@ class StarrocksSQLApiLib(object):
         is_all_ok = False
         count = 0
         if check_count is None:
+            sql = "SHOW MATERIALIZED VIEWS WHERE database_name='{}' AND NAME='{}'".format(current_db, mv_name)
             while count < MAX_LOOP_COUNT:
-                res = self.execute_sql(show_sql, True)
+                print(sql)
+                res = self.execute_sql(sql, True)
                 if not res["status"]:
                     tools.assert_true(False, "show mv state error")
 
@@ -1332,7 +1334,9 @@ class StarrocksSQLApiLib(object):
                 time.sleep(2)
                 count += 1
         else:
+            show_sql = "select STATE from information_schema.task_runs a join information_schema.materialized_views b on a.task_name=b.task_name where b.table_name='{}' and a.`database`='{}'".format(mv_name, current_db)
             while count < MAX_LOOP_COUNT:
+                print(show_sql)
                 res = self.execute_sql(show_sql, True)
                 if not res["status"]:
                     tools.assert_true(False, "show mv state error")
