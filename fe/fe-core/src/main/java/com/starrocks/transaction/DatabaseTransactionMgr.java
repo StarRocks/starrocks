@@ -59,7 +59,6 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
@@ -129,7 +128,7 @@ public class DatabaseTransactionMgr {
      * transactionLock is used to control the access to database transaction manager data
      * Modifications to the following multiple data structures must be protected by this lock
      * */
-    private final ReentrantReadWriteLock transactionLock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock transactionLock = new ReentrantReadWriteLock(true);
 
     // count the number of running transactions of database, except for shapeless.the routine load txn
     private int runningTxnNums = 0;

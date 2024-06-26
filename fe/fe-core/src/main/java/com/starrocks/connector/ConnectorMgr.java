@@ -16,7 +16,6 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.memory.MemoryTrackable;
 
@@ -26,11 +25,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // ConnectorMgr is responsible for managing all ConnectorFactory, and for creating Connector
 public class ConnectorMgr {
     private final ConcurrentHashMap<String, CatalogConnector> connectors = new ConcurrentHashMap<>();
-    private final ReadWriteLock connectorLock = new FairReentrantReadWriteLock();
+    private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
     public CatalogConnector createConnector(ConnectorContext context) throws StarRocksConnectorException {
         String catalogName = context.getCatalogName();

@@ -23,7 +23,6 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
@@ -45,6 +44,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class WarehouseManager implements Writable {
@@ -56,7 +56,7 @@ public class WarehouseManager implements Writable {
     protected final Map<Long, Warehouse> idToWh = new HashMap<>();
     protected final Map<String, Warehouse> nameToWh = new HashMap<>();
 
-    protected final ReadWriteLock rwLock = new FairReentrantReadWriteLock();
+    protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public WarehouseManager() {
     }

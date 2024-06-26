@@ -61,7 +61,7 @@ public class BinlogManager {
 
     public static final long INVALID = -1;
 
-    QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock();
+    QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
 
     public BinlogManager() {
         tableIdToReportedNum = new HashMap<>();

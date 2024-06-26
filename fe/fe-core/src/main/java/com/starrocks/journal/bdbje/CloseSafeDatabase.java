@@ -20,16 +20,16 @@ import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.Transaction;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * this class guarantee that when bdb database is closing, there will be neither read nor write operations on that db
  */
 public class CloseSafeDatabase {
     private final Database db;
-    private final ReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     CloseSafeDatabase(Database db) {
         this.db = db;

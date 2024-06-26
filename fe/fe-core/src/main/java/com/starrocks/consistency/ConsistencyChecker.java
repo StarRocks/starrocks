@@ -49,7 +49,6 @@ import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
@@ -100,7 +99,7 @@ public class ConsistencyChecker extends FrontendDaemon {
         super("consistency checker");
 
         jobs = Maps.newHashMap();
-        jobsLock = new FairReentrantReadWriteLock();
+        jobsLock = new ReentrantReadWriteLock();
 
         if (!initWorkTime()) {
             LOG.error("failed to init time in ConsistencyChecker. exit");

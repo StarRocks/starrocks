@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -30,7 +31,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.concurrent.FairReentrantLock;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -84,6 +84,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class DictionaryMgr implements Writable, GsonPostProcessable {
     private static final Logger LOG = LoggerFactory.getLogger(DictionaryMgr.class);
@@ -103,7 +104,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
     // use last successful txn id as next readable version
     private ConcurrentHashMap<Long, Long> dictionaryIdTolastSuccessVersion = new ConcurrentHashMap<>();
 
-    private final Lock lock = new FairReentrantLock();
+    private final Lock lock = new ReentrantLock();
 
     private final ExecutorService executor =
             ThreadPoolManager.newDaemonFixedThreadPool(

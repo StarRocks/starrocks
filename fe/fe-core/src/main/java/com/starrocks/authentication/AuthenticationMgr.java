@@ -21,7 +21,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.epack.authentication.LDAPAuthProviderForExternal;
 import com.starrocks.epack.authentication.LDAPAuthProviderForNative;
 import com.starrocks.epack.authentication.SecurityIntegration;
@@ -116,9 +115,9 @@ public class AuthenticationMgr {
 
     // resolve hostname to ip
     private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
-    private final ReentrantReadWriteLock hostnameToIpLock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock hostnameToIpLock = new ReentrantReadWriteLock();
 
-    private final ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;

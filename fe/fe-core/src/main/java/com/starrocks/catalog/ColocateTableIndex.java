@@ -48,7 +48,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.concurrent.FairReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
@@ -162,7 +161,7 @@ public class ColocateTableIndex implements Writable {
     // lake group, in memory
     private final Set<GroupId> lakeGroups = Sets.newHashSet();
 
-    private final transient ReentrantReadWriteLock lock = new FairReentrantReadWriteLock();
+    private final transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public ColocateTableIndex() {
 
