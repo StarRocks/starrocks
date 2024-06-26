@@ -17,10 +17,10 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
@@ -31,13 +31,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.groovy.util.Maps;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-
-import static java.util.function.Function.identity;
 
 public class PushDownPredicateRepeatRule extends TransformationRule {
     public PushDownPredicateRepeatRule() {
@@ -89,19 +87,28 @@ public class PushDownPredicateRepeatRule extends TransformationRule {
      * it proves that the expression may contains null value, can not push down
      */
     private boolean canPushDownPredicate(ScalarOperator predicate, Set<ColumnRefOperator> repeatColumns) {
-        Map<ColumnRefOperator, ScalarOperator> m =
-                repeatColumns.stream().map(col -> new ColumnRefOperator(col.getId(), Type.INVALID, "", true))
-                        .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
-
-        ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(predicate);
-
-        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        // The calculation of the null value is in the constant fold
-        nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-        if (nullEval.equals(ConstantOperator.createBoolean(true))) {
+        ColumnRefSet usedRefs = predicate.getUsedColumns();
+        if (!usedRefs.containsAny(repeatColumns)) {
             return false;
-        } else if (!(nullEval instanceof ConstantOperator)) {
-            return false;
+        }
+
+        for (ColumnRefOperator repeatColumn : repeatColumns) {
+            if (!usedRefs.contains(repeatColumn)) {
+                continue;
+            }
+            // need check repeat column one by one
+            Map<ColumnRefOperator, ScalarOperator> m =
+                    Maps.of(repeatColumn, ConstantOperator.createNull(repeatColumn.getType()));
+            ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(predicate);
+
+            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            // The calculation of the null value is in the constant fold
+            nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            if (nullEval.equals(ConstantOperator.createBoolean(true))) {
+                return false;
+            } else if (!(nullEval instanceof ConstantOperator)) {
+                return false;
+            }
         }
         return true;
     }

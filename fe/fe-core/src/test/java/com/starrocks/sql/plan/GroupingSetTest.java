@@ -28,6 +28,15 @@ public class GroupingSetTest extends PlanTestBase {
     }
 
     @Test
+    public void testGroupByRollup() throws Exception {
+        String sql = "select * from (select v1, v2, v3, grouping_id(v1, v3), grouping(v2) " +
+                "from t0 group by rollup(v1, v2, v3)) x where coalesce(v1, v2, v3) = 1;";
+        String planFragment = getFragmentPlan(sql);
+        assertNotContains(planFragment, "PREAGGREGATION: ON\n" +
+                "     PREDICATES: coalesce(1: v1, 2: v2, 3: v3) = 1");
+    }
+
+    @Test
     public void testPredicateOnRepeatNode() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is null;";
@@ -45,7 +54,7 @@ public class GroupingSetTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
                 "  |  PREDICATES: 1: v1 IS NOT NULL"));
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assert.assertTrue(plan, plan.contains("0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 IS NOT NULL"));
