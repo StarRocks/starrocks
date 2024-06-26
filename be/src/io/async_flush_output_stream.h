@@ -35,7 +35,7 @@ public:
 
     class SliceChunk {
     public:
-        using Buffer = std::vector<uint8_t>;
+        using Buffer = raw::RawVector<uint8_t>;
 
         SliceChunk(int64_t max_size) : max_size_(max_size) {}
 

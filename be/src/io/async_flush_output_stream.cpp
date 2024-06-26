@@ -72,7 +72,9 @@ Status AsyncFlushOutputStream::write(const uint8_t* data, int64_t size) {
                     auto task = _task_queue.front();
                     _task_queue.pop();
                     bool ok = _io_executor->offer(task);
-                    DCHECK(ok);
+                    if (!ok) {
+                        _io_status.update(Status::ResourceBusy("fail to submit io task"));
+                    }
                 }
             };
             to_enqueue_tasks.emplace_back(task);
@@ -114,7 +116,9 @@ Status AsyncFlushOutputStream::close() {
                 auto task = _task_queue.front();
                 _task_queue.pop();
                 bool ok = _io_executor->offer(task);
-                DCHECK(ok);
+                if (!ok) {
+                    _io_status.update(Status::ResourceBusy("fail to submit io task"));
+                }
             }
         };
         to_enqueue_tasks.emplace_back(task);
@@ -156,6 +160,8 @@ void AsyncFlushOutputStream::enqueue_tasks_and_maybe_submit_task(std::vector<Tas
     _task_queue.pop();
     _has_in_flight_io = true;
     bool ok = _io_executor->offer(task);
-    DCHECK(ok);
+    if (!ok) {
+        _io_status.update(Status::ResourceBusy("fail to submit io task"));
+    }
 }
 } // namespace starrocks::io
