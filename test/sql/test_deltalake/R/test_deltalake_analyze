@@ -10,7 +10,7 @@ create external catalog delta_test_${uuid0} PROPERTIES (
 -- !result
 analyze table delta_test_${uuid0}.delta_oss_db.delta_lake_data_type;
 -- result:
-[REGEX].*analyze	status	OK
+delta_test_88b23d8ac5324941a60f73f8aa628920.delta_oss_db.delta_lake_data_type	analyze	status	OK
 -- !result
 select column_name, row_count, data_size, hll_cardinality(ndv), `max`, `min` from default_catalog._statistics_.external_column_statistics
     where catalog_name="delta_test_${uuid0}" and db_name="delta_oss_db" and table_name="delta_lake_data_type"
@@ -32,6 +32,26 @@ col_string	8	98	6	third_string	another_string
 col_struct	8	288	0		
 col_timestamp	8	64	6	2024-04-29 12:00:00	2024-04-24 12:00:00
 col_tinyint	8	8	6	6	1
+-- !result
+analyze table delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz;
+-- result:
+delta_test_88b23d8ac5324941a60f73f8aa628920.delta_oss_db.t_timestamp_ntz	analyze	status	OK
+-- !result
+select column_name, row_count, data_size, hll_cardinality(ndv), `max`, `min` from default_catalog._statistics_.external_column_statistics
+    where catalog_name="delta_test_${uuid0}" and db_name="delta_oss_db" and table_name="t_timestamp_ntz"
+    order by column_name;
+-- result:
+col_int	5	20	5	5	1
+col_timestamp_ntz	5	40	4	2024-01-05 04:05:06	2024-01-02 01:02:03
+-- !result
+analyze table delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz;
+-- result:
+delta_test_88b23d8ac5324941a60f73f8aa628920.delta_oss_db.t_partition_timestamp_ntz	analyze	error	172.26.92.227: primary key size exceed the limit.
+-- !result
+select column_name, row_count, data_size, hll_cardinality(ndv), `max`, `min` from default_catalog._statistics_.external_column_statistics
+    where catalog_name="delta_test_${uuid0}" and db_name="delta_oss_db" and table_name="t_partition_timestamp_ntz"
+    order by column_name;
+-- result:
 -- !result
 drop catalog delta_test_${uuid0}
 -- result:
