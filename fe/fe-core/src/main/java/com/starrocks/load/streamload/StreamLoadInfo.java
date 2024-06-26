@@ -38,6 +38,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TInsertMode;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
@@ -88,6 +89,7 @@ public class StreamLoadInfo {
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     private TCompressionType payloadCompressionType = TCompressionType.NO_COMPRESSION;
+    private TInsertMode insertMode = TInsertMode.UPSERT_MODE;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -254,6 +256,10 @@ public class StreamLoadInfo {
 
     public long getLogRejectedRecordNum() {
         return logRejectedRecordNum;
+    }
+
+    public TInsertMode getInsertMode() {
+        return insertMode;
     }
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
@@ -466,6 +472,9 @@ public class StreamLoadInfo {
             if (payloadCompressionType == null) {
                 throw new UserException("unsupported compression type: " + request.getPayload_compression_type());
             }
+        }
+        if (request.isSetInsert_mode()) {
+            insertMode = request.getInsert_mode();
         }
     }
 

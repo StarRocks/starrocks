@@ -252,6 +252,9 @@ private:
     // bucket size for automatic bucket
     int64_t _automatic_bucket_size = 0;
     std::set<int64_t> _immutable_partition_ids;
+
+    // insert mode
+    TInsertMode::type _insert_mode = TInsertMode::type::UPSERT_MODE;
     RuntimeState* _state = nullptr;
 
     PLoadChannelProfileConfig _load_channel_profile_config;

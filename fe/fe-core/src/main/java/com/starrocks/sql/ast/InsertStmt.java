@@ -94,14 +94,15 @@ public class InsertStmt extends DmlStmt {
     private final Map<String, String> tableFunctionProperties;
 
     private boolean isVersionOverwrite = false;
+    private boolean isIgnore = false;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
-        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
+        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, false, NodePosition.ZERO);
     }
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+                      QueryStatement queryStatement, boolean isOverwrite, boolean isIgnore, NodePosition pos) {
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
@@ -112,6 +113,7 @@ public class InsertStmt extends DmlStmt {
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
+        this.isIgnore = isIgnore;
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -274,6 +276,10 @@ public class InsertStmt extends DmlStmt {
 
     public void setPartitionNotSpecifiedInOverwrite(boolean partitionNotSpecifiedInOverwrite) {
         this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
+    }
+
+    public boolean isIgnore() {
+        return isIgnore;
     }
 
     @Override

@@ -163,7 +163,8 @@ enum TAggregationType {
     NONE,
     BITMAP_UNION,
     REPLACE_IF_NOT_NULL,
-    PERCENTILE_UNION
+    PERCENTILE_UNION,
+    FIRST
 }
 
 enum TPushType {
@@ -580,4 +581,9 @@ struct TSnapshotInfo {
     1: optional TBackend backend
     2: optional string snapshot_path
     3: optional bool incremental_snapshot
+}
+
+enum TInsertMode {
+    UPSERT_MODE = 0;
+    IGNORE_MODE = 1;
 }

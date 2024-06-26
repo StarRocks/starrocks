@@ -292,4 +292,21 @@ void Schema::convert_to(Schema* new_schema, const std::vector<LogicalType>& new_
     }
 }
 
+Schema Schema::copy() const {
+    Schema new_schema;
+    new_schema._fields.resize(num_fields());
+    for (size_t i = 0; i < num_fields(); ++i) {
+        new_schema._fields[i] = _fields[i]->copy();
+    }
+    new_schema._num_keys = _num_keys;
+    new_schema._share_name_to_index = false;
+    new_schema._build_index_map(new_schema._fields);
+    new_schema._keys_type = _keys_type;
+    new_schema._name_to_index_append_buffer = nullptr;
+    new_schema._sort_key_idxes = sort_key_idxes();
+    new_schema.init_sort_key_idxes();
+
+    return new_schema;
+}
+
 } // namespace starrocks

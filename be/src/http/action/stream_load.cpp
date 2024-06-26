@@ -600,7 +600,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     } else if (!http_req->header(HTTP_COMPRESSION).empty()) {
         request.__set_payload_compression_type(http_req->header(HTTP_COMPRESSION));
     }
-
+    if (!http_req->header(HTTP_INSERT_MODE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_INSERT_MODE), "upsert")) {
+            request.__set_insert_mode(TInsertMode::type::UPSERT_MODE);
+        } else if (boost::iequals(http_req->header(HTTP_INSERT_MODE), "ignore")) {
+            request.__set_insert_mode(TInsertMode::type::IGNORE_MODE);
+        } else {
+            return Status::InvalidArgument("Invalid insert mode flag format. Must be upsert or ignore");
+        }
+    }
     // plan this load
     int64_t stream_load_put_start_time = MonotonicNanos();
     RETURN_IF_ERROR(stream_load_put_internal(request, rpc_timeout_ms, &ctx->put_result));

@@ -182,6 +182,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_insert_mode(InsertMode insert_mode) {
+        _insert_mode = insert_mode;
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -198,6 +203,7 @@ private:
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    InsertMode _insert_mode = InsertMode::UPSERT_MODE;
 };
 
 } // namespace starrocks::lake

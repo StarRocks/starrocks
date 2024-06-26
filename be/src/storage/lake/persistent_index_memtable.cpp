@@ -27,11 +27,29 @@ void PersistentIndexMemtable::update_index_value(std::list<IndexValueWithVer>* i
 }
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                       KeyIndexSet* not_founds, size_t* num_found, int64_t version) {
+                                       KeyIndexSet* not_founds, size_t* num_found, int64_t version,
+                                       const InsertMode& mode) {
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
         const auto value = values[i];
+        if (mode == InsertMode::IGNORE_MODE) {
+            if (old_values[i].get_value() != NullIndexValue) {
+                old_values[i] = value;
+                nfound++;
+                continue;
+            }
+            auto it = _map.find(key);
+            if (it != _map.end()) {
+                auto& index_value_vers = it->second;
+                auto& index_value = index_value_vers.front().second;
+                if (index_value.get_value() != NullIndexValue) {
+                    old_values[i] = value;
+                    nfound++;
+                    continue;
+                }
+            }
+        }
         std::list<IndexValueWithVer> index_value_vers;
         index_value_vers.emplace_front(version, value);
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {

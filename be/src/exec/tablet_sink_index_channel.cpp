@@ -183,6 +183,11 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_sender_id(_parent->_sender_id);
     request.set_immutable_tablet_size(_parent->_automatic_bucket_size);
     request.set_sink_id(_parent->_sink_id);
+    if (_parent->_insert_mode == TInsertMode::type::UPSERT_MODE) {
+        request.set_insert_mode(InsertMode::UPSERT_MODE);
+    } else if (_parent->_insert_mode == TInsertMode::type::IGNORE_MODE) {
+        request.set_insert_mode(InsertMode::IGNORE_MODE);
+    }
     for (auto& tablet : tablets) {
         auto ptablet = request.add_tablets();
         ptablet->CopyFrom(tablet);

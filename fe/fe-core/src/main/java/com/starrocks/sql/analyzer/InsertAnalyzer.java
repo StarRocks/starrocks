@@ -26,6 +26,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -342,7 +343,19 @@ public class InsertAnalyzer {
                 throw unsupportedException(msg);
             }
         }
-
+        if (insertStmt.isIgnore()) {
+            if (!(table instanceof OlapTable)) {
+                throw unsupportedException("Only support insert ignore for olap table");
+            }
+            if (((OlapTable) table).getKeysType() != KeysType.PRIMARY_KEYS) {
+                throw unsupportedException("Only support insert ignore for primary key olap table");
+            }
+            OlapTableState state = ((OlapTable) table).getState();
+            String msg = String.format("table state is %s, please wait to insert util table state is normal", state);
+            if (state != NORMAL) {
+                throw unsupportedException(msg);
+            }
+        }
         if (!table.supportInsert()) {
             if (table.isIcebergTable() || table.isHiveTable()) {
                 throw unsupportedException(String.format("Only support insert into %s table with parquet file format",

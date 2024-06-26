@@ -351,6 +351,85 @@ TEST_F(AggregateIteratorTest, agg_replace) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(AggregateIteratorTest, agg_first) {
+    config::vector_chunk_size = 1024;
+
+    auto k1 = std::make_shared<Field>(0, "k1", TYPE_BIGINT, false);
+    auto c1 = std::make_shared<Field>(1, "c1", TYPE_SMALLINT, false);
+    auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
+    auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
+    auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
+
+    k1->set_is_key(true);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+    c2->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+    c3->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+    c4->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+    c5->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+    c6->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+    c7->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+    c8->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+
+    Schema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
+
+    // clang-format off
+    auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
+    auto v1 = std::vector<int64_t>{ 1, 2, 3, 1, -1};  // numeric columns
+    auto v2 = std::vector<const char*>{"1", "2", "3", "1", "-1"};  // decimal
+    auto v3 = std::vector<const char*>{"2020-01-02", "2020-05-01", "2020-06-01", "1990-11-25", "1998-09-01"};
+    auto v4 = std::vector<const char*>{"2020-01-01 01:01:01", "2020-01-01 01:02:01", "2020-01-01 01:03:01",
+                                       "1990-01-01 01:01:01", "1991-01-01 01:01:01"};
+    auto v5 = std::vector<const char*>{"a", "b", "c", "x", "y"};  // varchar
+
+    auto child_iter = std::make_shared<VectorChunkIterator>(schema,
+                                                            COL_BIGINT(pk),                  // k1
+                                                            COL_SMALLINT(v1),                // v1
+                                                            COL_LARGEINT(v1),                // v2
+                                                            COL_FLOAT(v1),                   // v3
+                                                            COL_DOUBLE(v1),                  // v4
+                                                            COL_DECIMAL(v2),                 // v5
+                                                            COL_DATE(v3),                    // v6
+                                                            COL_DATETIME(v4),                // v7
+                                                            COL_VARCHAR(v5));                // v8
+    // clang-format on
+    auto agg_iter = new_aggregate_iterator(child_iter);
+    ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
+    Status st = agg_iter->get_next(chunk.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(2u, chunk->num_rows());
+    ASSERT_EQ(9u, chunk->num_columns());
+
+    // first row
+    ASSERT_EQ(1, row(*chunk, 0)[0].get_int64());                                               // k1
+    ASSERT_EQ(1, row(*chunk, 0)[1].get_int16());                                               // c1
+    ASSERT_EQ(1, row(*chunk, 0)[2].get_int128());                                              // c2
+    ASSERT_EQ(1.0, row(*chunk, 0)[3].get_float());                                             // c3
+    ASSERT_EQ(1.0, row(*chunk, 0)[4].get_double());                                            // c4
+    ASSERT_EQ(DecimalV2Value("1"), row(*chunk, 0)[5].get_decimal());                           // c5
+    ASSERT_EQ(DateValue::create(2020, 1, 2), row(*chunk, 0)[6].get_date());                    // c6
+    ASSERT_EQ(TimestampValue::create(2020, 1, 1, 1, 1, 1), row(*chunk, 0)[7].get_timestamp()); // c7
+    ASSERT_EQ("a", row(*chunk, 0)[8].get_slice());                                             // c8
+
+    // second row
+    ASSERT_EQ(2, row(*chunk, 1)[0].get_int64());                                               // k1
+    ASSERT_EQ(1, row(*chunk, 1)[1].get_int16());                                               // c1
+    ASSERT_EQ(1, row(*chunk, 1)[2].get_int128());                                              // c2
+    ASSERT_EQ(1.0, row(*chunk, 1)[3].get_float());                                             // c3
+    ASSERT_EQ(1.0, row(*chunk, 1)[4].get_double());                                            // c4
+    ASSERT_EQ(DecimalV2Value("1"), row(*chunk, 1)[5].get_decimal());                           // c5
+    ASSERT_EQ(DateValue::create(1990, 11, 25), row(*chunk, 1)[6].get_date());                  // c6
+    ASSERT_EQ(TimestampValue::create(1990, 1, 1, 1, 1, 1), row(*chunk, 1)[7].get_timestamp()); // c7
+    ASSERT_EQ("x", row(*chunk, 1)[8].get_slice());
+    agg_iter->close();
+}
+
+// NOLINTNEXTLINE
 TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
     config::vector_chunk_size = 1024;
 

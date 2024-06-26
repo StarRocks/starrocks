@@ -33,6 +33,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
@@ -1022,5 +1023,34 @@ public class InsertPlanTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=2.0\n";
         Assert.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testInsertIgnore() throws Exception {
+        String sql = "explain insert ignore into tprimary select * from tprimary";
+        String plan = getInsertExecPlan(sql);
+        assertContains(plan, "  OLAP TABLE SINK\n" +
+                "    TABLE: tprimary\n" +
+                "    TUPLE ID: 1\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: tprimary");
+    }
+
+    @Test
+    public void testInsertIgnoreCheck() {
+        // check olap table
+        UnsupportedException exception = Assert.assertThrows(UnsupportedException.class, () -> {
+            getInsertExecPlan("insert ignore into test.mysql_table select v1,v2 from t0");
+        });
+        assertContains(exception.getMessage(), "Only support insert ignore for olap table");
+
+        // check primary key engine
+        exception = Assert.assertThrows(UnsupportedException.class, () -> {
+            getInsertExecPlan("explain insert ignore into t0 select * from t0");
+        });
+
+        assertContains(exception.getMessage(), "Only support insert ignore for primary key olap table");
     }
 }

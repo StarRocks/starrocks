@@ -64,6 +64,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TInsertMode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPlanFragmentExecParams;
@@ -154,6 +155,17 @@ public class StreamLoadPlanner {
                 throw new DdlException("Only primary key table support partial update");
             }
         }
+        if (streamLoadInfo.getInsertMode() == TInsertMode.IGNORE_MODE) {
+            if (!isPrimaryKey) {
+                throw new DdlException("Only primary key table support insert ignore mode.");
+            }
+            if (streamLoadInfo.isPartialUpdate()) {
+                throw new DdlException("Insert ignore mode does not support partial update.");
+            }
+            if (streamLoadInfo.getMergeConditionStr() != null && !streamLoadInfo.getMergeConditionStr().isEmpty()) {
+                throw new DdlException("Insert ignore mode does not support condition update.");
+            }
+        }
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns;
         List<Boolean> missAutoIncrementColumn = Lists.newArrayList();
@@ -220,6 +232,7 @@ public class StreamLoadPlanner {
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns,
                 olapTableSink.missAutoIncrementColumn());
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
+        olapTableSink.setInsertMode(streamLoadInfo.getInsertMode());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.

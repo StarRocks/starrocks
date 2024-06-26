@@ -528,4 +528,12 @@ TEST_F(MemTableTest, test_metrics) {
     ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.value() > 0);
 }
 
+TEST_F(MemTableTest, test_convert_schema) {
+    const string path = "./MemTableTest_test_convert_schema";
+    MySetUp(create_tablet_schema("pk bigint,v1 int", 1, KeysType::PRIMARY_KEYS), "pk bigint,v1 int,__op tinyint", path);
+    Schema insert_ignore_schema = MemTable::convert_schema(_schema, _slots, InsertMode::IGNORE_MODE);
+    ASSERT_EQ(STORAGE_AGGREGATE_REPLACE, _vectorized_schema.get_field_by_name("v1")->aggregate_method());
+    ASSERT_EQ(STORAGE_AGGREGATE_FIRST, insert_ignore_schema.get_field_by_name("v1")->aggregate_method());
+}
+
 } // namespace starrocks

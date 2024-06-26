@@ -186,6 +186,11 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_insert_mode(InsertMode insert_mode) {
+        _insert_mode = insert_mode;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -201,6 +206,7 @@ private:
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    InsertMode _insert_mode = InsertMode::UPSERT_MODE;
 };
 
 } // namespace starrocks::lake

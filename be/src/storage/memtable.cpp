@@ -39,8 +39,8 @@ namespace starrocks {
 // TODO(cbl): move to common space latter
 static const string LOAD_OP_COLUMN = "__op";
 
-Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
-                                const std::vector<SlotDescriptor*>* slot_descs) {
+Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
+                                const InsertMode insert_mode) {
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         const auto& last_column = tablet_schema->columns().back();
         // remove last __row column if exists, because it's not used in memtable
@@ -59,6 +59,17 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
                     std::make_shared<starrocks::Field>((ColumnId)-1, LOAD_OP_COLUMN, LogicalType::TYPE_TINYINT, false);
             op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
             schema.append(op_column);
+        }
+
+        if (insert_mode == InsertMode::IGNORE_MODE) {
+            Schema new_schema = schema.copy();
+            for (auto& name : new_schema.field_names()) {
+                FieldPtr f = new_schema.get_field_by_name(name);
+                if (f->aggregate_method() == STORAGE_AGGREGATE_REPLACE) {
+                    f->set_aggregate_method(STORAGE_AGGREGATE_FIRST);
+                }
+            }
+            return new_schema;
         }
         return schema;
     } else {

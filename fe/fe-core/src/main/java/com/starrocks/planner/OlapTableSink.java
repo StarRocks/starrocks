@@ -93,6 +93,7 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TInsertMode;
 import com.starrocks.thrift.TOlapTableColumnParam;
 import com.starrocks.thrift.TOlapTableIndexSchema;
 import com.starrocks.thrift.TOlapTableIndexTablets;
@@ -141,6 +142,7 @@ public class OlapTableSink extends DataSink {
     private TPartialUpdateMode partialUpdateMode;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     private long automaticBucketSize = 0;
+    private TInsertMode insertMode = TInsertMode.UPSERT_MODE;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -226,6 +228,10 @@ public class OlapTableSink extends DataSink {
         this.partialUpdateMode = mode;
     }
 
+    public void setInsertMode(TInsertMode insertMode) {
+        this.insertMode = insertMode;
+    }
+
     public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
@@ -256,6 +262,7 @@ public class OlapTableSink extends DataSink {
         tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, warehouseId));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId));
         tSink.setPartial_update_mode(this.partialUpdateMode);
+        tSink.setInsert_mode(this.insertMode);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         if (canUseColocateMVIndex(dstTable)) {
             tSink.setEnable_colocate_mv_index(true);
