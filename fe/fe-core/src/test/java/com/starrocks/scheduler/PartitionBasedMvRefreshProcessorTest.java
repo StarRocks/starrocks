@@ -31,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
@@ -48,6 +49,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -70,6 +72,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -357,24 +360,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
         }
-    }
-
-    private void refreshMVRange(String mvName, boolean force) throws Exception {
-        refreshMVRange(mvName, null, null, force);
-    }
-
-    private void refreshMVRange(String mvName, String start, String end, boolean force) throws Exception {
-        StringBuilder sb = new StringBuilder();
-        sb.append("refresh materialized view " + mvName);
-        if (start != null && end != null) {
-            sb.append(String.format(" partition start('%s') end('%s')", start, end));
-        }
-        if (force) {
-            sb.append(" force");
-        }
-        sb.append(" with sync mode");
-        String sql = sb.toString();
-        starRocksAssert.getCtx().executeSql(sql);
     }
 
     private static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
@@ -3093,5 +3078,32 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
                 }
         );
+    }
+
+    @Test
+    public void testRefreshWithCachePartitionTraits() {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
+                        "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;",
+                () -> {
+                    MaterializedView mv = getMv("test", "test_mv1");
+                    PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                    RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
+                    QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
+                    Assert.assertTrue(queryCacheStats != null);
+                    queryCacheStats.getCounter().forEach((key, value) -> {
+                        if (key.contains("cache_partitionNames")) {
+                            Assert.assertEquals(2L, value.longValue());
+                        } else if (key.contains("cache_getPartitionKeyRange")) {
+                            Assert.assertEquals(3L, value.longValue());
+                        } else {
+                            Assert.assertEquals(1L, value.longValue());
+                        }
+                    });
+                    Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
+                    Assert.assertTrue(partitionsToRefresh1.isEmpty());
+                });
     }
 }

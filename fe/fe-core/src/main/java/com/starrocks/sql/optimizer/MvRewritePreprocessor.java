@@ -230,7 +230,8 @@ public class MvRewritePreprocessor {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
-            QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
+            QueryMaterializationContext queryMaterializationContext = connectContext.getQueryMVContext() != null ?
+                    connectContext.getQueryMVContext() : new QueryMaterializationContext();
             try {
                 // 1. get related mvs for all input tables
                 Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
@@ -258,9 +259,11 @@ public class MvRewritePreprocessor {
                             queryColumnRefFactory, requiredColumns);
                 }
 
-                // add queryMaterializationContext into context
+                // To avoid disturbing queries without mv, only initialize materialized view context
+                // when there are candidate mvs.
                 if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
                     context.setQueryMaterializationContext(queryMaterializationContext);
+                    connectContext.setQueryMVContext(queryMaterializationContext);
                 }
 
                 // initialize mv rewrite strategy finally

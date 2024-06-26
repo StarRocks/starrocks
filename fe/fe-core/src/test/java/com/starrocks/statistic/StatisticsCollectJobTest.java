@@ -27,9 +27,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -782,7 +782,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 return metaMap;
             }
         };
-        new MockUp<ConnectorPartitionTraits.DefaultTraits>() {
+        new MockUp<DefaultTraits>() {
             @Mock
             public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
                 return ImmutableMap.of("date=2020-01-01", new com.starrocks.connector.iceberg.Partition(
@@ -815,7 +815,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         100));
             }
         };
-        new MockUp<ConnectorPartitionTraits.DefaultTraits>() {
+        new MockUp<DefaultTraits>() {
             @Mock
             public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
                 long needUpdateTime = statsUpdateTime.plusSeconds(120).

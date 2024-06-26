@@ -60,6 +60,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
@@ -215,6 +216,10 @@ public class ConnectContext {
     private boolean relationAliasCaseInsensitive = false;
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
+
+    // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
+    // lifecycle instead of per materialized view.
+    private QueryMaterializationContext queryMVContext;
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -734,6 +739,14 @@ public class ConnectContext {
 
     public int getForwardTimes() {
         return this.forwardTimes;
+    }
+
+    public QueryMaterializationContext getQueryMVContext() {
+        return queryMVContext;
+    }
+
+    public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
+        this.queryMVContext = queryMVContext;
     }
 
     // kill operation with no protect.
