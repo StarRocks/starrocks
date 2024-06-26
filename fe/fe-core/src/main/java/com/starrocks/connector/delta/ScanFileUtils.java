@@ -17,8 +17,6 @@ package com.starrocks.connector.delta;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonUtils;
 import io.delta.kernel.data.Row;
-import io.delta.kernel.internal.InternalScanFileUtils;
-import io.delta.kernel.utils.FileStatus;
 
 import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_STATS_ORDINAL;
 
@@ -28,13 +26,8 @@ public class ScanFileUtils {
         public long numRecords;
     }
 
-    public static String getPath(Row addFileRow) {
-        FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(addFileRow);
-        return fileStatus.getPath();
-    }
-
-    public static long getFileRows(Row addFileRow) {
-        String stats = addFileRow.getString(ADD_FILE_STATS_ORDINAL);
+    public static long getFileRows(Row file) {
+        String stats = file.getString(ADD_FILE_STATS_ORDINAL);
         if (stats == null) {
             throw new IllegalArgumentException("There is no `stats` entry in the add file row");
         }
@@ -47,8 +40,8 @@ public class ScanFileUtils {
         return records.numRecords;
     }
 
-    public static DeltaLakeFileStruct getColumnStatistics(Row addFileRow) {
-        String stats = addFileRow.getString(ADD_FILE_STATS_ORDINAL);
+    public static DeltaLakeFileStruct getColumnStatistics(Row file) {
+        String stats = file.getString(ADD_FILE_STATS_ORDINAL);
         if (stats == null) {
             throw new IllegalArgumentException("There is no `stats` entry in the add file row");
         }
