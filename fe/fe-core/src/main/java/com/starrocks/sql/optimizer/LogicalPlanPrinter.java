@@ -381,6 +381,11 @@ public class LogicalPlanPrinter {
             return visitScanCommon(optExpression, step, "ICEBERG METADATA SCAN");
         }
 
+        @Override
+        public OperatorStr visitPhysicalPaimonScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "PAIMON SCAN");
+        }
+
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
         }
