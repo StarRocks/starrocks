@@ -1,0 +1,21 @@
+-- name: test_connection
+SELECT 1, 2;
+-- result:
+1	2
+-- !result
+trino: SELECT 1, 2;
+-- result:
+1	2
+-- !result
+spark: SELECT 1, 2;
+-- result:
+1	2
+-- !result
+hive: SELECT 1, 2;
+-- result:
+1	2
+-- !result
+function: assert_equal_result("select 1, 2;", "hive: select 1, 2;", "trino: select 1, 2;", "spark: select 1, 2;")
+-- result:
+None
+-- !result
