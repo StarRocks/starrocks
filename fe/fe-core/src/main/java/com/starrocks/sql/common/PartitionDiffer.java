@@ -35,8 +35,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
@@ -246,9 +244,6 @@ public class PartitionDiffer {
             return Maps.newHashMap();
         }
 
-        // TODO: lock base tables or use snapshot tables to avoid the partition change during the process.
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
         Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
         try {
             for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
@@ -271,8 +266,6 @@ public class PartitionDiffer {
         } catch (UserException | SemanticException e) {
             LOG.warn("Partition differ collects ref base table partition failed.", e);
             return null;
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
         }
         return refBaseTablePartitionMap;
     }
