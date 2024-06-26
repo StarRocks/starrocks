@@ -710,8 +710,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
     }
 
     @Override
-<<<<<<< HEAD
-=======
     public Void visitAddFieldClause(AddFieldClause clause, ConnectContext context) {
         String columnName = clause.getColName();
         if (Strings.isNullOrEmpty(columnName)) {
@@ -754,7 +752,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
     }
 
     @Override
->>>>>>> 13899a2d67 ([Feature]Support add/drop field for struct column(part3) (#47217))
     public Void visitModifyColumnClause(ModifyColumnClause clause, ConnectContext context) {
         ColumnDef columnDef = clause.getColumnDef();
         if (columnDef == null) {

@@ -1865,8 +1865,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
-<<<<<<< HEAD
-=======
             } else if (alterClause instanceof AddFieldClause) {
                 if (RunMode.isSharedDataMode()) {
                     throw new DdlException("Add field for struct column not support shared-data mode so far");
@@ -1898,7 +1896,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 modifyFieldColumns = Set.of(dropFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
                 processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap, newIndexes);
->>>>>>> 13899a2d67 ([Feature]Support add/drop field for struct column(part3) (#47217))
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
                 fastSchemaEvolution = false;
