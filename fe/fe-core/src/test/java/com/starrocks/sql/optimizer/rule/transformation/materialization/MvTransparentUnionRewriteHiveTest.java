@@ -293,7 +293,6 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
     @Test
     public void testTransparentRewriteWithJoinMv() {
         withPartialJoinMv(() -> {
-<<<<<<< HEAD
             {
                 String[] sqls = {
                         "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
@@ -310,22 +309,6 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                     PlanTestBase.assertNotContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
-=======
-            String[] sqls = {
-                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                            "WHERE a.l_shipdate='1998-01-01';",
-                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                            "WHERE a.l_shipdate='1998-01-01' and a.l_suppkey > 100;",
-            };
-            for (String query : sqls) {
-                String plan = getFragmentPlan(query);
-                PlanTestBase.assertNotContains(plan, ":UNION");
-                PlanTestBase.assertContains(plan, "mv0");
->>>>>>> ba4c74f4e4 ([UT] [BugFix] Fix refreshing mv with unligned base table partition range bug (#47485))
             }
 
             {
