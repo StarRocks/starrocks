@@ -52,6 +52,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJobTest {
@@ -210,7 +211,8 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds) throws AlterCancelException {
+                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                             AtomicBoolean isCancelling) throws AlterCancelException {
                 throw new AlterCancelException("Create tablet failed");
             }
         };
@@ -593,5 +595,16 @@ public class LakeTableSchemaChangeJobTest {
         alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
         schemaChangeHandler2.addAlterJobV2(alterJobV2);
         System.out.println(schemaChangeHandler2.getAlterJobInfosByDb(db));
+    }
+
+    @Test
+    public void testCancelPendingJobWithFlag() throws Exception {
+        schemaChangeJob.setIsCancelling(true);
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.setIsCancelling(false);
+     
+        schemaChangeJob.setWaitingCreatingReplica(true);
+        schemaChangeJob.cancel("");
+        schemaChangeJob.setWaitingCreatingReplica(false);
     }
 }
