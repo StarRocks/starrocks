@@ -24,20 +24,17 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.InternalScanFileUtils;
-import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_ORDINAL;
@@ -104,10 +101,7 @@ public class DeltaStatisticProvider {
                                   Map<String, Object> lowerBounds,
                                   Map<String, Object> nullCounts,
                                   long recordCount) {
-        deltaLakeFileStats.updateStats(deltaLakeFileStats.getMinValues(), lowerBounds, nullCounts,
-                recordCount, i -> (i > 0));
-        updatePartitionedStats(deltaLakeFileStats, partitionCols, deltaLakeFileStats.getMinValues(),
-                lowerBounds, i -> (i > 0));
+        deltaLakeFileStats.updateMinStats(lowerBounds, nullCounts, recordCount, i -> (i > 0));
     }
 
     private void updateSummaryMax(DeltaLakeFileStats deltaLakeFileStats,
@@ -115,42 +109,7 @@ public class DeltaStatisticProvider {
                                   Map<String, Object> upperBounds,
                                   Map<String, Object> nulCounts,
                                   long recordCount) {
-        deltaLakeFileStats.updateStats(deltaLakeFileStats.getMaxValues(), upperBounds, nulCounts,
-                recordCount, i -> (i > 0));
-        updatePartitionedStats(deltaLakeFileStats, partitionCols, deltaLakeFileStats.getMaxValues(),
-                upperBounds, i -> (i > 0));
-    }
-
-    private void updatePartitionedStats(DeltaLakeFileStats deltaLakeFileStats,
-                                        List<String> partitionCols,
-                                        Map<String, Object> curStats,
-                                        Map<String, Object> newStats,
-                                        Predicate<Integer> predicate) {
-        if (!deltaLakeFileStats.isHasValidColumnMetrics()) {
-            return;
-        }
-
-        for (String col : partitionCols) {
-            if (deltaLakeFileStats.getCorruptedStats().contains(col)) {
-                continue;
-            }
-
-            Object newValue = newStats.get(col);
-            if (newValue == null) {
-                curStats.remove(col);
-                deltaLakeFileStats.getCorruptedStats().add(col);
-                continue;
-            }
-
-            DataType type = deltaLakeFileStats.getSchema().get(col).getDataType();
-            Object oldValue = curStats.putIfAbsent(col, newValue);
-            if (oldValue != null) {
-                Comparator<Object> comparator = DeltaLakeComparators.forType(type);
-                if (predicate.test(comparator.compare(oldValue, newValue))) {
-                    curStats.put(col, newValue);
-                }
-            }
-        }
+        deltaLakeFileStats.updateMaxStats(upperBounds, nulCounts, recordCount, i -> (i > 0));
     }
 
     public Statistics getTableStatistics(DeltaLakeTable deltaLakeTable,

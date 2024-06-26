@@ -186,14 +186,29 @@ public class DeltaLakeFileStats {
         this.size += numberOfBytes;
     }
 
-    public void updateStats(Map<String, Object> curStat,
+    public void updateMinStats(Map<String, Object> newStat, Map<String, Object> nullCounts,
+                               long recordCount, Predicate<Integer> predicate) {
+        if (!hasValidColumnMetrics) {
+            return;
+        }
+
+        updateStats(this.minValues, newStat, nullCounts, recordCount, predicate);
+    }
+
+    public void updateMaxStats(Map<String, Object> newStat, Map<String, Object> nullCounts,
+                               long recordCount, Predicate<Integer> predicate) {
+        if (!hasValidColumnMetrics) {
+            return;
+        }
+
+        updateStats(this.maxValues, newStat, nullCounts, recordCount, predicate);
+    }
+
+    private void updateStats(Map<String, Object> curStat,
                             Map<String, Object> newStat,
                             Map<String, Object> nullCounts,
                             long recordCount,
                             Predicate<Integer> predicate) {
-        if (!hasValidColumnMetrics) {
-            return;
-        }
         if (newStat == null || nullCounts == null) {
             hasValidColumnMetrics = false;
             return;
@@ -256,11 +271,11 @@ public class DeltaLakeFileStats {
     }
 
     private static double parseDate(String str) {
-        LocalDateTime time = LocalDateTime.parse(str, DateUtils.DATE_FORMATTER_UNIX);
+        LocalDateTime time = DateUtils.parseStrictDateTime(str);
         return time.atZone(ZoneOffset.UTC).toEpochSecond();
     }
 
-    public static Optional<Double> convertObjectToOptionalDouble(DataType type, Object value) {
+    private static Optional<Double> convertObjectToOptionalDouble(DataType type, Object value) {
         // TODO: Decimal
         double result;
 
