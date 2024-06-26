@@ -131,8 +131,9 @@ public class SampleInfo {
         int idx = 0;
         int size = primitiveTypeStats.size();
         for (ColumnStats columnStats : primitiveTypeStats) {
-            builder.append(generateQueryColumnSql(tableId, dbId, tableName, dbName, columnStats));
-            if (++idx != size) {
+            idx++;
+            builder.append(generateQueryColumnSql(tableId, dbId, tableName, dbName, columnStats, "col_" + idx));
+            if (idx != size) {
                 builder.append(" UNION ALL ");
             }
         }
@@ -144,8 +145,11 @@ public class SampleInfo {
                                        TabletSampleManager manager) {
         StringBuilder sql = new StringBuilder();
         String fullQualifiedName = "`" + dbName + "`.`" + tableName + "`";
-        String columnNames = primitiveTypeStats.stream().map(ColumnStats::getQuotedColumnName)
-                .collect(Collectors.joining(", "));
+        StringJoiner joiner = new StringJoiner(", ");
+        for (int i = 0; i < primitiveTypeStats.size(); i++) {
+            joiner.add(primitiveTypeStats.get(i).getQuotedColumnName() + " as col_" + i);
+        }
+        String columnNames = joiner.toString();
         if (!highWeightTablets.isEmpty()) {
             sql.append("SELECT * FROM (")
                     .append("SELECT ").append(columnNames).append(" FROM ")
@@ -213,7 +217,7 @@ public class SampleInfo {
     }
 
     private String generateQueryColumnSql(long tableId, long dbId, String tableName, String dbName,
-                                          ColumnStats columnStats) {
+                                          ColumnStats columnStats, String alias) {
         String sep = ", ";
         StringBuilder builder = new StringBuilder();
         builder.append("SELECT ");
@@ -231,8 +235,7 @@ public class SampleInfo {
         builder.append(columnStats.getMin()).append(sep);
         builder.append("NOW() FROM (");
         builder.append("SELECT t0.`column_key`, COUNT(1) as count FROM (SELECT ");
-        builder.append(columnStats.getQuotedColumnName())
-                .append(" AS column_key FROM `base_cte_table`) as t0 GROUP BY t0.column_key) AS t1");
+        builder.append(alias).append(" AS column_key FROM `base_cte_table`) as t0 GROUP BY t0.column_key) AS t1");
         return builder.toString();
     }
 

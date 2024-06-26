@@ -11,9 +11,11 @@ duplicate key(c0)
 partition by (c1)
 distributed by hash(c0) buckets 200 properties('replication_num'='1');
 
-insert into t_struct values
+insert into test_778899 values
 (1, '2021-01-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3])),
 (2, '2021-02-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3])),
 (3, '2021-03-01', 'abc', 1, row(1, [row(1, 2)]), row(1, 2), row(1, 2, row(1, 2), [1, 2, 3]));
 
-analyze sample table t_struct;
+analyze sample table test_778899;
+
+analyze sample table test_778899 (c4.a, c4.b, c6.c.a, c6.d);

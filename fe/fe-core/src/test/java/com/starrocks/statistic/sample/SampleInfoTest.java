@@ -77,7 +77,6 @@ public class SampleInfoTest extends PlanTestBase {
 
         String complexSql = sampleInfo.generateComplexTypeColumnTask(table.getId(), db.getId(), table.getName(),
                 db.getFullName(), columnSampleManager.getComplexTypeStats());
-        System.out.println(complexSql);
         List<StatementBase> stmt = SqlParser.parse(complexSql, connectContext.getSessionVariable());
         Assert.assertTrue(stmt.get(0) instanceof InsertStmt);
         InsertStmt insertStmt = (InsertStmt) stmt.get(0);
