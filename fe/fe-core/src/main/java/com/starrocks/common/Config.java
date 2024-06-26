@@ -668,8 +668,6 @@ public class Config extends ConfigBase {
     public static boolean enable_query_queue_v2 = false;
     @ConfField(mutable = true)
     public static int query_queue_v2_num_rows_per_slot = 4096;
-
-    // TODO(lzh): add prop min=1
     @ConfField(mutable = true)
     public static int query_queue_v2_concurrency_level = 4;
 
