@@ -258,4 +258,45 @@ void LakePrimaryIndex::set_local_pk_index_write_amp_score(double score) {
     }
 }
 
+static void old_values_to_deletes(const std::vector<uint64_t>& old_values, DeletesMap* deletes) {
+    for (uint64_t old : old_values) {
+        if (old != NullIndexValue) {
+            (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+        }
+    }
+}
+
+Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
+                               uint32_t rowset_id) {
+    // No need to setup rebuild point for in-memory index and local persistent index,
+    // so keep using previous erase interface.
+    if (!_enable_persistent_index) {
+        return PrimaryIndex::erase(pks, deletes);
+    }
+
+    switch (metadata->persistent_index_type()) {
+    case PersistentIndexTypePB::LOCAL: {
+        return PrimaryIndex::erase(pks, deletes);
+    }
+    case PersistentIndexTypePB::CLOUD_NATIVE: {
+        auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+        if (lake_persistent_index != nullptr) {
+            std::vector<Slice> keys;
+            std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
+            const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
+            // Cloud native index need to setup rowset id as rebuild point when erase.
+            RETURN_IF_ERROR(lake_persistent_index->erase(pks.size(), vkeys,
+                                                         reinterpret_cast<IndexValue*>(old_values.data()), rowset_id));
+            old_values_to_deletes(old_values, deletes);
+            return Status::OK();
+        } else {
+            return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+        }
+    }
+    default:
+        return Status::InternalError("Unsupported lake_persistent_index_type " +
+                                     PersistentIndexTypePB_Name(metadata->persistent_index_type()));
+    }
+}
+
 } // namespace starrocks::lake

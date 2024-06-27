@@ -69,6 +69,9 @@ private:
     Status _finalize_delvec(int64_t version, int64_t txn_id);
     // fill delvec cache, for better reading latency
     void _fill_delvec_cache();
+    // collect del files which are above cloud native index's rebuild point
+    void _collect_del_files_above_rebuild_point(RowsetMetadataPB* rowset,
+                                                std::vector<DelfileWithRowsetId>* collect_del_files);
 
 private:
     Tablet _tablet;

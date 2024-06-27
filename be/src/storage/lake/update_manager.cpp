@@ -232,7 +232,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         }
         // 2.3 handle auto increment deletes
         if (state.auto_increment_deletes(segment_id) != nullptr) {
-            RETURN_IF_ERROR(index.erase(*state.auto_increment_deletes(segment_id), &new_deletes));
+            RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(segment_id), &new_deletes, rowset_id));
         }
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_segment(segment_id);
@@ -243,7 +243,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t del_id = 0; del_id < op_write.dels_size(); del_id++) {
         RETURN_IF_ERROR(state.load_delete(del_id, params));
         DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(*state.deletes(del_id), &new_deletes));
+        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, rowset_id));
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_delete(del_id);
     }
