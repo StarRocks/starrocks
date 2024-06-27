@@ -221,10 +221,8 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
                 MetricRepo.GAUGE_QUERY_QUEUE_CATEGORY_WEIGHT.getMetric(category).setValue(curWeight);
                 MetricRepo.GAUGE_QUERY_QUEUE_CATEGORY_SLOT_MIN_SLOTS.getMetric(category).setValue(curMinSlots * numWorkers);
 
-                if (curMinSlots > 1) {
-                    curWeight = (curWeight >>> 1) + (curWeight << 1); // curWeight*=2.5
-                    curMinSlots = curMinSlots >>> 1;
-                }
+                curWeight = (curWeight >>> 1) + (curWeight << 1); // curWeight*=2.5
+                curMinSlots = curMinSlots >>> 1;
             }
             this.totalWeight = totalWeight;
         }
