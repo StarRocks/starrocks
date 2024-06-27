@@ -14,6 +14,7 @@
 
 package com.starrocks.datacache.copilot;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Config;
@@ -37,12 +38,12 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(DataCacheCopilotRepo.class);
     private static final int INSERT_BATCH_SIZE = 5000;
     private long lastFlushTimestamp = 0L;
-    private long lastClearTimestamp = 0L;
+    private long lastCleanTimestamp = 0L;
 
     public DataCacheCopilotRepo() {
         super("DataCacheCopilotRepo", Config.datacache_copilot_repo_check_interval_sec * 1000);
         lastFlushTimestamp = System.currentTimeMillis();
-        lastClearTimestamp = System.currentTimeMillis();
+        lastCleanTimestamp = System.currentTimeMillis();
     }
 
     @Override
@@ -50,7 +51,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
         if (isSatisfyFlushCondition()) {
             flushStorageToBE();
         }
-        if (isSatisfyClearCondition()) {
+        if (isSatisfyCleanCondition()) {
             clearStaleStats();
         }
     }
@@ -68,8 +69,8 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
         return false;
     }
 
-    private boolean isSatisfyClearCondition() {
-        if ((System.currentTimeMillis() - lastClearTimestamp) >
+    private boolean isSatisfyCleanCondition() {
+        if ((System.currentTimeMillis() - lastCleanTimestamp) >
                 Config.datacache_copilot_repo_clean_interval_sec * 1000) {
             return true;
         }
@@ -111,7 +112,7 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
 
     private void clearStaleStats() {
         LOG.info("DataCacheCopilotRepo start to drop outdated statistics");
-        lastClearTimestamp = System.currentTimeMillis();
+        lastCleanTimestamp = System.currentTimeMillis();
 
         try {
             String dropSQL = DeleteSQLBuilder.buildDeleteStatsSQL();
@@ -140,23 +141,19 @@ public class DataCacheCopilotRepo extends FrontendDaemon {
         context.getSessionVariable().setEnableProfile(false);
         // enlarge group_concat max length from 1024 -> 65535
         context.getSessionVariable().setGroupConcatMaxLen(65535);
-        // context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
-        // context.getSessionVariable().setEnablePipelineEngine(true);
-
-        // context.setStatisticsContext(true);
-        // context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
+        context.setStatisticsContext(true);
+        context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
         context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         context.setQualifiedUser(UserIdentity.ROOT.getUser());
         context.setQueryId(UUIDUtil.genUUID());
-        // context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setStartTime();
-
         return context;
     }
 
-    private static class DeleteSQLBuilder {
+    @VisibleForTesting
+    public static class DeleteSQLBuilder {
         private static final String CLEAN_SQL_TEMPLATE = "DELETE FROM `%s`.`%s`.`%s` WHERE `%s` <= '%s'";
 
         public static String buildDeleteStatsSQL() {
