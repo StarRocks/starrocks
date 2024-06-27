@@ -40,13 +40,13 @@ public class ScanFileUtils {
         return records.numRecords;
     }
 
-    public static DeltaLakeFileStruct getColumnStatistics(Row file) {
+    public static DeltaLakeStatsStruct getColumnStatistics(Row file) {
         String stats = file.getString(ADD_FILE_STATS_ORDINAL);
         if (stats == null) {
             throw new IllegalArgumentException("There is no `stats` entry in the add file row");
         }
 
-        DeltaLakeFileStruct statistics = GsonUtils.GSON.fromJson(stats, DeltaLakeFileStruct.class);
+        DeltaLakeStatsStruct statistics = GsonUtils.GSON.fromJson(stats, DeltaLakeStatsStruct.class);
         if (statistics == null) {
             throw new IllegalArgumentException("There is no entry in the stats row");
         }

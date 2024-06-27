@@ -44,8 +44,9 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class DeltaLakeFileStats {
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
-    private static final DateTimeFormatter TIME_ZONE_FORMAT =
+    private static final DateTimeFormatter TIMESTAMP_NTZ_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
+    private static final DateTimeFormatter TIMESTAMP_ZONE_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     private final StructType schema;
@@ -109,7 +110,7 @@ public class DeltaLakeFileStats {
         }
 
         builder.setAverageRowSize(size * 1.0 / Math.max(recordCount, 1));
-        builder.setDistinctValuesCount(1);
+        builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
 
         String colName = col.getName();
         if (!nonPartitionPrimitiveColumns.contains(colName)) {
@@ -243,13 +244,13 @@ public class DeltaLakeFileStats {
         }
     }
 
-    private static double parseTimestampWithTimeZone(String str) {
-        OffsetDateTime time = OffsetDateTime.parse(str, TIME_ZONE_FORMAT);
+    private static double parseTimestampWithAtZone(String str) {
+        OffsetDateTime time = OffsetDateTime.parse(str, TIMESTAMP_ZONE_FORMAT);
         return time.toEpochSecond();
     }
 
     private static double parseTimestampNTZ(String str) {
-        LocalDateTime time = LocalDateTime.parse(str, TIME_FORMAT);
+        LocalDateTime time = LocalDateTime.parse(str, TIMESTAMP_NTZ_FORMAT);
         return time.atZone(ZoneOffset.UTC).toEpochSecond();
     }
 
@@ -277,7 +278,7 @@ public class DeltaLakeFileStats {
         } else if (type instanceof TimestampNTZType) {
             result = parseTimestampNTZ((String) value);
         } else if (type instanceof TimestampType) {
-            result = parseTimestampWithTimeZone((String) value);
+            result = parseTimestampWithAtZone((String) value);
         } else if (type instanceof DateType) {
             result = parseDate((String) value);
         } else {

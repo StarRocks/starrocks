@@ -76,7 +76,7 @@ public class DeltaStatisticProvider {
         FileStatus status = InternalScanFileUtils.getAddFileStatus(file);
 
         Row addFileEntry = getAddFileEntry(file);
-        DeltaLakeFileStruct fileStat = ScanFileUtils.getColumnStatistics(addFileEntry);
+        DeltaLakeStatsStruct fileStat = ScanFileUtils.getColumnStatistics(addFileEntry);
 
         DeltaLakeFileStats fileStats;
         if (deltaLakeFileStatsMap.containsKey(key)) {
