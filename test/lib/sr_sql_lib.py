@@ -621,6 +621,7 @@ class StarrocksSQLApiLib(object):
             raise
 
     def conn_execute_sql(self, conn, sql):
+        var, sql = self.analyse_var(sql)
         try:
             cursor = conn.cursor()
             if sql.endswith(";"):
