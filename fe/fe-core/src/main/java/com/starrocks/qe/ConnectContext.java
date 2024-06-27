@@ -70,7 +70,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
-import com.starrocks.sql.common.QueryContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
@@ -176,8 +175,6 @@ public class ConnectContext {
     protected Instant startTime = Instant.now();
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
-    // some query context in this conenct context
-    protected QueryContext queryContext = new QueryContext();
 
     // GlobalStateMgr: put globalStateMgr here is convenient for unit test,
     // because globalStateMgr is singleton, hard to mock
@@ -911,10 +908,6 @@ public class ConnectContext {
             LOG.warn("construct SSLChannelImp class failed");
             throw new IOException("construct SSLChannelImp class failed");
         }
-    }
-
-    public QueryContext getQueryContext() {
-        return queryContext;
     }
 
     public StmtExecutor executeSql(String sql) throws Exception {
