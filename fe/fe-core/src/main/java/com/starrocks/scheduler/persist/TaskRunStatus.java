@@ -23,6 +23,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.collections.MapUtils;
 
 import java.io.DataInput;
@@ -64,7 +65,11 @@ public class TaskRunStatus implements Writable {
     private String postRun;
 
     @SerializedName("user")
+    @Deprecated
     private String user;
+
+    @SerializedName("userIdentity")
+    private UserIdentity userIdentity;
 
     @SerializedName("expireTime")
     private long expireTime;
@@ -203,6 +208,14 @@ public class TaskRunStatus implements Writable {
 
     public void setUser(String user) {
         this.user = user;
+    }
+
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
+    }
+
+    public void setUserIdentity(UserIdentity userIdentity) {
+        this.userIdentity = userIdentity;
     }
 
     public String getPostRun() {
