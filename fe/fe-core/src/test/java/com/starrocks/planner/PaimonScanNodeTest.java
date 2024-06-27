@@ -27,6 +27,7 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.paimon.data.BinaryArray;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
 import org.apache.paimon.io.DataFileMeta;
