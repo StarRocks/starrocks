@@ -19,20 +19,25 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class CancelRefreshMaterializedViewStmt extends DdlStmt {
     private final TableName mvName;
+    private final boolean force;
 
-    public CancelRefreshMaterializedViewStmt(TableName mvName) {
-        this(mvName, NodePosition.ZERO);
+    public CancelRefreshMaterializedViewStmt(TableName mvName, boolean force) {
+        this(mvName, force, NodePosition.ZERO);
     }
 
-    public CancelRefreshMaterializedViewStmt(TableName mvName, NodePosition pos) {
+    public CancelRefreshMaterializedViewStmt(TableName mvName, boolean force, NodePosition pos) {
         super(pos);
         this.mvName = mvName;
+        this.force = force;
     }
 
     public TableName getMvName() {
         return mvName;
     }
 
+    public boolean isForce() {
+        return force;
+    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

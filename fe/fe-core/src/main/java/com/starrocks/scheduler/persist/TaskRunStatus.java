@@ -256,6 +256,21 @@ public class TaskRunStatus implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public long getProcessStartTime() {
+        return processStartTime;
+    }
+
+    public void setProcessStartTime(long processStartTime) {
+        this.processStartTime = processStartTime;
+        // update process start time in mvTaskRunExtraMessage to display in the web page
+        if (mvTaskRunExtraMessage != null) {
+            mvTaskRunExtraMessage.setProcessStartTime(processStartTime);
+        }
+    }
+
+>>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
     public Map<String, String> getProperties() {
         return properties;
     }

@@ -548,6 +548,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!mvProperty.getProperties().containsKey(MV_SESSION_TIMEOUT)) {
             mvSessionVariable.setQueryTimeoutS(MV_DEFAULT_QUERY_TIMEOUT);
         }
+
+        // set enable_insert_strict by default
+        if (!isMVPropertyContains(SessionVariable.ENABLE_INSERT_STRICT)) {
+            mvSessionVariable.setEnableInsertStrict(false);
+        }
+        // enable profile by default for mv refresh task
+        if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {
+            mvSessionVariable.setEnableProfile(true);
+        }
+    }
+
+    private boolean isMVPropertyContains(String key) {
+        String mvKey = PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + key;
+        return materializedView.getTableProperty().getProperties().containsKey(mvKey);
     }
 
     private void postProcess() {
@@ -1444,7 +1458,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
+<<<<<<< HEAD
         ctx.getSessionVariable().setEnableInsertStrict(false);
+=======
+>>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
         LOG.info("[QueryId:{}] start to refresh materialized view {}", ctx.getQueryId(), materializedView.getName());
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
