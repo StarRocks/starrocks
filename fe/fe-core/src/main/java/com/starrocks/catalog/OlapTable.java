@@ -97,6 +97,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.SystemInfoService;
@@ -1100,11 +1101,14 @@ public class OlapTable extends Table {
 
     /**
      * @return : table's partition name to list partition names.
+     * eg:
+     *  partition columns   : (a, b, c)
+     *  values              : [[1, 2, 3], [4, 5, 6]]
      */
-    public Map<String, List<List<String>>> getListPartitionMap() {
+    public Map<String, PListCell> getListPartitionItems() {
         Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-        Map<String, List<List<String>>> listPartitionMap = Maps.newHashMap();
+        Map<String, PListCell> partitionItems = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
             String partitionName = partitionEntry.getValue().getName();
@@ -1112,32 +1116,43 @@ public class OlapTable extends Table {
             if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                 continue;
             }
-            List<String> values = listPartitionInfo.getIdToValues().get(partitionId);
-            if (values != null) {
-                List<List<String>> valueList = Lists.newArrayList();
-                valueList.add(values);
-                listPartitionMap.put(partitionName, valueList);
+            // one item
+            List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
+            if (singleValues != null) {
+                List<List<String>> cellValue = Lists.newArrayList();
+                // for one item(single value), treat it as multi values.
+                for (String val : singleValues) {
+                    cellValue.add(Lists.newArrayList(val));
+                }
+                partitionItems.put(partitionName, new PListCell(cellValue));
             }
+
+            // multi items
             List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
             if (multiValues != null) {
-                listPartitionMap.put(partitionName, listPartitionInfo.getIdToMultiValues().get(partitionId));
+                partitionItems.put(partitionName, new PListCell(multiValues));
             }
-
         }
-        return listPartitionMap;
+        return partitionItems;
     }
 
+    @Override
+    public List<Column> getPartitionColumns() {
+        return partitionInfo.getPartitionColumns(this.idToColumn);
+    }
+
+    @Override
     public List<String> getPartitionColumnNames() {
         List<String> partitionColumnNames = Lists.newArrayList();
-        if (partitionInfo instanceof SinglePartitionInfo) {
+        if (partitionInfo.isUnPartitioned()) {
             return partitionColumnNames;
-        } else if (partitionInfo instanceof RangePartitionInfo) {
+        } else if (partitionInfo.isRangePartition()) {
             List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
             for (Column column : partitionColumns) {
                 partitionColumnNames.add(column.getName());
             }
             return partitionColumnNames;
-        } else if (partitionInfo instanceof ListPartitionInfo) {
+        } else if (partitionInfo.isListPartition()) {
             List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
             for (Column column : partitionColumns) {
                 partitionColumnNames.add(column.getName());
@@ -1501,8 +1516,8 @@ public class OlapTable extends Table {
     }
 
     // partitionName -> formatValue 1:1/1:N
-    public Map<String, List<List<String>>> getValidListPartitionMap(int lastPartitionNum) {
-        Map<String, List<List<String>>> listPartitionMap = getListPartitionMap();
+    public Map<String, PListCell> getValidListPartitionMap(int lastPartitionNum) {
+        Map<String, PListCell> listPartitionMap = getListPartitionItems();
         // less than 0 means not set
         if (lastPartitionNum < 0) {
             return listPartitionMap;
@@ -1514,7 +1529,7 @@ public class OlapTable extends Table {
         }
 
         return listPartitionMap.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(ListPartitionInfo::compareByValue))
+                .sorted(Map.Entry.comparingByValue(PListCell::compareTo))
                 .skip(Math.max(0, partitionNum - lastPartitionNum))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }

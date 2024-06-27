@@ -51,6 +51,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -1222,6 +1225,29 @@ public class UtFrameUtils {
                 replica.updateVersionInfo(version, -1, version);
             }
         }
+    }
+
+    public static void mockTimelinessForAsyncMVTest(ConnectContext connectContext) {
+        new MockUp<MvRefreshArbiter>() {
+            /**
+             * {@link MvRefreshArbiter#getMVTimelinessUpdateInfo(MaterializedView, boolean)}
+             */
+            @Mock
+            public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                          boolean isQueryRewrite) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+            }
+        };
+
+        new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
+            @Mock
+            boolean isPrintPlanTableNames() {
+                return true;
+            }
+        };
     }
 
     public static void setDefaultConfigForAsyncMVTest(ConnectContext connectContext) {
