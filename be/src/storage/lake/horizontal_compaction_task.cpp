@@ -67,11 +67,11 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
-            return Status::Cancelled("background worker stopped");
+            return Status::Aborted("background worker stopped");
         }
-        if (cancel_func()) {
-            return Status::Cancelled("cancelled");
-        }
+
+        RETURN_IF_ERROR(cancel_func());
+
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif

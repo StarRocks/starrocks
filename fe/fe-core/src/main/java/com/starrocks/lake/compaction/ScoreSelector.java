@@ -32,12 +32,11 @@ public class ScoreSelector implements Selector {
         double minScore = Config.lake_compaction_score_selector_min_score;
         long now = System.currentTimeMillis();
         return statistics.stream()
-                .filter(p -> p.getNextCompactionTime() <= now)
                 .filter(p -> p.getCompactionScore() != null)
                 .filter(p -> !excludeTables.contains(p.getPartition().getTableId()))
-                // When manual compaction is triggered, we just skip min score
+                // When manual compaction is triggered, we just skip min score and time check
                 .filter(p -> (p.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT
-                        || p.getCompactionScore().getMax() >= minScore))
+                        || (p.getNextCompactionTime() <= now && p.getCompactionScore().getMax() >= minScore)))
                 .collect(Collectors.toList());
     }
 }

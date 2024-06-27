@@ -44,7 +44,7 @@ public class Quantiles implements Comparable<Quantiles> {
         return new Quantiles(avg, p50, max);
     }
 
-    private Quantiles(double avg, double p50, double max) {
+    public Quantiles(double avg, double p50, double max) {
         this.avg = avg;
         this.p50 = p50;
         this.max = max;
