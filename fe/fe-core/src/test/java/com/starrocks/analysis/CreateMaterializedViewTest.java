@@ -1295,7 +1295,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testPartitionByAllowedFunctionUseWeek() {
+    public void testPartitionByAllowedFunctionUseWeek1() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
                 "distributed by hash(k2) buckets 10 " +
@@ -1307,6 +1307,26 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
+            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 31. " +
+                    "Detail message: Materialized view partition function date_trunc check failed: " +
+                    "date_trunc('week', `k2`).", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testPartitionByAllowedFunctionUseWeek2() {
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select date_trunc('week',k1) ss, k2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         }
     }
