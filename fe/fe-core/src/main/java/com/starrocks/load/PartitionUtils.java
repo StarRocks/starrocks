@@ -25,7 +25,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -96,13 +95,13 @@ public class PartitionUtils {
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
                             range, partitionInfo.getDataCacheInfo(partition.getId()));
-                } else if (partitionInfo instanceof SinglePartitionInfo) {
+                } else if (partitionInfo.isUnPartitioned()) {
                     info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
                             partitionInfo.getDataCacheInfo(partition.getId()));
-                } else if (partitionInfo instanceof ListPartitionInfo) {
+                } else if (partitionInfo.isListPartition()) {
                     ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
 
                     listPartitionInfo.setIdToIsTempPartition(partition.getId(), true);

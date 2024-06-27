@@ -14,50 +14,11 @@
 
 package com.starrocks.sql.common;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Predicates;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
-import com.google.common.collect.RangeMap;
-import com.google.common.collect.TreeRangeMap;
-import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.RangeUtils;
-import com.starrocks.connector.PartitionUtil;
-import com.starrocks.sql.analyzer.SemanticException;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.threeten.extra.PeriodDuration;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
-// TODO: refactor all related code into this class
-
 /**
- * Compute the Materialized View partition mapping from base table
- * e.g. the MV is PARTITION BY date_trunc('month', dt), and the base table is daily partition, the resulted mv
- * should be monthly partition
+ * {@link PartitionDiffer} is used to compare the difference between two partitions which can be range
+ * partition or list partition.
  */
+<<<<<<< HEAD
 public class PartitionDiffer {
 
     private static final Logger LOG = LogManager.getLogger(PartitionDiffer.class);
@@ -380,4 +341,7 @@ public class PartitionDiffer {
             return null;
         }
     }
+=======
+public abstract class PartitionDiffer {
+>>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
 }

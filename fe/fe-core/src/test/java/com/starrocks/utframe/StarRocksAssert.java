@@ -36,6 +36,7 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
@@ -123,6 +124,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.jupiter.params.provider.Arguments;
 
@@ -131,6 +133,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -356,22 +359,28 @@ public class StarRocksAssert {
         return this;
     }
 
-    public StarRocksAssert withTable(PseudoCluster cluster,
-                                     MTable mTable,
-                                     ExceptionRunnable action) {
-        return withMTables(cluster, List.of(mTable), action);
-    }
-
     public StarRocksAssert withTable(MTable mTable,
                                      ExceptionRunnable action) {
-        return withTables(List.of(mTable), action);
+        return this.withMTables(List.of(mTable), action);
     }
 
-    public StarRocksAssert withTables(List<MTable> mTables,
-                                      ExceptionRunnable action) {
+    public StarRocksAssert withMTable(String mTable,
+                                       ExceptionRunnable action) {
+        return withMTableNames(null, ImmutableList.of(mTable), action);
+    }
+
+    public StarRocksAssert withMTables(List<MTable> mTables,
+                                       ExceptionRunnable action) {
         return withMTables(null, mTables, action);
     }
 
+    /**
+     * Create tables by using MTables and do insert datas and later actions.
+     * @param cluster pseudo cluster
+     * @param mTables mtables to be used for creating tables
+     * @param action action after creating base tables
+     * @return return this
+     */
     public StarRocksAssert withMTables(PseudoCluster cluster,
                                        List<MTable> mTables,
                                        ExceptionRunnable action) {
@@ -420,15 +429,51 @@ public class StarRocksAssert {
     }
 
     /**
+     * With input base table's create table sqls and actions.
+     * @param sqls the base table's create table sqls
+     * @param action action after creating base tables
+     * @return return this
+     */
+    public StarRocksAssert withTables(List<String> sqls,
+                                       ExceptionRunnable action) {
+        Set<String> tables = Sets.newHashSet();
+        try {
+            for (String sql : sqls) {
+                CreateTableStmt createTableStmt =
+                        (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                utCreateTableWithRetry(createTableStmt, ctx);
+                tables.add(createTableStmt.getTableName());
+            }
+            if (action != null) {
+                action.run();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("Do action failed:" +  e.getMessage());
+        } finally {
+            if (action != null) {
+                for (String table : tables) {
+                    try {
+                        dropTable(table);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        return this;
+    }
+
+    /**
      * Create tables and do insert datas and later actions.
      * @param cluster : insert into datas into table if it's not null.
      * @param tables  : tables which needs to be created and inserted.
      * @param action  : actions which will be used to do later.
      * @return
      */
-    public StarRocksAssert withTables(PseudoCluster cluster,
-                                      List<String> tables,
-                                      ExceptionRunnable action) {
+    public StarRocksAssert withMTableNames(PseudoCluster cluster,
+                                           List<String> tables,
+                                           ExceptionRunnable action) {
         try {
             for (String table : tables) {
                 MTable mTable = MSchema.getTable(table);
@@ -470,14 +515,14 @@ public class StarRocksAssert {
      */
     public StarRocksAssert withTable(PseudoCluster cluster,
                                      String tableName) {
-        return withTables(cluster, List.of(tableName), null);
+        return withMTableNames(cluster, List.of(tableName), null);
     }
 
     /**
      * Create table only and no insert datas into the table and do actions.
      */
     public StarRocksAssert withTable(String table, ExceptionRunnable action) {
-        return withTables(null, List.of(table), action);
+        return withTables(List.of(table), action);
     }
 
     /**
@@ -487,14 +532,14 @@ public class StarRocksAssert {
                                      String table,
                                      ExceptionRunnable action) {
 
-        return withTables(cluster, List.of(table), action);
+        return withMTableNames(cluster, List.of(table), action);
     }
 
     /**
      * To distinguish `withTable(sql)`, call it `useTable` to select existed table from MSchema.
      */
     public StarRocksAssert useTable(String table) {
-        return withTables(null, List.of(table), null);
+        return withMTableNames(null, List.of(table), null);
     }
 
     public Table getTable(String dbName, String tableName) {

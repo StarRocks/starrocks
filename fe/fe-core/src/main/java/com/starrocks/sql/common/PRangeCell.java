@@ -20,37 +20,31 @@ import com.starrocks.catalog.PartitionKey;
 import java.util.Objects;
 
 /**
- * `PartitionRange` contains a `PartitionKey` range and the partition's name to represent a table's partition range info.
+ * {@link PRangeCell} contains the range partition's value which contains a `PartitionKey` range.
  */
-public class PartitionRange implements Comparable<PartitionRange> {
-    private final Range<PartitionKey> partitionKeyRange;
-    private final String partitionName;
+public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
+    private final Range<PartitionKey> range;
 
-    public PartitionRange(String partitionName, Range<PartitionKey> partitionKeyRange) {
-        this.partitionName = partitionName;
-        this.partitionKeyRange = partitionKeyRange;
+    public PRangeCell(Range<PartitionKey> partitionKeyRange) {
+        this.range = partitionKeyRange;
     }
 
-    public Range<PartitionKey> getPartitionKeyRange() {
-        return partitionKeyRange;
-    }
-
-    public String getPartitionName() {
-        return partitionName;
+    public Range<PartitionKey> getRange() {
+        return range;
     }
 
     /**
-     * `PartitionRange`'s compareTo method is not an exact comparator, but it can work for Partition Ranges:
+     * {@link PRangeCell}'s compareTo method is not an exact comparator, but it can work for Partition Ranges:
      *   1. Partitions are serial un-connected ranges which are not interact between each other, so we can just compare
      * `lowerEndPoint` directly.
      *   2. Choose two interact partition ranges as `equal` to let callers handle it directly.
      */
     @Override
-    public int compareTo(PartitionRange o) {
+    public int compareTo(PRangeCell o) {
         if (isIntersected(o)) {
             return 0;
         }
-        return this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint());
+        return this.range.lowerEndpoint().compareTo(o.range.lowerEndpoint());
     }
 
     /**
@@ -63,29 +57,32 @@ public class PartitionRange implements Comparable<PartitionRange> {
      *         && other.lowerBound.compareTo(upperBound) <= 0;
      *   }
      */
-    public boolean isIntersected(PartitionRange o) {
-        return this.partitionKeyRange.upperEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint()) > 0 &&
-                this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.upperEndpoint()) < 0;
+    public boolean isIntersected(PRangeCell o) {
+        return this.range.upperEndpoint().compareTo(o.range.lowerEndpoint()) > 0 &&
+                this.range.lowerEndpoint().compareTo(o.range.upperEndpoint()) < 0;
     }
 
     @Override
     public boolean equals(Object o) {
-
         if (o == this) {
             return true;
         }
-        if (o == null || !(o instanceof PartitionRange)) {
+        if (o == null || !(o instanceof PRangeCell)) {
             return false;
         }
-        PartitionRange range = (PartitionRange) o;
-
-        return this.partitionName.equals(((PartitionRange) o).partitionName) &&
-                this.partitionKeyRange.equals(range.partitionKeyRange);
+        PRangeCell range = (PRangeCell) o;
+        return this.range.equals(range.range);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(partitionName, partitionKeyRange);
+        return Objects.hash(range);
     }
 
+    @Override
+    public String toString() {
+        return "PRangeCell{" +
+                "range=" + range +
+                '}';
+    }
 }

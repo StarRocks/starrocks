@@ -63,7 +63,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getPartitionNamesToRefreshForMv;
+import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.REWRITE_SUCCESS;
 
@@ -230,7 +230,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
                     return null;
                 }
-                MvUpdateInfo mvUpdateInfo = getPartitionNamesToRefreshForMv(mv, true);
+                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo(mv, true);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite, " +
                             "stale partitions {}", mv.getName(), mvUpdateInfo);
