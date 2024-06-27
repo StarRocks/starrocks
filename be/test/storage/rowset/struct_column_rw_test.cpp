@@ -168,10 +168,6 @@ protected:
         }
 
         {
-<<<<<<< HEAD
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::FIELD, "f1", 0);
-=======
             TabletColumn new_struct_column = create_struct(0, true);
             std::vector<std::string> names{"f1", "f3"};
             TabletColumn f1_tablet_column = create_int_value(1, STORAGE_AGGREGATE_NONE, true);
@@ -253,10 +249,8 @@ protected:
         }
 
         {
-            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f1", 0));
-            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
-            path->children().emplace_back(std::move(child_path));
->>>>>>> 757f14205a ([Feature] Support add/drop field for struct column(part1) (#46451))
+            auto child_path = std::make_unique<ColumnAccessPath>();
+            child_path->init(TAccessPathType::type::FIELD, "f1", 0);
 
             ColumnAccessPath path;
             path.init(TAccessPathType::type::ROOT, "root", 0);
