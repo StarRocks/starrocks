@@ -30,7 +30,7 @@ function: assert_explain_costs_contains('select col_array from delta_test_${uuid
 function: assert_explain_costs_contains('select col_binary from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_binary-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
 function: assert_explain_costs_contains('select col_map from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_map-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
 function: assert_explain_costs_contains('select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_struct-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
-function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntx', 'col_timestamp_ntz-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz', 'col_timestamp_ntz-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
 
 set enable_delta_lake_column_statistics=true;
 
@@ -52,6 +52,6 @@ function: assert_explain_costs_contains('select col_array from delta_test_${uuid
 function: assert_explain_costs_contains('select col_binary from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_binary-->[-Infinity, Infinity, 0.0, NaN, NaN] UNKNOWN')
 function: assert_explain_costs_contains('select col_map from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_map-->[-Infinity, Infinity, NaN, NaN, NaN] UNKNOWN')
 function: assert_explain_costs_contains('select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_struct-->[-Infinity, Infinity, NaN, NaN, NaN] UNKNOWN')
-function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntx', 'col_timestamp_ntz-->[1.704157323E9, 1.704427506E9, 0.2, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz', 'col_timestamp_ntz-->[1.704157323E9, 1.704427506E9, 0.2, NaN, NaN] UNKNOWN')
 
 drop catalog delta_test_${uuid0}
