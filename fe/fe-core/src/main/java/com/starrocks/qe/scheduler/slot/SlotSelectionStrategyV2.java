@@ -327,9 +327,10 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
                     break;
                 }
 
+                // If the highest state sub-queue is empty, skip it
+
                 maxSubQueue.skip(1);
 
-                // If the highest state sub-queue is empty, skip it
                 final int selectTimes = calculateContinuousSelectTimesForQueue(maxQueueIndex);
                 if (selectTimes > 0) {
                     maxSubQueue.skip(selectTimes);

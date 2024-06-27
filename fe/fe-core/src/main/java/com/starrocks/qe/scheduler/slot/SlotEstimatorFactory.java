@@ -67,10 +67,13 @@ public class SlotEstimatorFactory {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
             Map<PlanFragmentId, FragmentContext> fragmentContexts = collectFragmentContexts(coord);
-
-            return fragmentContexts.values().stream()
+            int numSlots = fragmentContexts.values().stream()
                     .mapToInt(fragmentContext -> estimateFragmentSlots(opts, fragmentContext))
                     .max().orElse(1);
+
+            final long planCpuCosts = (long) context.getAuditEventBuilder().build().planCpuCosts;
+            int numSlotsPerWorker = (int) (planCpuCosts / opts.v2().getNumWorkers() / 1e8);
+            return Math.min(Math.max(numSlots / 2, numSlotsPerWorker), numSlots);
         }
 
         private static int estimateFragmentSlots(QueryQueueOptions opts, FragmentContext context) {
