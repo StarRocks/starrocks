@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.compress.utils.Lists;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -214,7 +215,9 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
                 String category = String.valueOf(i);
                 LongCounterMetric m = MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING.getMetric(category);
-                m.increase(-m.getValue());  // Reset the pending slots of this category.
+                m.increase(-m.getValue());  // Reset.
+                m = MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_STATE.getMetric(category);
+                m.increase(-m.getValue());  // Reset.
                 MetricRepo.GAUGE_QUERY_QUEUE_CATEGORY_WEIGHT.getMetric(category).setValue(curWeight);
                 MetricRepo.GAUGE_QUERY_QUEUE_CATEGORY_SLOT_MIN_SLOTS.getMetric(category).setValue(curMinSlots * numWorkers);
 
@@ -326,15 +329,26 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
                     break;
                 }
 
+                maxSubQueue.skip(1);
+
                 // If the highest state sub-queue is empty, skip it
                 final int selectTimes = calculateContinuousSelectTimesForQueue(maxQueueIndex);
-                maxSubQueue.skip(1 + selectTimes);
-                maxSubQueue.incrState(-(totalWeight - maxSubQueue.weight) * selectTimes);
-                for (int i = 0; i < subQueues.length; i++) {
-                    SlotSubQueue queue = subQueues[i];
-                    if (i != maxQueueIndex) {
-                        queue.incrState(queue.weight * selectTimes);
+                if (selectTimes > 0) {
+                    maxSubQueue.skip(selectTimes);
+                    maxSubQueue.incrState(-(totalWeight - maxSubQueue.weight) * selectTimes);
+                    for (int i = 0; i < subQueues.length; i++) {
+                        SlotSubQueue queue = subQueues[i];
+                        if (i != maxQueueIndex) {
+                            queue.incrState(queue.weight * selectTimes);
+                        }
                     }
+                }
+            }
+
+            final int minState = Arrays.stream(subQueues).mapToInt(queue -> queue.state).min().getAsInt();
+            if (minState > 1000) {
+                for (SlotSubQueue queue : subQueues) {
+                    queue.incrState(-minState);
                 }
             }
 
@@ -405,7 +419,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
             public void comeback() {
                 // Give it some compensations according to the skip times.
-                state += (int) Math.min((totalWeight - weight) * skipTimes, totalWeight * 2L);
+                incrState((int) Math.min((totalWeight - weight) * skipTimes, totalWeight * 2L));
                 skipTimes = 0;
             }
 
