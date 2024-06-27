@@ -308,10 +308,12 @@ public enum ErrorCode {
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
             "%s. Check the 'TrackingSQL' field for detailed information. If you are sure that the data has many errors, " +
-                    "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job."),
+                    "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
-            "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job."),
+            "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_ROUTINE_LOAD_PROPERTY_PARTITION_OFFSET_INVALID(5608, new byte[] {'4', '2', '0', '0', '0'},
+            "%s '%s' is invalid. It must be %s"),
 
     /**
      * 5700 - 5799: Partition
