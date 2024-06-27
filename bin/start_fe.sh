@@ -62,10 +62,8 @@ check_and_update_max_processes
 # JAVA_OPTS
 # LOG_DIR
 # PID_DIR
-export JAVA_OPTS="-Xmx8g"
 export LOG_DIR="$STARROCKS_HOME/log"
 export PID_DIR=`cd "$curdir"; pwd`
-
 export_env_from_conf $STARROCKS_HOME/conf/fe.conf
 
 if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
@@ -108,6 +106,7 @@ JAVA=$JAVA_HOME/bin/java
 
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
+<<<<<<< HEAD
 final_java_opt=$JAVA_OPTS
 if [[ "$JAVA_VERSION" -gt 8 ]]; then
     if [[ "$JAVA_VERSION" -lt 11 ]]; then
@@ -128,6 +127,54 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
         echo "JAVA_OPTS_FOR_JDK_11 is not set in fe.conf, use default java options for jdk11 to start fe process: $default_java_opts_for_jdk11"
         final_java_opt=$default_java_opts_for_jdk11
     fi
+=======
+if [[ "$JAVA_VERSION" -lt 11 ]]; then
+    echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
+    exit -1
+fi
+
+# ### Things to know about environment variables of JAVA_OPTS, JAVA_OPTS_FOR_JDK_9 and JAVA_OPTS_FOR_JDK_11
+# * It is historic reason and backwards compatibility consideration to have separate JAVA_OPTS
+#   for diffferent versions of JDK, so that when the user upgrades or downgrades the JDK version,
+#   the JAVA_OPTS won't be suddenly broken.
+# * Ideally, the user will only care about the `JAVA_OPTS`, don't set any JAVA_OPTS_FOR_JDK_*
+# * JAVA_OPTS/JAVA_OPTS_FOR_JDK_9/JAVA_OPTS_FOR_JDK_11 can be either set in the shell before invoking
+#   this script, or can be set in `fe.conf` which will be loaded automatically by `export_env_from_conf`
+#
+# ### Precedence of environment variables
+# For JDK11, it takes the following precedences:
+#    JAVA_OPTS_FOR_JDK_11 > JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
+# (The `JAVA_OPTS_FOR_JDK_9` here is just for historic reason)
+# For JDK9, it takes the following precedences:
+#    JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
+# For all remain jdk versions, only JAVA_OPTS takes effect.
+#
+# NOTE: try not adding new JAVA_OPTS_FOR_JDK_## for a new JDK version.
+#
+final_java_opt=
+case $JAVA_VERSION in
+  11)
+    # take JAVA_OPTS_FOR_JDK_11 or JAVA_OPTS_FOR_JDK_9 if the former is empty
+    final_java_opt=${JAVA_OPTS_FOR_JDK_11:-$JAVA_OPTS_FOR_JDK_9}
+    final_java_opt=${final_java_opt:-$JAVA_OPTS}
+    ;;
+  9)
+    # take JAVA_OPTS_FOR_JDK_9 or JAVA_OPTS if the former is empty
+    final_java_opt=${JAVA_OPTS_FOR_JDK_9:-$JAVA_OPTS}
+    ;;
+  *)
+    final_java_opt=$JAVA_OPTS
+    ;;
+esac
+
+if [ -z "$final_java_opt" ] ; then
+    # lookup fails, provide a fixed opts with best guess that may or may not work
+    if [ -z "$DATE" ] ; then
+        DATE=`date +%Y%m%d-%H%M%S`
+    fi
+    final_java_opt="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy"
+    echo "JAVA_OPTS is not set in fe.conf, use default java options to start fe process: $final_java_opt"
+>>>>>>> bd497d3e8c ([BugFix] Clean the JAVA_OPTS variable family in start_fe.sh (#47495))
 fi
 
 # Auto detect jvm -Xmx parameter in case $FE_ENABLE_AUTO_JVM_XMX_DETECT = true
