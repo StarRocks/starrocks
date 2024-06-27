@@ -682,7 +682,8 @@ public class AlterJobMgr {
             TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
             taskManager.createTask(task, false);
         } else {
-            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties());
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties(),
+                    currentTask);
             TaskBuilder.updateTaskInfo(changedTask, refreshSchemeDesc, materializedView);
             taskManager.alterTask(currentTask, changedTask, false);
             task = currentTask;
