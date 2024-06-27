@@ -47,7 +47,11 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+<<<<<<< HEAD
 import com.starrocks.persist.EditLog;
+=======
+import com.starrocks.proto.TxnInfoPB;
+>>>>>>> 7964355135 ([Enhancement] support lake compaction force commit (backport #47097) (#47382))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -763,6 +767,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPublishVersion() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
@@ -770,6 +775,10 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
                                        long commitTime)
+=======
+            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       long warehouseId)
+>>>>>>> 7964355135 ([Enhancement] support lake compaction force commit (backport #47097) (#47382))
                     throws
                     RpcException {
                 throw new RpcException("publish version failed", "127.0.0.1");
@@ -870,6 +879,7 @@ public class LakeTableSchemaChangeJobTest {
         // Make publish version success
         new MockUp<Utils>() {
             @Mock
+<<<<<<< HEAD
             public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
@@ -884,6 +894,10 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<StarMgrMetaSyncer>() {
             @Mock
             public void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
+=======
+            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       long warehouseId) {
+>>>>>>> 7964355135 ([Enhancement] support lake compaction force commit (backport #47097) (#47382))
                 // nothing to do
             }
         };

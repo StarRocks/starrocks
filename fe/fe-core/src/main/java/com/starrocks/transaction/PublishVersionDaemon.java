@@ -51,9 +51,16 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.TxnInfoHelper;
+>>>>>>> 7964355135 ([Enhancement] support lake compaction force commit (backport #47097) (#47382))
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.scheduler.Constants;
@@ -566,13 +573,22 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 List<Tablet> publishTablets = new ArrayList<>();
                 publishTablets.addAll(normalTablets);
 
-                // commit time of last transactionState as commitTime
-                long commitTime = transactionStates.get(transactionStates.size() - 1).getCommitTime();
+                List<TxnInfoPB> txnInfos = new ArrayList<>();
+                for (TransactionState state : transactionStates) {
+                    txnInfos.add(TxnInfoHelper.fromTransactionState(state));
+                }
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+<<<<<<< HEAD
                 Utils.publishVersionBatch(publishTablets, txnIds,
                         startVersion - 1, endVersion, commitTime, compactionScores, nodeToTablets);
+=======
+                Utils.publishVersionBatch(publishTablets, txnInfos,
+                        startVersion - 1, endVersion, compactionScores,
+                        warehouseId,
+                        nodeToTablets);
+>>>>>>> 7964355135 ([Enhancement] support lake compaction force commit (backport #47097) (#47382))
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
@@ -819,14 +835,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
             db.readUnlock();
         }
 
+        TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
+<<<<<<< HEAD
                 Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
                         compactionScores);
+=======
+                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
+                        warehouseId);
+>>>>>>> 7964355135 ([Enhancement] support lake compaction force commit (backport #47097) (#47382))
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
