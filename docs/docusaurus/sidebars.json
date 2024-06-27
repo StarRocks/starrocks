@@ -23,7 +23,15 @@
             },
             "items": [
                 "quick_start/shared-nothing",
+<<<<<<< HEAD
                 "quick_start/shared-data"
+=======
+                "quick_start/shared-data",
+                "quick_start/iceberg",
+                "quick_start/hudi",
+                "quick_start/routine-load",
+                "quick_start/helm"
+>>>>>>> f1cd788499 ([Doc] Helm quick start (#47555))
             ]
         },
         {
