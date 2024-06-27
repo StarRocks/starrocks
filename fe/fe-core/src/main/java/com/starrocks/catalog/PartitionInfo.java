@@ -263,15 +263,14 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
 
     protected Object clone()  {
         try {
-            // shallow clone on base partition info
             PartitionInfo p = (PartitionInfo) super.clone();
             p.type = this.type;
-            p.idToDataProperty = this.idToDataProperty;
-            p.idToReplicationNum = this.idToReplicationNum;
+            p.idToDataProperty = new HashMap<>(this.idToDataProperty);
+            p.idToReplicationNum = new HashMap<>(this.idToReplicationNum);
             p.isMultiColumnPartition = this.isMultiColumnPartition;
-            p.idToInMemory = this.idToInMemory;
-            p.idToTabletType = this.idToTabletType;
-            p.idToStorageCacheInfo = this.idToStorageCacheInfo;
+            p.idToInMemory = new HashMap<>(this.idToInMemory);
+            p.idToTabletType = new HashMap<>(this.idToTabletType);
+            p.idToStorageCacheInfo = new HashMap<>(this.idToStorageCacheInfo);
             return p;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
