@@ -19,6 +19,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.BooleanType;
+import io.delta.kernel.types.ByteType;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.DateType;
 import io.delta.kernel.types.DoubleType;
@@ -109,7 +110,8 @@ public class DeltaLakeFileStats {
             return;
         }
 
-        builder.setAverageRowSize(size * 1.0 / Math.max(recordCount, 1));
+        // TODO: Currently not set avg size, will be optimized laster.
+        // builder.setAverageRowSize(xxx);
         builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
 
         String colName = col.getName();
@@ -265,6 +267,8 @@ public class DeltaLakeFileStats {
 
         if (type instanceof BooleanType) {
             result = (boolean) value ? 1 : 0;
+        } else if (type instanceof ByteType) {
+            result = (double) value;
         } else if (type instanceof ShortType) {
             result = (double) value;
         } else if (type instanceof IntegerType) {

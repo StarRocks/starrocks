@@ -104,7 +104,7 @@ public class DeltaStatisticProvider {
                                   Map<String, Object> upperBounds,
                                   Map<String, Object> nulCounts,
                                   long recordCount) {
-        deltaLakeFileStats.updateMaxStats(upperBounds, nulCounts, recordCount, i -> (i > 0));
+        deltaLakeFileStats.updateMaxStats(upperBounds, nulCounts, recordCount, i -> (i < 0));
     }
 
     public Statistics getTableStatistics(DeltaLakeTable deltaLakeTable,
