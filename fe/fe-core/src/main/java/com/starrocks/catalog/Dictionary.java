@@ -349,6 +349,7 @@ public class Dictionary implements Writable, GsonPostProcessable {
         List<String> info = new ArrayList<>();
         info.add(String.valueOf(dictionaryId));
         info.add(dictionaryName);
+        info.add(catalogName);
         info.add(dbName);
         info.add(queryableObject);
 
