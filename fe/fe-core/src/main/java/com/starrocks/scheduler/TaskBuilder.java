@@ -63,6 +63,7 @@ public class TaskBuilder {
         task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+            task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
         }
         return task;
     }
@@ -103,12 +104,13 @@ public class TaskBuilder {
         task.setExpireTime(0L);
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+            task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
         }
         return task;
     }
 
     public static Task rebuildMvTask(MaterializedView materializedView, String dbName,
-                                     Map<String, String> previousTaskProperties) {
+                                     Map<String, String> previousTaskProperties, Task previousTask) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
@@ -118,7 +120,10 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
-        task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        if (previousTask != null) {
+            task.setCreateUser(previousTask.getCreateUser());
+            task.setUserIdentity(previousTask.getUserIdentity());
+        }
         return task;
     }
 
