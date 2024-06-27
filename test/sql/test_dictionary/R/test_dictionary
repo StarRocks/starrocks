@@ -1201,7 +1201,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-insert into t_dictionary_multiple_row select generate_series, generate_series, generate_series, generate_series from Table(generate_series(1, 20000));
+insert into t_dictionary_multiple_row select generate_series, generate_series, generate_series, generate_series from Table(generate_series(1, 20001));
 -- result:
 -- !result
 [UC]DROP DICTIONARY test_dictionary_multiple_row_multi_value;
