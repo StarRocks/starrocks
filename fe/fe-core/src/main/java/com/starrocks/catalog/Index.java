@@ -35,9 +35,8 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.IndexParams;
-import com.starrocks.common.IndexParams.IndexParamItem;
-import com.starrocks.common.IndexParams.IndexParamType;
+import com.starrocks.catalog.IndexParams.IndexParamItem;
+import com.starrocks.catalog.IndexParams.IndexParamType;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
@@ -52,7 +51,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -60,7 +58,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -264,9 +261,12 @@ public class Index implements Writable {
             Map<String, String> extraProperties = new HashMap<>();
 
             IndexParams indexParams = IndexParams.getInstance();
-            Map<String, IndexParamItem> commonIndexParams = indexParams.getKeySet(indexType, IndexParamType.COMMON);
-            Map<String, IndexParamItem> indexIndexParams = indexParams.getKeySet(indexType, IndexParamType.INDEX);
-            Map<String, IndexParamItem> searchIndexParams = indexParams.getKeySet(indexType, IndexParamType.SEARCH);
+            Map<String, IndexParamItem> commonIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.COMMON);
+            Map<String, IndexParamItem> indexIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.INDEX);
+            Map<String, IndexParamItem> searchIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.SEARCH);
             for (Entry<String, String> propEntry : properties.entrySet()) {
                 String key = propEntry.getKey();
                 String value = propEntry.getValue();
@@ -284,14 +284,6 @@ public class Index implements Writable {
                     extraProperties.put(key, value);
                 }
             }
-
-            // set default value
-            commonIndexParams.entrySet().stream().filter(p -> p.getValue().needDefault())
-                    .forEach(p -> commonProperties.put(p.getKey().toLowerCase(Locale.ROOT), p.getValue().getDefaultValue()));
-            indexIndexParams.entrySet().stream().filter(p -> p.getValue().needDefault())
-                    .forEach(p -> indexProperties.put(p.getKey().toLowerCase(Locale.ROOT), p.getValue().getDefaultValue()));
-            searchIndexParams.entrySet().stream().filter(p -> p.getValue().needDefault())
-                    .forEach(p -> searchProperties.put(p.getKey().toLowerCase(Locale.ROOT), p.getValue().getDefaultValue()));
 
             tIndex.setCommon_properties(commonProperties);
             tIndex.setIndex_properties(indexProperties);

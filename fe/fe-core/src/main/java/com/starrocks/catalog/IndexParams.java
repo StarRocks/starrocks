@@ -12,9 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.common;
+package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
+import com.starrocks.common.NgramBfIndexParamsKey;
+import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.io.ParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -22,7 +27,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -32,69 +36,80 @@ import java.util.stream.Collectors;
 public class IndexParams {
 
     private static final Logger LOG = LogManager.getLogger(IndexParams.class);
-    private final Map<String, IndexParamItem> paramsHolder = new HashMap<>();
+    private final ImmutableMap<String, IndexParamItem> paramsHolder;
 
     private IndexParams() {
+
+        ImmutableMap.Builder<String, IndexParamItem> builder = ImmutableMap.builder();
+
         /* Vector Index */
         // common
-        register(IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.INDEX_TYPE,
+        register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.INDEX_TYPE,
                 true, false, null,
                 "You should set `index_type` to IVFPQ/HNSW for a vector index.");
-        register(IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.DIM,
+        register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.DIM,
                 true, false, null,
                 "You should set `dim` to a numeric value for a vector index.");
-        register(IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.METRIC_TYPE,
+        register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.METRIC_TYPE,
                 true, false, null,
                 "You should set `metric_type` at least to add a vector index.");
-        register(IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.IS_VECTOR_NORMED, false, true,
-                "false", null);
-        register(IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.INDEX_BUILD_THRESHOLD, false,
-                false, null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.IS_VECTOR_NORMED, false,
+                true, "false", null);
+        register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.INDEX_BUILD_THRESHOLD,
+                false, false, null, null);
 
         // index
-        register(IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.M, false, true, "16", null);
-        register(IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.EFCONSTRUCTION, false, true, "40",
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.M, false, true, "16", null);
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.EFCONSTRUCTION, false, true,
+                "40", null);
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NBITS, false, false, "8",
                 null);
-        register(IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NBITS, false, false, "8", null);
-        register(IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NLIST, false, false, null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NLIST, false, false, null,
+                null);
 
         // search
-        register(IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.EFSEARCH, false, false, null, null);
-        register(IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.NPROBE, false, false, null, null);
-        register(IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.MAX_CODES, false, false, null, null);
-        register(IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.SCAN_TABLE_THRESHOLD, false, false,
-                null, null);
-        register(IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.POLYSEMOUS_HT, false, false, null,
+        register(builder, IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.EFSEARCH, false, false, null,
                 null);
-        register(IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.RANGE_SEARCH_CONFIDENCE, false, false,
+        register(builder, IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.NPROBE, false, false, null,
+                null);
+        register(builder, IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.MAX_CODES, false, false,
                 null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.SCAN_TABLE_THRESHOLD, false,
+                false, null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.POLYSEMOUS_HT, false, false,
+                null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.SEARCH, VectorIndexParams.SearchParamsKey.RANGE_SEARCH_CONFIDENCE,
+                false, false, null, null);
 
         /* GIN */
         // common
-        register(IndexType.GIN, IndexParamType.COMMON, InvertedIndexParams.CommonIndexParamKey.IMP_LIB, true, true,
+        register(builder, IndexType.GIN, IndexParamType.COMMON, InvertedIndexParams.CommonIndexParamKey.IMP_LIB, true, true,
                 InvertedIndexImpType.CLUCENE.toString().toLowerCase(), null);
 
         // index
-        register(IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.PARSER, true, true, "none", null);
-        register(IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION, false,
-                false,
-                null, null);
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.PARSER, true, true, "none",
+                null);
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION,
+                false, false, null, null);
 
         // search
-        register(IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.IS_SEARCH_ANALYZED, false, false,
+        register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.IS_SEARCH_ANALYZED, false,
+                false, "false", null);
+        register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.DEFAULT_SEARCH_ANALYZER,
+                false, false, "english", null);
+        register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.RERANK, false, false,
                 "false", null);
-        register(IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.DEFAULT_SEARCH_ANALYZER, false, false,
-                "english", null);
-        register(IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.RERANK, false, false, "false", null);
 
         /* NGramFilter */
         // index
-        register(IndexType.NGRAMBF, IndexParamType.INDEX, NgramBfIndexParamsKey.GRAM_NUM, true, true,
+        register(builder, IndexType.NGRAMBF, IndexParamType.INDEX, NgramBfIndexParamsKey.GRAM_NUM, true, true,
                 String.valueOf(FeConstants.DEFAULT_GRAM_NUM), null);
-        register(IndexType.NGRAMBF, IndexParamType.INDEX, NgramBfIndexParamsKey.BLOOM_FILTER_FPP, true, true,
+        register(builder, IndexType.NGRAMBF, IndexParamType.INDEX, NgramBfIndexParamsKey.BLOOM_FILTER_FPP, true, true,
                 String.valueOf(FeConstants.DEFAULT_BLOOM_FILTER_FPP), null);
-        register(IndexType.NGRAMBF, IndexParamType.INDEX, NgramBfIndexParamsKey.CASE_SENSITIVE, true, true,
+        register(builder, IndexType.NGRAMBF, IndexParamType.INDEX, NgramBfIndexParamsKey.CASE_SENSITIVE, true, true,
                 String.valueOf(FeConstants.NGRAM_CASE_SENSITIVE), null);
+
+        paramsHolder = builder.build();
     }
 
     private static class Holder {
@@ -114,17 +129,31 @@ public class IndexParams {
      * @param defaultValue default value
      * @param alert when this param is not set, user defined alert message
      */
-    public void register(IndexType indexType, IndexParamType paramType, ParamsKey paramKey, boolean mustNotNull,
-            boolean needDefault,
-            String defaultValue, String alert) {
-        paramsHolder.put(paramKey.name().toUpperCase(Locale.ROOT),
+    private void register(ImmutableMap.Builder<String, IndexParamItem> builder, IndexType indexType, IndexParamType paramType,
+            ParamsKey paramKey, boolean mustNotNull, boolean needDefault, String defaultValue, String alert) {
+        builder.put(paramKey.name().toUpperCase(Locale.ROOT),
                 new IndexParamItem(indexType, paramType, paramKey, mustNotNull, needDefault, defaultValue, alert));
     }
 
-    public Map<String, IndexParamItem> getKeySet(IndexType indexType, IndexParamType paramType) {
+    public IndexParamItem getParam(String keyName) {
+        return paramsHolder.get(keyName.toUpperCase(Locale.ROOT));
+    }
+
+    public Map<String, IndexParamItem> getKeySetByIndexTypeAndParamType(IndexType indexType, IndexParamType paramType) {
         try {
             return paramsHolder.entrySet().stream()
                     .filter(entry -> entry.getValue().indexType == indexType && entry.getValue().getParamType() == paramType)
+                    .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+        } catch (Exception e) {
+            LOG.error("", e);
+        }
+        return Collections.emptyMap();
+    }
+
+    public Map<String, IndexParamItem> getKeySetByIndexTypeWithDefaultValue(IndexType indexType) {
+        try {
+            return paramsHolder.entrySet().stream()
+                    .filter(entry -> entry.getValue().indexType == indexType && entry.getValue().needDefault())
                     .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
         } catch (Exception e) {
             LOG.error("", e);

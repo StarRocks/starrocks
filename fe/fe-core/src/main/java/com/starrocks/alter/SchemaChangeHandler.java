@@ -760,7 +760,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Cannot modify a column with GIN into non-string type");
                 }
             } else if (index.getIndexType() == IndexType.VECTOR) {
-                if (index.getColumns().contains(oriColumn.getName()) && modColumn.getType() != oriColumn.getType()) {
+                if (index.getColumns().contains(oriColumn.getColumnId()) && modColumn.getType() != oriColumn.getType()) {
                     throw new DdlException("Cannot modify a column with VECTOR index");
                 }
             }

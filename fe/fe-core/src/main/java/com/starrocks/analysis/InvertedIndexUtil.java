@@ -100,6 +100,13 @@ public class InvertedIndexUtil {
         }
 
         InvertedIndexUtil.checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
+
+        // add default properties
+        addDefaultProperties(properties);
+    }
+
+    private static void addDefaultProperties(Map<String, String> properties) {
+        properties.computeIfAbsent(IMP_LIB.name().toLowerCase(Locale.ROOT), k -> IMP_LIB.getIndexParamItem().getDefaultValue());
     }
 
     public static void checkInvertedIndexParser(

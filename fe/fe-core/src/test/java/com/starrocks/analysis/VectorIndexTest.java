@@ -17,15 +17,21 @@ package com.starrocks.analysis;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.IndexParams.IndexParamItem;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorIndexParams.CommonIndexParamKey;
+import com.starrocks.common.VectorIndexParams.IndexParamsKey;
 import com.starrocks.common.VectorIndexParams.MetricsType;
 import com.starrocks.common.VectorIndexParams.VectorIndexType;
 import com.starrocks.server.RunMode;
@@ -146,6 +152,22 @@ public class VectorIndexTest extends PlanTestBase {
                 "Params HNSW should not define with NBITS"
         );
 
+        Map<String, String> paramItemMap = new HashMap<>(){{
+            put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+            put(CommonIndexParamKey.DIM.name(), "1024");
+            put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+            put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+        }};
+
+        // Add default properties
+        IndexParamItem m = IndexParamsKey.M.getIndexParamItem();
+        IndexParamItem efConstruction = VectorIndexParams.IndexParamsKey.EFCONSTRUCTION.getIndexParamItem();
+        Assertions.assertDoesNotThrow(() -> VectorIndexUtil.checkVectorIndexValid(c4, paramItemMap, KeysType.DUP_KEYS));
+        Assertions.assertTrue(m.getDefaultValue()
+                .equalsIgnoreCase(paramItemMap.get(m.getParamKey().name().toLowerCase(Locale.ROOT))));
+        Assertions.assertTrue(efConstruction.getDefaultValue()
+                .equalsIgnoreCase(paramItemMap.get(efConstruction.getParamKey().name().toLowerCase(Locale.ROOT))));
+
         new MockUp<RunMode>() {
             @Mock
             public boolean isSharedDataMode() {
@@ -162,7 +184,7 @@ public class VectorIndexTest extends PlanTestBase {
     public void testIndexToThrift() {
         int indexId = 0;
         String indexName = "vector_index";
-        List<String> columns = Collections.singletonList("f1");
+        List<ColumnId> columns = Collections.singletonList(ColumnId.create("f1"));
 
         Index index = new Index(indexId, indexName, columns, IndexType.VECTOR, "", new HashMap<>() {{
             put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
@@ -181,7 +203,7 @@ public class VectorIndexTest extends PlanTestBase {
         Assertions.assertEquals(indexId, vectorIndex.getIndex_id());
         Assertions.assertEquals(indexName, vectorIndex.getIndex_name());
         Assertions.assertEquals(TIndexType.VECTOR, vectorIndex.getIndex_type());
-        Assertions.assertEquals(columns, vectorIndex.getColumns());
+        Assertions.assertEquals(columns.stream().map(ColumnId::getId).collect(Collectors.toList()), vectorIndex.getColumns());
         Assertions.assertEquals(
                 new HashMap<>(){{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());

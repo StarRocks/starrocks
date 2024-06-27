@@ -28,9 +28,9 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.common.Config;
-import com.starrocks.common.IndexParams;
-import com.starrocks.common.IndexParams.IndexParamItem;
-import com.starrocks.common.IndexParams.IndexParamType;
+import com.starrocks.catalog.IndexParams;
+import com.starrocks.catalog.IndexParams.IndexParamItem;
+import com.starrocks.catalog.IndexParams.IndexParamType;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorIndexParams.CommonIndexParamKey;
 import com.starrocks.common.VectorIndexParams.IndexParamsKey;
@@ -41,9 +41,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 
 public class VectorIndexUtil {
-
-    private static void checkIndexTypeValid(Map<String, String> properties) {
-    }
 
     public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
         if (RunMode.isSharedDataMode()) {
@@ -70,8 +67,8 @@ public class VectorIndexUtil {
         // check param keys which must not be null
         Map<String, IndexParamItem> mustNotNullParams = IndexParams.getInstance().getMustNotNullParams(IndexType.VECTOR);
 
-        Map<String, IndexParamItem> indexIndexParams = IndexParams.getInstance().getKeySet(IndexType.VECTOR, IndexParamType.INDEX);
-        Map<String, IndexParamItem> searchIndexParams = IndexParams.getInstance().getKeySet(IndexType.VECTOR, IndexParamType.SEARCH);
+        Map<String, IndexParamItem> indexIndexParams = IndexParams.getInstance().getKeySetByIndexTypeAndParamType(IndexType.VECTOR, IndexParamType.INDEX);
+        Map<String, IndexParamItem> searchIndexParams = IndexParams.getInstance().getKeySetByIndexTypeAndParamType(IndexType.VECTOR, IndexParamType.SEARCH);
 
         Map<VectorIndexType, Set<String>> indexParamsGroupByType =
                 Arrays.stream(IndexParamsKey.values()).filter(belong -> belong.getBelongVectorIndexType() != null)
@@ -86,12 +83,16 @@ public class VectorIndexUtil {
         Set<String> configIndexParams = new HashSet<>();
         Set<String> configSearchParams = new HashSet<>();
 
+        Map<String, IndexParamItem> paramsNeedDefault = IndexParams.getInstance()
+                .getKeySetByIndexTypeWithDefaultValue(IndexType.VECTOR);
+
         VectorIndexType vectorIndexType = null;
         for (Entry<String, String> propEntry : properties.entrySet()) {
             String propKey = propEntry.getKey();
             String upperPropKey = propKey.toUpperCase(Locale.ROOT);
             IndexParams.getInstance().checkParams(upperPropKey, propEntry.getValue());
             mustNotNullParams.remove(upperPropKey);
+            paramsNeedDefault.remove(upperPropKey);
             if (upperPropKey.equalsIgnoreCase(CommonIndexParamKey.INDEX_TYPE.name())) {
                 vectorIndexType = VectorIndexType.valueOf(propEntry.getValue().toUpperCase(Locale.ROOT));
             } else if (indexIndexParams.containsKey(upperPropKey)) {
@@ -128,5 +129,14 @@ public class VectorIndexUtil {
             throw new SemanticException(String.format("Search params %s should not define with %s", configSearchParams,
                     vectorIndexType));
         }
+
+        // add default properties
+        if (!paramsNeedDefault.isEmpty()) {
+            addDefaultProperties(properties, paramsNeedDefault);
+        }
+    }
+
+    private static void addDefaultProperties(Map<String, String> properties, Map<String, IndexParamItem> paramsNeedDefault) {
+        paramsNeedDefault.forEach((key, value) -> properties.put(key.toLowerCase(Locale.ROOT), value.getDefaultValue()));
     }
 }
