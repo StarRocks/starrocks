@@ -14,10 +14,12 @@
 
 package com.starrocks.http.rest.v2;
 
+import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -39,7 +41,6 @@ import com.starrocks.http.rest.v2.vo.IndexView;
 import com.starrocks.http.rest.v2.vo.MaterializedIndexMetaView;
 import com.starrocks.http.rest.v2.vo.PartitionInfoView;
 import com.starrocks.http.rest.v2.vo.TableSchemaView;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
@@ -176,7 +177,7 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
                 assertEquals("idx1", idx.getIndexName());
                 assertEquals(IndexDef.IndexType.BITMAP.getDisplayName(), idx.getIndexType());
                 assertEquals(1, idx.getColumns().size());
-                assertEquals("c1", idx.getColumns().get(0));
+                assertEquals(ColumnId.create("c1"), idx.getColumns().get(0));
                 assertEquals("c_idx1", idx.getComment());
                 assertTrue(idx.getProperties().isEmpty());
             }
@@ -187,7 +188,7 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
                 assertEquals("idx2", idx.getIndexName());
                 assertEquals(IndexDef.IndexType.NGRAMBF.getDisplayName(), idx.getIndexType());
                 assertEquals(1, idx.getColumns().size());
-                assertEquals("c2", idx.getColumns().get(0));
+                assertEquals(ColumnId.create("c2"), idx.getColumns().get(0));
                 assertEquals("c_idx2", idx.getComment());
                 assertTrue(idx.getProperties().isEmpty());
             }
@@ -218,10 +219,10 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
         DistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
         Index idx1 = new Index(
-                tableId, "idx1", Lists.newArrayList("c1"),
+                tableId, "idx1", Lists.newArrayList(ColumnId.create("c1")),
                 IndexDef.IndexType.BITMAP, "c_idx1", new HashMap<>());
         Index idx2 = new Index(
-                tableId + 1, "idx2", Lists.newArrayList("c2"),
+                tableId + 1, "idx2", Lists.newArrayList(ColumnId.create("c2")),
                 IndexDef.IndexType.NGRAMBF, "c_idx2", new HashMap<>());
         TableIndexes indexes = new TableIndexes(
                 Lists.newArrayList(idx1, idx2)
@@ -264,7 +265,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
     private static RestBaseResultV2<TableSchemaView> parseResponseBody(String body) {
         try {
             System.out.println("resp: " + body);
-            return GsonUtils.GSON.fromJson(body, new TypeToken<RestBaseResultV2<TableSchemaView>>() {
+            Gson gson = new Gson();
+            return gson.fromJson(body, new TypeToken<RestBaseResultV2<TableSchemaView>>() {
             }.getType());
         } catch (Exception e) {
             fail("invalid resp body: " + body);

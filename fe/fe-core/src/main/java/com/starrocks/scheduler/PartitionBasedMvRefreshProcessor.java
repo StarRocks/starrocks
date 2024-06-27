@@ -597,14 +597,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (partitionRefreshNumber <= 0) {
             return;
         }
-        Map<String, Range<PartitionKey>> rangePartitionMap = materializedView.getRangePartitionMap();
-        if (partitionRefreshNumber >= rangePartitionMap.size()) {
+        Map<String, Range<PartitionKey>> mvRangePartitionMap = materializedView.getRangePartitionMap();
+        if (partitionRefreshNumber >= mvRangePartitionMap.size()) {
             return;
         }
 
         Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();
-        for (String partitionName : partitionsToRefresh) {
-            mappedPartitionsToRefresh.put(partitionName, rangePartitionMap.get(partitionName));
+        Iterator<String> mvToRefreshPartitionsIter = partitionsToRefresh.iterator();
+        while (mvToRefreshPartitionsIter.hasNext()) {
+            String mvPartitionName = mvToRefreshPartitionsIter.next();
+            // skip if partition is not in the mv's partition range map
+            if (!mvRangePartitionMap.containsKey(mvPartitionName)) {
+                LOG.warn("Partition {} is not in the materialized view's partition range map for mv:{}, " +
+                                "remove it from refresh list", mvPartitionName, materializedView.getName());
+                mvToRefreshPartitionsIter.remove();
+                continue;
+            }
+            mappedPartitionsToRefresh.put(mvPartitionName, mvRangePartitionMap.get(mvPartitionName));
         }
         LinkedList<String> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
@@ -2139,16 +2148,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             OlapTable olapTable = (OlapTable) baseTable;
             for (String partitionName : refreshedPartitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
+                // it's ok to skip because only existed partitinos are updated in the version map.
+                if (partition == null) {
+                    LOG.warn("Partition {} not found in base table {} in refreshing {}, refreshedPartitionNames:{}",
+                            partitionName, baseTable.getName(), materializedView.getName(), refreshedPartitionNames);
+                    continue;
+                }
                 MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
                         partition.getId(), partition.getVisibleVersion(), partition.getVisibleVersionTime());
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
             LOG.info("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
             return partitionInfos;
-        } else if (baseTable.isHiveTable() || baseTable.isIcebergTable() || baseTable.isJDBCTable() ||
-                baseTable.isPaimonTable()) {
-            return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames),
-                    baseTableInfo);
+        } else if (ConnectorPartitionTraits.isSupported(baseTable.getType())) {
+            return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames), baseTableInfo);
         } else {
             // FIXME: base table does not support partition-level refresh and does not update the meta
             //  in materialized view.

@@ -525,7 +525,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 "percentile_union(percentile_hash(LO_REVENUE + 1)), any_value(LO_REVENUE + 1), bitmap_agg(LO_REVENUE + 1), " +
                 "array_agg_distinct(LO_REVENUE + 1) \n" +
                 "from lineorder l group by LO_ORDERDATE;";
-        setTracLogModule("MV");
         starRocksAssert.withMaterializedViews(ImmutableList.of(mv0, mv1, mv2), (obj) -> {
             {
                 String query = String.format("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), " +
@@ -995,7 +994,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
     public void testAggPushDown_WithoutFunctions_WithMultiGroupByKeys() {
         String mvAggArg = "LO_REVENUE";
         String queryAggArg = "LO_REVENUE";
-        setTracLogModule("MV");
         for (Map.Entry<String, String> e : REWRITE_ROLLUP_FUNCTION_MAP.entrySet()) {
             String funcName = e.getKey();
             String mvAggFunc = getAggFunction(funcName, mvAggArg);

@@ -515,6 +515,12 @@ public class SyncPartitionUtils {
         for (String needRefreshMvPartitionName : copiedNeedRefreshMvPartitionNames) {
             // baseTable with its partitions by mv's partition
             Map<Table, Set<String>> baseNames = mvToBaseNameRef.get(needRefreshMvPartitionName);
+            if (baseNames == null) {
+                // mv partition has no base table partition reference if its partition is not added since
+                LOG.warn("MV partition {} does not existed in the collected mv to base table partition mapping: {}",
+                        needRefreshMvPartitionName, mvToBaseNameRef);
+                continue;
+            }
             Set<String> mvNeedRefreshPartitions = Sets.newHashSet();
             for (Map.Entry<Table, Set<String>> entry : baseNames.entrySet()) {
                 Table baseTable = entry.getKey();

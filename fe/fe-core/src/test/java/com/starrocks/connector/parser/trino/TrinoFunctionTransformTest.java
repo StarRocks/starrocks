@@ -441,4 +441,17 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select current_schema";
         assertPlanContains(sql, "<slot 2> : 'test'");
     }
+
+
+    @Test
+    public void testHllFunction() throws Exception {
+        String sql = "select empty_approx_set()";
+        assertPlanContains(sql, "<slot 2> : HLL_EMPTY()");
+
+        sql = "select approx_set(\"tc\") from tall";
+        assertPlanContains(sql, "<slot 12> : hll_hash(CAST(3: tc AS VARCHAR))");
+
+        sql = "select merge(approx_set(\"tc\")) from tall";
+        assertPlanContains(sql, "hll_raw_agg(hll_hash(CAST(3: tc AS VARCHAR)))");
+    }
 }
