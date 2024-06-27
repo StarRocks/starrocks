@@ -2613,6 +2613,9 @@ public class OlapTable extends Table {
     }
 
     public void setCompressionLevel(int compressionLevel) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
         tableProperty.setCompressionLevel(compressionLevel);
     }
 
