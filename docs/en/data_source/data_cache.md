@@ -63,10 +63,16 @@ By default, the system caches data in the following ways:
 - The system variables `enable_scan_datacache` and the BE parameter `datacache_enable` are set to `true` by default.
 - If the cache disk path, memory size, and disk capacity are not configured, the system will automatically select a path and set memory and disk limits by following these rules:
   - A **datacache** directory is created as the cache directory under the parent directory of `storage_root_path`. (You can modify this with the BE parameter `datacache_disk_path`.)
-  - The system enables automatic disk space adjustment for Data Cache. It sets the limit to ensure that the overall disk usage is around 70%, and dynamically adjusts according to subsequent disk usage. (You can modify this with the BE parameter `datacache_disk_safe_level`.)
+  - The system enables automatic disk space adjustment for Data Cache. It sets the limit to ensure that the overall disk usage is around 70%, and dynamically adjusts according to subsequent disk usage. (You can modify this behavior with the BE parameters `datacache_disk_high_level`, `datacache_disk_safe_level`, and `datacache_disk_low_level`.)
   - The default memory limit for Data Cache is `0`. (You can modify this with the BE parameter `datacache_mem_size`.)
 - The system adopts asynchronous cache population by default to minimize its impact on data read operations.
 - The I/O adaptor feature is enabled by default. When the disk I/O load is high, the system will automatically route some requests to remote storage to reduce disk pressure.
+
+To **disable** Data Cache, execute the following statement:
+
+```SQL
+SET GLOBAL enable_scan_datacache=false;
+```
 
 ## Populate data cache
 
