@@ -1684,12 +1684,18 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
 
     for (size_t i = 0; i < chunk_size; i++) {
         Datum v = array_column->get(i);
-        const auto& items = v.get<DatumArray>();
-        for (const auto& item : items) {
-            if (!item.is_null()) {
-                const auto& sub_items = item.get<DatumArray>();
-                for (const auto& sub_item : sub_items) {
-                    result_elements->append_datum(sub_item);
+        if (v.is_null()) {
+            result_elements->append_datum(Datum());
+        } else {
+            const auto& items = v.get<DatumArray>();
+            for (const auto& item : items) {
+                if (item.is_null()) {
+                    result_elements->append_datum(Datum());
+                } else {
+                    const auto& sub_items = item.get<DatumArray>();
+                    for (const auto& sub_item : sub_items) {
+                        result_elements->append_datum(sub_item);
+                    }
                 }
             }
         }
