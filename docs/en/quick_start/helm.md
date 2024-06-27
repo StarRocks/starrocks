@@ -81,46 +81,16 @@ Backend nodes are responsible for both data storage and executing query plans.
    3. View the Helm Chart Repo that you added.
 
       ```Bash
-      $ helm search repo starrocks-community
-      NAME                                    CHART VERSION    APP VERSION  DESCRIPTION
-      starrocks-community/kube-starrocks      1.8.0            3.1-latest   kube-starrocks includes two subcharts, starrock...
-      starrocks-community/operator            1.8.0            1.8.0        A Helm chart for StarRocks operator
-      starrocks-community/starrocks           1.8.0            3.1-latest   A Helm chart for StarRocks cluster
+      helm search repo starrocks-community
       ```
 
-2. Download the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)**
-
-   3. Deployment with custom configurations
-      - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart.
-      - Run the following command to deploy the StarRocks Operator and StarRocks cluster with the custom configurations in **my-values.yaml**.
-
-        ```Bash
-        helm install -f my-values.yaml starrocks starrocks-community/kube-starrocks
-        ```
-
-    Deployment takes a while. During this period, you can check the deployment status with:
-
-    ```Bash
-    kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
-
-    ```bash
-    # If the following result is returned, the deployment has been successfully completed.
-    NAME             PHASE     FESTATUS   BESTATUS   CNSTATUS   FEPROXYSTATUS
-    kube-starrocks   running   running    running
-    ```
-
-    You can also run `kubectl get pods` to check the deployment status. If all Pods are in the `Running` state and all containers within the Pods are `READY`, the deployment has been successfully completed.
-
-    ```Bash
-    kubectl get pods
-    ```
-
-    ```bash
-    NAME                                       READY   STATUS    RESTARTS   AGE
-    kube-starrocks-be-0                        1/1     Running   0          2m50s
-    kube-starrocks-fe-0                        1/1     Running   0          4m31s
-    kube-starrocks-operator-69c5c64595-pc7fv   1/1     Running   0          4m50s
-    ```
+      ```
+      NAME                              	CHART VERSION	APP VERSION	DESCRIPTION
+      starrocks-community/kube-starrocks	1.9.7        	3.2-latest 	kube-starrocks includes two subcharts, operator...
+      starrocks-community/operator      	1.9.7        	1.9.7      	A Helm chart for StarRocks operator
+      starrocks-community/starrocks     	1.9.7        	3.2-latest 	A Helm chart for StarRocks cluster
+      starrocks-community/warehouse     	1.9.7        	3.2-latest 	Warehouse is currently a feature of the StarRoc...
+      ```
 
 ---
 
@@ -128,7 +98,7 @@ Backend nodes are responsible for both data storage and executing query plans.
 
 These three clients are tested with this tutorial, you only need one:
 
-- MySQL CLI: You can run this from the Docker environment or your machine.
+- MySQL CLI: You can run this from the Kubernetes environment or your machine.
 - [DBeaver](https://dbeaver.io/download/) is available as a community version and a Pro version. 
 - [MySQL Workbench](https://dev.mysql.com/downloads/workbench/)
 
@@ -143,10 +113,6 @@ The easiest way to use the MySQL CLI is to run it from the StarRocks FE pod `kub
 kubectl exec --stdin --tty kube-starrocks-fe-0 -- \
   mysql -P9030 -h127.0.0.1 -u root --prompt="StarRocks > "
 ```
-
-:::tip
-All `docker compose` commands must be run from the directory containing the `docker-compose.yml` file.
-:::
 
 If you would like to install the mysql CLI expand **mysql client install** below:
 
@@ -201,6 +167,279 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 ---
 
+
+
+
+
+
+```bash
+kubectl get pods
+```
+
+```
+NAME                                     READY STATUS  RESTARTS AGE
+kube-starrocks-operator-58bdf9bb55-d4qd8 1/1   Running 0        3m3s
+quickstart-be-0                          0/1   Running 0        118s
+quickstart-be-1                          0/1   Running 0        117s
+quickstart-be-2                          1/1   Running 0        117s
+quickstart-fe-0                          1/1   Running 0        2m43s
+quickstart-fe-1                          1/1   Running 0        2m43s
+quickstart-fe-2                          1/1   Running 0        2m43s
+quickstart-fe-proxy-787fd777cf-r2rr7     1/1   Running 0        117s
+```
+
+```bash
+kubectl get starrocksclusters.starrocks.com
+```
+
+```bash
+NAME       PHASE    FESTATUS  BESTATUS  CNSTATUS  FEPROXYSTATUS
+quickstart running  running   running             running
+```
+
+```bash
+kubectl get services
+```
+
+```bash
+NAME                        TYPE         CLUSTER-IP     EXTERNAL-IP   PORT(S)
+kubernetes                  ClusterIP    34.118.224.1   <none>        443/TCP
+quickstart-be-search        ClusterIP    None           <none>        9050/TCP
+quickstart-be-service       ClusterIP    34.118.230.192 <none>        9060/TCP,8040/TCP,9050/TCP,8060/TCP
+quickstart-fe-proxy-service LoadBalancer 34.118.232.134 34.176.52.103 8080:30546/TCP
+quickstart-fe-search        ClusterIP    None           <none>        9030/TCP
+quickstart-fe-service       ClusterIP    34.118.238.5   <none>        8030/TCP,9020/TCP,9030/TCP,9010/TCP
+```
+
+TEST RUN
+
+## Add the `starrocks-community` Helm repo
+
+```bash
+helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
+helm repo update starrocks-community
+helm search repo starrocks-community
+```
+
+```
+NAME                              	CHART VERSION	APP VERSION	DESCRIPTION
+starrocks-community/kube-starrocks	1.9.7        	3.2-latest 	kube-starrocks includes two subcharts, operator...
+starrocks-community/operator      	1.9.7        	1.9.7      	A Helm chart for StarRocks operator
+starrocks-community/starrocks     	1.9.7        	3.2-latest 	A Helm chart for StarRocks cluster
+starrocks-community/warehouse     	1.9.7        	3.2-latest 	Warehouse is currently a feature of the StarRoc...
+```
+## Download the Helm values files
+
+There is a default Helm `values.yaml` file and a custom values file that overrides some of the defaults. For now look at the custom file and the defaults will be provided at the end of this quick start lab.
+
+The default `values.yaml` file deploys a single FE and a single BE. For this lab you will:
+
+- Configure a password for the StarRocks database user `root`
+- Provide for high-availability with three FEs and three BEs
+- Configure a LoadBalancer to allow MySQL clients to connect from outside the Kubernetes cluster
+- Configure a LoadBalancer to allow loading data from outside the Kubernetes cluster
+
+### Password for the database user
+
+```yaml
+starrocks:
+    initPassword:
+        enabled: true
+            # Set a password secret, for example:
+            # kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
+        passwordSecret: starrocks-root-pass
+```
+
+### High Availability with 3 FEs and 3 BEs
+
+```yaml
+starrocks:
+    starrocksFESpec:
+        replicas: 3
+        service:
+            type: LoadBalancer
+        resources:
+            requests:
+                cpu: 1
+                memory: 1Gi
+
+    starrocksBeSpec:
+        replicas: 3
+        resources:
+            requests:
+                cpu: 1
+                memory: 2Gi
+        storageSpec:
+            storageSize: 15Gi
+```
+
+### LoadBalancer for MySQL clients
+
+```yaml
+starrocks:
+    starrocksFESpec:
+        service:
+            type: LoadBalancer
+```
+
+### LoadBalancer for external data loading
+
+```yaml
+starrocks:
+    starrocksFeProxySpec:
+        enabled: true
+        service:
+            type: LoadBalancer
+```
+
+### The complete values file
+
+Putting together the above snippets:
+
+```yaml
+starrocks:
+    initPassword:
+        enabled: true
+            # Set a password secret, for example:
+            # kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
+        passwordSecret: starrocks-root-pass
+
+    starrocksFESpec:
+        replicas: 3
+        service:
+            type: LoadBalancer
+        resources:
+            requests:
+                cpu: 1
+                memory: 1Gi
+
+    starrocksBeSpec:
+        replicas: 3
+        resources:
+            requests:
+                cpu: 1
+                memory: 2Gi
+        storageSpec:
+            storageSize: 15Gi
+
+    starrocksFeProxySpec:
+        enabled: true
+        service:
+            type: LoadBalancer
+```
+
+## Set the StarRocks root database user password
+
+To load data from outside of the Kubernetes cluster the StarRocks database will be exposed externally. You should set
+a password for the StarRocks database user `root`. The operator will apply the password to the FE and BE nodes.
+
+```bash
+kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
+```
+
+```
+secret/starrocks-root-pass created
+```
+
+```bash
+helm install -f ha_cluster_with_proxy_and_password.yaml starrocks starrocks-community/kube-starrocks
+```
+
+```
+NAME: starrocks
+LAST DEPLOYED: Wed Jun 26 20:25:09 2024
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+Thank you for installing kube-starrocks-1.9.7 kube-starrocks chart.
+It will install both operator and starrocks cluster, please wait for a few minutes for the cluster to be ready.
+
+Please see the values.yaml for more operation information: https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml
+```
+
+## Check the status of the StarRocks cluster
+
+You can check the progress with these commands:
+
+```bash
+kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
+```
+
+```
+NAME             PHASE         FESTATUS      BESTATUS      CNSTATUS   FEPROXYSTATUS
+kube-starrocks   reconciling   reconciling   reconciling              reconciling
+```
+
+```bash
+kubectl get pods
+```
+
+:::note
+The `kube-starrocks-initpwd` pod will go through `error` and `CrashLoopBackOff` states as it attempts to connect to the FE and BE pods to set the StarRocks root password. You should ignore these errors and wait for a status of `Completed` for this pod.
+:::
+
+```
+NAME                                       READY   STATUS             RESTARTS      AGE
+kube-starrocks-be-0                        0/1     Running            0             20s
+kube-starrocks-be-1                        0/1     Running            0             20s
+kube-starrocks-be-2                        0/1     Running            0             20s
+kube-starrocks-fe-0                        1/1     Running            0             66s
+kube-starrocks-fe-1                        0/1     Running            0             65s
+kube-starrocks-fe-2                        0/1     Running            0             66s
+kube-starrocks-fe-proxy-56f8998799-d4qmt   1/1     Running            0             20s
+kube-starrocks-initpwd-m84br               0/1     CrashLoopBackOff   3 (50s ago)   92s
+kube-starrocks-operator-54ffcf8c5c-xsjc8   1/1     Running            0             92s
+```
+
+## Verify that the cluster is healthy
+
+```bash
+kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
+```
+
+```
+NAME             PHASE     FESTATUS   BESTATUS   CNSTATUS   FEPROXYSTATUS
+kube-starrocks   running   running    running               running
+```
+
+```bash
+kubectl get pods
+```
+
+:::tip
+The system is ready when all of the pods except for `kube-starrocks-initpwd` show `1/1` in the `READY` column. The `kube-starrocks-initpwd` pod should show `0/1` and a `STATUS` of `Completed`.
+:::
+
+```
+NAME                                       READY   STATUS      RESTARTS   AGE
+kube-starrocks-be-0                        1/1     Running     0          57s
+kube-starrocks-be-1                        1/1     Running     0          57s
+kube-starrocks-be-2                        1/1     Running     0          57s
+kube-starrocks-fe-0                        1/1     Running     0          103s
+kube-starrocks-fe-1                        1/1     Running     0          102s
+kube-starrocks-fe-2                        1/1     Running     0          103s
+kube-starrocks-fe-proxy-56f8998799-d4qmt   1/1     Running     0          57s
+kube-starrocks-initpwd-m84br               0/1     Completed   4          2m9s
+kube-starrocks-operator-54ffcf8c5c-xsjc8   1/1     Running     0          2m9s
+```
+
+
+
+```
+kubectl get services
+NAME                              TYPE           CLUSTER-IP       EXTERNAL-IP     PORT(S)                                                       AGE
+kube-starrocks-be-search          ClusterIP      None             <none>          9050/TCP                                                      78s
+kube-starrocks-be-service         ClusterIP      34.118.228.231   <none>          9060/TCP,8040/TCP,9050/TCP,8060/TCP                           78s
+kube-starrocks-fe-proxy-service   LoadBalancer   34.118.230.176   34.176.12.205   8080:30241/TCP                                                78s
+kube-starrocks-fe-search          ClusterIP      None             <none>          9030/TCP                                                      2m4s
+kube-starrocks-fe-service         LoadBalancer   34.118.226.82    34.176.215.97   8030:30620/TCP,9020:32461/TCP,9030:32749/TCP,9010:30911/TCP   2m4s
+kubernetes                        ClusterIP      34.118.224.1     <none>          443/TCP                                                       8h
+```
+
+---
+
 ### Connect to StarRocks with a SQL client
 
 :::tip
@@ -208,7 +447,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 If you are using a client other than the mysql CLI, open that now.
 :::
 
-This command will run the `mysql` command in the Docker container:
+This command will run the `mysql` command in a Kubernetes pod:
 
 ```sql
 kubectl exec --stdin --tty kube-starrocks-fe-0 -- \
@@ -216,26 +455,46 @@ kubectl exec --stdin --tty kube-starrocks-fe-0 -- \
 ```
 
 ---
-
 ## Create some tables
+
+```bash
+mysql -h 34.176.215.97 -P9030 -uroot -p
+```
+
 
 <DDL />
 
----
+Exit from the MySQL client, or open a new shell to run commands at the command line to upload data.
 
-## Load two datasets
+```sql
+exit
+```
+
+
+
+## Upload data
+
+There are many ways to load data into StarRocks. For this tutorial, the simplest way is to use curl and StarRocks Stream Load.
+
+
+Export the external IP and port number of the FE Proxy service in an environment variable `FE_PROXY` so that you can use the proxy in the `curl` commands to load the data with Stream Load.
+
+```bash
+export FE_PROXY=34.176.12.205:8080
+```
+
+Upload the two datasets that you downloaded earlier.
 
 There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
 
 :::tip
 Open a new shell as these curl commands are run at the operating system prompt, not in the `mysql` client. The commands refer to the datasets that you downloaded, so run them from the directory where you downloaded the files.
 
-You will be prompted for a password. You probably have not assigned a password to the MySQL `root` user, so just hit enter.
+You will be prompted for a password. Use the password that you added to the Kubernetes secret `starrocks-root-pass`. If you used the command provided, the password is `g()()dpa$$word`.
 :::
 
 The `curl` commands look complex, but they are explained in detail at the end of the tutorial. For now, we recommend running the commands and running some SQL to analyze the data, and then reading about the data loading details at the end.
 
-### New York City collision data - Crashes
 
 ```bash
 curl --location-trusted -u root             \
@@ -246,55 +505,31 @@ curl --location-trusted -u root             \
     -H "enclose:\""                         \
     -H "max_filter_ratio:1"                 \
     -H "columns:tmp_CRASH_DATE, tmp_CRASH_TIME, CRASH_DATE=str_to_date(concat_ws(' ', tmp_CRASH_DATE, tmp_CRASH_TIME), '%m/%d/%Y %H:%i'),BOROUGH,ZIP_CODE,LATITUDE,LONGITUDE,LOCATION,ON_STREET_NAME,CROSS_STREET_NAME,OFF_STREET_NAME,NUMBER_OF_PERSONS_INJURED,NUMBER_OF_PERSONS_KILLED,NUMBER_OF_PEDESTRIANS_INJURED,NUMBER_OF_PEDESTRIANS_KILLED,NUMBER_OF_CYCLIST_INJURED,NUMBER_OF_CYCLIST_KILLED,NUMBER_OF_MOTORIST_INJURED,NUMBER_OF_MOTORIST_KILLED,CONTRIBUTING_FACTOR_VEHICLE_1,CONTRIBUTING_FACTOR_VEHICLE_2,CONTRIBUTING_FACTOR_VEHICLE_3,CONTRIBUTING_FACTOR_VEHICLE_4,CONTRIBUTING_FACTOR_VEHICLE_5,COLLISION_ID,VEHICLE_TYPE_CODE_1,VEHICLE_TYPE_CODE_2,VEHICLE_TYPE_CODE_3,VEHICLE_TYPE_CODE_4,VEHICLE_TYPE_CODE_5" \
-    -XPUT http://localhost:8030/api/quickstart/crashdata/_stream_load
+    # highlight-next-line
+    -XPUT http://$FE_PROXY/api/quickstart/crashdata/_stream_load
 ```
 
-Here is the output of the preceding command. The first highlighted section shows what you should expect to see (OK and all but one row inserted). One row was filtered out because it does not contain the correct number of columns.
-
-```bash
+```
 Enter host password for user 'root':
 {
     "TxnId": 2,
     "Label": "crashdata-0",
     "Status": "Success",
-    # highlight-start
     "Message": "OK",
     "NumberTotalRows": 423726,
     "NumberLoadedRows": 423725,
-    # highlight-end
     "NumberFilteredRows": 1,
     "NumberUnselectedRows": 0,
     "LoadBytes": 96227746,
-    "LoadTimeMs": 1013,
-    "BeginTxnTimeMs": 21,
-    "StreamLoadPlanTimeMs": 63,
-    "ReadDataTimeMs": 563,
-    "WriteDataTimeMs": 870,
-    "CommitAndPublishTimeMs": 57,
-    # highlight-start
-    "ErrorURL": "http://127.0.0.1:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f"
-    # highlight-end
-}%
+    "LoadTimeMs": 2483,
+    "BeginTxnTimeMs": 42,
+    "StreamLoadPlanTimeMs": 122,
+    "ReadDataTimeMs": 1610,
+    "WriteDataTimeMs": 2253,
+    "CommitAndPublishTimeMs": 65,
+    "ErrorURL": "http://kube-starrocks-be-2.kube-starrocks-be-search.default.svc.cluster.local:8040/api/_load_error_log?file=error_log_5149e6f80de42bcb_eab2ea77276de4ba"
+}
 ```
-
-If there was an error the output provides a URL to see the error messages. Open this in a browser to find out what happened. Expand the detail to see the error message:
-
-<details>
-
-<summary>Reading error messages in the browser</summary>
-
-```bash
-Error: Value count does not match column count. Expect 29, but got 32.
-
-Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.0110059,"(40.6722269, -74.0110059)",,,"R/O 1 BEARD ST. ( IKEA'S 
-09/14/2015,5:30,BRONX,10473,40.814551,-73.8490955,"(40.814551, -73.8490955)",TORRY AVENUE                    ,NORTON AVENUE                   ,,0,0,0,0,0,0,0,0,Driver Inattention/Distraction,Unspecified,,,,3297457,PASSENGER VEHICLE,PASSENGER VEHICLE,,,
-```
-
-</details>
-
-### Weather data
-
-Load the weather dataset in the same manner as you loaded the crash data.
 
 ```bash
 curl --location-trusted -u root             \
@@ -305,14 +540,55 @@ curl --location-trusted -u root             \
     -H "enclose:\""                         \
     -H "max_filter_ratio:1"                 \
     -H "columns: STATION, DATE, LATITUDE, LONGITUDE, ELEVATION, NAME, REPORT_TYPE, SOURCE, HourlyAltimeterSetting, HourlyDewPointTemperature, HourlyDryBulbTemperature, HourlyPrecipitation, HourlyPresentWeatherType, HourlyPressureChange, HourlyPressureTendency, HourlyRelativeHumidity, HourlySkyConditions, HourlySeaLevelPressure, HourlyStationPressure, HourlyVisibility, HourlyWetBulbTemperature, HourlyWindDirection, HourlyWindGustSpeed, HourlyWindSpeed, Sunrise, Sunset, DailyAverageDewPointTemperature, DailyAverageDryBulbTemperature, DailyAverageRelativeHumidity, DailyAverageSeaLevelPressure, DailyAverageStationPressure, DailyAverageWetBulbTemperature, DailyAverageWindSpeed, DailyCoolingDegreeDays, DailyDepartureFromNormalAverageTemperature, DailyHeatingDegreeDays, DailyMaximumDryBulbTemperature, DailyMinimumDryBulbTemperature, DailyPeakWindDirection, DailyPeakWindSpeed, DailyPrecipitation, DailySnowDepth, DailySnowfall, DailySustainedWindDirection, DailySustainedWindSpeed, DailyWeather, MonthlyAverageRH, MonthlyDaysWithGT001Precip, MonthlyDaysWithGT010Precip, MonthlyDaysWithGT32Temp, MonthlyDaysWithGT90Temp, MonthlyDaysWithLT0Temp, MonthlyDaysWithLT32Temp, MonthlyDepartureFromNormalAverageTemperature, MonthlyDepartureFromNormalCoolingDegreeDays, MonthlyDepartureFromNormalHeatingDegreeDays, MonthlyDepartureFromNormalMaximumTemperature, MonthlyDepartureFromNormalMinimumTemperature, MonthlyDepartureFromNormalPrecipitation, MonthlyDewpointTemperature, MonthlyGreatestPrecip, MonthlyGreatestPrecipDate, MonthlyGreatestSnowDepth, MonthlyGreatestSnowDepthDate, MonthlyGreatestSnowfall, MonthlyGreatestSnowfallDate, MonthlyMaxSeaLevelPressureValue, MonthlyMaxSeaLevelPressureValueDate, MonthlyMaxSeaLevelPressureValueTime, MonthlyMaximumTemperature, MonthlyMeanTemperature, MonthlyMinSeaLevelPressureValue, MonthlyMinSeaLevelPressureValueDate, MonthlyMinSeaLevelPressureValueTime, MonthlyMinimumTemperature, MonthlySeaLevelPressure, MonthlyStationPressure, MonthlyTotalLiquidPrecipitation, MonthlyTotalSnowfall, MonthlyWetBulb, AWND, CDSD, CLDD, DSNW, HDSD, HTDD, NormalsCoolingDegreeDay, NormalsHeatingDegreeDay, ShortDurationEndDate005, ShortDurationEndDate010, ShortDurationEndDate015, ShortDurationEndDate020, ShortDurationEndDate030, ShortDurationEndDate045, ShortDurationEndDate060, ShortDurationEndDate080, ShortDurationEndDate100, ShortDurationEndDate120, ShortDurationEndDate150, ShortDurationEndDate180, ShortDurationPrecipitationValue005, ShortDurationPrecipitationValue010, ShortDurationPrecipitationValue015, ShortDurationPrecipitationValue020, ShortDurationPrecipitationValue030, ShortDurationPrecipitationValue045, ShortDurationPrecipitationValue060, ShortDurationPrecipitationValue080, ShortDurationPrecipitationValue100, ShortDurationPrecipitationValue120, ShortDurationPrecipitationValue150, ShortDurationPrecipitationValue180, REM, BackupDirection, BackupDistance, BackupDistanceUnit, BackupElements, BackupElevation, BackupEquipment, BackupLatitude, BackupLongitude, BackupName, WindEquipmentChangeDate" \
-    -XPUT http://localhost:8030/api/quickstart/weatherdata/_stream_load
+    # highlight-next-line
+    -XPUT http://$FE_PROXY/api/quickstart/weatherdata/_stream_load
 ```
 
----
+```
+Enter host password for user 'root':
+{
+    "TxnId": 4,
+    "Label": "weather-0",
+    "Status": "Success",
+    "Message": "OK",
+    "NumberTotalRows": 22931,
+    "NumberLoadedRows": 22931,
+    "NumberFilteredRows": 0,
+    "NumberUnselectedRows": 0,
+    "LoadBytes": 15558550,
+    "LoadTimeMs": 404,
+    "BeginTxnTimeMs": 1,
+    "StreamLoadPlanTimeMs": 7,
+    "ReadDataTimeMs": 157,
+    "WriteDataTimeMs": 372,
+    "CommitAndPublishTimeMs": 23
+}
+```
+
+## Connect with a MySQL client
+
+Connect with a MySQL client if you are not connected. Remember to use the external IP address of the `kube-starrocks-fe-service` service and the password that you configured in the Kubernetes secret `starrocks-root-pass`.
+
+```bash
+mysql -h 34.176.215.97 -P9030 -uroot -p
+```
 
 ## Answer some questions
 
 <SQL />
+
+```sql
+exit
+```
+
+## Cleanup
+
+Run this command if you are finished and would like to remove the StarRocks cluster and the StarRocks operator.
+
+```bash
+helm delete starrocks
+```
+
 
 ---
 
@@ -320,7 +596,7 @@ curl --location-trusted -u root             \
 
 In this tutorial you:
 
-- Deployed StarRocks in Docker
+- Deployed StarRocks with Helm and the StarRocks Operator
 - Loaded crash data provided by New York City and weather data provided by NOAA
 - Analyzed the data using SQL JOINs to find out that driving in low visibility or icy streets is a bad idea
 
@@ -335,6 +611,8 @@ There is more to learn; we intentionally glossed over the data transformation do
 ---
 
 ## More information
+
+default `values.yaml`
 
 [StarRocks table design](../table_design/StarRocks_table_design.md)
 
@@ -374,7 +652,7 @@ The [Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)
 
   - If you need to mount persistent volumes to FE and BE pods to store FE metadata and logs, as well as BE data and logs, see [Mount Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart).
 
-    :::danger
+    :::info
 
     If persistent volumes are not mounted, the StarRocks Operator will use emptyDir to store FE metadata and logs, as well as BE data and logs. When containers restart, data will be lost.
 
