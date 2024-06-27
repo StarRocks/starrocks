@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 
 import java.util.Map;
 
@@ -63,7 +64,11 @@ public class ExecuteOption {
     public boolean isMergeRedundant() {
         // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
         // hanging after removing it.
-        return !isSync && mergeRedundant;
+        if (Config.enable_mv_refresh_sync_refresh_mergeable) {
+            return mergeRedundant;
+        } else {
+            return !isSync && mergeRedundant;
+        }
     }
 
     public Map<String, String> getTaskRunProperties() {

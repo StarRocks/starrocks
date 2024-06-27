@@ -651,7 +651,7 @@ refreshMaterializedViewStatement
     ;
 
 cancelRefreshMaterializedViewStatement
-    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName FORCE?
     ;
 
 // ------------------------------------------- Admin Statement ---------------------------------------------------------

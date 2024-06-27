@@ -548,6 +548,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!mvProperty.getProperties().containsKey(MV_SESSION_TIMEOUT)) {
             mvSessionVariable.setQueryTimeoutS(MV_DEFAULT_QUERY_TIMEOUT);
         }
+
+        // set enable_insert_strict by default
+        if (!isMVPropertyContains(SessionVariable.ENABLE_INSERT_STRICT)) {
+            mvSessionVariable.setEnableInsertStrict(false);
+        }
+    }
+
+    private boolean isMVPropertyContains(String key) {
+        String mvKey = PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + key;
+        return materializedView.getTableProperty().getProperties().containsKey(mvKey);
     }
 
     private void postProcess() {
@@ -1444,7 +1454,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
-        ctx.getSessionVariable().setEnableInsertStrict(false);
         LOG.info("[QueryId:{}] start to refresh materialized view {}", ctx.getQueryId(), materializedView.getName());
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);

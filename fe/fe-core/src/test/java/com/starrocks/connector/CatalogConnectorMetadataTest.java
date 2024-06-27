@@ -173,7 +173,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.dropMaterializedView(null);
                 connectorMetadata.alterMaterializedView(null);
                 connectorMetadata.refreshMaterializedView(null);
-                connectorMetadata.cancelRefreshMaterializedView("test_db", "test_mv");
+                connectorMetadata.cancelRefreshMaterializedView(null);
                 connectorMetadata.createView(null);
                 connectorMetadata.alterView(null);
                 connectorMetadata.truncateTable(null);
@@ -209,7 +209,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.dropMaterializedView(null);
         catalogConnectorMetadata.alterMaterializedView(null);
         catalogConnectorMetadata.refreshMaterializedView(null);
-        catalogConnectorMetadata.cancelRefreshMaterializedView("test_db", "test_mv");
+        catalogConnectorMetadata.cancelRefreshMaterializedView(null);
         catalogConnectorMetadata.createView(null);
         catalogConnectorMetadata.alterView(null);
         catalogConnectorMetadata.truncateTable(null);
