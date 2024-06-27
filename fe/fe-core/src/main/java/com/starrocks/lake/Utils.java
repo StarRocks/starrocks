@@ -25,6 +25,7 @@ import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -93,14 +94,14 @@ public class Utils {
         return groupMap;
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                      long commitTimeInSecond, long warehouseId)
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                      long warehouseId)
             throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnId, baseVersion, newVersion, commitTimeInSecond, null, warehouseId);
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, warehouseId);
     }
 
-    public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds,
-                                           long baseVersion, long newVersion, long commitTimeInSecond,
+    public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                           long baseVersion, long newVersion,
                                            Map<Long, Double> compactionScores, long warehouseId,
                                            Map<ComputeNode, List<Long>> nodeToTablets)
             throws NoAliveBackendException, RpcException {
@@ -124,9 +125,8 @@ public class Utils {
             request.baseVersion = baseVersion;
             request.newVersion = newVersion;
             request.tabletIds = entry.getValue(); // todo: limit the number of Tablets sent to a single node
-            request.txnIds = txnIds;
-            request.commitTime = commitTimeInSecond;
             request.timeoutMs = LakeService.TIMEOUT_PUBLISH_VERSION;
+            request.txnInfos = txnInfos;
 
             ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -151,11 +151,11 @@ public class Utils {
         }
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                      long commitTimeInSecond, Map<Long, Double> compactionScores, long warehouseId)
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                      Map<Long, Double> compactionScores, long warehouseId)
             throws NoAliveBackendException, RpcException {
-        List<Long> txnIds = Lists.newArrayList(txnId);
-        publishVersionBatch(tablets, txnIds, baseVersion, newVersion, commitTimeInSecond, compactionScores, warehouseId, null);
+        List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
+        publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, warehouseId, null);
     }
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version, long warehouseId)

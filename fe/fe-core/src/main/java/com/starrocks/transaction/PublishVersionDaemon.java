@@ -53,9 +53,11 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.scheduler.Constants;
@@ -548,13 +550,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 List<Tablet> publishTablets = new ArrayList<>();
                 publishTablets.addAll(normalTablets);
 
-                // commit time of last transactionState as commitTime
-                long commitTime = transactionStates.get(transactionStates.size() - 1).getCommitTime();
+                List<TxnInfoPB> txnInfos = new ArrayList<>();
+                for (TransactionState state : transactionStates) {
+                    txnInfos.add(TxnInfoHelper.fromTransactionState(state));
+                }
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
-                Utils.publishVersionBatch(publishTablets, txnIds,
-                        startVersion - 1, endVersion, commitTime, compactionScores,
+                Utils.publishVersionBatch(publishTablets, txnInfos,
+                        startVersion - 1, endVersion, compactionScores,
                         warehouseId,
                         nodeToTablets);
 
@@ -804,14 +808,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         }
 
+        TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnId, txnVersion, warehouseId);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
-                        compactionScores, warehouseId);
+                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
+                        warehouseId);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
