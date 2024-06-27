@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.scheduler;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvRefreshArbiter;
@@ -77,6 +78,10 @@ public class MVRefreshTestBase {
     public static void tearDown() throws Exception {
     }
 
+    public static void executeInsertSql(String sql) throws Exception {
+        executeInsertSql(connectContext, sql);
+    }
+
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
@@ -112,16 +117,16 @@ public class MVRefreshTestBase {
     }
 
     public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
-        return MvRefreshArbiter.getPartitionNamesToRefreshForMv(mv, true);
+        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
     }
 
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
-        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getPartitionNamesToRefreshForMv(mv, true);
-        com.google.common.base.Preconditions.checkState(mvUpdateInfo != null);
+        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        Preconditions.checkState(mvUpdateInfo != null);
         return mvUpdateInfo.getMvToRefreshPartitionNames();
     }
 
-    PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
+    protected PartitionBasedMvRefreshProcessor refreshMV(String dbName, MaterializedView mv) throws Exception {
         Task task = TaskBuilder.buildMvTask(mv, dbName);
         Map<String, String> testProperties = task.getProperties();
         testProperties.put(TaskRun.IS_TEST, "true");

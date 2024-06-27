@@ -20,9 +20,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.plan.ExecPlan;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,7 +39,7 @@ public class MvTaskRunContext extends TaskRunContext {
     private Map<String, Range<PartitionKey>> mvRangePartitionMap;
 
     // all the RefBaseTable's partition name to its list partition keys.
-    private Map<String, List<List<String>>> refBaseTableListPartitionMap;
+    private Map<Table, Map<String, PListCell>> refBaseTableListPartitionMap;
     // the external ref base table's mv partition name to original partition names map because external
     // table supports multi partition columns, one converted partition name(mv partition name) may have
     // multi original partition names.
@@ -109,11 +109,11 @@ public class MvTaskRunContext extends TaskRunContext {
         this.refBaseTableRangePartitionMap = refBaseTableRangePartitionMap;
     }
 
-    public Map<String, List<List<String>>> getRefBaseTableListPartitionMap() {
+    public Map<Table, Map<String, PListCell>> getRefBaseTableListPartitionMap() {
         return refBaseTableListPartitionMap;
     }
 
-    public void setRefBaseTableListPartitionMap(Map<String, List<List<String>>> refBaseTableListPartitionMap) {
+    public void setRefBaseTableListPartitionMap(Map<Table, Map<String, PListCell>> refBaseTableListPartitionMap) {
         this.refBaseTableListPartitionMap = refBaseTableListPartitionMap;
     }
 

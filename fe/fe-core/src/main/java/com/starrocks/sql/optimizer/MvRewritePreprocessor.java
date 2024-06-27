@@ -87,7 +87,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getPartitionNamesToRefreshForMv;
+import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.getMvPartialPartitionPredicates;
 
@@ -738,7 +738,7 @@ public class MvRewritePreprocessor {
             MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
             try {
                 // mv's partitions to refresh
-                MvUpdateInfo mvUpdateInfo = getPartitionNamesToRefreshForMv(mv, true);
+                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo(mv, true);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "stale partitions {}", mvUpdateInfo);
                     continue;
@@ -795,7 +795,7 @@ public class MvRewritePreprocessor {
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
         Preconditions.checkState(mvPlan != null);
         PartitionInfo partitionInfo = mv.getPartitionInfo();
-        if (partitionInfo instanceof SinglePartitionInfo) {
+        if (partitionInfo.isUnPartitioned()) {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
@@ -842,8 +842,7 @@ public class MvRewritePreprocessor {
                                                               Set<String> partitionNamesToRefresh) {
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
         ScalarOperator mvPartialPartitionPredicates = ConstantOperator.TRUE;
-        // TODO: support list partition
-        if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
+        if (mv.getPartitionInfo().isRangePartition() && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
             // when should calculate the latest partition range predicates for partition-by base table
             try {
