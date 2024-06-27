@@ -47,17 +47,8 @@ enum DictionaryCacheEncoderType {
 
 template <LogicalType logical_type>
 struct DictionaryCacheTypeTraits {
-    using CppType = typename CppTypeTraits<logical_type>::CppType;
-};
-
-template <>
-struct DictionaryCacheTypeTraits<TYPE_DATE> {
-    using CppType = DateValue;
-};
-
-template <>
-struct DictionaryCacheTypeTraits<TYPE_DATETIME> {
-    using CppType = TimestampValue;
+    using CppType = typename RunTimeTypeTraits<logical_type>::CppType;
+    using ColumnType = typename RunTimeTypeTraits<logical_type>::ColumnType;
 };
 
 template <LogicalType logical_type>
@@ -99,6 +90,8 @@ public:
 
     using KeyCppType = typename DictionaryCacheTypeTraits<KeyLogicalType>::CppType;
     using ValueCppType = typename DictionaryCacheTypeTraits<ValueLogicalType>::CppType;
+
+    using ValueColumnType = typename DictionaryCacheTypeTraits<ValueLogicalType>::ColumnType;
 
     virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
         switch (_type) {
@@ -285,27 +278,7 @@ public:
 private:
     // Avoid creating Datum
     inline void _append_value(Column* dest, const ValueCppType& v) {
-        if constexpr (std::is_same_v<ValueCppType, Slice>) {
-            down_cast<BinaryColumn*>(dest)->append(v);
-        } else if constexpr (std::is_same_v<ValueCppType, bool>) {
-            down_cast<BooleanColumn*>(dest)->append(v);
-        } else if constexpr (std::is_same_v<ValueCppType, int8_t>) {
-            down_cast<Int8Column*>(dest)->append(v);
-        } else if constexpr (std::is_same_v<ValueCppType, int16_t>) {
-            down_cast<Int16Column*>(dest)->append(v);
-        } else if constexpr (std::is_same_v<ValueCppType, int32_t>) {
-            down_cast<Int32Column*>(dest)->append(v);
-        } else if constexpr (std::is_same_v<ValueCppType, int64_t>) {
-            down_cast<Int64Column*>(dest)->append(v);
-        } else if constexpr (std::is_same_v<ValueCppType, int128_t>) {
-            down_cast<Int128Column*>(dest)->append(v);
-        } else if constexpr (std::is_same_v<ValueCppType, DateValue>) {
-            down_cast<DateColumn*>(dest)->append(v);
-        } else if constexpr (std::is_same_v<ValueCppType, TimestampValue>) {
-            down_cast<TimestampColumn*>(dest)->append(v);
-        } else {
-            __builtin_unreachable();
-        }
+        down_cast<ValueColumnType*>(dest)->append(v);
     }
 
     template <class KeyCppType, class ValueCppType>
