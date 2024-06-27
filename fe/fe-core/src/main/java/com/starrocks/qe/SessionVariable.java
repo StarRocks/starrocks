@@ -1618,6 +1618,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_COPILOT)
     private boolean enableDataCacheCopilot = false;
 
+    // By default, we will ignore full (table/partition) scan in datacache copilot
     @VariableMgr.VarAttr(name = ENABLE_DATACACHE_COPILOT_FULL_COLLECT)
     private boolean enableDataCacheCopilotFullCollect = false;
 

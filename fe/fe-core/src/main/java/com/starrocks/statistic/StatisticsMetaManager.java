@@ -278,6 +278,20 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
     }
 
+    // same as:
+    // CREATE TABLE IF NOT EXISTS datacache_copilot_access_frequency_statistics (
+    //    catalog_name string NOT NULL,
+    //    database_name string NOT NULL,
+    //    table_name string NOT NULL,
+    //    partition_name string NOT NULL,
+    //    -- if it's struct subfield access, it will store as col.a.b
+    //    column_name string NOT NULL,
+    //    access_time datetime NOT NULL,
+    //    count bigint SUM NOT NULL DEFAULT "0"
+    // )
+    // AGGREGATE KEY(`catalog_name`, `database_name`, `table_name`, `partition_name`, `column_name`, `access_time`)
+    // PARTITION BY date_trunc('day', access_time)
+    // DISTRIBUTED BY HASH(catalog_name, database_name, table_name) buckets 10;
     private boolean createDataCacheCopilotStatisticsTable(ConnectContext context) {
         LOG.info("start to create datacache_copilot_statistics table");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
@@ -303,18 +317,15 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
             CreateTableStmt stmt = new CreateTableStmt(false, false,
                     tableName,
-                    StatisticUtils.buildStatsColumnDef(
-                            DataCacheCopilotConstants.DATACACHE_COPILOT_STATISTICS_TABLE_NAME),
+                    StatisticUtils.buildStatsColumnDef(DataCacheCopilotConstants.DATACACHE_COPILOT_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     null,
                     expressionPartitionDesc,
                     new HashDistributionDesc(10, List.of(DataCacheCopilotConstants.CATALOG_NAME,
-                            DataCacheCopilotConstants.DATABASE_NAME, DataCacheCopilotConstants.TABLE_NAME,
-                            DataCacheCopilotConstants.PARTITION_NAME,
-                            DataCacheCopilotConstants.COLUMN_NAME)),
+                            DataCacheCopilotConstants.DATABASE_NAME, DataCacheCopilotConstants.TABLE_NAME)),
                     properties,
                     null,
-                    "");
+                    "Store DataCacheCopilot collected statistics");
 
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);

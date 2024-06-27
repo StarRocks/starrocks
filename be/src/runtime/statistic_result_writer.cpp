@@ -489,7 +489,9 @@ Status StatisticResultWriter::_fill_datacache_copilot_statistic(const Columns& c
     auto catalog_name = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto database_name = ColumnViewer<TYPE_VARCHAR>(columns[2]);
     auto table_name = ColumnViewer<TYPE_VARCHAR>(columns[3]);
-    auto partition_name = ColumnViewer<TYPE_VARCHAR>(columns[4]);
+    // With the help of group_concat(), partition_name will be concat as dt=2012-01-02,dt=2012-01-03,xxxx
+    auto partition_names = ColumnViewer<TYPE_VARCHAR>(columns[4]);
+    // With the help of group_concat(), column_name will be concat as col1,col2,col3,xxxx
     auto column_names = ColumnViewer<TYPE_VARCHAR>(columns[5]);
     auto count = ColumnViewer<TYPE_BIGINT>(columns[6]);
 
@@ -501,7 +503,7 @@ Status StatisticResultWriter::_fill_datacache_copilot_statistic(const Columns& c
         data_list[i].__set_catalogName(catalog_name.value(i).to_string());
         data_list[i].__set_databaseName(database_name.value(i).to_string());
         data_list[i].__set_tableName(table_name.value(i).to_string());
-        data_list[i].__set_partitionName(partition_name.value(i).to_string());
+        data_list[i].__set_partitionName(partition_names.value(i).to_string());
         data_list[i].__set_columnName(column_names.value(i).to_string());
         data_list[i].__set_rowCount(count.value(i));
     }

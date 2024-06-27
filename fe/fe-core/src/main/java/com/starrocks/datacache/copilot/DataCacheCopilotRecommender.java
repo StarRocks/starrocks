@@ -17,5 +17,5 @@ package com.starrocks.datacache.copilot;
 import com.starrocks.qe.ShowResultSet;
 
 public interface DataCacheCopilotRecommender {
-    ShowResultSet recommend(int num);
+    ShowResultSet recommend();
 }

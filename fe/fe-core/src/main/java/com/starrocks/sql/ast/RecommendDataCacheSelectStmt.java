@@ -22,14 +22,16 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Optional;
 
 public class RecommendDataCacheSelectStmt extends ShowStmt {
+    // if target is empty, means recommend cache select from whole database
     private final Optional<QualifiedName> target;
     // only interval >= 0 is valid
+    // interval > 0 means that cache select is recommended based on the data in the most recent ${interval} seconds.
     private final long interval;
     private final LimitElement limitElement;
 
     public RecommendDataCacheSelectStmt(QualifiedName target, long interval, LimitElement limitElement, NodePosition pos) {
         super(pos);
-        Preconditions.checkArgument(interval >= 0, "interval must be >= 0");
+        Preconditions.checkArgument(interval >= 0, "Interval must be >= 0");
         Preconditions.checkNotNull(limitElement, "LimitElement must not be null");
         this.target = Optional.ofNullable(target);
         this.interval = interval;

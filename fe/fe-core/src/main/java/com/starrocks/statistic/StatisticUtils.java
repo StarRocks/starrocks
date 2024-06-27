@@ -420,6 +420,7 @@ public class StatisticUtils {
                     new ColumnDef(DataCacheCopilotConstants.PARTITION_NAME, new TypeDef(partitionNameType)),
                     new ColumnDef(DataCacheCopilotConstants.COLUMN_NAME, new TypeDef(columnNameType)),
                     new ColumnDef(DataCacheCopilotConstants.ACCESS_TIME_NAME, new TypeDef(accessTimeType)),
+                    // agg sum() column
                     new ColumnDef(DataCacheCopilotConstants.COUNT_NAME, new TypeDef(countType), false,
                             AggregateType.SUM, false,
                             new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), ""));

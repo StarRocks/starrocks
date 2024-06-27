@@ -59,7 +59,7 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
     }
 
     @Override
-    public ShowResultSet recommend(int num) {
+    public ShowResultSet recommend() {
         // flush access logs to BE first
         DataCacheCopilotRepo repository = GlobalStateMgr.getCurrentState().getDataCacheCopilotRepo();
         repository.flushStorageToBE();

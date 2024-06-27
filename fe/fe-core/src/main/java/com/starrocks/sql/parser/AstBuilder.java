@@ -3378,7 +3378,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.limitElement() != null) {
             limitElement = (LimitElement) visit(context.limitElement());
         } else {
-            limitElement = new LimitElement(Config.datacache_copilot_default_recommend_nums);
+            // use default limit numbers to avoid return too many rows
+            limitElement = new LimitElement(Config.datacache_copilot_default_recommend_limit);
         }
         return new RecommendDataCacheSelectStmt(qualifiedName, intervalSecs, limitElement, createPos(context));
     }

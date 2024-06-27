@@ -172,7 +172,7 @@ public class DataCacheStmtAnalyzer {
         public Void visitRecommendDataCacheSelectStmt(RecommendDataCacheSelectStmt stmt, ConnectContext context) {
             if (!context.getSessionVariable().isEnableDataCacheCopilot()) {
                 throw new SemanticException(
-                        "DataCache copilot(SET datacache_copilot=true) must be enabled before show recommendations.");
+                        "DataCache copilot(SET enable_datacache_copilot=true) must be enabled before show recommendations.");
             }
             return null;
         }

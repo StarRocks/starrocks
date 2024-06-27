@@ -81,7 +81,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -2269,7 +2268,7 @@ public class ShowExecutor {
         public ShowResultSet visitRecommendDataCacheSelectStmt(RecommendDataCacheSelectStmt stmt,
                                                                ConnectContext context) {
             DataCacheCopilotRecommender recommender = new DataCacheCopilotSimpleRecommender(stmt);
-            return recommender.recommend(Config.datacache_copilot_default_recommend_nums);
+            return recommender.recommend();
         }
 
         @Override

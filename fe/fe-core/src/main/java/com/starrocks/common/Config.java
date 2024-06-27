@@ -3023,5 +3023,5 @@ public class Config extends ConfigBase {
     * Avoid to return large results
     * */
     @ConfField(mutable = true)
-    public static int datacache_copilot_default_recommend_nums = 100;
+    public static int datacache_copilot_default_recommend_limit = 100;
 }
