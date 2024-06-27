@@ -277,9 +277,7 @@ public:
 
 private:
     // Avoid creating Datum
-    inline void _append_value(Column* dest, const ValueCppType& v) {
-        down_cast<ValueColumnType*>(dest)->append(v);
-    }
+    inline void _append_value(Column* dest, const ValueCppType& v) { down_cast<ValueColumnType*>(dest)->append(v); }
 
     template <class KeyCppType, class ValueCppType>
     inline size_t _get_element_memory_usage(const KeyCppType& k, const ValueCppType& v) {
