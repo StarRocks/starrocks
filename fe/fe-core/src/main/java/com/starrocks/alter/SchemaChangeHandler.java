@@ -66,12 +66,8 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
->>>>>>> 13899a2d67 ([Feature]Support add/drop field for struct column(part3) (#47217))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
@@ -1659,7 +1655,6 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
-        Set<String> modifyFieldColumns = new HashSet<>();
         for (AlterClause alterClause : alterClauses) {
             Map<String, String> properties = alterClause.getProperties();
             if (properties != null) {
@@ -1784,16 +1779,15 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Add field for struct column require table enable fast schema evolution");
                 }
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
-                modifyFieldColumns = Set.of(addFieldClause.getColName());
+                Set<String> modifyFieldColumns = ImmutableSet.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
 
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                db.readLock();
                 int id = 0;
                 try {
                     id = olapTable.incAndGetMaxColUniqueId();
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    db.readUnlock();
                 }
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
@@ -1804,7 +1798,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Drop field for struct column require table enable fast schema evolution");
                 }
                 DropFieldClause dropFieldClause = (DropFieldClause) alterClause;
-                modifyFieldColumns = Set.of(dropFieldClause.getColName());
+                Set<String> modifyFieldColumns = ImmutableSet.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
                 processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ReorderColumnsClause) {
@@ -2717,15 +2711,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 "Target of light schema change must be olap table");
         OlapTable olapTable = (OlapTable) table;
         try {
-<<<<<<< HEAD
             db.writeLock();
-            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
-                                        indexToNewSchemaId, true);
-=======
-            locker.lockDatabase(db, LockType.WRITE);
             modifyTableAddOrDrop(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
                     indexToNewSchemaId, true);
->>>>>>> 13899a2d67 ([Feature]Support add/drop field for struct column(part3) (#47217))
         } catch (DdlException e) {
             // should not happen
             LOG.warn("failed to replay modify table add or drop columns", e);
