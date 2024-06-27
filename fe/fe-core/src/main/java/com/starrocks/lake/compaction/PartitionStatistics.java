@@ -101,8 +101,7 @@ public class PartitionStatistics {
 
     private void adjustPunishFactor(Quantiles newCompactionScore) {
         if (compactionScore != null && newCompactionScore != null) {
-            if (compactionScore.compareTo(newCompactionScore) != 0 &&
-                    compactionScore.getMax() == newCompactionScore.getMax()) {
+            if (compactionScore.getMax() == newCompactionScore.getMax()) {
                 // this means partial compaction succeeds, need increase punish factor,
                 // so that other partitions' compaction can proceed.
                 // max interval will be CompactionScheduler.MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS * punishFactor
