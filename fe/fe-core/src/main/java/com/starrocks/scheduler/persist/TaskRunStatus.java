@@ -39,6 +39,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("taskName")
     private String taskName;
 
+    @SerializedName("processStartTime")
+    private long processStartTime;
+
     @SerializedName("createTime")
     private long createTime;
 
@@ -253,6 +256,18 @@ public class TaskRunStatus implements Writable {
                     GsonUtils.GSON.fromJson(extraMessage, MVTaskRunExtraMessage.class);
         } else {
             // do nothing
+        }
+    }
+
+    public long getProcessStartTime() {
+        return processStartTime;
+    }
+
+    public void setProcessStartTime(long processStartTime) {
+        this.processStartTime = processStartTime;
+        // update process start time in mvTaskRunExtraMessage to display in the web page
+        if (mvTaskRunExtraMessage != null) {
+            mvTaskRunExtraMessage.setProcessStartTime(processStartTime);
         }
     }
 

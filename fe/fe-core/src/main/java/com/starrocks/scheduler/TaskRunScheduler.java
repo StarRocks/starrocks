@@ -77,8 +77,12 @@ public class TaskRunScheduler {
         return pendingTaskRunQueue.add(taskRun);
     }
 
-    public void removePendingTaskRun(TaskRun taskRun) {
-        pendingTaskRunQueue.remove(taskRun);
+    public void removePendingTaskRun(TaskRun taskRun, Constants.TaskRunState state) {
+        if (taskRun == null) {
+            return;
+        }
+        LOG.info("remove pending task run: {}", taskRun);
+        pendingTaskRunQueue.remove(taskRun, state);
     }
 
     public void removePendingTask(Task task) {
