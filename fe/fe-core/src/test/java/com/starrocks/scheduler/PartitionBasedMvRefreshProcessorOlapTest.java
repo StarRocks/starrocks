@@ -79,6 +79,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.MV_ID;
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -905,6 +906,20 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         Assert.assertEquals(3, baseTableVisibleVersionMap.get(tbl1.getId()).get("p100").getVersion());
     }
 
+    private PartitionBasedMvRefreshProcessor createProcessor(MaterializedView mv) {
+        TaskRunContext context = new TaskRunContext();
+        context.setCtx(connectContext);
+        context.getCtx().setDatabase("test");
+        MvTaskRunContext mvContext = new MvTaskRunContext(context);
+        Map<String, String> props = Maps.newHashMap();
+        props.put(MV_ID, String.valueOf(mv.getId()));
+        mvContext.setProperties(props);
+        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
+        processor.setMvContext(mvContext);
+        processor.prepare(mvContext);
+        return processor;
+    }
+
     @Test
     public void testFilterPartitionByRefreshNumber() throws Exception {
         // PARTITION p0 values [('2021-12-01'),('2022-01-01'))
@@ -925,14 +940,10 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
         materializedView.getTableProperty().setPartitionRefreshNumber(3);
-        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
 
-        MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
-
-        processor.setMvContext(mvContext);
+        PartitionBasedMvRefreshProcessor processor = createProcessor(materializedView);
         processor.filterPartitionByRefreshNumber(materializedView.getPartitionNames(), Sets.newHashSet(), materializedView);
-
-        mvContext = processor.getMvContext();
+        MvTaskRunContext mvContext = processor.getMvContext();
         Assert.assertEquals("2022-03-01", mvContext.getNextPartitionStart());
         Assert.assertEquals("2022-05-01", mvContext.getNextPartitionEnd());
 
@@ -967,11 +978,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         initAndExecuteTaskRun(taskRun);
 
         materializedView.getTableProperty().setPartitionRefreshNumber(1);
-        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
 
-        MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
-        processor.setMvContext(mvContext);
-
+        PartitionBasedMvRefreshProcessor processor = createProcessor(materializedView);
         Set<String> allPartitions = new HashSet<>(materializedView.getPartitionNames());
 
         // ascending refresh
@@ -1808,7 +1816,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testFilterPartitionByJoinPredicate_RefreshPartitionNum() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 date",
@@ -1922,7 +1930,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testFilterPartitionByJoinPredicateWithNonPartitionTable() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 date",
@@ -2004,7 +2012,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testFilterPartitionByJoinPredicateWithNonPartition_RefreshPartitionNum() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 date",
@@ -2593,7 +2601,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testMVRefreshStatus() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 date",
@@ -2735,7 +2743,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testMVRefreshWithFailedStatus() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 date",

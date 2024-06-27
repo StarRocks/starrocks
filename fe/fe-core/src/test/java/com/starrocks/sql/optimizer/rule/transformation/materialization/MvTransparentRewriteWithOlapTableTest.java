@@ -143,7 +143,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
     }
 
     private void withPartialJoinMv(StarRocksAssert.ExceptionRunnable runner) {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
             cluster.runSql("test", "insert into m2 values (1,1,1,1,1), (4,2,1,1,1);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
@@ -298,7 +298,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
 
     @Test
     public void testJoin2() {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             // only update the non ref table, transparent plan should also works too
             cluster.runSql("test", "insert into m2 values (1,1,1,1,1), (4,2,1,1,1);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
@@ -353,7 +353,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
 
     private void withPartialSetOperator(StarRocksAssert.ExceptionRunnable runner,
                                         String setOperator) {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1);");
             cluster.runSql("test", "insert into m2 values (4,2,1,1,1);");
             starRocksAssert.withMaterializedView((String.format("CREATE MATERIALIZED VIEW mv0 " +
@@ -414,7 +414,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MvRewriteTestBase {
 
     @Test
     public void testTransparentRewriteWithSetOperators2() {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1);");
             cluster.runSql("test", "insert into m2 values (4,2,1,1,1);");
             starRocksAssert.withMaterializedView((String.format("CREATE MATERIALIZED VIEW mv0 " +

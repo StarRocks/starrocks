@@ -117,7 +117,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
     }
 
     private void withPartialJoinMv(StarRocksAssert.ExceptionRunnable runner) {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1), (4,2,1,1);");
             cluster.runSql("test", "insert into m2 values (1,1,1,1), (4,2,1,1);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +

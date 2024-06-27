@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.common;
 
 /**
- * {@link PartitionDiffer} is used to compare the difference between two partitions which can be range
- * partition or list partition.
+ * The base class for partition diff which is used to represent the difference between two partition sets.
  */
-public abstract class PartitionDiffer {
+public abstract class PartitionDiff {
 }

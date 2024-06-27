@@ -38,6 +38,7 @@ import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
@@ -166,7 +167,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    public abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
+    public abstract Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 

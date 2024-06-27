@@ -891,7 +891,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testAggExprRewrite() throws Exception {
         // Group by Cast Expr
-        starRocksAssert.withTable("json_tbl",
+        starRocksAssert.withMTable("json_tbl",
                 () -> {
                     {
                         String mvName = "mv_q15";
@@ -954,7 +954,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testPkFk() throws SQLException {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("parent_table1", "k1",
                                 List.of(
                                         "k1 INT",

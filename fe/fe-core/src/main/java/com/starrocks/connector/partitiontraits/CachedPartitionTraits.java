@@ -29,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 
 import java.util.List;
@@ -152,7 +153,7 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) {
+    public Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException {
         return getCacheWithException("getPartitionList",
                 () -> delegate.getPartitionList(partitionColumn), () -> Maps.newHashMap());
     }

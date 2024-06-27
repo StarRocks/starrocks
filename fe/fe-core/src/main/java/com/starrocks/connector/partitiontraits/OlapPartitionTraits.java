@@ -25,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.sql.common.PListCell;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -62,9 +63,9 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) {
+    public Map<String, PListCell> getPartitionList(Column partitionColumn) {
         // TODO: check partition type
-        return ((OlapTable) table).getListPartitionMap();
+        return ((OlapTable) table).getListPartitionItems();
     }
 
     @Override

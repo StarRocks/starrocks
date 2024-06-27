@@ -49,7 +49,6 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
@@ -787,10 +786,10 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseOlapTable(SlotRef slotRef, OlapTable table) {
             PartitionInfo partitionInfo = table.getPartitionInfo();
-            if (partitionInfo instanceof SinglePartitionInfo) {
+            if (partitionInfo.isUnPartitioned()) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
-            } else if (partitionInfo instanceof RangePartitionInfo) {
+            } else if (partitionInfo.isRangePartition()) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(table.getIdToColumn());
                 if (partitionColumns.size() != 1) {
@@ -1082,7 +1081,7 @@ public class MaterializedViewAnalyzer {
             if (statement.getPartitionRangeDesc() == null) {
                 return null;
             }
-            if (!(table.getPartitionInfo() instanceof RangePartitionInfo)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
                 throw new SemanticException("Not support refresh by partition for single partition mv",
                         mvName.getPos());
             }

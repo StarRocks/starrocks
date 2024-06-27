@@ -25,6 +25,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.StringUtils;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.SlotRefResolver;
@@ -152,7 +153,7 @@ public class MvJoinFilter {
             Integer slotIndex = null;
             for (int i = 0; i < relations.getOutputExpression().size(); i++) {
                 String column = relations.getRelations().get(0).getColumnOutputNames().get(i);
-                if (com.starrocks.common.util.StringUtils.areColumnNamesEqual(slot.getColumnName(), column)) {
+                if (StringUtils.areColumnNamesEqual(slot.getColumnName(), column)) {
                     slotIndex = i;
                     break;
                 }

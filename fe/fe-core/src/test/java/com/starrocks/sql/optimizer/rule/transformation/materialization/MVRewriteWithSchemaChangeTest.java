@@ -87,7 +87,6 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 ");");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_cache_mv1 \n" +
                 "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
-                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
                 "partition by date_trunc('day', dt)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -275,7 +274,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
 
 
         {
-            starRocksAssert.withTables(cluster, List.of("depts", "emps_par"),
+            starRocksAssert.withMTableNames(cluster, List.of("depts", "emps_par"),
                     () -> {
                         starRocksAssert.withView("create view view1 as " +
                                 " select deptno1, deptno2, empid, name " +
