@@ -102,7 +102,7 @@ DISTRIBUTED BY RANDOM
 PROPERTIES (
 "labels.location" = "rack:rack1,rack:rack2")
 as 
-select order_id, dt from example_table
+select order_id, dt from example_table;
 ```
 
 对于新建的物化视图，属性 `labels.location` 默认为 `*` ，表示副本在所有标签中均匀分布。
