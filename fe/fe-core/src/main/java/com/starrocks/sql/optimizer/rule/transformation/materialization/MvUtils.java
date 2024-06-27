@@ -1410,4 +1410,26 @@ public class MvUtils {
             return new RandomDistributionDesc();
         }
     }
+
+    /**
+     * Trim the input set if its size is larger than maxLength.
+     * @return the trimmed set.
+     */
+    public static Set<String> shrinkToSize(Set<String> set, int maxLength) {
+        if (set != null && set.size() > maxLength) {
+            return set.stream().limit(maxLength).collect(Collectors.toSet());
+        }
+        return set;
+    }
+
+    /**
+     * Trim the input map if its size is larger than maxLength.
+     * @return the trimmed map.
+     */
+    public static Map<String, Set<String>> shrinkToSize(Map<String, Set<String>> map, int maxLength) {
+        if (map != null && map.size() > maxLength) {
+            return map.entrySet().stream().limit(maxLength).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+        return map;
+    }
 }
