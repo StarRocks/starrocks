@@ -51,13 +51,20 @@ StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState*
     _morsel_queue->set_tablets(_ctx->tablets());
     _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
 
-    _ctx->set_prepare_finished();
-    if (!status.ok()) {
-        _ctx->set_finished();
-        return status;
-    }
+    DeferOp defer([&]() { _ctx->set_prepare_finished(); });
 
-    return nullptr;
+    if (!status.ok()) {
+        // OlapScanOperator::has_output() will `use !_ctx->is_prepare_finished() || _ctx->is_finished()` to
+        // determine whether OlapScanOperator::pull_chunk() needs to be executed.
+        // When _ctx->parse_conjuncts returns EOF, if set_prepare_finished first, and then set_finished.
+        // Between calling set_finished, OlapScanOperator::has_output maybe return true,
+        // causing OlapScanOperator::pull_chunk to be executed, which is invalid, maybe cause crash.
+        // So we will set_finished first and set_prepare_finished()
+        static_cast<void>(_ctx->set_finished());
+        return status;
+    } else {
+        return nullptr;
+    }
 }
 
 /// OlapScanPrepareOperatorFactory

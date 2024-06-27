@@ -433,6 +433,14 @@ public class SystemInfoService {
         return idToComputeNodeRef.get(computeNodeId);
     }
 
+    public ComputeNode getBackendOrComputeNode(long nodeId) {
+        ComputeNode backend = idToBackendRef.get(nodeId);
+        if (backend == null) {
+            backend = idToComputeNodeRef.get(nodeId);
+        }
+        return backend;
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();
@@ -769,7 +777,7 @@ public class SystemInfoService {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
                 updateReportVersionIncrementally(atomicLong, newReportVersion);
-                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+                LOG.info("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
             } else {
                 LOG.warn("failed to update backend report version, db {} does not exist", dbId);
             }

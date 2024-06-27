@@ -1495,8 +1495,8 @@ public class LocalMetastore implements ConnectorMetadata {
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
+            Partition partition = olapTable.getPartition(partitionName);
             if (!clause.isForceDrop()) {
-                Partition partition = olapTable.getPartition(partitionName);
                 if (partition != null) {
                     if (stateMgr.getGlobalTransactionMgr()
                             .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
@@ -1507,6 +1507,9 @@ public class LocalMetastore implements ConnectorMetadata {
                                         " please use \"DROP PARTITION <partition> FORCE\".");
                     }
                 }
+            }
+            if (partition != null) {
+                GlobalStateMgr.getCurrentState().getAnalyzeManager().recordDropPartition(partition.getId());
             }
             tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
 
@@ -2020,11 +2023,15 @@ public class LocalMetastore implements ConnectorMetadata {
         short shortKeyColumnCount = 0;
         List<Integer> sortKeyIdxes = new ArrayList<>();
         if (stmt.getSortKeys() != null) {
+            Set<Integer> addedSortKey = new HashSet<>();
             List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
             for (String column : stmt.getSortKeys()) {
                 int idx = baseSchemaNames.indexOf(column);
                 if (idx == -1) {
                     throw new DdlException("Invalid column '" + column + "': not exists in all columns.");
+                }
+                if (!addedSortKey.add(idx)) {
+                    throw new DdlException("Duplicate sort key column " + column + " is not allowed.");
                 }
                 sortKeyIdxes.add(idx);
             }
@@ -4636,12 +4643,13 @@ public class LocalMetastore implements ConnectorMetadata {
                     if (partition == null) {
                         throw new DdlException("Partition " + partName + " does not exist");
                     }
-
                     origPartitions.put(partName, partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeManager().recordDropPartition(partition.getId());
                 }
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
                     origPartitions.put(partition.getName(), partition);
+                    GlobalStateMgr.getCurrentState().getAnalyzeManager().recordDropPartition(partition.getId());
                 }
             }
 
@@ -4969,7 +4977,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException("Temp partition[" + partName + "] does not exist");
                 }
             }
-
+            partitionNames.stream().forEach(e ->
+                    GlobalStateMgr.getCurrentState().getAnalyzeManager()
+                            .recordDropPartition(olapTable.getPartition(e).getId()));
             olapTable.replaceTempPartitions(partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
 
             // write log

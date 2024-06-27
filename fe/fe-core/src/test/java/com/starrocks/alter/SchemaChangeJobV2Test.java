@@ -227,8 +227,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
         schemaChangeHandler.process(alterClauses, db, olapTable);
-        Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExist());
-        Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().getEnable());
+        Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExists());
+        Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         Assert.assertEquals("day", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
         Assert.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getEnd());
         Assert.assertEquals("p", olapTable.getTableProperty().getDynamicPartitionProperty().getPrefix());
@@ -239,7 +239,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         properties.put(DynamicPartitionProperty.ENABLE, "false");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
         schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
-        Assert.assertFalse(olapTable.getTableProperty().getDynamicPartitionProperty().getEnable());
+        Assert.assertFalse(olapTable.getTableProperty().getDynamicPartitionProperty().isEnabled());
         // set dynamic_partition.time_unit = week
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.TIME_UNIT, "week");

@@ -514,7 +514,8 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
     }
 }
 
-void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
+void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id,
+                                            RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
                                             std::set<TPlanNodeId>& local_rf_waiting_set) {
     if (this == parent) return;
     auto iter = parent->_descriptors.begin();
@@ -524,7 +525,8 @@ void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent,
             ++iter;
             continue;
         }
-        if (desc->is_bound(tuple_ids)) {
+        if (desc->is_bound(tuple_ids) && !(state->broadcast_join_right_offsprings().count(target_plan_node_id) &&
+                                           state->shuffle_hash_bucket_rf_ids().count(desc->filter_id()))) {
             add_descriptor(desc);
             if (desc->is_local()) {
                 local_rf_waiting_set.insert(desc->build_plan_node_id());

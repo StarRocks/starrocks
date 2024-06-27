@@ -1,0 +1,60 @@
+-- name: test_array_map_1
+CREATE TABLE t1 (
+    k1 bigint,
+    c1 array < varchar(65536) > 
+) ENGINE = OLAP 
+DUPLICATE KEY(k1) PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE t2 (
+    k1 bigint,
+    c1 bigint
+) ENGINE = OLAP 
+DUPLICATE KEY(k1) PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1
+values
+    (1, ["1","2"]        ), 
+    (2, ["0","2","1"]    ), 
+    (3, ["0","2","1"]    ), 
+    (4, ["1","2"]        ), 
+    (5, ["0","2","1"]    ), 
+    (6, ["0","2","1","1"]), 
+    (7, ["0","2","1"]    ), 
+    (8, ["1","2"]        ), 
+    (9, ["L","2","1"]    ), 
+    (10, ["1","2"]       );
+-- result:
+-- !result
+insert into t2
+values
+    (1, 1),
+    (2, 1),
+    (3, 3),
+    (4, 5);
+-- result:
+-- !result
+with w1 as (
+    select
+        k1, c1, array_map (x -> true, c1) as c2
+    from
+        t1
+)
+select
+    w1.*
+from
+    w1
+    join [broadcast] t2 using(k1)
+where
+    array_sum(w1.c1) <= t2.c1
+order by
+    w1.k1;
+-- result:
+3	["0","2","1"]	[1,1,1]
+4	["1","2"]	[1,1]
+-- !result

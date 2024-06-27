@@ -15,7 +15,7 @@ You can find a function based on the following categories:
   - [Bitmap functions](#bitmap-functions)
   - [Conditional functions](#conditional-functions)
   - [Cryptographic functions](#cryptographic-functions)
-  - [Date functions](#date-functions)
+  - [Date and time functions](#date-and-time-functions)
   - [Geographic functions](#geographic-functions)
   - [Hash functions](#hash-functions)
   - [JSON functions](#json-functions)
@@ -25,6 +25,7 @@ You can find a function based on the following categories:
   - [Pattern matching functions](#pattern-matching-functions)
   - [Percentile functions](#percentile-functions)
   - [Scalar functions](#scalar-functions)
+  - [Table functions](#table-functions)
   - [Utility functions](#utility-functions)
 
 ## Aggregate functions
@@ -154,7 +155,7 @@ You can find a function based on the following categories:
 - [sm3](../sql-functions/crytographic-functions/sm3.md)
 - [to_base64](../sql-functions/crytographic-functions/from_base64.md)
 
-## Date functions
+## Date and time functions
 
 - [add_months](../sql-functions/date-time-functions/add_months.md)
 - [adddate, days_ad](../sql-functions/date-time-functions/adddate.md)

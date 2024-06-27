@@ -1468,9 +1468,13 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
-    // already committed, so we can ignore timeout error here
-    std::unique_lock<std::mutex> ul(_lock);
-    _wait_for_version(version, 120000, ul);
+    {
+        // already committed, so we can ignore timeout error here
+        std::unique_lock<std::mutex> ul(_lock);
+        _wait_for_version(version, 120000, ul);
+    }
+    // Release metadata memory after rowsets have been compacted.
+    Rowset::close_rowsets(input_rowsets);
     return Status::OK();
 }
 
@@ -1621,6 +1625,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         st = index.reset(&_tablet, version_info.version, &index_meta);
     } else {
         st = index.load(&_tablet);
+    }
+
+    if (!st.ok()) {
+        _compaction_state.reset();
+        std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
+                                              st.to_string(), debug_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
     }
 
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
@@ -2685,14 +2698,17 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
 
 Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                           EditVersion* full_edit_version) {
+    int64_t begin_ms = MonotonicMillis();
     if (_error) {
         return Status::InternalError(
                 Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
                            _tablet.tablet_id(), _error_msg));
     }
     std::unique_lock<std::mutex> ul(_lock);
+    int64_t get_lock_ms = MonotonicMillis();
     // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
+    int64_t wait_ver_ms = MonotonicMillis();
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute(
                 "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. Please "
@@ -2721,10 +2737,20 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
             if (full_edit_version != nullptr) {
                 *full_edit_version = edit_version_info->version;
             }
+            int64_t end_ms = MonotonicMillis();
+            if (end_ms - begin_ms > 3 * 1000) {
+                // more than 3 seconds
+                LOG(INFO) << strings::Substitute("get_applied_rowsets(version $0) slow cost ($1/$2/$3)", version,
+                                                 get_lock_ms - begin_ms, wait_ver_ms - get_lock_ms,
+                                                 end_ms - wait_ver_ms);
+            }
             return Status::OK();
         }
     }
-    string msg = strings::Substitute("get_applied_rowsets(version $0) failed $1", version, _debug_version_info(false));
+    int64_t end_ms = MonotonicMillis();
+    string msg = strings::Substitute("get_applied_rowsets(version $0) failed $1 cost ($2/$3/$4)", version,
+                                     _debug_version_info(false), get_lock_ms - begin_ms, wait_ver_ms - get_lock_ms,
+                                     end_ms - wait_ver_ms);
     LOG(WARNING) << msg;
     return Status::NotFound(msg);
 }
@@ -3508,7 +3534,11 @@ Status TabletUpdates::pk_index_major_compaction() {
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
 
-    auto st = index.load(&_tablet);
+    auto st = Status::OK();
+    {
+        std::lock_guard lg(_index_lock);
+        st = index.load(&_tablet);
+    }
     if (!st.ok()) {
         // remove index entry when loading fail
         manager->index_cache().remove(index_entry);

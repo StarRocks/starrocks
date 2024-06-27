@@ -117,6 +117,13 @@ TO test_repo
 ON (sr_member);
 ```
 
+:::tip
+StarRocks supports BACKUP and RESTORE operations on the following levels of granularity:
+- Partition level: You need to specify the ON clause in the format `ON (<table_name>.<partition_name>)`.
+- Table level: You need to specify the ON clause in the format `ON (<table_name>)`.
+- Database level: You do not need to specify the ON clause. This will back up or restore the entire database.
+:::
+
 BACKUP is an asynchronous operation. You can check the status of a BACKUP job using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md).
 
 ## Restore or migrate data
@@ -158,6 +165,13 @@ PROPERTIES (
     "replication_num" = "1"
 );
 ```
+
+:::tip
+StarRocks supports BACKUP and RESTORE operations on the following levels of granularity:
+- Partition level: You need to specify the ON clause in the format `ON (<table_name>.<partition_name>)`.
+- Table level: You need to specify the ON clause in the format `ON (<table_name>)`.
+- Database level: You do not need to specify the ON clause. This will back up or restore the entire database.
+:::
 
 RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md).
 

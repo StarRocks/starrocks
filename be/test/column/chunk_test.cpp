@@ -9,6 +9,7 @@
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {
 
@@ -60,8 +61,7 @@ public:
 };
 
 // NOLINTNEXTLINE
-TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
-#ifdef NDEBUG
+GROUP_SLOW_TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
     size_t row_count = 1 << 30;
     auto c1 = BinaryColumn::create();
     c1->resize(row_count);
@@ -77,7 +77,6 @@ TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(chunk->get_column_by_slot_id(1)->is_binary());
     ASSERT_TRUE(chunk->get_column_by_slot_id(2)->is_large_binary());
-#endif
 }
 
 // NOLINTNEXTLINE

@@ -114,11 +114,11 @@ if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
 # detect cpuinfo
-if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
+if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
     USE_AVX2=OFF
 fi
 
-if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
+if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
     USE_SSE4_2=OFF
 fi
 
@@ -208,6 +208,7 @@ echo "Get params:
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
     USE_AVX2            -- $USE_AVX2
+    USE_SSE4_2          -- $USE_SSE4_2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_BLOCK_CACHE    -- $WITH_BLOCK_CACHE
@@ -315,6 +316,8 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/bin/common.sh ${STARROCKS_OUTPUT}/fe/bin/
         cp -r -p ${STARROCKS_HOME}/conf/fe.conf ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
+
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
@@ -348,6 +351,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/conf/cn.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j.properties ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/core-site.xml ${STARROCKS_OUTPUT}/be/conf/
     if [ "${BUILD_TYPE}" == "ASAN" ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi

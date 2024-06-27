@@ -15,12 +15,12 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
 
 ## Usage notes
 
-- The file formats of Hive that StarRocks supports are Parquet, ORC, and CSV:
+- The file formats of Hive that StarRocks supports are Parquet, ORC, and Textfile:
 
   - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
-- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for CSV-formatted Hive tables.
+- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for Textfile-formatted Hive tables.
 - You can only use Hive catalogs to query data. You cannot use Hive catalogs to drop, delete, or insert data into your Hive cluster.
 
 ## Integration preparations
@@ -104,7 +104,7 @@ The following table describes the parameters you can configure in `GeneralParams
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| enable_recursive_listing | No       | Specifies whether StarRocks reads data from a table and its partitions and from the subdirectories within the physical locations of the table and its partitions. Valid values: `true` and `false`. Default value: `false`. The value `true` specifies to recursively list subdirectories, and the value `false` specifies to ignore subdirectories. |
+| enable_recursive_listing | No       | Specifies whether StarRocks reads data from a table and its partitions and from the subdirectories within the physical locations of the table and its partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` specifies to recursively list subdirectories, and the value `false` specifies to ignore subdirectories. |
 
 #### MetastoreParams
 

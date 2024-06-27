@@ -40,12 +40,17 @@ std::string get_stack_trace_for_function(const std::string& function_pattern);
 extern "C" {
 #ifdef __clang__
 void __real___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
-__attribute__((no_sanitize("address"))) void __wrap___cxa_throw(void* thrown_exception, std::type_info* info,
-                                                                void (*dest)(void*));
+#ifdef ADDRESS_SANITIZER
+void __interceptor___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
+#endif
+void __wrap___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
 #elif defined(__GNUC__)
 void __real___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
-__attribute__((no_sanitize("address"))) void __wrap___cxa_throw(void* thrown_exception, void* infov,
-                                                                void (*dest)(void*));
+#ifdef ADDRESS_SANITIZER
+void __interceptor___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
+#endif
+
+void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
 #endif
 }
 

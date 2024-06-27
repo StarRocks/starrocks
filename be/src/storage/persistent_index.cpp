@@ -720,7 +720,7 @@ public:
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) override {
+                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) override {
         faststring fixed_buf;
         fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue)));
         put_fixed32_le(&fixed_buf, KeySize);
@@ -732,6 +732,8 @@ public:
         }
         RETURN_IF_ERROR(index_file->append(fixed_buf));
         *page_size += fixed_buf.size();
+        // incremental calc crc32
+        *checksum = crc32c::Extend(*checksum, (const char*)fixed_buf.data(), fixed_buf.size());
         return Status::OK();
     }
 
@@ -1043,7 +1045,7 @@ public:
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) override {
+                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) override {
         faststring fixed_buf;
         size_t keys_size = 0;
         auto n = idxes.size();
@@ -1063,6 +1065,8 @@ public:
         }
         RETURN_IF_ERROR(index_file->append(fixed_buf));
         *page_size += fixed_buf.size();
+        // incremental calc crc32
+        *checksum = crc32c::Extend(*checksum, (const char*)fixed_buf.data(), fixed_buf.size());
         return Status::OK();
     }
 
@@ -1653,8 +1657,8 @@ Status ShardByLengthMutableIndex::append_wal(size_t n, const Slice* keys, const 
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
         for (size_t i = 0; i < shard_size; ++i) {
-            RETURN_IF_ERROR(
-                    _shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file, &_page_size));
+            RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
+                                                                  &_page_size, &_checksum));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1672,7 +1676,7 @@ Status ShardByLengthMutableIndex::append_wal(size_t n, const Slice* keys, const 
             const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, idxes);
             for (size_t i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
-                                                                      &_page_size));
+                                                                      &_page_size, &_checksum));
             }
         }
     }
@@ -1686,8 +1690,8 @@ Status ShardByLengthMutableIndex::append_wal(const Slice* keys, const IndexValue
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, idxes);
         for (size_t i = 0; i < shard_size; ++i) {
-            RETURN_IF_ERROR(
-                    _shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file, &_page_size));
+            RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
+                                                                  &_page_size, &_checksum));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1705,7 +1709,7 @@ Status ShardByLengthMutableIndex::append_wal(const Slice* keys, const IndexValue
             const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, idxes);
             for (size_t i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
-                                                                      &_page_size));
+                                                                      &_page_size, &_checksum));
             }
         }
     }
@@ -1741,6 +1745,14 @@ bool ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::se
     return true;
 }
 
+static Status checksum_of_file(RandomAccessFile* file, uint64_t offset, uint32_t size, uint32* checksum) {
+    std::string buff;
+    raw::stl_string_resize_uninitialized(&buff, size);
+    RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
+    *checksum = crc32c::Value(buff.data(), buff.size());
+    return Status::OK();
+}
+
 Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type) {
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
@@ -1767,6 +1779,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset = 0;
         _page_size = 0;
+        _checksum = 0;
         break;
     }
     case kSnapshot: {
@@ -1790,6 +1803,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
+        // open l0 to calc checksum
+        std::unique_ptr<RandomAccessFile> l0_rfile;
+        ASSIGN_OR_RETURN(l0_rfile, fs->new_random_access_file(file_name));
         size_t snapshot_size = _index_file->size();
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add write stats manually
@@ -1802,9 +1818,12 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         data->set_size(snapshot_size);
         snapshot->clear_dumped_shard_idxes();
         snapshot->mutable_dumped_shard_idxes()->Add(dumped_shard_idxes.begin(), dumped_shard_idxes.end());
+        RETURN_IF_ERROR(checksum_of_file(l0_rfile.get(), 0, snapshot_size, &_checksum));
+        snapshot->set_checksum(_checksum);
         meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset = snapshot_size;
         _page_size = 0;
+        _checksum = 0;
         break;
     }
     case kAppendWAL: {
@@ -1813,9 +1832,11 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         PagePointerPB* data = wal_pb->mutable_data();
         data->set_offset(_offset);
         data->set_size(_page_size);
+        wal_pb->set_checksum(_checksum);
         meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset += _page_size;
         _page_size = 0;
+        _checksum = 0;
         break;
     }
     default: {
@@ -1849,8 +1870,25 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     std::string index_file_name = get_l0_index_file_name(_path, start_version);
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     phmap::BinaryInputArchive ar(index_file_name.data());
     if (snapshot_size > 0) {
+        // check snapshot's crc32 checksum
+        const uint32_t expected_checksum = snapshot_meta.checksum();
+        // If expected crc32 is 0, which means no crc32 here, skip check.
+        // This may happen when upgrade from old version.
+        if (expected_checksum > 0) {
+            uint32_t current_checksum = 0;
+            RETURN_IF_ERROR(checksum_of_file(read_file.get(), snapshot_off, snapshot_size, &current_checksum));
+            if (current_checksum != expected_checksum) {
+                std::string error_msg = fmt::format(
+                        "persistent index l0 crc checksum fail. filename: {} offset: {} cur_crc: {} expect_crc: {}",
+                        index_file_name, snapshot_off, current_checksum, expected_checksum);
+                LOG(ERROR) << error_msg;
+                return Status::Corruption(error_msg);
+            }
+        }
+        // do load snapshot
         if (!load_snapshot(ar, dumped_shard_idxes)) {
             std::string err_msg = strings::Substitute("failed load snapshot from file $0", index_file_name);
             LOG(WARNING) << err_msg;
@@ -1860,7 +1898,6 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         // so add read stats manually
         IOProfiler::add_read(snapshot_size);
     }
-    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
     _offset = snapshot_off + snapshot_size;
     const int n = meta.wals_size();
@@ -1871,6 +1908,19 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         const auto end = offset + page_pointer_pb.size();
         std::string buff;
         raw::stl_string_resize_uninitialized(&buff, 4);
+        // check crc32
+        const uint32_t expected_checksum = meta.wals(i).checksum();
+        if (expected_checksum > 0) {
+            uint32_t current_checksum = 0;
+            RETURN_IF_ERROR(checksum_of_file(read_file.get(), offset, page_pointer_pb.size(), &current_checksum));
+            if (current_checksum != expected_checksum) {
+                std::string error_msg = fmt::format(
+                        "persistent index l0 crc checksum fail. filename: {} offset: {} cur_crc: {} expect_crc: {}",
+                        index_file_name, page_pointer_pb.offset(), current_checksum, expected_checksum);
+                LOG(ERROR) << error_msg;
+                return Status::Corruption(error_msg);
+            }
+        }
         while (offset < end) {
             RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
             const auto key_size = UNALIGNED_LOAD32(buff.data());
@@ -2429,6 +2479,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     RETURN_IF_ERROR(_delete_expired_index_file(
             l0_version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+    _calc_memory_usage();
     return Status::OK();
 }
 
@@ -2504,12 +2555,10 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
     DCHECK(_l0 != nullptr);
     RETURN_IF_ERROR(_l0->load(l0_meta));
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.clear();
-        _l1_merged_num.clear();
-        _has_l1 = false;
-    }
+
+    _l1_vec.clear();
+    _l1_merged_num.clear();
+    _has_l1 = false;
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
         auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
@@ -2518,18 +2567,13 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         if (!l1_st.ok()) {
             return l1_st.status();
         }
-        {
-            std::unique_lock wrlock(_lock);
-            _l1_vec.emplace_back(std::move(l1_st).value());
-            _l1_merged_num.emplace_back(-1);
-            _has_l1 = true;
-        }
+        _l1_vec.emplace_back(std::move(l1_st).value());
+        _l1_merged_num.emplace_back(-1);
+        _has_l1 = true;
     }
-    {
-        std::unique_lock wrlock(_lock);
-        _l2_versions.clear();
-        _l2_vec.clear();
-    }
+
+    _l2_versions.clear();
+    _l2_vec.clear();
     if (index_meta.l2_versions_size() > 0) {
         DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
@@ -2538,12 +2582,8 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
                                                      index_meta.l2_version_merged(i) ? MergeSuffix : "");
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
-            {
-                std::unique_lock wrlock(_lock);
-                _l2_versions.emplace_back(
-                        EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
-                _l2_vec.emplace_back(std::move(l2_index));
-            }
+            _l2_versions.emplace_back(EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
+            _l2_vec.emplace_back(std::move(l2_index));
         }
     }
     // if reload, don't update _usage_and_size_by_key_length
@@ -2788,12 +2828,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     _dump_snapshot = true;
 
     // clear l1
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.clear();
-        _usage_and_size_by_key_length.clear();
-        _l1_merged_num.clear();
-    }
+    _l1_vec.clear();
+    _usage_and_size_by_key_length.clear();
+    _l1_merged_num.clear();
     _has_l1 = false;
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
@@ -2814,11 +2851,8 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         }
     }
     // clear l2
-    {
-        std::unique_lock wrlock(_lock);
-        _l2_vec.clear();
-        _l2_versions.clear();
-    }
+    _l2_vec.clear();
+    _l2_versions.clear();
 
     // Init PersistentIndexMetaPB
     //   1. reset |version| |key_size|
@@ -3015,6 +3049,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
     }
+    _calc_memory_usage();
     return Status::OK();
 }
 
@@ -3230,10 +3265,13 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
             }
         }
     }
+    _calc_memory_usage();
 
     return Status::OK();
 }
 
+// 1. insert/upsert: kv num and usage in add_usage_and_size is greater than 0
+// 2. erase: kv num and usage in add_usage_and_size is less than 0
 Status PersistentIndex::_update_usage_and_size_by_key_length(
         std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size) {
     if (_key_size > 0) {
@@ -3249,16 +3287,14 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
         }
     } else {
         for (int key_size = 1; key_size <= kSliceMaxFixLength; key_size++) {
-            if (add_usage_and_size[key_size].second > 0) {
-                auto iter = _usage_and_size_by_key_length.find(key_size);
-                if (iter == _usage_and_size_by_key_length.end()) {
-                    std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
-                    LOG(WARNING) << msg;
-                    return Status::InternalError(msg);
-                } else {
-                    iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[key_size].first);
-                    iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[key_size].second);
-                }
+            auto iter = _usage_and_size_by_key_length.find(key_size);
+            if (iter == _usage_and_size_by_key_length.end()) {
+                std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
+                LOG(WARNING) << msg;
+                return Status::InternalError(msg);
+            } else {
+                iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[key_size].first);
+                iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[key_size].second);
             }
         }
 
@@ -3353,6 +3389,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
                                                                 std::pair<int64_t, int64_t>(0, 0));
+    // decrease kv num and usage, the value in add_usage_and_size is less than 0
     for (size_t i = 0; i < n; i++) {
         if (old_values[i].get_value() != NullIndexValue) {
             _size--;
@@ -3424,12 +3461,9 @@ Status PersistentIndex::flush_advance() {
     if (!l1_st.ok()) {
         return l1_st.status();
     }
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.emplace_back(std::move(l1_st).value());
-        _l1_merged_num.emplace_back(1);
-        _l1_vec.back()->_bf_map.swap(bf_map);
-    }
+    _l1_vec.emplace_back(std::move(l1_st).value());
+    _l1_merged_num.emplace_back(1);
+    _l1_vec.back()->_bf_map.swap(bf_map);
 
     // clear l0
     _l0->clear();
@@ -4161,18 +4195,14 @@ Status PersistentIndex::_merge_compaction_advance() {
     RETURN_IF_ERROR(writer->finish());
     std::vector<std::unique_ptr<ImmutableIndex>> new_l1_vec;
     std::vector<int> new_l1_merged_num;
-    size_t merge_num = 0;
-    {
-        std::unique_lock wrlock(_lock);
-        merge_num = _l1_merged_num[merge_l1_start_idx];
-        for (int i = 0; i < merge_l1_start_idx; i++) {
-            new_l1_vec.emplace_back(std::move(_l1_vec[i]));
-            new_l1_merged_num.emplace_back(_l1_merged_num[i]);
-        }
+    size_t merge_num = _l1_merged_num[merge_l1_start_idx];
+    for (int i = 0; i < merge_l1_start_idx; i++) {
+        new_l1_vec.emplace_back(std::move(_l1_vec[i]));
+        new_l1_merged_num.emplace_back(_l1_merged_num[i]);
+    }
 
-        for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
-            _l1_vec[i]->destroy();
-        }
+    for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
+        _l1_vec[i]->destroy();
     }
 
     const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(),
@@ -4189,11 +4219,8 @@ Status PersistentIndex::_merge_compaction_advance() {
         new_l1_vec.back()->_bf_map.swap(bf_map);
     }
     new_l1_merged_num.emplace_back((merge_l1_end_idx - merge_l1_start_idx) * merge_num);
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.swap(new_l1_vec);
-        _l1_merged_num.swap(new_l1_merged_num);
-    }
+    _l1_vec.swap(new_l1_vec);
+    _l1_merged_num.swap(new_l1_merged_num);
     _l0->clear();
     return Status::OK();
 }
@@ -4403,6 +4430,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         return Status::OK();
     }
     // 1. load current l2 vec
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
     DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
@@ -4411,7 +4439,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major(),
                                                  prev_index_meta.l2_versions(i).minor(),
                                                  prev_index_meta.l2_version_merged(i) ? MergeSuffix : "");
-        ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
+        ASSIGN_OR_RETURN(auto l2_rfile, fs->new_random_access_file(l2_block_path));
         ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
         l2_vec.emplace_back(std::move(l2_index));
     }
@@ -4437,6 +4465,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         RETURN_IF_ERROR(_delete_expired_index_file(
                 l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+        _calc_memory_usage();
     }
     _delete_major_compaction_tmp_index_file();
     return Status::OK();
@@ -4502,7 +4531,6 @@ double PersistentIndex::get_write_amp_score() const {
 }
 
 Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
-    std::unique_lock wrlock(_lock);
     _cancel_major_compaction = true;
 
     const TabletSchema& tablet_schema = tablet->tablet_schema();
@@ -4545,33 +4573,26 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
     PagePointerPB* data = snapshot->mutable_data();
     data->set_offset(0);
     data->set_size(0);
+    _calc_memory_usage();
 
     return Status::OK();
+}
+
+void PersistentIndex::_calc_memory_usage() {
+    size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
+    for (int i = 0; i < _l1_vec.size(); i++) {
+        memory_usage += _l1_vec[i]->memory_usage();
+    }
+    for (int i = 0; i < _l2_vec.size(); i++) {
+        memory_usage += _l2_vec[i]->memory_usage();
+    }
+    _memory_usage.store(memory_usage);
 }
 
 void PersistentIndex::reset_cancel_major_compaction() {
     if (!_major_compaction_running.load(std::memory_order_relaxed)) {
         _cancel_major_compaction = false;
     }
-}
-
-Status PersistentIndex::delete_pindex_files() {
-    std::string dir = _path;
-    auto cb = [&](std::string_view name) -> bool {
-        std::string prefix = "index.";
-        std::string full(name);
-        if (full.length() >= prefix.length() && full.compare(0, prefix.length(), prefix) == 0) {
-            std::string path = dir + "/" + full;
-            VLOG(1) << "delete index file " << path;
-            Status st = FileSystem::Default()->delete_file(path);
-            if (!st.ok()) {
-                LOG(WARNING) << "delete index file: " << path << ", failed, status: " << st.to_string();
-                return false;
-            }
-        }
-        return true;
-    };
-    return FileSystem::Default()->iterate_dir(_path, cb);
 }
 
 } // namespace starrocks

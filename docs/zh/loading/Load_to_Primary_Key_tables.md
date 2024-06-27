@@ -150,7 +150,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
         columns terminated by ","
         format as "csv"
     )
-    with broker
+    WITH BROKER;
     ```
 
   - 添加 `__op` 字段：
@@ -164,7 +164,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
         format as "csv"
         set (__op = 'upsert')
     )
-    with broker
+    WITH BROKER;
     ```
 
 - 通过 Routine Load 导入：
@@ -299,7 +299,7 @@ SELECT * FROM table1;
       format as "csv"
       set (__op = 'delete')
   )
-  with broker  
+  WITH BROKER;
   ```
 
 - 通过 Routine Load 导入：
@@ -416,7 +416,7 @@ SELECT * FROM table2;
       (id, name, score, temp)
       set (__op=temp)
   )
-  with broker
+  WITH BROKER;
   ```
 
 - 通过 Routine Load 导入：

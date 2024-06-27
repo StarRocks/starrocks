@@ -83,7 +83,7 @@ mysql> SHOW PROCESSLIST;
 
 - Check the FE audit log file **fe.audit.log**. The field `PendingTimeMs` indicates the time that a query is in a queue, and its unit is milliseconds.
 
-- Check the following FE metrics:
+- Check the following monitoring metrics:
 
 | **Metrics**                      | **Description**                                |
 | -------------------------------- | ---------------------------------------------- |

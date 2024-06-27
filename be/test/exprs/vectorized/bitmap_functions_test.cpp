@@ -35,7 +35,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapEmptyTest) {
 
         auto* bitmap = ColumnHelper::get_const_value<TYPE_OBJECT>(column);
 
-        ASSERT_EQ(1, bitmap->getSizeInBytes());
+        ASSERT_EQ(1, bitmap->get_size_in_bytes());
     }
 }
 

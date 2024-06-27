@@ -53,10 +53,7 @@ using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env)
-        : _exec_env(exec_env),
-          _async_thread_pool("async_thread_pool", config::internal_service_async_thread_num,
-                             config::internal_service_async_thread_num) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
@@ -295,7 +292,23 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
+
+    if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
+        return Status::InvalidArgument("batch_size is not set");
+    }
+    // Before version 2.5, broker load/export was not executed in the pipeline engine.
+    // The batch_size params may not be set in the request sent by FE.
+    // During the grayscale upgrade process, the request sent by the old version of FE will report an error.
+    // For compatibility, choose to skip checking batch_size for non-pipeline query here.
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
+    if (is_pipeline) {
+        auto batch_size = t_request.query_options.batch_size;
+        if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+            return Status::InvalidArgument(
+                    fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                                MAX_CHUNK_SIZE, batch_size));
+        }
+    }
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
               << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
               << ", is_pipeline=" << is_pipeline << ", chunk_size=" << t_request.query_options.batch_size;
@@ -459,37 +472,29 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
 template <typename T>
 void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
                                            PProxyResult* response, google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-
-    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
-
     int timeout_ms =
             request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
 
-    // watch estimates the interval before the task is actually executed.
-    MonotonicStopWatch watch;
-    watch.start();
+    auto task = [this, request, response, done, timeout_ms]() {
+        this->_get_info_impl(request, response, done, timeout_ms);
+    };
 
-    if (!_async_thread_pool.try_offer([&]() {
-            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
-            _get_info_impl(request, response, &latch, timeout_ms);
-        })) {
+    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    if (!st.ok()) {
+        LOG(WARNING) << "get kafka info: " << st << " ,timeout: " << timeout_ms
+                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+        ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(
-                "too busy to get kafka info, please check the kafka broker status, or set "
-                "internal_service_async_thread_num bigger")
+                fmt::format("too busy to get kafka info, please check the kafka broker status, timeout ms: {}",
+                            timeout_ms))
                 .to_protobuf(response->mutable_status());
-        return;
     }
-
-    latch.wait();
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::_get_info_impl(
-        const PProxyRequest* request, PProxyResult* response,
-        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
-    DeferOp defer([latch] { latch->count_down(); });
-
+void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, PProxyResult* response,
+                                                 google::protobuf::Closure* done, int timeout_ms) {
+    ClosureGuard closure_guard(done);
     if (timeout_ms <= 0) {
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
         return;
@@ -558,36 +563,30 @@ template <typename T>
 void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcController* controller,
                                                   const PPulsarProxyRequest* request, PPulsarProxyResult* response,
                                                   google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-
-    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
-
     int timeout_ms =
             request->has_timeout() ? request->timeout() * 1000 : config::routine_load_pulsar_timeout_second * 1000;
 
-    // watch estimates the interval before the task is actually executed.
-    MonotonicStopWatch watch;
-    watch.start();
+    auto task = [this, request, response, done, timeout_ms]() {
+        this->_get_pulsar_info_impl(request, response, done, timeout_ms);
+    };
 
-    if (!_async_thread_pool.try_offer([&]() {
-            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
-            _get_pulsar_info_impl(request, response, &latch, timeout_ms);
-        })) {
-        Status::ServiceUnavailable(
-                "too busy to get pulsar info, please check the pulsar service status, or set "
-                "internal_service_async_thread_num bigger")
+    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    if (!st.ok()) {
+        LOG(WARNING) << "get pulsar info: " << st << " ,timeout: " << timeout_ms
+                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable(fmt::format("too busy to get pulsar info, please check the pulsar status, "
+                                               "timeout ms: {}",
+                                               timeout_ms))
                 .to_protobuf(response->mutable_status());
-        return;
     }
-
-    latch.wait();
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
-        const PPulsarProxyRequest* request, PPulsarProxyResult* response,
-        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
-    DeferOp defer([latch] { latch->count_down(); });
+void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyRequest* request,
+                                                        PPulsarProxyResult* response, google::protobuf::Closure* done,
+                                                        int timeout_ms) {
+    ClosureGuard closure_guard(done);
 
     if (timeout_ms <= 0) {
         Status::TimedOut("get pulsar info timeout").to_protobuf(response->mutable_status());

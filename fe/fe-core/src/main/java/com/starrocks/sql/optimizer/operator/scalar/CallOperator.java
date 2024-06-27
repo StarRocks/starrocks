@@ -19,6 +19,8 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Scalar operator support function call
+ * Please be careful when adding new attributes. Rewriting expr operation exists everywhere in the optimizer.
+ * If you add new attributes, please make sure that the new attributes will not be erased by the rewriting operation.
  */
 public class CallOperator extends ScalarOperator {
     private String fnName;
@@ -157,7 +159,6 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&

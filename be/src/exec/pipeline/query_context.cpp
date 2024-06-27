@@ -492,7 +492,8 @@ void QueryContextManager::report_fragments(
             auto* runtime_state = fragment_ctx->runtime_state();
             DCHECK(runtime_state != nullptr);
 
-            FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr, &fe_connection_status);
+            FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr,
+                                                    config::thrift_rpc_timeout_ms, &fe_connection_status);
             if (!fe_connection_status.ok()) {
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fe_addr;
@@ -545,7 +546,7 @@ void QueryContextManager::report_fragments(
                     fe_connection->batchReportExecStatus(res, report_batch);
                 } catch (TTransportException& e) {
                     LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-                    rpc_status = fe_connection.reopen();
+                    rpc_status = fe_connection.reopen(config::thrift_rpc_timeout_ms);
                     if (!rpc_status.ok()) {
                         continue;
                     }

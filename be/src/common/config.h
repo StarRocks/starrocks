@@ -267,6 +267,9 @@ CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
+// data and index page size, default is 64k
+CONF_Int32(data_page_size, "65536");
+
 // Cache for storage page size
 CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
@@ -301,7 +304,7 @@ CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
-CONF_mInt64(update_compaction_size_threshold, "268435456");
+CONF_mInt64(update_compaction_size_threshold, "67108864");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
@@ -787,7 +790,6 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 // but with coalesce read enabled, this value is not used.
 CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
-CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
@@ -896,10 +898,6 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
-// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
-// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
-CONF_Int32(internal_service_async_thread_num, "10");
-
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
  * to inject error through return random status(except ok).
@@ -916,9 +914,9 @@ CONF_String(directory_of_inject,
             "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
 
 // Used by to_base64
-CONF_Int64(max_length_for_to_base64, "200000");
+CONF_mInt64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
-CONF_Int64(max_length_for_bitmap_function, "1000000");
+CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");

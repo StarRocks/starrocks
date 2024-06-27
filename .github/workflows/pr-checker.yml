@@ -10,6 +10,11 @@ on:
       - opened
       - reopened
       - edited
+      - synchronize
+
+concurrency:
+  group: PR-CHECKER-${{ github.event.number }}
+  cancel-in-progress: false
 
 permissions:
   checks: write
@@ -46,8 +51,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.number }}
           REPO: ${{ github.repository }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          ORI_PR=$(echo "${{ github.event.pull_request.title }}" | grep -oP '\(backport #\K\d+' | tail -n 1)
+          ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
             gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author} || true
@@ -77,7 +83,7 @@ jobs:
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
           ori_body=$(cat body.txt)
           
-          if [[ "${{ github.head_ref }}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
+          if [[ "${GITHUB_HEAD_REF}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
             gh pr view ${BACKPORT_SOURCE_PR} -R ${REPO} --json body -q .body > source_body.txt
             sed -ie '/Bugfix cherry-pick branch check/,$d' source_body.txt
             cat body.txt source_body.txt > tmp_body.txt
@@ -91,9 +97,10 @@ jobs:
 
       - name: check backport pr's title
         if: github.base_ref != 'main' && contains(toJson(github.event.pull_request.body), '[x] This is a backport pr')
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          PR_TITLE=$(echo "${{ github.event.pull_request.title }}")
-          count=$(echo $PR_TITLE | grep -E '\(backport #[0-9]+)$' | wc -l)
+          count=$(echo "${PR_TITLE}" | grep -E '\(backport #[0-9]+)$' | wc -l)
           if [[ $count -le 0 ]]; then
             echo "::error::Backport PR title is not valid. It should end with '(backport #[0-9]+)'"
             exit 1
@@ -121,6 +128,17 @@ jobs:
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
+      - name: add branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.2'
+
+      - name: add branch-3.1 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.1')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.1'
 
       - name: add branch-3.0 label
         if: contains(toJson(github.event.pull_request.body), '[x] 3.0')
@@ -134,17 +152,17 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: add branch-2.4 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 2.4')
-        uses: actions-ecosystem/action-add-labels@v1
+      - name: remove branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
+        uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: '2.4'
+          labels: '3.2'
 
-      - name: add branch-2.3 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 2.3')
-        uses: actions-ecosystem/action-add-labels@v1
+      - name: remove branch-3.1 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.1') && contains(github.event.pull_request.labels.*.name, '3.1')
+        uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: '2.3'
+          labels: '3.1'
 
       - name: remove branch-3.0 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 3.0') && contains(github.event.pull_request.labels.*.name, '3.0')
@@ -158,18 +176,6 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: remove branch-2.4 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 2.4') && contains(github.event.pull_request.labels.*.name, '2.4')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '2.4'
-
-      - name: remove branch-2.3 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 2.3') && contains(github.event.pull_request.labels.*.name, '2.3')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '2.3'
-
       - name: check-done
         if: >
           (startsWith(github.event.pull_request.title, '[BugFix]') ||
@@ -180,7 +186,7 @@ jobs:
           !contains(github.event.pull_request.title, 'backport') &&
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
         run: |
-          echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
+          echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
 
   behavior-check:
@@ -259,3 +265,36 @@ jobs:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
+
+  feature-label-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: add feature label
+        id: add
+        if: startsWith(github.event.pull_request.title, '[Feature]')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 'feature'
+          github_token: ${{ secrets.PAT }}
+
+      - name: remove feature label
+        if: always() && steps.add.outcome == 'skipped'
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 'feature'
+          github_token: ${{ secrets.PAT }}
+
+  changelist-check:
+    runs-on: [self-hosted, normal]
+    if: >
+      (github.event.action == 'opened' || github.event.action == 'synchronize') &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: CHECK CHANGELIST
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/check-pr-changelist.sh

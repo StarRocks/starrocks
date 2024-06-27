@@ -22,7 +22,7 @@ public class Histogram {
         if (mcv != null) {
             totalRows += mcv.values().stream().reduce(Long::sum).orElse(0L);
         }
-        return totalRows;
+        return Math.max(1, totalRows);
     }
 
     public List<Bucket> getBuckets() {

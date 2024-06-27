@@ -988,7 +988,7 @@ public class Config extends ConfigBase {
      * Maximal number of connections per FE.
      */
     @ConfField
-    public static int qe_max_connection = 1024;
+    public static int qe_max_connection = 4096;
 
     /**
      * Maximal number of thread in connection-scheduler-pool.
@@ -1543,6 +1543,12 @@ public class Config extends ConfigBase {
     public static boolean statistic_check_expire_partition = true;
 
     /**
+     * Clear stale partition statistics data job work interval
+     */
+    @ConfField(mutable = true)
+    public static long clear_stale_stats_interval_sec = 12 * 60 * 60L; // 12 hour
+
+    /**
      * The collect thread work interval
      */
     @ConfField(mutable = true)
@@ -2057,7 +2063,7 @@ public class Config extends ConfigBase {
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
      * e.g 495501,495503
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     /**

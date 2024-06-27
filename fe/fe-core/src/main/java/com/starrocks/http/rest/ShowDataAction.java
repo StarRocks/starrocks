@@ -81,7 +81,6 @@ public class ShowDataAction extends RestBaseAction {
             totalSize = getDataSizeOfDatabase(db);
         } else {
             for (Database db : fullNameToDb.values()) {
-                LOG.info("database name: {}", db.getOriginName());
                 totalSize += getDataSizeOfDatabase(db);
             }
         }

@@ -110,12 +110,11 @@ public:
                          ExecuteCommandResultPB* response, google::protobuf::Closure* done) override;
 
 private:
-    void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
-                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
+    void _get_info_impl(const PProxyRequest* request, PProxyResult* response, google::protobuf::Closure* done,
+                        int timeout_ms);
 
     void _get_pulsar_info_impl(const PPulsarProxyRequest* request, PPulsarProxyResult* response,
-                               GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch,
-                               int timeout_ms);
+                               google::protobuf::Closure* done, int timeout_ms);
 
     Status _exec_plan_fragment(brpc::Controller* cntl);
     Status _exec_batch_plan_fragments(brpc::Controller* cntl);
@@ -125,15 +124,6 @@ private:
 
 protected:
     ExecEnv* _exec_env;
-
-    // The BRPC call is executed by bthread.
-    // If the bthread is blocked by pthread primitive, the current bthread cannot release the bind pthread and cannot be yield.
-    // In this way, the available pthread become less and the scheduling of bthread would be influenced.
-    // So, we should execute the function that may use pthread block primitive in a specific thread pool.
-    // More detail: https://github.com/apache/brpc/blob/master/docs/cn/bthread.md
-
-    // Thread pool for executing task  asynchronously in BRPC call.
-    PriorityThreadPool _async_thread_pool;
 };
 
 } // namespace starrocks

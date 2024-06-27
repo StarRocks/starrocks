@@ -20,6 +20,7 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -76,14 +77,15 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         if (!MysqlProto.negotiate(context)) {
                             throw new AfterConnectedException("mysql negotiate failed");
                         }
-                        if (connectScheduler.registerConnection(context)) {
-                            MysqlProto.sendResponsePacket(context);
+                        Pair<Boolean, String> result = connectScheduler.registerConnection(context);
+                        if (result.first) {
                             connection.setCloseListener(
                                     streamConnection -> connectScheduler.unregisterConnection(context));
-                        } else {
-                            context.getState().setError("Reach limit of connections");
                             MysqlProto.sendResponsePacket(context);
-                            throw new AfterConnectedException("Reach limit of connections");
+                        } else {
+                            context.getState().setError(result.second);
+                            MysqlProto.sendResponsePacket(context);
+                            throw new AfterConnectedException(result.second);
                         }
                         context.setStartTime();
                         ConnectProcessor processor = new ConnectProcessor(context);

@@ -15,6 +15,7 @@ StarRocks 支持在以下外部存储系统中备份数据：
 - Google GCS
 - 阿里云 OSS
 - 腾讯云 COS
+- 华为云 OBS
 
 ## 备份数据
 
@@ -149,6 +150,13 @@ TO test_repo
 ON (sr_member);
 ```
 
+:::tip
+StarRocks 支持以下粒度的备份还原操作：
+- 分区级：你需要按照以下格式在 ON 子句中指定分区名 `ON (<table_name>.<partition_name>)`。
+- 表级：你需要在 ON 子句中指定表名 `ON (<table_name>)`。
+- 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
+:::
+
 数据备份为异步操作。您可以通过 [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md) 语句取消备份作业。
 
 ## 恢复或迁移数据
@@ -190,6 +198,13 @@ PROPERTIES (
     "replication_num" = "1"
 );
 ```
+
+:::tip
+StarRocks 支持以下粒度的备份还原操作：
+- 分区级：你需要按照以下格式在 ON 子句中指定分区名 `ON (<table_name>.<partition_name>)`。
+- 表级：你需要在 ON 子句中指定表名 `ON (<table_name>)`。
+- 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
+:::
 
 数据恢复为异步操作。您可以通过 [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md) 语句取消恢复作业。
 

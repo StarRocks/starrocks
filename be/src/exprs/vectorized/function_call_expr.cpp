@@ -74,7 +74,6 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }
-
         RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::THREAD_LOCAL));
     }
 
@@ -94,12 +93,13 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
 
 void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks::ExprContext* context,
                                        FunctionContext::FunctionStateScope scope) {
-    if (_fn_desc != nullptr && _fn_desc->close_function != nullptr) {
+    // _fn_context_index >= 0 means this function call has call opened
+    if (_fn_desc != nullptr && _fn_desc->close_function != nullptr && _fn_context_index >= 0) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-        _fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
+        (void)_fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
 
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
-            _fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
+            (void)_fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
         }
     }
 
@@ -121,7 +121,7 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     Columns args;
     args.reserve(_children.size());
     for (Expr* child : _children) {
-        ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
+        ASSIGN_OR_RETURN(ColumnPtr column, context->evaluate(child, ptr));
         args.emplace_back(column);
     }
 
@@ -151,6 +151,13 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
         result = _fn_desc->scalar_function(fn_ctx, args);
     }
     RETURN_IF_ERROR(result);
+    if (_fn_desc->check_overflow) {
+        std::string err_msg;
+        if (UNLIKELY(result.value()->capacity_limit_reached(&err_msg))) {
+            return Status::InternalError(
+                    fmt::format("Result column of function {} exceed limit: {}", _fn_desc->name, err_msg));
+        }
+    }
 
     // For no args function call (pi, e)
     if (result.value()->is_constant() && ptr != nullptr) {

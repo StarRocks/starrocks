@@ -145,6 +145,12 @@ public class Alter {
         clusterHandler.start();
     }
 
+    public void stop() {
+        schemaChangeHandler.setStop();
+        materializedViewHandler.setStop();
+        clusterHandler.setStop();
+    }
+
     public void processCreateMaterializedView(CreateMaterializedViewStmt stmt)
             throws DdlException, AnalysisException {
         String tableName = stmt.getBaseIndexName();

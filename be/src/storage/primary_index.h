@@ -112,9 +112,6 @@ public:
     std::size_t size() const;
 
     // [not thread-safe]
-    std::size_t capacity() const;
-
-    // [not thread-safe]
     void reserve(size_t s);
 
     std::string to_string() const;
@@ -126,6 +123,12 @@ public:
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();
+
+    // only for ut
+    void set_status(bool loaded, Status st) {
+        _loaded = loaded;
+        _status = st;
+    }
 
 private:
     void _set_schema(const vectorized::Schema& pk_schema);

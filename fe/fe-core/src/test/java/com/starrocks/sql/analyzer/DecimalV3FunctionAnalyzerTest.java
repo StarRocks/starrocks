@@ -18,6 +18,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -134,6 +135,41 @@ public class DecimalV3FunctionAnalyzerTest {
                     DecimalV3FunctionAnalyzer.rectifyAggregationFunction(function, argType, retType);
             Type returnType = aggFunc.getReturnType();
             Assert.assertTrue(returnType.isDecimalV3());
+        }
+    }
+
+    /**
+     * Expected return type is double and the associated function id should be changed either.
+     */
+    @Test
+    public void testDecimalGreatest() {
+        List<Expr> params = Lists.newArrayList();
+        params.add(new DecimalLiteral(new BigDecimal(new BigInteger("1845076"), 8)));
+        params.add(new DecimalLiteral(new BigDecimal(new BigInteger("2"), 7)));
+        params.add(new DecimalLiteral(new BigDecimal(new BigInteger("2"), 2)));
+
+        List<Type> paramTypes = Lists.newArrayList();
+        paramTypes.add(ScalarType.createDecimalV3NarrowestType(38, 8));
+        paramTypes.add(ScalarType.createDecimalV3NarrowestType(22, 7));
+        paramTypes.add(ScalarType.createDecimalV3NarrowestType(38, 7));
+        Type[] types = paramTypes.toArray(new Type[0]);
+
+        ConnectContext session = new ConnectContext();
+
+        List<String> functions = Arrays.asList(FunctionSet.GREATEST, FunctionSet.LEAST);
+        for (String funcName : functions) {
+            FunctionCallExpr functionCallExpr = new FunctionCallExpr(funcName, params);
+            Function function =
+                    DecimalV3FunctionAnalyzer.getDecimalV3Function(session, functionCallExpr, types);
+            Type returnType = function.getReturnType();
+            Type[] argTypes = function.getArgs();
+            Assert.assertTrue(returnType.isDouble());
+
+            Function expectFunc =
+                    Expr.getBuiltinFunction(funcName, argTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Assert.assertTrue(expectFunc.getFunctionId() == function.getFunctionId());
+            Assert.assertTrue(expectFunc.getReturnType().equals(function.getReturnType()));
         }
     }
 }

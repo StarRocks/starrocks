@@ -543,7 +543,7 @@ public class AlterTest {
                 " );";
         alterTableWithNewParser(stmt, false);
 
-        Assert.assertTrue(tbl.getTableProperty().getDynamicPartitionProperty().getEnable());
+        Assert.assertTrue(tbl.getTableProperty().getDynamicPartitionProperty().isEnabled());
         Assert.assertEquals(4, tbl.getIndexIdToSchema().size());
 
         // add partition when dynamic partition is enable
@@ -560,7 +560,7 @@ public class AlterTest {
         // disable the dynamic partition
         stmt = "alter table test.tbl1 set ('dynamic_partition.enable' = 'false')";
         alterTableWithNewParser(stmt, false);
-        Assert.assertFalse(tbl.getTableProperty().getDynamicPartitionProperty().getEnable());
+        Assert.assertFalse(tbl.getTableProperty().getDynamicPartitionProperty().isEnabled());
 
         // add partition when dynamic partition is disable
         stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01') " +

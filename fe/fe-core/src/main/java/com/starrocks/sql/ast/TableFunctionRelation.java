@@ -4,6 +4,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.TableFunction;
 
 import java.util.List;
@@ -62,6 +63,11 @@ public class TableFunctionRelation extends Relation {
 
     public void setColumnNames(List<String> columnNames) {
         this.columnNames = columnNames;
+    }
+
+    @Override
+    public TableName getResolveTableName() {
+        return alias != null ? alias : new TableName(null, "table_function_" + functionName.getFunction());
     }
 
     @Override

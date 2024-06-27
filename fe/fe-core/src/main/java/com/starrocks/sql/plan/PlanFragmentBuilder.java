@@ -245,6 +245,9 @@ public class PlanFragmentBuilder {
         }
         Collections.reverse(fragments);
 
+        for (PlanFragment fragment : fragments) {
+            fragment.removeRfOnRightOffspringsOfBroadcastJoin();
+        }
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -264,17 +267,6 @@ public class PlanFragmentBuilder {
             }
         }
         return execPlan;
-    }
-
-    private static void maybeClearOlapScanNodePartitions(PlanFragment fragment) {
-        List<OlapScanNode> olapScanNodes = fragment.collectOlapScanNodes();
-        long numNodesWithBucketColumns = olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
-        // Either all OlapScanNode use bucketColumns for local shuffle, or none of them do.
-        // Therefore, clear bucketColumns if only some of them contain bucketColumns.
-        boolean needClear = numNodesWithBucketColumns > 0 && numNodesWithBucketColumns < olapScanNodes.size();
-        if (needClear) {
-            clearOlapScanNodePartitions(fragment.getPlanRoot());
-        }
     }
 
     /**
@@ -2387,6 +2379,7 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr()
                         .put(analyticCall.getKey(), new SlotRef(analyticCall.getKey().toString(), slotDesc));
             }
+            outputTupleDesc.computeMemLayout();
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
@@ -2517,9 +2510,16 @@ public class PlanFragmentBuilder {
 
             // reset column is nullable, for handle union select xx join select xxx...
             setOperationNode.setHasNullableGenerateChild();
-            for (ColumnRefOperator columnRefOperator : setOperation.getOutputColumnRefOp()) {
+            for (int index = 0; index < setOperation.getOutputColumnRefOp().size(); index++) {
+                ColumnRefOperator columnRefOperator = setOperation.getOutputColumnRefOp().get(index);
                 SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(columnRefOperator.getId()));
-                slotDesc.setIsNullable(slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild());
+                boolean isNullable = slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild();
+                for (List<ColumnRefOperator> childOutputColumn : setOperation.getChildOutputColumns()) {
+                    ColumnRefOperator childRef = childOutputColumn.get(index);
+                    Expr childExpr = ScalarOperatorToExpr.buildExecExpression(childRef, formatterContext);
+                    isNullable |= childExpr.isNullable();
+                }
+                slotDesc.setIsNullable(isNullable);
             }
             setOperationTuple.computeMemLayout();
 

@@ -24,7 +24,7 @@ import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import groovy.lang.Binding;
 import groovy.lang.GroovyShell;
@@ -79,7 +79,7 @@ public class ExecuteScriptExecutor {
     }
 
     private static ShowResultSet executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(stmt.getBeId());
+        ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(stmt.getBeId());
         if (be == null) {
             throw new UserException("node not found: " + stmt.getBeId());
         }

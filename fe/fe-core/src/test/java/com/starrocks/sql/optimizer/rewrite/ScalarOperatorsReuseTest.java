@@ -15,6 +15,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -159,7 +160,7 @@ public class ScalarOperatorsReuseTest {
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, ImmutableList.of(add1, add2, add3, add4),
                         columnRefFactory, false);
-        assertTrue(commonSubScalarOperators.isEmpty());
+        Assert.assertFalse(commonSubScalarOperators.isEmpty());
     }
 
     @Test
@@ -183,7 +184,7 @@ public class ScalarOperatorsReuseTest {
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, ImmutableList.of(add1, add2, add3, add4),
                         columnRefFactory, false);
-        assertEquals(2, commonSubScalarOperators.size());
+        assertEquals(3, commonSubScalarOperators.size());
     }
 
     @Test

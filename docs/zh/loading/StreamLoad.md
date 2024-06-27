@@ -22,6 +22,16 @@ StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 
 Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](../loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
+## 准备工作
+
+### 查看权限
+
+导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
+### 查看网络配置
+
+确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/Configuration.md) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/Configuration.md) 端口（默认 `8040`）。
+
 ## 使用 Stream Load 从本地导入
 
 Stream Load 是一种基于 HTTP PUT 的同步导入方式。提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
@@ -311,7 +321,7 @@ Broker Load 支持导入单个数据文件到单张表、导入多个数据文�
 
 #### 数据样例
 
-以 CSV 格式的数据为例，登录本地文件系统，在指定路径（假设为 `/user/starrocks/`）下创建两个 CSV 格式的数据文件，`file1.csv` 和 `file2.csv`。两个数据文件都包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
+以 CSV 格式的数据为例，登录本地文件系统，在指定路径（假设为 `/home/disk1/business/`）下创建两个 CSV 格式的数据文件，`file1.csv` 和 `file2.csv`。两个数据文件都包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
 - `file1.csv`
 
@@ -359,7 +369,7 @@ PROPERTIES("replication_num"="1");
 
 #### 提交导入作业
 
-通过如下语句，把本地文件系统的 `/user/starrocks/` 路径下所有数据文件（`file1.csv` 和 `file2.csv`）的数据导入到目标表 `mytable`：
+通过如下语句，把本地文件系统的 `/home/disk1/business/` 路径下所有数据文件（`file1.csv` 和 `file2.csv`）的数据导入到目标表 `mytable`：
 
 ```SQL
 LOAD LABEL mydatabase.label_local
@@ -472,7 +482,7 @@ WHERE LABEL = "label_local";
 
 1. 把 NAS 挂载到所有的 BE、FE 节点，同时保证所有节点的挂载路径完全一致。这样，所有 BE 可以像访问 BE 自己的本地文件一样访问 NAS。
 
-2. 使用 Broker Load 导入数据。
+2. 使用 Broker Load 导入数据。例如：
 
    ```SQL
    LOAD LABEL test_db.label_nas

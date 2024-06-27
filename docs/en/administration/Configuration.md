@@ -147,8 +147,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | --------------------------------------------- | ---- | ---------------------- | ------------------------------------------------------------ |
 | enable_strict_storage_medium_check            | -    | FALSE                  | Whether the FE strictly checks the storage medium of BEs when users create tables. If this parameter is set to `TRUE`, the FE checks the storage medium of BEs when users create tables and returns an error if the storage medium of the BE is different from the `storage_medium` parameter specified in the CREATE TABLE statement. For example, the storage medium specified in the CREATE TABLE statement is SSD but the actual storage medium of BEs is HDD. As a result, the table creation fails. If this parameter is `FALSE`, the FE does not check the storage medium of BEs when users create a table. |
 | enable_auto_tablet_distribution               | -    | TRUE                   | Whether to automatically set the number of buckets. <ul><li> If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets. For the strategy of automatically setting the number of buckets, see [Determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).</li><li>If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.</li></ul>Starting from version 2.5.7, StarRocks supports setting this parameter.|
-| storage_usage_soft_limit_percent              | %    | 90                     | If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_soft_limit_reserve_bytes`, tablets cannot be cloned into this directory. |
-| storage_usage_soft_limit_reserve_bytes        | Byte | 200 \* 1024 \* 1024 \* 1024 | If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory. |
+| storage_usage_soft_limit_percent              | %    | 90                     | Soft limit of the storage usage percentage in a BE directory. If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_soft_limit_reserve_bytes`, tablets cannot be cloned into this directory. |
+| storage_usage_soft_limit_reserve_bytes        | Byte | 200 \* 1024 \* 1024 \* 1024 | Soft limit of the remaining storage space in a BE directory. If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory. |
+| storage_usage_hard_limit_percent              | %    | 95                     | Hard limit of the storage usage percentage in a BE directory. If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_hard_limit_reserve_bytes`, Load and Restore jobs are rejected. You need to set this item together with the BE configuration item `storage_flood_stage_usage_percent` to allow the configurations to take effect. |
+| storage_usage_hard_limit_reserve_bytes        | Byte | 100 \* 1024 \* 1024 \* 1024 | Hard limit of the remaining storage space in a BE directory. If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_hard_limit_percent`, Load and Restore jobs are rejected. You need to set this item together with the BE configuration item `storage_flood_stage_left_capacity_bytes` to allow the configurations to take effect. |
 | catalog_trash_expire_second                   | s    | 86400                  | The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds. |
 | alter_table_timeout_second                    | s    | 86400                  | The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds. |
 | recover_with_empty_tablet                     | -    | FALSE                  | Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones and the query fails. |
@@ -166,6 +168,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_sched_min_clone_task_timeout_sec       | s    | 3 \* 60                | The minimum timeout duration for cloning a tablet, in seconds. |
 | tablet_sched_max_clone_task_timeout_sec       | s    | 2 \* 60 \* 60          | The maximum timeout duration for cloning a tablet, in seconds. The alias is `max_clone_task_timeout_sec`. |
 | tablet_sched_max_not_being_scheduled_interval_ms | ms   | 15 \* 60 \* 100 | When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible. |
+| tablet_sched_be_down_tolerate_time_s | s   | 900 | The maximum duration the scheduler allows for a BE node to remain inactive. After the time threshold is reached, tablets on that BE node will be migrated to other active BE nodes. |
 
 #### Other FE dynamic parameters
 
@@ -361,8 +364,7 @@ BE dynamic parameters are as follows.
 | default_num_rows_per_column_file_block | 1024 | N/A | The maximum number of rows that can be stored in each row block. |
 | pending_data_expire_time_sec | 1800 | Second | The expiration time of the pending data in the storage engine. |
 | inc_rowset_expired_sec | 1800 | Second | The expiration time of the incoming data. This configuration item is used in incremental clone. |
-| tablet_rowset_stale_sweep_time_sec | 1800 | Second | The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading.
-|
+| tablet_rowset_stale_sweep_time_sec | 1800 | Second | The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading. |
 | snapshot_expire_time_sec | 172800 | Second | The expiration time of snapshot files. |
 | trash_file_expire_time_sec | 86,400 | Second | The time interval at which to clean trash files.  The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6. |
 | base_compaction_check_interval_seconds | 60 | Second | The time interval of thread polling for a Base Compaction. |
@@ -390,8 +392,8 @@ BE dynamic parameters are as follows.
 | path_gc_check_step | 1000 | N/A | The maximum number of files that can be scanned continuously each time. |
 | path_gc_check_step_interval_ms | 10 | ms | The time interval between file scans. |
 | path_scan_interval_second | 86400 | Second | The time interval at which GC cleans expired data. |
-| storage_flood_stage_usage_percent | 95 | % | If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected. |
-| storage_flood_stage_left_capacity_bytes | 107374182400 | Byte | If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected. |
+| storage_flood_stage_usage_percent | 95 | % | Hard limit of the storage usage percentage in all BE directories. If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected. You need to set this item together with the FE configuration item `storage_usage_hard_limit_percent` to allow the configurations to take effect. |
+| storage_flood_stage_left_capacity_bytes | 107374182400 | Byte | Hard limit of the remaining storage space in all BE directories. If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected. You need to set this item together with the FE configuration item `storage_usage_hard_limit_reserve_bytes` to allow the configurations to take effect. |
 | tablet_meta_checkpoint_min_new_rowsets_num | 10 | N/A | The minimum number of rowsets to create since the last TabletMeta Checkpoint. |
 | tablet_meta_checkpoint_min_interval_secs | 600 | Second | The time interval of thread polling for a TabletMeta Checkpoint. |
 | max_runnings_transactions_per_txn_map | 100 | N/A | The maximum number of transactions that can run concurrently in each partition. |
@@ -849,6 +851,12 @@ BE static parameters are as follows.
 - **Default**: TRUE
 - **Unit**: N/A
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
+
+#### update_compaction_size_threshold
+
+- **Default**: 67108864
+- **Unit**: bytes
+- **Description**: The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand. Since v2.5.20, the default value of this parameter is changed from `268435456` (256 MB) to `67108864` (64 MB) to accelerate compaction.
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |

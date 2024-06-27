@@ -66,7 +66,7 @@ public class UserProperty implements Writable {
 
     private String qualifiedUser;
 
-    private long maxConn = 100;
+    private long maxConn = 1024;
 
     /*
      *  We keep white list here to save Baidu domain name (BNS) or DNS as white list.

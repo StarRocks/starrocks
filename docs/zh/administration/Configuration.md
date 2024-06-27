@@ -144,8 +144,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |---|---|---|
 |enable_strict_storage_medium_check|FALSE|建表时，是否严格校验存储介质类型。<br />为 true 时表示在建表时，会严格校验 BE 上的存储介质。比如建表时指定 `storage_medium = HDD`，而 BE 上只配置了 SSD，那么建表失败。<br />为 FALSE 时则忽略介质匹配，建表成功。|
 |enable_auto_tablet_distribution| TRUE| 是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>自 2.5.6 版本起，StarRocks 支持设置该参数。  |
-|storage_usage_soft_limit_percent|90|如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。|
-|storage_usage_soft_limit_reserve_bytes|200 \* 1024 \* 1024 \* 1024|默认 200GB，单位为 Byte，如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。|
+|storage_usage_soft_limit_percent|90|单个 BE 存储目录空间使用率软上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。|
+|storage_usage_soft_limit_reserve_bytes|200 \* 1024 \* 1024 \* 1024|单个 BE 存储目录剩余空间软限制。默认 200GB，单位为 Byte，如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。|
+|storage_usage_hard_limit_percent|95|单个 BE 存储目录空间使用率硬上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_hard_limit_reserve_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数`storage_flood_stage_usage_percent` 才能使配置生效。|
+|storage_usage_hard_limit_reserve_bytes|100 \* 1024 \* 1024 \* 1024|单个 BE 存储目录剩余空间硬限制。默认 100 GB，单位为 Byte。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_hard_limit_percent`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数 `storage_flood_stage_left_capacity_bytes` 才能使配置生效。|
 |catalog_trash_expire_second|86400|删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
 |recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br />这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。|
@@ -163,6 +165,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |tablet_sched_min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
 |tablet_sched_max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。参数别名 `max_clone_task_timeout_sec`。|
 |tablet_sched_max_not_being_scheduled_interval_ms|15 \* 60 \* 100|克隆 Tablet 调度时，如果超过该时间一直未被调度，则将该 Tablet 的调度优先级升高，以尽可能优先调度。|
+|tablet_sched_be_down_tolerate_time_s|900|调度器容忍 BE 节点保持不存活状态的最长时间。超时之后该节点上的 Tablet 会被迁移到其他存活的 BE 节点上。单位：Seconds。|
 
 #### 其他动态参数
 
@@ -384,8 +387,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | path_gc_check_step                                    | 1000        | N/A    | 单次连续 scan 最大的文件数量。                                   |
 | path_gc_check_step_interval_ms                        | 10          | ms     | 多次连续 scan 文件间隔时间。                                     |
 | path_scan_interval_second                             | 86400       | second | gc 线程清理过期数据的间隔时间。                                 |
-| storage_flood_stage_usage_percent                     | 95          | %      | 如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。        |
-| storage_flood_stage_left_capacity_bytes               | 107374182400| Byte   | 如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。 |
+| storage_flood_stage_usage_percent                     | 95          | %      | BE 存储目录整体磁盘空间使用率的硬上限。如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_percent` 才能使配置生效。        |
+| storage_flood_stage_left_capacity_bytes               | 107374182400| Byte   | BE 存储目录整体磁盘剩余空间的硬限制。如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_reserve_bytes` 才能使配置生效。 |
 | tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。        |
 | tablet_meta_checkpoint_min_interval_secs              | 600         | second | TabletMeta Checkpoint 线程轮询的时间间隔。         |
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
@@ -464,10 +467,10 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |load_process_max_memory_limit_percent|30|单节点上所有的导入线程占据的内存上限比例。|
 |sync_tablet_meta|FALSE|存储引擎是否开 sync 保留到磁盘上。|
 |routine_load_thread_pool_size|10|单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。|
-|internal_service_async_thread_num | 10 | N/A | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。从 3.1.0 版本起，该参数废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。|
-|max_garbage_sweep_interval|3600|s|磁盘进行垃圾清理的最大间隔。|
-|min_garbage_sweep_interval|180|s|磁盘进行垃圾清理的最小间隔。|
-|brpc_max_body_size|2147483648|bRPC 最大的包容量，单位为 Byte。|
+|internal_service_async_thread_num | 10 | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。从 3.1.0 版本起，该参数废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。|
+|max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔。单位：s。|
+|min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔。单位：s。|
+|brpc_max_body_size|2147483648|bRPC 最大的包容量，单位：Byte。|
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
 |mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。如果 BE 为独立部署，则无需配置，如果 BE 与其它占用内存较多的服务混合部署，则需要合理配置。|
@@ -483,3 +486,4 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | jdbc_connection_idle_timeout_ms  | 600000 | JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。 |
 | query_cache_capacity  | 536870912 | 指定 Query Cache 的大小。单位：Byte。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。<br />每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。 |
 | enable_event_based_compaction_framework  | TRUE | 是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。 |
+| update_compaction_size_threshold  | 67108864 | 主键表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使主键表的 Compaction Score 与其他类型表的相近，便于用户理解。从 v2.5.20 版本起，为了更快执行 compaction，该参数默认值从 `268435456` (256 MB) 改为 `67108864` (64 MB)。|

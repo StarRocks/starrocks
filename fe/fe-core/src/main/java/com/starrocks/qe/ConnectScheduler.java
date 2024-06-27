@@ -24,6 +24,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
@@ -109,29 +110,37 @@ public class ConnectScheduler {
         return true;
     }
 
-    // Register one connection with its connection id.
-    public boolean registerConnection(ConnectContext ctx) {
+    /**
+     * Register one connection with its connection id.
+     * @param ctx connection context
+     * @return a pair, first is success or not, second is error message(if any)
+     */
+    public Pair<Boolean, String> registerConnection(ConnectContext ctx) {
         if (numberConnection.get() >= maxConnections.get()) {
-            return false;
+            return new Pair<>(false, "Reach cluster-wide connection limit, qe_max_connection=" + maxConnections +
+                    ", connectionMap.size=" + connectionMap.size() +
+                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         // Check user
-        if (connByUser.get(ctx.getQualifiedUser()) == null) {
-            connByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
-        }
+        connByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
         int conns = connByUser.get(ctx.getQualifiedUser()).get();
-        long currentConns;
+        long currentUserMaxConn;
         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-            currentConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
+            currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
         } else {
-            currentConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
+            currentUserMaxConn = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
         }
-        if (conns >= currentConns) {
-            return false;
+        if (conns >= currentUserMaxConn) {
+            return new Pair<>(false, "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
+                    ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
+                    "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size=" + connectionMap.size() +
+                    ", connByUser.totConn=" + connByUser.values().stream().mapToInt(AtomicInteger::get).sum() +
+                    ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
         }
         numberConnection.incrementAndGet();
         connByUser.get(ctx.getQualifiedUser()).incrementAndGet();
         connectionMap.put((long) ctx.getConnectionId(), ctx);
-        return true;
+        return new Pair<>(true, null);
     }
 
     public void unregisterConnection(ConnectContext ctx) {
@@ -154,14 +163,19 @@ public class ConnectScheduler {
         return numberConnection.get();
     }
 
-    public List<ConnectContext.ThreadInfo> listConnection(String user) {
+    public List<ConnectContext.ThreadInfo> listConnection(String currUser, String forUser) {
         List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
 
         for (ConnectContext ctx : connectionMap.values()) {
             // Check auth
-            if (!ctx.getQualifiedUser().equals(user) &&
+            if (!ctx.getQualifiedUser().equals(currUser) &&
                     !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                             PrivPredicate.GRANT)) {
+                continue;
+            }
+
+            // Check whether it's the connection for the specified user
+            if (forUser != null && !ctx.getQualifiedUser().equals(forUser)) {
                 continue;
             }
 
@@ -188,10 +202,11 @@ public class ConnectScheduler {
                     return;
                 }
 
-                if (registerConnection(context)) {
+                Pair<Boolean, String> result = registerConnection(context);
+                if (result.first) {
                     MysqlProto.sendResponsePacket(context);
                 } else {
-                    context.getState().setError("Reach limit of connections");
+                    context.getState().setError(result.second);
                     MysqlProto.sendResponsePacket(context);
                     return;
                 }
@@ -200,7 +215,7 @@ public class ConnectScheduler {
                 ConnectProcessor processor = new ConnectProcessor(context);
                 processor.loop();
             } catch (Exception e) {
-                // for unauthrorized access such lvs probe request, may cause exception, just log it in debug level
+                // for unauthorized access such lvs probe request, may cause exception, just log it in debug level
                 if (context.getCurrentUserIdentity() != null) {
                     LOG.warn("connect processor exception because ", e);
                 } else {

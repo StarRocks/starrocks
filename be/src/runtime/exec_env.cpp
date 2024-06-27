@@ -210,6 +210,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_drivers, [] {
+        auto* driver_limiter = ExecEnv::GetInstance()->driver_limiter();
+        return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
+    });
 
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
@@ -332,6 +336,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
+
+    // The _load_rpc_pool now handles routine load RPC and table function RPC.
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_rpc") // thread pool for load rpc
+                            .set_min_threads(10)
+                            .set_max_threads(1000)
+                            .set_max_queue_size(0)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_load_rpc_pool));
     return Status::OK();
 }
 
@@ -510,6 +522,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_cache_mgr);
+    _load_rpc_pool.reset();
     _metrics = nullptr;
 
     _reset_tracker();

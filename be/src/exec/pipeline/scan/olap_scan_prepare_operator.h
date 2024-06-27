@@ -7,7 +7,9 @@
 
 namespace starrocks {
 
+namespace vectorized {
 class OlapScanNode;
+}
 
 namespace pipeline {
 

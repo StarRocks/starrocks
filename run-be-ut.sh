@@ -39,6 +39,7 @@ Usage: $0 <options>
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --with-gcov                    enable to build with gcov
+     --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
      -j                             build parallel
 
@@ -52,6 +53,23 @@ Usage: $0 <options>
   exit 1
 }
 
+# Append negative cases to existing $TEST_NAME
+# refer to https://github.com/google/googletest/blob/main/docs/advanced.md#running-a-subset-of-the-tests
+# for detailed explaination of `--gtest_filter`
+append_negative_case() {
+    local exclude_case=$1
+    case $TEST_NAME in
+      *-*)
+        # already has negative cases, just append the cases to the end
+        TEST_NAME=${TEST_NAME}:$exclude_case
+        ;;
+      *)
+        # doesn't have negative cases, start the negative session
+        TEST_NAME=${TEST_NAME}-$exclude_case
+        ;;
+    esac
+}
+
 # -l run and -l gtest_filter only used for compatibility
 OPTS=$(getopt \
   -n $0 \
@@ -63,6 +81,7 @@ OPTS=$(getopt \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
+  -l 'excluding-test-suit:' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -79,6 +98,7 @@ CLEAN=0
 DRY_RUN=0
 TEST_NAME=*
 TEST_MODULE=".*"
+EXCLUDING_TEST_SUIT=
 HELP=0
 WITH_AWS=OFF
 WITH_BLOCK_CACHE=ON
@@ -94,6 +114,7 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+        --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -200,7 +221,15 @@ export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 
 if [ $WITH_AWS = "OFF" ]; then
-    TEST_NAME="$TEST_NAME*:-*S3*"
+    append_negative_case "*S3*"
+fi
+
+if [ -n "$EXCLUDING_TEST_SUIT" ]; then
+    excluding_test_suit=$EXCLUDING_TEST_SUIT
+    excluding_test_suit_array=("${excluding_test_suit//|/ }")
+    for element in ${excluding_test_suit_array[*]}; do
+        append_negative_case "*.${element}_*"
+    done
 fi
 
 # prepare util test_data
@@ -211,6 +240,7 @@ cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util
 
 test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" | grep -v starrocks_test | grep -v bench_test`
 
+echo "[INFO] gtest_filter: $TEST_NAME"
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
 if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then

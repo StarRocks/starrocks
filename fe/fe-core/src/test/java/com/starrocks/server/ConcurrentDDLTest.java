@@ -152,7 +152,7 @@ public class ConcurrentDDLTest {
                 Random random = new Random();
                 ConnectContext ctx = UtFrameUtils.createDefaultCtx();
                 ctx.setThreadLocalInfo();
-                while (times < 10) {
+                while (times < 5) {
                     try {
                         System.out.println("creating table and db time: " + times);
                         starRocksAssert.withDatabase("concurrent_test_db");

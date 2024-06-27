@@ -9,11 +9,13 @@ message IndexSnapshotMetaPB {
     EditVersionPB version = 1;
     PagePointerPB data = 2;
     repeated uint32 dumped_shard_idxes = 3;
+    uint32 checksum = 4;
 }
 
 message IndexWalMetaPB {
     EditVersionPB version = 1;
     PagePointerPB data = 2;
+    uint32 checksum = 3;
 }
 
 message MutableIndexMetaPB {

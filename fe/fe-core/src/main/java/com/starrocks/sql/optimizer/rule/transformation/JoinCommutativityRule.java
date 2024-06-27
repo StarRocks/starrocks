@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 public class JoinCommutativityRule extends TransformationRule {
+
+    public static final int COMMUTATIVITY_MASK = 1;
     private static final Map<JoinOperator, JoinOperator> JOIN_COMMUTATIVITY_MAP =
             ImmutableMap.<JoinOperator, JoinOperator>builder()
                     .put(JoinOperator.LEFT_ANTI_JOIN, JoinOperator.RIGHT_ANTI_JOIN)
@@ -49,7 +51,9 @@ public class JoinCommutativityRule extends TransformationRule {
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {
-        return ((LogicalJoinOperator) input.getOp()).getJoinHint().isEmpty();
+        LogicalJoinOperator joinOperator = input.getOp().cast();
+        return joinOperator.getJoinHint().isEmpty() &&
+                (joinOperator.getTransformMask() != COMMUTATIVITY_MASK);
     }
 
     public static OptExpression commuteRightSemiAntiJoin(OptExpression input) {
@@ -70,7 +74,8 @@ public class JoinCommutativityRule extends TransformationRule {
         List<OptExpression> newChildren = Lists.newArrayList(input.inputAt(1), input.inputAt(0));
 
         LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder().withOperator(oldJoin)
-                .setJoinType(commuteMap.get(oldJoin.getJoinType())).build();
+                .setJoinType(commuteMap.get(oldJoin.getJoinType()))
+                .setTransformMask(oldJoin.getTransformMask() | COMMUTATIVITY_MASK).build();
         OptExpression result = OptExpression.create(newJoin, newChildren);
         return Lists.newArrayList(result);
     }

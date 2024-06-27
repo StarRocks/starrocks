@@ -14,6 +14,9 @@ Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk) {
     if (_is_finished) {
         return Status::OK();
     }
+    // unpack chunk's const column, since Chunk#append_selective cannot be const column
+    chunk->unpack_and_duplicate_const_columns();
+
     _memory_manager->update_row_count(chunk->num_rows());
     _full_chunk_queue.emplace(std::move(chunk));
 
@@ -29,10 +32,12 @@ Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk,
     if (_is_finished) {
         return Status::OK();
     }
+    // unpack chunk's const column, since Chunk#append_selective cannot be const column
+    chunk->unpack_and_duplicate_const_columns();
+
     _memory_manager->update_row_count(size);
     _partition_chunk_queue.emplace(std::move(chunk), std::move(indexes), from, size);
     _partition_rows_num += size;
-
     return Status::OK();
 }
 
@@ -112,6 +117,7 @@ vectorized::ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeSta
     vectorized::ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
     chunk->reserve(rows_num);
     for (const auto& partition_chunk : selected_partition_chunks) {
+        // NOTE: unpack column if `partition_chunk.chunk` constains const column
         chunk->append_selective(*partition_chunk.chunk, partition_chunk.indexes->data(), partition_chunk.from,
                                 partition_chunk.size);
     }

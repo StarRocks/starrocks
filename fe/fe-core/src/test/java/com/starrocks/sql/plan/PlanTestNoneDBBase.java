@@ -159,6 +159,10 @@ public class PlanTestNoneDBBase {
         return UtFrameUtils.getPlanThriftString(connectContext, sql);
     }
 
+    public String getDescTbl(String sql) throws Exception {
+        return UtFrameUtils.getThriftDescTbl(connectContext, sql);
+    }
+
     public static int getPlanCount(String sql) throws Exception {
         connectContext.getSessionVariable().setUseNthExecPlan(1);
         int planCount = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPlanCount();

@@ -370,20 +370,29 @@ public:
             return io_error(dir, errno);
         }
         errno = 0;
+        Status ret;
         struct dirent* entry;
         while ((entry = readdir(d)) != nullptr) {
             std::string_view name(entry->d_name);
             if (name == "." || name == "..") {
                 continue;
             }
-            // callback returning false means to terminate iteration
-            if (!cb(name)) {
+            auto saved_errno = errno;
+            auto r = cb(name);
+            errno = saved_errno;
+            if (!r) {
                 break;
             }
         }
-        closedir(d);
-        if (errno != 0) return io_error(dir, errno);
-        return Status::OK();
+        if (entry == nullptr && errno != 0) {
+            PLOG(WARNING) << "Fail to read " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        if (closedir(d) != 0) {
+            PLOG(WARNING) << "Fail to close " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        return ret;
     }
 
     Status delete_file(const std::string& fname) override {
@@ -453,7 +462,7 @@ public:
             RETURN_IF_ERROR(st);
             return delete_dir(dirname);
         } else {
-            return delete_file(dirname);
+            return ignore_not_found(delete_file(dirname));
         }
     }
 

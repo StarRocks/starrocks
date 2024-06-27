@@ -140,7 +140,29 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Whether to enable low cardinality optimization. After this feature is enabled, the performance of querying STRING columns improves by about three times. Default value: true.
 
-### character_set_database (global）
+### cbo_eq_base_type (2.5.14 and later)
+
+  Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
+
+### enable_materialized_view_union_rewrite (2.5.20 and later)
+
+  Whether to enable materialized view union rewrite. If this item is set to `true`, the system seeks to compensate the predicates using UNION ALL when the predicates in the materialized view cannot satisfy the query's predicates. The default value is `true`.
+
+### enable_materialized_view_plan_cache (2.5.13 and later)
+
+  Whether to enable materialized view plan cache, which can optimize the automatic rewrite performance of materialized views. The default value `true` indicates enabling it.
+
+### follower_query_forward_mode (2.5.20 and later)
+
+  Specifies to which FE nodes the query statements are routed.
+
+  * Valid values:
+
+    * `default`: Routes the query statement to the Leader FE or Follower FEs, depending on the Follower's replay progress. If the Follower FE nodes have not completed replay progress, queries will be routed to the Leader FE node. If the replay progress is complete, queries will be preferentially routed to the Follower FE node.
+    * `leader`: Routes the query statement to the Leader FE.
+    * `follower`: Routes the query statement to Follower FE.
+
+### character_set_database (global)
 
   The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
 
@@ -164,11 +186,19 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 ### disable_streaming_preaggregations
 
-  Used to enable the streaming pre-aggregations. The default value is `false`, meaning  it is enabled.
+  Used to enable the streaming pre-aggregations. The default value is `false`, meaning it is enabled.
 
 ### div_precision_increment
 
   Used for MySQL client compatibility. No practical usage.
+
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+This variable is introduced to solve compatibility issues.
+
+Default value: `true`.
+-->
 
 ### enable_connector_adaptive_io_tasks (2.5 and later)
 
@@ -588,4 +618,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### wait_timeout
 
-  Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
+The number of seconds the server waits for activity on a noninteractive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
+
+Unit: seconds. Default value: 28800 (8 hours).
