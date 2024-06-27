@@ -741,11 +741,10 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(params.tablet->del_location(path)));
-    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
-    std::vector<uint8_t> read_buffer(file_size);
-    RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+    ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
     auto col = pk_column->clone();
-    if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+    if (serde::ColumnArraySerde::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), col.get()) ==
+        nullptr) {
         return Status::InternalError("column deserialization failed");
     }
     col->raw_data();
