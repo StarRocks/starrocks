@@ -88,7 +88,7 @@ public class KafkaTaskInfoTest {
                 Config.routine_load_task_timeout_second * 1000);
         ExceptionChecker.expectThrowsWithMsg(RoutineLoadPauseException.class,
                 "Consume offset: 101 is greater than the latest offset: 100 in kafka partition: 0. " +
-                        "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job.",
+                        "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job",
                 () -> kafkaTaskInfo3.readyToExecute());
     }
 
