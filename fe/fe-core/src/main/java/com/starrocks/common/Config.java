@@ -2783,8 +2783,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
 
-<<<<<<< HEAD
-=======
     @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in sync mode mergeable or not")
     public static boolean enable_mv_refresh_sync_refresh_mergeable = false;
 
@@ -2792,13 +2790,6 @@ public class Config extends ConfigBase {
             "occupying too much meta memory")
     public static int max_mv_task_run_meta_message_values_length = 16;
 
-    /**
-     * The refresh partition number when refreshing materialized view at once by default.
-     */
-    @ConfField(mutable = true)
-    public static int default_mv_partition_refresh_number = 1;
-
->>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")

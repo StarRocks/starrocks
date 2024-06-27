@@ -196,11 +196,8 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.ColumnDef;
-=======
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
->>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;

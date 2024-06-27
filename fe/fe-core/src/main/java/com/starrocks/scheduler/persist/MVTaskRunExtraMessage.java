@@ -23,11 +23,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-<<<<<<< HEAD
-=======
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
->>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
@@ -55,13 +52,6 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("basePartitionsToRefreshMap")
     private Map<String, Set<String>> basePartitionsToRefreshMap = Maps.newHashMap();
 
-<<<<<<< HEAD
-=======
-    @SerializedName("nextPartitionStart")
-    private String nextPartitionStart;
-    @SerializedName("nextPartitionEnd")
-    private String nextPartitionEnd;
-
     // task run starts to process time
     // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
     @SerializedName("processStartTime")
@@ -70,7 +60,6 @@ public class MVTaskRunExtraMessage implements Writable {
     @SerializedName("executeOption")
     private ExecuteOption executeOption = new ExecuteOption(true);
 
->>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
     public MVTaskRunExtraMessage() {
     }
 

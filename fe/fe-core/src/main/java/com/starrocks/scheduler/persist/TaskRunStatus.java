@@ -39,6 +39,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("taskName")
     private String taskName;
 
+    @SerializedName("processStartTime")
+    private long processStartTime;
+
     @SerializedName("createTime")
     private long createTime;
 
@@ -256,8 +259,6 @@ public class TaskRunStatus implements Writable {
         }
     }
 
-<<<<<<< HEAD
-=======
     public long getProcessStartTime() {
         return processStartTime;
     }
@@ -270,7 +271,6 @@ public class TaskRunStatus implements Writable {
         }
     }
 
->>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
     public Map<String, String> getProperties() {
         return properties;
     }

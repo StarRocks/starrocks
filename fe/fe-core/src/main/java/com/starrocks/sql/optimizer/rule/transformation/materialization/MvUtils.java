@@ -1293,36 +1293,6 @@ public class MvUtils {
         return expr instanceof FunctionCallExpr
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
-<<<<<<< HEAD
-}
-=======
-
-    public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
-        Map<String, String> partitionProperties = new HashMap<>(4);
-        partitionProperties.put("replication_num",
-                String.valueOf(materializedView.getDefaultReplicationNum()));
-        partitionProperties.put("storage_medium", materializedView.getStorageMedium());
-        String storageCooldownTime =
-                materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
-        if (storageCooldownTime != null
-                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
-            // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
-            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
-            partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
-        }
-        return partitionProperties;
-    }
-
-    public static DistributionDesc getDistributionDesc(MaterializedView materializedView) {
-        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
-        if (distributionInfo instanceof HashDistributionInfo) {
-            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
-                    materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
-            return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
-        } else {
-            return new RandomDistributionDesc();
-        }
-    }
 
     /**
      * Trim the input set if its size is larger than maxLength.
@@ -1346,4 +1316,3 @@ public class MvUtils {
         return map;
     }
 }
->>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))

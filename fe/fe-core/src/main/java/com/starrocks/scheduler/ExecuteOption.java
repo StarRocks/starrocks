@@ -17,11 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Config;
-import com.starrocks.persist.gson.GsonUtils;
->>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
 
 import java.util.Map;
 
@@ -68,15 +64,11 @@ public class ExecuteOption {
     public boolean isMergeRedundant() {
         // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
         // hanging after removing it.
-<<<<<<< HEAD
-        return !isSync && mergeRedundant;
-=======
         if (Config.enable_mv_refresh_sync_refresh_mergeable) {
-            return isMergeRedundant;
+            return mergeRedundant;
         } else {
-            return !isSync && isMergeRedundant;
+            return !isSync && mergeRedundant;
         }
->>>>>>> 02fb8899f4 ([BugFix] Support force cancel refresh materialized view & optimize some task run strategies (#46131))
     }
 
     public Map<String, String> getTaskRunProperties() {
