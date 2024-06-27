@@ -124,8 +124,6 @@ fi
 # For JDK11, it takes the following precedences:
 #    JAVA_OPTS_FOR_JDK_11 > JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
 # (The `JAVA_OPTS_FOR_JDK_9` here is just for historic reason)
-# For JDK9, it takes the following precedences:
-#    JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
 # For all remain jdk versions, only JAVA_OPTS takes effect.
 #
 # NOTE: try not adding new JAVA_OPTS_FOR_JDK_## for a new JDK version.
@@ -136,10 +134,6 @@ case $JAVA_VERSION in
     # take JAVA_OPTS_FOR_JDK_11 or JAVA_OPTS_FOR_JDK_9 if the former is empty
     final_java_opt=${JAVA_OPTS_FOR_JDK_11:-$JAVA_OPTS_FOR_JDK_9}
     final_java_opt=${final_java_opt:-$JAVA_OPTS}
-    ;;
-  9)
-    # take JAVA_OPTS_FOR_JDK_9 or JAVA_OPTS if the former is empty
-    final_java_opt=${JAVA_OPTS_FOR_JDK_9:-$JAVA_OPTS}
     ;;
   *)
     final_java_opt=$JAVA_OPTS
