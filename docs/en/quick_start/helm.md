@@ -94,61 +94,6 @@ Backend nodes are responsible for both data storage and executing query plans.
 
 ---
 
-## SQL clients
-
-These three clients are tested with this tutorial, you only need one:
-
-- MySQL CLI: You can run this from the Kubernetes environment or your machine.
-- [DBeaver](https://dbeaver.io/download/) is available as a community version and a Pro version. 
-- [MySQL Workbench](https://dev.mysql.com/downloads/workbench/)
-
-#### Configuring the client
-
-<Tabs groupId="client">
-<TabItem value="mysqlCLI" label="mysql CLI" default>
-
-The easiest way to use the MySQL CLI is to run it from the StarRocks FE pod `kube-starrocks-fe-0`:
-
-```bash
-kubectl exec --stdin --tty kube-starrocks-fe-0 -- \
-  mysql -P9030 -h127.0.0.1 -u root --prompt="StarRocks > "
-```
-
-If you would like to install the mysql CLI expand **mysql client install** below:
-
-<details>
-
-<summary>mysql client install</summary>
-
-- macOS: If you use Homebrew and do not need MySQL Server run `brew install mysql` to install the CLI.
-- Linux: Check your repository system for the `mysql` client. For example, `yum install mariadb`.
-- Microsoft Windows: Install the [MySQL Community Server](https://dev.mysql.com/downloads/mysql/) and run the provided client, or run `mysql` from WSL.
-
-</details>
-
-</TabItem>
-
-<TabItem value="DBeaver" label="DBeaver" >
-
-- Install [DBeaver](https://dbeaver.io/download/), and add a connection:
-![Add a connection](../assets/quick-start/DBeaver-1.png)
-- Configure the port, IP, and username. Test the connection, and click Finish if the test succeeds:
-![Configure and test](../assets/quick-start/DBeaver-2.png)
-
-</TabItem>
-<TabItem value="MySQLWorkbench" label="MySQL Workbench">
-
-- Install the [MySQL Workbench](https://dev.mysql.com/downloads/workbench/), and add a connection.
-- Configure the port, IP, and username and then test the connection:
-![Connection settings](../assets/quick-start/Workbench-1.png)
-- You will see warnings from the Workbench as it is checking for a specific MySQL version. You can ignore the warnings and when prompted, you can configure Workbench to stop displaying the warnings:
-![Ignore warning](../assets/quick-start/Workbench-2.png)
-</TabItem>
-
-</Tabs>
-
----
-
 ## Download the data
 
 Download these two datasets to your machine.
@@ -441,6 +386,8 @@ kubernetes                        ClusterIP      34.118.224.1     <none>        
 ---
 
 ### Connect to StarRocks with a SQL client
+
+NOTE: Add info about `kubectl get services` and the external IP.
 
 :::tip
 
