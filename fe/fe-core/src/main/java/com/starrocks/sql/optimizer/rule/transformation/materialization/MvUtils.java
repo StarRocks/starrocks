@@ -61,7 +61,6 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -1375,14 +1374,14 @@ public class MvUtils {
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
 
-<<<<<<< HEAD
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
         return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
         return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
-=======
+    }
+
     public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
         Map<String, String> partitionProperties = new HashMap<>(4);
         partitionProperties.put("replication_num",
@@ -1402,12 +1401,13 @@ public class MvUtils {
     public static DistributionDesc getDistributionDesc(MaterializedView materializedView) {
         DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
         if (distributionInfo instanceof HashDistributionInfo) {
-            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
-                    materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
+            List<String> distColumnNames = new ArrayList<>();
+            for (Column distributionColumn : ((HashDistributionInfo) distributionInfo).getDistributionColumns()) {
+                distColumnNames.add(distributionColumn.getName());
+            }
             return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
         } else {
             return new RandomDistributionDesc();
         }
->>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
     }
 }

@@ -729,14 +729,8 @@ public class MvPartitionCompensator {
         }
 
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
-<<<<<<< HEAD
-            ExpressionRangePartitionInfo partitionInfo =
-                    (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
-            Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
-=======
             ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
-            Expr partitionExpr = partitionInfo.getPartitionExprs(olapTable.getIdToColumn()).get(0);
->>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
+            Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionExpr.collect(SlotRef.class, slotRefs);
             Preconditions.checkState(slotRefs.size() == 1);

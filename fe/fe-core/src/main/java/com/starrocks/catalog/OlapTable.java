@@ -97,11 +97,7 @@ import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PListCell;
->>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.SystemInfoService;
@@ -1097,7 +1093,7 @@ public class OlapTable extends Table {
 
     @Override
     public List<Column> getPartitionColumns() {
-        return partitionInfo.getPartitionColumns(this.idToColumn);
+        return partitionInfo.getPartitionColumns();
     }
 
     @Override
@@ -1105,26 +1101,16 @@ public class OlapTable extends Table {
         List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo.isUnPartitioned()) {
             return partitionColumnNames;
-<<<<<<< HEAD
-        } else if (partitionInfo instanceof RangePartitionInfo) {
+        } else if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-=======
-        } else if (partitionInfo.isRangePartition()) {
-            List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
->>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
             for (Column column : partitionColumns) {
                 partitionColumnNames.add(column.getName());
             }
             return partitionColumnNames;
-<<<<<<< HEAD
-        } else if (partitionInfo instanceof ListPartitionInfo) {
+        } else if (partitionInfo.isListPartition()) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             List<Column> partitionColumns = listPartitionInfo.getPartitionColumns();
-=======
-        } else if (partitionInfo.isListPartition()) {
-            List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
->>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
             for (Column column : partitionColumns) {
                 partitionColumnNames.add(column.getName());
             }

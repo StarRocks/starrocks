@@ -635,7 +635,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return the partition column of the materialized view
      */
     public Optional<Column> getPartitionColumn() {
-        List<Column> partitionCols = partitionInfo.getPartitionColumns(this.idToColumn);
+        List<Column> partitionCols = partitionInfo.getPartitionColumns();
         if (partitionCols == null || partitionCols.isEmpty()) {
             return Optional.empty();
         }
@@ -651,17 +651,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionRefTableExprs == null) {
             return null;
         }
-<<<<<<< HEAD
-        if (partitionRefTableExprs.get(0).getType() == Type.INVALID) {
-            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Type partitionColType = expressionRangePartitionInfo.getPartitionColumns().get(0).getType();
-            partitionRefTableExprs.get(0).setType(partitionColType);
-=======
-
         Expr partitionExpr = partitionRefTableExprs.get(0);
         if (partitionExpr == null) {
             return null;
->>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
         }
         if (partitionExpr.getType() == Type.INVALID) {
             Optional<Column> partitionColOpt = getPartitionColumn();
@@ -682,13 +674,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
                 ((ExpressionRangePartitionInfo) materializedView.getPartitionInfo());
         // currently, mv only supports one expression
-<<<<<<< HEAD
         Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-        return materializedView.getFirstPartitionRefTableExpr();
-=======
-        Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprsSize() == 1);
         return materializedView.getPartitionExpr();
->>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
     }
 
     /**
@@ -1653,14 +1640,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionColOpt.isEmpty()) {
             return;
         }
-<<<<<<< HEAD
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        // only one partition column is supported now.
-        Preconditions.checkState(expressionRangePartitionInfo.getPartitionColumns().size() == 1);
-        Column partitionCol = expressionRangePartitionInfo.getPartitionColumns().get(0);
-=======
         Column partitionCol = partitionColOpt.get();
->>>>>>> d92e732e84 ([Refactor] [Enhancement] List Partition For AMV(Part 1): Refactor MVTimelinessArbiter and MVPCTRefreshPartitioner to make it more extensible (#46808))
 
         // for single ref base table, recover from serializedPartitionRefTableExprs
         partitionRefTableExprs = new ArrayList<>();
