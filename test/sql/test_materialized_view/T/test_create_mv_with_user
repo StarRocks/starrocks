@@ -4,7 +4,7 @@ drop database if exists test_create_mv_with_user;
 create database test_create_mv_with_user;
 use test_create_mv_with_user;
 
-shell: ip=hostname -I | awk '{print $1}';
+[UC]shell: ip=hostname -I | awk '{print $1}';
 DROP USER IF EXISTS mv_creator@'${ip[1]}';
 CREATE USER mv_creator@'${ip[1]}';
 

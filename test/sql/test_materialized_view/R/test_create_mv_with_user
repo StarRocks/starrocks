@@ -8,7 +8,7 @@ create database test_create_mv_with_user;
 use test_create_mv_with_user;
 -- result:
 -- !result
-shell: ip=hostname -I | awk '{print $1}';
+[UC]shell: ip=hostname -I | awk '{print $1}';
 -- result:
 0
 172.26.92.227
