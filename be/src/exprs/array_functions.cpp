@@ -1676,8 +1676,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
         array_column = down_cast<ArrayColumn*>(src_column);
     }
 
-    auto [array_null, elements, offsets]
-            = unpack_array_column(array_column->elements_column());
+    auto [array_null, elements, offsets] = unpack_array_column(array_column->elements_column());
     ColumnPtr result_elements = elements->clone_empty();
     auto result_offsets = UInt32Column::create();
     result_offsets->reserve(array_column->offsets().size());
@@ -1686,10 +1685,10 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
     for (size_t i = 0; i < chunk_size; i++) {
         Datum v = array_column->get(i);
         const auto& items = v.get<DatumArray>();
-        for (const auto &item: items) {
+        for (const auto& item : items) {
             if (!item.is_null()) {
                 const auto& sub_items = item.get<DatumArray>();
-                for (const auto &sub_item: sub_items) {
+                for (const auto& sub_item : sub_items) {
                     result_elements->append_datum(sub_item);
                 }
             }
