@@ -980,7 +980,8 @@ public class SyncPartitionUtils {
             return;
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
-        Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalog,
                 tableName.getDb(), tableName.getTbl());
 
         if (baseTable == null) {
@@ -989,7 +990,7 @@ public class SyncPartitionUtils {
         if (expr instanceof SlotRef) {
             // TODO: use `dropRefBaseTableFromVersionMapForExternalTable` later.
             Column partitionColumn = baseTable.getColumn(((SlotRef) expr).getColumnName());
-            BaseTableInfo baseTableInfo = new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
+            BaseTableInfo baseTableInfo = new BaseTableInfo(catalog, tableName.getDb(),
                     baseTable.getName(), baseTable.getTableIdentifier());
             Map<String, MaterializedView.BasePartitionInfo> baseTableVersionMap = versionMap.get(baseTableInfo);
             if (baseTableVersionMap != null) {
@@ -1007,7 +1008,7 @@ public class SyncPartitionUtils {
                 });
             }
         } else {
-            BaseTableInfo baseTableInfo = new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
+            BaseTableInfo baseTableInfo = new BaseTableInfo(catalog, tableName.getDb(),
                     baseTable.getName(), baseTable.getTableIdentifier());
             dropRefBaseTableFromVersionMapForExternalTable(mv, versionMap, baseTableInfo, mvPartitionName);
         }
