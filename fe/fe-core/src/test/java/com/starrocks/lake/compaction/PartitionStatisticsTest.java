@@ -47,10 +47,14 @@ public class PartitionStatisticsTest {
 
         Quantiles q2 = new Quantiles(1.0, 2.0, 3.0);
         statistics.setCompactionScore(q2);
-        assertEquals(1, statistics.getPunishFactor());
-
-        Quantiles q3 = new Quantiles(2.0, 2.0, 3.0);
-        statistics.setCompactionScore(q3);
         assertEquals(2, statistics.getPunishFactor());
+
+        Quantiles q3 = new Quantiles(1.0, 2.0, 3.0);
+        statistics.setCompactionScore(q3);
+        assertEquals(4, statistics.getPunishFactor());
+
+        Quantiles q4 = new Quantiles(1.0, 1.0, 2.0);
+        statistics.setCompactionScore(q4);
+        assertEquals(1, statistics.getPunishFactor());
     }
 }
