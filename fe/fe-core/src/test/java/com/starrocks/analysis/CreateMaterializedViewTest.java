@@ -61,7 +61,6 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
@@ -1308,9 +1307,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 31. " +
-                    "Detail message: The function date_trunc used by the materialized view for partition " +
-                    "does not support week formatting.", e.getMessage());
+            Assert.fail();
         }
     }
 
