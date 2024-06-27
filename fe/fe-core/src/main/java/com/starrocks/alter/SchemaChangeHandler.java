@@ -1655,6 +1655,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
+        Set<String> modifyFieldColumns = new HashSet<>();
         for (AlterClause alterClause : alterClauses) {
             Map<String, String> properties = alterClause.getProperties();
             if (properties != null) {
@@ -1779,7 +1780,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Add field for struct column require table enable fast schema evolution");
                 }
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
-                Set<String> modifyFieldColumns = ImmutableSet.of(addFieldClause.getColName());
+                modifyFieldColumns = ImmutableSet.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
 
                 db.readLock();
@@ -1798,7 +1799,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Drop field for struct column require table enable fast schema evolution");
                 }
                 DropFieldClause dropFieldClause = (DropFieldClause) alterClause;
-                Set<String> modifyFieldColumns = ImmutableSet.of(addFieldClause.getColName());
+                modifyFieldColumns = ImmutableSet.of(dropFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
                 processDropField((DropFieldClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ReorderColumnsClause) {
