@@ -26,7 +26,8 @@
                 "quick_start/shared-data",
                 "quick_start/iceberg",
                 "quick_start/hudi",
-                "quick_start/routine-load"
+                "quick_start/routine-load",
+                "quick_start/helm"
             ]
         },
         {
