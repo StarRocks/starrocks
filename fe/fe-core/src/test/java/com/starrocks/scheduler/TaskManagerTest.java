@@ -30,6 +30,8 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -614,5 +616,178 @@ public class TaskManagerTest {
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
         Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
         Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+    }
+
+    @Test
+    public void testTaskEquality() {
+        Task task1 = new Task("test");
+        task1.setDefinition("select 1");
+        task1.setId(1);
+
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task1)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        {
+            long now = System.currentTimeMillis();
+            taskRun1.setTaskId(task1.getId());
+            taskRun1.initStatus("1", now + 10);
+            taskRun1.getStatus().setPriority(0);
+        }
+
+        TaskRun taskRun2 = TaskRunBuilder
+                .newBuilder(task1)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("1", now + 10);
+            taskRun2.getStatus().setPriority(0);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            taskRun2.setExecuteOption(DEFAULT_NO_MERGE_OPTION);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(2);
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            taskRun2.setExecuteOption(DEFAULT_NO_MERGE_OPTION);
+            Assert.assertFalse(taskRun1.equals(taskRun2));
+        }
+
+        {
+            long now = System.currentTimeMillis();
+            taskRun2.setTaskId(task1.getId());
+            taskRun2.initStatus("2", now + 10);
+            taskRun2.getStatus().setPriority(10);
+            try {
+                Field taskRunId = taskRun2.getClass().getDeclaredField("taskRunId");
+                taskRunId.setAccessible(true);
+                taskRunId.set(taskRun2, taskRun1.getTaskRunId());
+            } catch (Exception e) {
+                Assert.fail();
+            }
+            Assert.assertTrue(taskRun1.equals(taskRun2));
+        }
+
+        {
+            Map<Long, TaskRun> map1 = Maps.newHashMap();
+            map1.put(task1.getId(), taskRun1);
+            Map<Long, TaskRun> map2 = Maps.newHashMap();
+            map2.put(task1.getId(), taskRun1);
+            Assert.assertTrue(map1.equals(map2));
+            Map<Long, TaskRun> map3 = ImmutableMap.copyOf(map1);
+            Assert.assertTrue(map1.equals(map3));
+            Assert.assertTrue(map1.get(task1.getId()).equals(map3.get(task1.getId())));
+        }
+    }
+
+    @Test
+    public void testSyncRefreshWithoutMergeable() {
+        Config.enable_mv_refresh_sync_refresh_mergeable = false;
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        for (int i = 0; i < 10; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, true));
+            taskRun.setProcessor(new MockTaskRunProcessor(5000));
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        Assert.assertEquals(pendingTaskRunsCount, 10);
+    }
+
+    @Test
+    public void testSyncRefreshWithMergeable1() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        Config.enable_mv_refresh_sync_refresh_mergeable = true;
+        for (int i = 0; i < 10; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, true));
+            taskRun.setProcessor(new MockTaskRunProcessor(5000));
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        Assert.assertTrue(pendingTaskRunsCount == 1);
+        Config.enable_mv_refresh_sync_refresh_mergeable = false;
+    }
+
+    @Test
+    public void testSyncRefreshWithMergeable2() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        Config.enable_mv_refresh_sync_refresh_mergeable = true;
+        for (int i = 0; i < 10; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, true));
+            taskRun.setProcessor(new MockTaskRunProcessor(5000));
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+            taskRunScheduler.scheduledPendingTaskRun(t -> {
+                try {
+                    t.getProcessor().postTaskRun(null);
+                } catch (Exception e) {
+                    Assert.fail("Process task run failed:" + e);
+                }
+            });
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        Assert.assertTrue(pendingTaskRunsCount == 1);
+        Config.enable_mv_refresh_sync_refresh_mergeable = false;
+    }
+
+    @Test
+    public void testKillTaskRun() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        for (int i = 0; i < 10; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, false));
+            taskRun.setProcessor(new MockTaskRunProcessor(5000));
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        taskRunScheduler.scheduledPendingTaskRun(taskRun -> {
+            try {
+                taskRun.getProcessor().postTaskRun(null);
+            } catch (Exception e) {
+                Assert.fail("Process task run failed:" + e);
+            }
+        });
+        long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
+        Assert.assertEquals(1, runningTaskRunsCount);
+
+        new MockUp<TaskRun>() {
+            @Mock
+            public ConnectContext getRunCtx() {
+                return null;
+            }
+        };
+        // running task run will not be removed if force kill is false
+        TaskRunManager taskRunManager = tm.getTaskRunManager();
+        taskRunManager.killTaskRun(1L, false);
+        Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+        taskRunManager.killTaskRun(1L, true);
+        Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
     }
 }

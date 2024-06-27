@@ -186,7 +186,7 @@ public class TaskManager implements MemoryTrackable {
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
 
                 // remove pending task run
-                taskRunScheduler.removePendingTaskRun(taskRun);
+                taskRunScheduler.removePendingTaskRun(taskRun, Constants.TaskRunState.FAILED);
             }
 
             // clear running task runs
@@ -268,24 +268,22 @@ public class TaskManager implements MemoryTrackable {
         return isCancel;
     }
 
-    public boolean killTask(String taskName, boolean clearPending) {
+    public boolean killTask(String taskName, boolean force) {
         Task task = nameToTaskMap.get(taskName);
         if (task == null) {
             return false;
         }
-        if (clearPending) {
-            if (!taskRunManager.tryTaskRunLock()) {
-                return false;
-            }
-            try {
-                taskRunScheduler.removePendingTask(task);
-            } catch (Exception ex) {
-                LOG.warn("failed to kill task.", ex);
-            } finally {
-                taskRunManager.taskRunUnlock();
-            }
+        if (!taskRunManager.tryTaskRunLock()) {
+            return false;
         }
-        return taskRunManager.killTaskRun(task.getId());
+        try {
+            taskRunScheduler.removePendingTask(task);
+        } catch (Exception ex) {
+            LOG.warn("failed to kill task.", ex);
+        } finally {
+            taskRunManager.taskRunUnlock();
+        }
+        return taskRunManager.killTaskRun(task.getId(), force);
     }
 
     public SubmitResult executeTask(String taskName) {
@@ -335,7 +333,7 @@ public class TaskManager implements MemoryTrackable {
         }
         try {
             Constants.TaskRunState taskRunState = taskRun.getFuture().get();
-            if (taskRunState != Constants.TaskRunState.SUCCESS) {
+            if (!taskRunState.isSuccessState()) {
                 String msg = taskRun.getStatus().getErrorMessage();
                 throw new DmlException("execute task %s failed: %s", task.getName(), msg);
             }
@@ -373,7 +371,7 @@ public class TaskManager implements MemoryTrackable {
                     }
                     periodFutureMap.remove(task.getId());
                 }
-                if (!killTask(task.getName(), true)) {
+                if (!killTask(task.getName(), false)) {
                     LOG.error("kill task failed: " + task.getName());
                 }
                 idToTaskMap.remove(task.getId());
@@ -756,7 +754,7 @@ public class TaskManager implements MemoryTrackable {
                 return;
             }
             // remove it from pending task queue
-            taskRunScheduler.removePendingTaskRun(pendingTaskRun);
+            taskRunScheduler.removePendingTaskRun(pendingTaskRun, toStatus);
 
             TaskRunStatus status = pendingTaskRun.getStatus();
 
