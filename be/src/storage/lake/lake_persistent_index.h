@@ -97,6 +97,15 @@ public:
         return Status::NotSupported("LakePersistentIndex::erase not supported");
     }
 
+    // batch insert delete operations, used when rebuild index.
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |filter| : used for filter keys that need to skip. `True` means need skip.
+    // |version|: version of values
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    Status replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
+                        uint32_t rowset_id);
+
     // batch replace
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -120,15 +129,6 @@ public:
     // |values|: value array
     // |version|: version of values
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
-
-    // batch insert delete operations, used when rebuild index.
-    // |n|: size of key/value array
-    // |keys|: key array as raw buffer
-    // |filter| : used for filter keys that need to skip. `True` means need skip.
-    // |version|: version of values
-    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
-    Status replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
-                        uint32_t rowset_id);
 
     Status minor_compact();
 
