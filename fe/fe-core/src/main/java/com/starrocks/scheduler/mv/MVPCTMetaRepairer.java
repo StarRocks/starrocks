@@ -137,7 +137,7 @@ public class MVPCTMetaRepairer {
 
         // acquire db write lock to modify meta of mv
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, mv, LockType.WRITE)) {
             throw new DmlException("repair mv meta failed. database:" + db.getFullName() + " not exist");
         }
         try {
@@ -193,7 +193,7 @@ public class MVPCTMetaRepairer {
                     newBaseTableInfo.getCatalogName(), newBaseTableInfo.getDbName(),
                     newBaseTableInfo.getTableIdentifier(), newConnectorTableInfo);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
         }
     }
 }
