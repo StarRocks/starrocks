@@ -1066,7 +1066,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -1084,7 +1084,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[2].first), chunks[2].second.data(), chunks[2].second.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -1103,7 +1103,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[1].first), chunks[1].second.data(), chunks[1].second.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -1140,7 +1140,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size() / 2));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -1184,7 +1184,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -1220,7 +1220,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
         ASSERT_OK(delta_writer->write(*(chunks[1].first), chunks[1].second.data(), chunks[1].second.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -1251,7 +1251,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
+        ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
