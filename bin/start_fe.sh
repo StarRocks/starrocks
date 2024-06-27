@@ -106,30 +106,9 @@ JAVA=$JAVA_HOME/bin/java
 
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
-<<<<<<< HEAD
-final_java_opt=$JAVA_OPTS
-if [[ "$JAVA_VERSION" -gt 8 ]]; then
-    if [[ "$JAVA_VERSION" -lt 11 ]]; then
-        echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
-        exit -1
-    fi
-        
-    if [ -n "$JAVA_OPTS_FOR_JDK_11" ]; then
-        final_java_opt=$JAVA_OPTS_FOR_JDK_11
-    # for config compatibility
-    elif [ -n "$JAVA_OPTS_FOR_JDK_9" ]; then 
-        final_java_opt=$JAVA_OPTS_FOR_JDK_9
-    else
-        if [ -z "$DATE" ] ; then
-            DATE=`date +%Y%m%d-%H%M%S`
-        fi
-        default_java_opts_for_jdk11="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
-        echo "JAVA_OPTS_FOR_JDK_11 is not set in fe.conf, use default java options for jdk11 to start fe process: $default_java_opts_for_jdk11"
-        final_java_opt=$default_java_opts_for_jdk11
-    fi
-=======
-if [[ "$JAVA_VERSION" -lt 11 ]]; then
-    echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
+# JDK8 is still OK for v3.2.x, so this line will just block jdk9 and jdk10
+if [[ "$JAVA_VERSION" -gt 8 && "$JAVA_VERSION" -lt 11 ]]; then
+    echo "JDK $JAVA_VERSION is not supported, please use JDK 8, 11 or 17"
     exit -1
 fi
 
@@ -172,9 +151,8 @@ if [ -z "$final_java_opt" ] ; then
     if [ -z "$DATE" ] ; then
         DATE=`date +%Y%m%d-%H%M%S`
     fi
-    final_java_opt="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy"
+    final_java_opt="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
     echo "JAVA_OPTS is not set in fe.conf, use default java options to start fe process: $final_java_opt"
->>>>>>> bd497d3e8c ([BugFix] Clean the JAVA_OPTS variable family in start_fe.sh (#47495))
 fi
 
 # Auto detect jvm -Xmx parameter in case $FE_ENABLE_AUTO_JVM_XMX_DETECT = true
