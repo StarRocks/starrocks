@@ -127,21 +127,30 @@ public class TaskRunFIFOQueue {
     /**
      * Remove a specific task run from the queue.
      * @param taskRun: task run to remove
+     * @param state: complete or cancel task run and set it with the state if the task run's future is not null
      */
-    public boolean remove(TaskRun taskRun) {
+    public boolean remove(TaskRun taskRun, Constants.TaskRunState state) {
         if (taskRun == null) {
             return false;
         }
 
         wLock.lock();
         try {
-            // make sure future is canceled.
-            CompletableFuture<?> future = taskRun.getFuture();
-            boolean isCancel = future.cancel(true);
-            if (!isCancel) {
-                LOG.warn("fail to cancel scheduler for task [{}]", taskRun);
+            CompletableFuture<Constants.TaskRunState> future = taskRun.getFuture();
+            // make sure the future is canceled or completed
+            if (future != null) {
+                if (state != null && state.isSuccessState()) {
+                    boolean isComplete = future.complete(state);
+                    if (!isComplete) {
+                        LOG.warn("fail to complete scheduler for task [{}]", taskRun);
+                    }
+                } else {
+                    boolean isCancel = future.cancel(true);
+                    if (!isCancel) {
+                        LOG.warn("fail to cancel scheduler for task [{}]", taskRun);
+                    }
+                }
             }
-
             // remove it from pending map.
             removeFromMapUnlock(taskRun);
             // remove it from pending queue.
