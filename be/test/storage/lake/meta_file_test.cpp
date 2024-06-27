@@ -407,4 +407,121 @@ TEST_F(MetaFileTest, test_dcg) {
     }
 }
 
+TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
+    // 1. generate metadata
+    const int64_t tablet_id = 10001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+
+    // 2. write first rowset (110)
+    {
+        metadata->set_version(11);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("aaa.dat");
+        TxnLogPB_OpWrite op_write;
+        std::map<int, FileInfo> replace_segments;
+        std::vector<std::string> orphan_files;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        builder.apply_opwrite(op_write, replace_segments, orphan_files);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+    // 3. write second rowset with del files (111)
+    {
+        metadata->set_version(12);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("bbb.dat");
+        DelfileWithRowsetId delfile;
+        delfile.set_name("bbb1.del");
+        delfile.set_origin_rowset_id(metadata->next_rowset_id());
+        rowset_metadata.add_del_files()->CopyFrom(delfile);
+        delfile.set_name("bbb2.del");
+        rowset_metadata.add_del_files()->CopyFrom(delfile);
+        TxnLogPB_OpWrite op_write;
+        std::map<int, FileInfo> replace_segments;
+        std::vector<std::string> orphan_files;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        builder.apply_opwrite(op_write, replace_segments, orphan_files);
+        PersistentIndexSstablePB sstable;
+        sstable.set_max_rss_rowid((uint64_t)111 << 32);
+        metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(sstable);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+    // 4. compact (112)
+    {
+        metadata->set_version(13);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(110);
+        op_compaction.add_input_rowsets(111);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("ccc.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
+        op_compaction.set_compact_version(13);
+        builder.apply_opcompaction(op_compaction, 111);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+        // check unpersistent del files
+        EXPECT_TRUE(metadata->rowsets_size() == 1);
+        EXPECT_TRUE(metadata->rowsets(0).del_files_size() == 2);
+        EXPECT_TRUE(metadata->rowsets(0).del_files(0).name() == "bbb1.del");
+        EXPECT_TRUE(metadata->rowsets(0).del_files(0).origin_rowset_id() == 111);
+        EXPECT_TRUE(metadata->rowsets(0).del_files(1).name() == "bbb2.del");
+        EXPECT_TRUE(metadata->rowsets(0).del_files(1).origin_rowset_id() == 111);
+        EXPECT_TRUE(metadata->compaction_inputs_size() == 2);
+        EXPECT_TRUE(metadata->compaction_inputs(0).del_files_size() == 0);
+        EXPECT_TRUE(metadata->compaction_inputs(1).del_files_size() == 0);
+    }
+    // 5. keep write (113)
+    {
+        metadata->set_version(14);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("ddd.dat");
+        TxnLogPB_OpWrite op_write;
+        std::map<int, FileInfo> replace_segments;
+        std::vector<std::string> orphan_files;
+        op_write.mutable_rowset()->CopyFrom(rowset_metadata);
+        builder.apply_opwrite(op_write, replace_segments, orphan_files);
+        PersistentIndexSstablePB sstable;
+        sstable.set_max_rss_rowid((uint64_t)113 << 32);
+        metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(sstable);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+    }
+    // 6. compact (114)
+    {
+        metadata->set_version(15);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(112);
+        op_compaction.add_input_rowsets(113);
+        RowsetMetadataPB rowset_metadata;
+        rowset_metadata.add_segments("eee.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
+        op_compaction.set_compact_version(15);
+        builder.apply_opcompaction(op_compaction, 113);
+        Status st = builder.finalize(next_id());
+        EXPECT_TRUE(st.ok());
+        // check unpersistent del files
+        EXPECT_TRUE(metadata->rowsets_size() == 1);
+        EXPECT_TRUE(metadata->rowsets(0).del_files_size() == 0);
+        EXPECT_TRUE(metadata->compaction_inputs(0).del_files_size() == 0);
+        EXPECT_TRUE(metadata->compaction_inputs(1).del_files_size() == 0);
+    }
+}
+
 } // namespace starrocks::lake
