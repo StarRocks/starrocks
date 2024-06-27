@@ -109,15 +109,6 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
-<<<<<<< HEAD
-=======
-    if (column == nullptr) {
-        _name = meta->has_name() ? meta->name() : "None";
-    } else {
-        _name = meta->has_name() ? meta->name() : column->name();
-    }
-    _column_unique_id = meta->unique_id();
->>>>>>> 757f14205a ([Feature] Support add/drop field for struct column(part1) (#46451))
 
     if (meta->is_nullable()) _flags |= kIsNullableMask;
     if (meta->has_all_dict_encoded()) _flags |= kHasAllDictEncodedMask;
@@ -187,20 +178,6 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             return Status::Corruption(
                     fmt::format("Bad file {}: missing ordinal index for column {}", file_name(), meta->column_id()));
         }
-<<<<<<< HEAD
-=======
-
-        if (_column_type == LogicalType::TYPE_JSON) {
-            _sub_readers = std::make_unique<SubReaderList>();
-            for (int i = 0; i < meta->children_columns_size(); ++i) {
-                auto sub_column = (column != nullptr) ? column->subcolumn_ptr(i) : nullptr;
-                auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
-                RETURN_IF_ERROR(res);
-                _sub_readers->emplace_back(std::move(res).value());
-            }
-            return Status::OK();
-        }
->>>>>>> 757f14205a ([Feature] Support add/drop field for struct column(part1) (#46451))
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         _sub_readers = std::make_unique<SubReaderList>();
@@ -517,10 +494,6 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 
-<<<<<<< HEAD
-StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path) {
-    if (is_scalar_field_type(delegate_type(_column_type))) {
-=======
 void ColumnReader::_update_sub_reader_pos(const TabletColumn* column, int pos) {
     if (column == nullptr) {
         return;
@@ -575,55 +548,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
 
 StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path,
                                                                      const TabletColumn* column) {
-    if (_column_type == LogicalType::TYPE_JSON) {
-        auto json_iter = std::make_unique<ScalarColumnIterator>(this);
-        if (path == nullptr || path->children().empty()) {
-            return json_iter;
-        }
-
-        std::vector<std::unique_ptr<ColumnIterator>> flat_iters;
-        // short name path, e.g. 'a'
-        std::vector<std::string> flat_paths;
-        std::vector<LogicalType> target_types;
-        std::vector<LogicalType> source_types;
-        {
-            for (auto& p : path->children()) {
-                if (UNLIKELY(!p->children().empty())) {
-                    // @todo: support later
-                    return Status::InvalidArgument("doesn't support multi-layer json access path: " +
-                                                   p->absolute_path());
-                }
-                flat_paths.emplace_back(p->path());
-                target_types.emplace_back(p->value_type().type);
-            }
-        }
-
-        int start = is_nullable() ? 1 : 0;
-        for (auto& p : flat_paths) {
-            for (size_t i = start; i < _sub_readers->size(); i++) {
-                const auto& rd = (*_sub_readers)[i];
-                if (rd->name() == p) {
-                    ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
-                    flat_iters.emplace_back(std::move(iter));
-                    source_types.emplace_back(rd->column_type());
-                    break;
-                }
-            }
-        }
-
-        if (flat_iters.size() != flat_paths.size()) {
-            // we must dynamic flat json, because we don't know other segment wasn't the paths
-            return create_json_dynamic_flat_iterator(std::move(json_iter), flat_paths, target_types, path);
-        }
-
-        std::unique_ptr<ColumnIterator> null_iterator;
-        if (is_nullable()) {
-            ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[0]->new_iterator());
-        }
-        return create_json_flat_iterator(this, std::move(null_iterator), std::move(flat_iters), flat_paths,
-                                         target_types, source_types, path);
-    } else if (is_scalar_field_type(delegate_type(_column_type))) {
->>>>>>> 757f14205a ([Feature] Support add/drop field for struct column(part1) (#46451))
+    if (is_scalar_field_type(delegate_type(_column_type))) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;

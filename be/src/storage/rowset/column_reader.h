@@ -108,14 +108,9 @@ public:
     ColumnReader(ColumnReader&&) = delete;
     void operator=(ColumnReader&&) = delete;
 
-<<<<<<< HEAD
     // create a new column iterator. Caller should free the returned iterator after unused.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
-=======
-    // create a new column iterator.
     StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr,
                                                            const TabletColumn* column = nullptr);
->>>>>>> 757f14205a ([Feature] Support add/drop field for struct column(part1) (#46451))
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
@@ -193,20 +188,11 @@ private:
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
-<<<<<<< HEAD
-=======
-    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
-
-    NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
-
-    bool _inverted_index_loaded() const { return invoked(_inverted_index_load_once); }
-
     StatusOr<std::unique_ptr<ColumnIterator>> _create_merge_struct_iter(ColumnAccessPath* path,
                                                                         const TabletColumn* column);
 
     void _update_sub_reader_pos(const TabletColumn* column, int pos);
 
->>>>>>> 757f14205a ([Feature] Support add/drop field for struct column(part1) (#46451))
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
