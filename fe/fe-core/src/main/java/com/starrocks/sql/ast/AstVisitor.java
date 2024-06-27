@@ -973,11 +973,11 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitAddFieldClause(AddFieldClause clause, C context) {
+    public R visitAddFieldClause(AddFieldClause clause, C context) {
         return visitNode(clause, context);
     }
 
-    default R visitDropFieldClause(DropFieldClause clause, C context) {
+    public R visitDropFieldClause(DropFieldClause clause, C context) {
         return visitNode(clause, context);
     }
 
