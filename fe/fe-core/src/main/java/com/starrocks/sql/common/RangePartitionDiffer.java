@@ -87,7 +87,6 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         int partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         PeriodDuration partitionTTL = mv.getTableProperty().getPartitionTTL();
         List<Column> partitionColumns = mv.getPartitionInfo().getPartitionColumns(mv.getIdToColumn());
-        Column partitionColumn = partitionColumns.get(0);
         return new RangePartitionDiffer(rangeToInclude, partitionTTLNumber, partitionTTL, partitionInfo, partitionColumns);
     }
 

@@ -15,14 +15,12 @@
 package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -42,7 +40,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
@@ -128,24 +125,6 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         // update mv's to refresh partitions
         mvTimelinessInfo.addMvToRefreshPartitionNames(mvToRefreshPartitionNames);
         return mvTimelinessInfo;
-    }
-
-    /**
-     * Collect ref base table's update partition infos
-     * @param refBaseTableAndColumns ref base table and columns of mv
-     * @return ref base table's changed partition names
-     */
-    private Map<Table, Set<String>> collectBaseTableUpdatePartitionNames(Map<Table, Column> refBaseTableAndColumns,
-                                                                         MvUpdateInfo mvUpdateInfo) {
-        Map<Table, Set<String>> baseChangedPartitionNames = Maps.newHashMap();
-        for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
-            Table baseTable = e.getKey();
-            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    true, true);
-            mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
-            baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPartitionNames());
-        }
-        return baseChangedPartitionNames;
     }
 
     @Override

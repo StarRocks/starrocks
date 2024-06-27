@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
+import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
@@ -104,6 +105,8 @@ public class MvRefreshArbiter {
             return new MVTimelinessNonPartitionArbiter(mv, isQueryRewrite);
         } else if (partitionInfo.isRangePartition()) {
             return new MVTimelinessRangePartitionArbiter(mv, isQueryRewrite);
+        } else if (partitionInfo.isListPartition()) {
+            return new MVTimelinessListPartitionArbiter(mv, isQueryRewrite);
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition info type:" +
                     partitionInfo.getClass().getName());
@@ -195,9 +198,7 @@ public class MvRefreshArbiter {
                 if (mvPartitionInfo.isListPartition()) {
                     Map<String, PListCell> partitionNameWithRange = getMVPartitionNameWithList(baseTable,
                             partitionColumn, updatedPartitionNamesList);
-                    for (Map.Entry<String, PListCell> e : partitionNameWithRange.entrySet()) {
-                        baseTableUpdateInfo.addListPartitionKeys(e.getKey(), e.getValue());
-                    }
+                    baseTableUpdateInfo.addListPartitionKeys(partitionNameWithRange);
                     baseTableUpdateInfo.addToRefreshPartitionNames(partitionNameWithRange.keySet());
                 } else if (mvPartitionInfo.isRangePartition()) {
                     Expr partitionExpr = MaterializedView.getPartitionExpr(mv);
