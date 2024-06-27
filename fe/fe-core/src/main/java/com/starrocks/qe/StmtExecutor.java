@@ -458,7 +458,7 @@ public class StmtExecutor {
 
         // Only add the last running stmt for multi statement,
         // because the audit log will only show the last stmt.
-        if (context.getIsLastStmt()) {
+        if (context.getIsLastStmt() && parsedStmt != null) {
             addRunningQueryDetail(parsedStmt);
         }
 
