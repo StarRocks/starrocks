@@ -93,6 +93,28 @@ public class PartitionStatistics {
         return getCurrentVersion().getVersion() - getCompactionVersion().getVersion();
     }
 
+<<<<<<< HEAD
+=======
+    public int getPunishFactor() {
+        return punishFactor;
+    }
+
+    private void adjustPunishFactor(Quantiles newCompactionScore) {
+        if (compactionScore != null && newCompactionScore != null) {
+            if (compactionScore.getMax() == newCompactionScore.getMax()) {
+                // this means partial compaction succeeds, need increase punish factor,
+                // so that other partitions' compaction can proceed.
+                // max interval will be CompactionScheduler.MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS * punishFactor
+                punishFactor = Math.min(punishFactor * 2, 360);
+            } else {
+                punishFactor = 1;
+            }
+        } else {
+            punishFactor = 1;
+        }
+    }
+
+>>>>>>> 80f9b65bc5 ([Enhancement] adjust lake compaction punish factor algorithm (#47582))
     public void setCompactionScore(@Nullable Quantiles compactionScore) {
         this.compactionScore = compactionScore;
     }
