@@ -45,18 +45,19 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
 
     @Test
     public void testZeroConcurrencyLevel() {
-        QueryQueueOptions.V2 opts = new QueryQueueOptions.V2(0, 0, 0, 0, 0);
+        QueryQueueOptions.V2 opts = new QueryQueueOptions.V2(0, 0, 0, 0, 0, 0);
         assertThat(opts.getTotalSlots()).isEqualTo(4);
     }
 
     @Test
     public void testZeroOthers() {
-        QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2(2, 0, 0, 0, 0));
+        QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2(2, 0, 0, 0, 0, 0));
         assertThat(opts.v2().getNumWorkers()).isOne();
         assertThat(opts.v2().getNumRowsPerSlot()).isOne();
         assertThat(opts.v2().getTotalSlots()).isEqualTo(2);
         assertThat(opts.v2().getTotalSmallSlots()).isOne();
         assertThat(opts.v2().getMemBytesPerSlot()).isEqualTo(Long.MAX_VALUE);
+        assertThat(opts.v2().getCpuCostsPerSlot()).isOne();
     }
 
     @Test

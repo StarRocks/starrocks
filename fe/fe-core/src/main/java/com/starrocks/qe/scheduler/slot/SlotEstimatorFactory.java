@@ -75,7 +75,7 @@ public class SlotEstimatorFactory {
                     .mapToInt(fragmentContext -> fragmentContext.numWorkers)
                     .max().orElse(1);
             final long planCpuCosts = (long) context.getAuditEventBuilder().build().planCpuCosts;
-            int numSlotsByCpuCosts = (int) (planCpuCosts / opts.v2().getNumWorkers() / 1e8);
+            int numSlotsByCpuCosts = (int) (planCpuCosts / opts.v2().getCpuCostsPerSlot());
             numSlotsByCpuCosts = Math.max(1, numSlotsByCpuCosts / numWorkers) * numWorkers;
 
             return Math.min(Math.max(numSlots / 2, numSlotsByCpuCosts), numSlots);

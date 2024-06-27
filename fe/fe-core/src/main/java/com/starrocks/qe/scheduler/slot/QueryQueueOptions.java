@@ -43,7 +43,8 @@ public class QueryQueueOptions {
                 BackendResourceStat.getInstance().getNumBes(),
                 BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe(),
                 BackendResourceStat.getInstance().getAvgMemLimitBytes(),
-                Config.query_queue_v2_num_rows_per_slot);
+                Config.query_queue_v2_num_rows_per_slot,
+                Config.query_queue_v2_cpu_costs_per_slot);
         return new QueryQueueOptions(true, v2);
     }
 
@@ -84,21 +85,24 @@ public class QueryQueueOptions {
 
         private final int totalSlots;
         private final long memBytesPerSlot;
+        private final long cpuCostsPerSlot;
         private final int totalSmallSlots;
 
         @VisibleForTesting
         V2() {
-            this(1, 1, 1, 1, 1);
+            this(1, 1, 1, 1, 1, 1);
         }
 
         @VisibleForTesting
-        V2(int concurrencyLevel, int numWorkers, int numCoresPerWorker, long memLimitBytesPerWorker, int numRowsPerSlot) {
+        V2(int concurrencyLevel, int numWorkers, int numCoresPerWorker, long memLimitBytesPerWorker, int numRowsPerSlot,
+                long cpuCostsPerSlot) {
             if (concurrencyLevel <= 0) {
                 concurrencyLevel = 4;
             }
             int normNumWorkers = Math.max(1, numWorkers);
             int normNumCoresPerWorker = Math.max(1, numCoresPerWorker);
             int normNumRowsPerSlot = Math.max(1, numRowsPerSlot);
+            long normCpuCostsPerSlot = Math.max(1, cpuCostsPerSlot);
 
             this.numWorkers = normNumWorkers;
             this.numRowsPerSlot = normNumRowsPerSlot;
@@ -108,6 +112,7 @@ public class QueryQueueOptions {
             this.totalSmallSlots = normNumCoresPerWorker;
             this.memBytesPerSlot = isAnyZero(memLimitBytesPerWorker, numCoresPerWorker) ? Long.MAX_VALUE :
                     memLimitBytesPerWorker / totalSlotsPerWorker;
+            this.cpuCostsPerSlot = normCpuCostsPerSlot;
         }
 
         public int getNumWorkers() {
@@ -130,6 +135,10 @@ public class QueryQueueOptions {
             return totalSmallSlots;
         }
 
+        public long getCpuCostsPerSlot() {
+            return cpuCostsPerSlot;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) {
@@ -140,12 +149,13 @@ public class QueryQueueOptions {
             }
             V2 v2 = (V2) o;
             return numWorkers == v2.numWorkers && numRowsPerSlot == v2.numRowsPerSlot && totalSlots == v2.totalSlots &&
-                    memBytesPerSlot == v2.memBytesPerSlot && totalSmallSlots == v2.totalSmallSlots;
+                    memBytesPerSlot == v2.memBytesPerSlot && totalSmallSlots == v2.totalSmallSlots &&
+                    cpuCostsPerSlot == v2.cpuCostsPerSlot;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(numWorkers, numRowsPerSlot, totalSlots, memBytesPerSlot, totalSmallSlots);
+            return Objects.hash(numWorkers, numRowsPerSlot, totalSlots, memBytesPerSlot, totalSmallSlots, cpuCostsPerSlot);
         }
     }
 
