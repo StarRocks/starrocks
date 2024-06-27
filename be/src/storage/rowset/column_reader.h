@@ -84,14 +84,21 @@ class Segment;
 // This will cache data shared by all reader
 class ColumnReader {
     struct private_type;
+    struct SubReaderId;
 
 public:
     // Create and initialize a ColumnReader.
     // This method will not take the ownership of |meta|.
     // Note that |meta| is mutable, this method may change its internal state.
     //
+    // The primary purpose of the |column| currently is to obtain the name and unique ID of the sub_column
+    // to support the add/drop field functionality of the struct column.
+    // It is important that the |column| needs to be consistent with the tablet schema corresponding to the segment.
+    // If you can ensure that this column does not involve a struct column, the |column| can be set to nullptr.
+    //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment,
+                                                          const TabletColumn* column);
 
     ColumnReader(const private_type&, Segment* segment);
     ~ColumnReader();
@@ -102,7 +109,8 @@ public:
     void operator=(ColumnReader&&) = delete;
 
     // create a new column iterator. Caller should free the returned iterator after unused.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator(ColumnAccessPath* path = nullptr,
+                                                           const TabletColumn* column = nullptr);
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
@@ -167,7 +175,7 @@ private:
     constexpr static uint8_t kHasAllDictEncodedMask = 2;
     constexpr static uint8_t kAllDictEncodedMask = 4;
 
-    Status _init(ColumnMetaPB* meta);
+    Status _init(ColumnMetaPB* meta, const TabletColumn* column);
 
     Status _load_zonemap_index(const IndexReadOptions& opts);
     Status _load_bitmap_index(const IndexReadOptions& opts);
@@ -179,6 +187,11 @@ private:
 
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
+
+    StatusOr<std::unique_ptr<ColumnIterator>> _create_merge_struct_iter(ColumnAccessPath* path,
+                                                                        const TabletColumn* column);
+
+    void _update_sub_reader_pos(const TabletColumn* column, int pos);
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
@@ -205,6 +218,28 @@ private:
 
     using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
     std::unique_ptr<SubReaderList> _sub_readers;
+    // Only used for struct column right now
+    // Use column names and unique IDs to distinguish sub-columns.
+    // The unnique id is always -1 for historical data, so the column name is needed.
+    // After support add/drop field for struct column, the following scenarios might occur:
+    //   1. Drop field v1
+    //   2. Add field v1
+    // The field `v1` in step 2 is different from the `v1` in step 1 and needs to be distinguished,
+    // So we also need to unqiue id.
+    struct SubReaderId {
+        std::string name;
+        int32_t id;
+
+        bool operator==(const SubReaderId& other) const { return id == other.id && name == other.name; }
+
+        bool operator<(const SubReaderId& other) const {
+            if (id != other.id) {
+                return id < other.id;
+            }
+            return name < other.name;
+        }
+    };
+    std::map<SubReaderId, int> _sub_reader_pos;
 
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,
