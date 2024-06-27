@@ -106,18 +106,20 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
     }
 
     auto available_memory = [&]() { return mem_tracker->limit() - mem_tracker->consumption(); };
-    auto low_watermark = [&]() { return mem_tracker->limit() * _low_watermark_ratio; };
-    auto high_watermark = [&]() { return mem_tracker->limit() * _high_watermark_ratio; };
+    auto low_watermark = static_cast<int64_t>(mem_tracker->limit() * _low_watermark_ratio);
+    auto high_watermark = static_cast<int64_t>(mem_tracker->limit() * _high_watermark_ratio);
     auto exceed_urgent_space = [&]() {
         return _total_writer_occupied_memory() > _query_tracker->limit() * _urgent_space_ratio;
     };
 
-    if (available_memory() <= low_watermark()) {
+    if (available_memory() <= low_watermark) {
+        child_manager->update_releasable_memory();
+        child_manager->update_writer_occupied_memory();
         LOG_EVERY_SECOND(WARNING) << "consumption: " << mem_tracker->consumption()
                                   << " releasable_memory: " << _total_releasable_memory()
                                   << " writer_allocated_memory: " << _total_writer_occupied_memory();
         // trigger early close
-        while (exceed_urgent_space() && available_memory() + _total_releasable_memory() < high_watermark()) {
+        while (exceed_urgent_space() && available_memory() + _total_releasable_memory() < high_watermark) {
             bool found = child_manager->kill_victim();
             if (!found) {
                 break;
@@ -128,7 +130,7 @@ bool SinkMemoryManager::_apply_on_mem_tracker(SinkOperatorMemoryManager* child_m
     }
 
     child_manager->update_releasable_memory();
-    if (available_memory() <= low_watermark() && _total_releasable_memory() > 0) {
+    if (available_memory() <= low_watermark && _total_releasable_memory() > 0) {
         return false;
     }
 
