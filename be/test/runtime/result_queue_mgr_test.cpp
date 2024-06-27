@@ -38,6 +38,7 @@
 #include <arrow/builder.h>
 #include <arrow/record_batch.h>
 #include <arrow/type.h>
+#include <arrow/testing/gtest_util.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -93,9 +94,9 @@ TEST_F(ResultQueueMgrTest, fetch_result_normal) {
 
     std::shared_ptr<arrow::Array> k1_col;
     arrow::NumericBuilder<arrow::Int32Type> builder;
-    builder.Reserve(1);
-    builder.Append(20);
-    builder.Finish(&k1_col);
+    ARROW_EXPECT_OK(builder.Reserve(1));
+    ARROW_EXPECT_OK(builder.Append(20));
+    ARROW_EXPECT_OK(builder.Finish(&k1_col));
 
     std::vector<std::shared_ptr<arrow::Array>> arrays;
     arrays.push_back(k1_col);
