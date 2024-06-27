@@ -74,6 +74,7 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
     // in map until the shard lock is release. If not, we may be deconstruct the original schema which will cause
     // a dead lock(#issue 5646)
     TabletSchemaPtr result = nullptr;
+    TabletSchemaPtr ptr = nullptr; // Do not move this definition inside the lock scope, otherwise it will deadlock
     bool insert = false;
     {
         std::unique_lock l(shard->mtx);
@@ -84,7 +85,7 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
             _insert(*shard, id, result);
             insert = true;
         } else {
-            TabletSchemaPtr ptr = it->second.tablet_schema.lock();
+            ptr = it->second.tablet_schema.lock();
             if (UNLIKELY(!ptr)) {
                 result = TabletSchema::create(schema_pb, this);
 
@@ -133,6 +134,7 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
     MapShard* shard = get_shard(id);
     bool insert = false;
     TabletSchemaPtr result = nullptr;
+    TabletSchemaPtr ptr = nullptr; // Do not move this definition inside the lock scope, otherwise it will deadlock
     {
         std::unique_lock l(shard->mtx);
         auto it = shard->map.find(id);
@@ -142,7 +144,7 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
             _insert(*shard, id, result);
             insert = true;
         } else {
-            TabletSchemaPtr ptr = it->second.tablet_schema.lock();
+            ptr = it->second.tablet_schema.lock();
             if (UNLIKELY(!ptr)) {
                 result = tablet_schema;
 
