@@ -66,4 +66,32 @@ public class AccessLog {
     public long getCount() {
         return count;
     }
+
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof AccessLog)) {
+            return false;
+        }
+
+        AccessLog accessLog = (AccessLog) o;
+        return accessTimeSec == accessLog.accessTimeSec && count == accessLog.count &&
+                catalogName.equals(accessLog.catalogName) && dbName.equals(accessLog.dbName) &&
+                tableName.equals(accessLog.tableName) && partitionName.equals(accessLog.partitionName) &&
+                columnName.equals(accessLog.columnName);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = catalogName.hashCode();
+        result = 31 * result + dbName.hashCode();
+        result = 31 * result + tableName.hashCode();
+        result = 31 * result + partitionName.hashCode();
+        result = 31 * result + columnName.hashCode();
+        result = 31 * result + Long.hashCode(accessTimeSec);
+        result = 31 * result + Long.hashCode(count);
+        return result;
+    }
 }

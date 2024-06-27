@@ -124,7 +124,7 @@ public class DataCacheCopilotStorage {
     private class CatalogMapping {
         private final Map<String, DbMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessLog) {
+        private void update(AccessLog accessLog) {
             String catalogName = accessLog.getCatalogName();
             DbMapping dbMapping = mapping.get(catalogName);
             if (dbMapping == null) {
@@ -135,7 +135,7 @@ public class DataCacheCopilotStorage {
             dbMapping.update(accessLog);
         }
 
-        protected void clear() {
+        private void clear() {
             mapping.clear();
         }
     }
@@ -143,7 +143,7 @@ public class DataCacheCopilotStorage {
     private class DbMapping {
         private final Map<String, TblMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessLog) {
+        private void update(AccessLog accessLog) {
             String dbName = accessLog.getDbName();
             TblMapping tblMapping = mapping.get(dbName);
             if (tblMapping == null) {
@@ -158,7 +158,7 @@ public class DataCacheCopilotStorage {
     private class TblMapping {
         private final Map<String, PartitionMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessLog) {
+        private void update(AccessLog accessLog) {
             String tblName = accessLog.getTableName();
             PartitionMapping partitionMapping = mapping.get(tblName);
             if (partitionMapping == null) {
@@ -173,7 +173,7 @@ public class DataCacheCopilotStorage {
     private class PartitionMapping {
         private final Map<String, ColumnMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessLog) {
+        private void update(AccessLog accessLog) {
             String partitionName = accessLog.getPartitionName();
             ColumnMapping columnMapping = mapping.get(partitionName);
             if (columnMapping == null) {
@@ -188,7 +188,7 @@ public class DataCacheCopilotStorage {
     private class ColumnMapping {
         private final Map<String, AccessTimeMapping> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessLog) {
+        private void update(AccessLog accessLog) {
             String columnName = accessLog.getColumnName();
             AccessTimeMapping accessTimeMapping = mapping.get(columnName);
             if (accessTimeMapping == null) {
@@ -203,11 +203,12 @@ public class DataCacheCopilotStorage {
     private class AccessTimeMapping {
         private final Map<Long, Long> mapping = new HashMap<>();
 
-        protected void update(AccessLog accessLog) {
+        private void update(AccessLog accessLog) {
             long accessTime = accessLog.getAccessTimeSec();
             Long count = mapping.get(accessTime);
             if (count == null) {
                 count = accessLog.getCount();
+                // key(long) + value(long) = 8bytes + 8bytes = 16bytes
                 estimateMemorySize += 16;
             } else {
                 count += accessLog.getCount();
