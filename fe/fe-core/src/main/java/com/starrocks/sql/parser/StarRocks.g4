@@ -1021,7 +1021,6 @@ compactionClause
     : (BASE | CUMULATIVE)? COMPACT (identifier | identifierList)?
     ;
 
-<<<<<<< HEAD
 applyMaskingPolicyClause
     : MODIFY COLUMN columnName=identifier SET MASKING POLICY policyName=qualifiedName (USING identifierList)?
     | MODIFY COLUMN columnName=identifier UNSET MASKING POLICY
@@ -1031,7 +1030,8 @@ applyRowAccessPolicyClause
     : ADD ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
     | DROP ROW ACCESS POLICY policyName=qualifiedName
     | DROP ALL ROW ACCESS POLICIES
-=======
+    ;
+
 subfieldName
     : identifier | ARRAY_ELEMENT
     ;
@@ -1046,7 +1046,6 @@ addFieldClause
 
 dropFieldClause
     : MODIFY COLUMN identifier DROP FIELD nestedFieldName properties?
->>>>>>> 93f333ee97 ([Feature]Support add/drop field for struct column(part2) (#46619))
     ;
 
 // ---------Alter partition clause---------
@@ -2717,12 +2716,7 @@ nonReserved
     | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
-<<<<<<< HEAD
     | DOTDOTDOT
-    ;
-=======
-    | DOTDOTDOT | NGRAMBF
     | FIELD
     | ARRAY_ELEMENT
     ;
->>>>>>> 93f333ee97 ([Feature]Support add/drop field for struct column(part2) (#46619))

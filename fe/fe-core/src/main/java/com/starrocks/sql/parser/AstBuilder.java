@@ -204,11 +204,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropDbStmt;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.DropDictionaryStmt;
 import com.starrocks.sql.ast.DropFieldClause;
->>>>>>> 93f333ee97 ([Feature]Support add/drop field for struct column(part2) (#46619))
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropFunctionStmt;

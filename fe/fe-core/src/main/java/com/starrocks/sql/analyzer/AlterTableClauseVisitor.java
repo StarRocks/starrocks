@@ -50,11 +50,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseVisitor.java
-=======
 import com.starrocks.sql.ast.AddFieldClause;
-import com.starrocks.sql.ast.AddPartitionClause;
->>>>>>> 93f333ee97 ([Feature]Support add/drop field for struct column(part2) (#46619)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseAnalyzer.java
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -66,11 +62,7 @@ import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseVisitor.java
-=======
 import com.starrocks.sql.ast.DropFieldClause;
-import com.starrocks.sql.ast.DropPartitionClause;
->>>>>>> 93f333ee97 ([Feature]Support add/drop field for struct column(part2) (#46619)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseAnalyzer.java
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -85,13 +77,7 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseVisitor.java
-=======
-import com.starrocks.sql.ast.SingleItemListPartitionDesc;
-import com.starrocks.sql.ast.SinglePartitionDesc;
-import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StructFieldDesc;
->>>>>>> 93f333ee97 ([Feature]Support add/drop field for struct column(part2) (#46619)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterTableClauseAnalyzer.java
 import com.starrocks.sql.ast.TableRenameClause;
 
 import java.time.format.DateTimeParseException;
