@@ -31,10 +31,27 @@
           "items": ["deployment/deployment_prerequisites", "deployment/plan_cluster", "deployment/environment_configurations", "deployment/prepare_deployment_files"]
         },
         {
+<<<<<<< HEAD
           "type": "category",
           "label": "Shared-nothing deployment",
           "link": {"type": "doc", "id": "cover_pages/shared_nothing_deployment"},
           "items": ["deployment/deploy_manually", "deployment/sr_operator", "deployment/helm", "deployment/starrocks_on_aws"]
+=======
+            "type": "category",
+            "label": "Quick Start",
+            "link": {
+                "type": "doc",
+                "id": "quick_start/quick_start"
+            },
+            "items": [
+                "quick_start/shared-nothing",
+                "quick_start/shared-data",
+                "quick_start/iceberg",
+                "quick_start/hudi",
+                "quick_start/routine-load",
+                "quick_start/helm"
+            ]
+>>>>>>> f1cd788499 ([Doc] Helm quick start (#47555))
         },
         "deployment/deploy_shared_data",
         {
