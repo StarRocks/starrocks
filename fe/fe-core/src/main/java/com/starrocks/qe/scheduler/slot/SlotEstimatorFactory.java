@@ -71,9 +71,14 @@ public class SlotEstimatorFactory {
                     .mapToInt(fragmentContext -> estimateFragmentSlots(opts, fragmentContext))
                     .max().orElse(1);
 
+            final int numWorkers = fragmentContexts.values().stream()
+                    .mapToInt(fragmentContext -> fragmentContext.numWorkers)
+                    .max().orElse(1);
             final long planCpuCosts = (long) context.getAuditEventBuilder().build().planCpuCosts;
-            int numSlotsPerWorker = (int) (planCpuCosts / opts.v2().getNumWorkers() / 1e8);
-            return Math.min(Math.max(numSlots / 2, numSlotsPerWorker), numSlots);
+            int numSlotsByCpuCosts = (int) (planCpuCosts / opts.v2().getNumWorkers() / 1e8);
+            numSlotsByCpuCosts = Math.max(1, numSlotsByCpuCosts / numWorkers) * numWorkers;
+
+            return Math.min(Math.max(numSlots / 2, numSlotsByCpuCosts), numSlots);
         }
 
         private static int estimateFragmentSlots(QueryQueueOptions opts, FragmentContext context) {
