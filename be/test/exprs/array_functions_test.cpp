@@ -5649,8 +5649,7 @@ TEST_F(ArrayFunctionsTest, array_flatten_int) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{DatumArray{1, 2}, DatumArray{1, 4}});
-
-
+        array->append_datum(DatumArray{DatumArray{1, 2}, DatumArray{3}});
 
         auto result = ArrayFunctions::array_flatten(nullptr, {array}).value();
         EXPECT_EQ(3, result->size());

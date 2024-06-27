@@ -1212,7 +1212,7 @@ vectorized_functions = [
 
     [150335, 'array_sortby', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_sortby_multi'],
 
-    [150340, 'array_flatten', 'ANY_ARRAY',  ['ANY_ARRAY'],      "ArrayFunctions::array_flatten"],
+    [150340, 'array_flatten', True, False, 'ANY_ARRAY', ['ANY_ARRAY'], 'ArrayFunctions::array_flatten'],
 
     # high-order functions related to lambda functions.
     [160100, 'array_map', True, False, 'ANY_ARRAY', ['FUNCTION', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_map'],
