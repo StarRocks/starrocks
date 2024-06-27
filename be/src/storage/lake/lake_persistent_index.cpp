@@ -476,7 +476,8 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
     return Status::OK();
 }
 
-// rebuild index from del files.
+// Rebuild index's memtable via del files, it will read from del file and write to index.
+// If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
     TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
     // Build pk column struct from schema

@@ -67,8 +67,12 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
                 // shouldn't happen
                 std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
                                                       hexdump((const char*)key.data(), size));
-                LOG(WARNING) << msg;
-                return Status::AlreadyExist(msg);
+                LOG(ERROR) << msg;
+                if (!config::experimental_lake_ignore_pk_consistency_check) {
+                    return Status::AlreadyExist(msg);
+                } else {
+                    update_index_value(&old_index_value_vers, version, value);
+                }
             } else {
                 // cover delete operation.
                 update_index_value(&old_index_value_vers, version, value);
