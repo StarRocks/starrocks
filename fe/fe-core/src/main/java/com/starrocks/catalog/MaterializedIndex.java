@@ -107,6 +107,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // this is for keeping tablet order
     private List<Tablet> tablets;
 
+    @SerializedName(value = "shardGroupId")
+    private long shardGroupId;
+
     // If this is an index of LakeTable and the index state is SHADOW, all transactions
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
     // PublishVersionRequest requests to BE nodes.
@@ -166,6 +169,14 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     public void setVisibleTxnId(long visibleTxnId) {
         Preconditions.checkState(state == IndexState.SHADOW);
         this.visibleTxnId = visibleTxnId;
+    }
+
+    public void setShardGroupId(long shardGroupId) {
+        this.shardGroupId = shardGroupId;
+    }
+
+    public long getShardGroupId() {
+        return shardGroupId;
     }
 
     public List<Tablet> getTablets() {

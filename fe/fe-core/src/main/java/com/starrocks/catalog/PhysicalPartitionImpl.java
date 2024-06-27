@@ -46,6 +46,7 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @SerializedName(value = "parentId")
     private long parentId;
 
+    // DEPRECATED
     @SerializedName(value = "shardGroupId")
     private long shardGroupId;
 
@@ -127,7 +128,8 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     public void setParentId(long parentId) {
         this.parentId = parentId;
     }
- 
+
+    // DEPRECATED
     @Override
     public long getShardGroupId() {
         return this.shardGroupId;

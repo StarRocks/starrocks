@@ -398,8 +398,10 @@ public class MaterializedViewHandler extends AlterHandler {
 
                 if (isCloudNativeTable) {
                     // create shard group
+                    long indexShardGroupId = GlobalStateMgr.getCurrentState().getNextId();
                     long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                            createShardGroup(db.getId(), olapTable.getId(), mvIndexId);
+                            createShardGroup(db.getId(), olapTable.getId(), indexShardGroupId);
+                    mvIndex.setShardGroupId(shardGroupId);
 
                     // create shard
                     Map<String, String> shardProperties = new HashMap<>();
