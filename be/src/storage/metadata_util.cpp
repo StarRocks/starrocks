@@ -320,11 +320,11 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                     LOG(WARNING) << "index " << index_col_name << " can not be found in table columns";
                 }
 
-                std::map<std::string, std::map<std::string, std::string>> properties_map;
-                properties_map.emplace(COMMON_PROPERTIES, index.common_properties);
-                properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
-                properties_map.emplace(SEARCH_PROPERTIES, index.search_properties);
-                properties_map.emplace(EXTRA_PROPERTIES, index.extra_properties);
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {COMMON_PROPERTIES, index.common_properties},
+                        {INDEX_PROPERTIES, index.index_properties},
+                        {SEARCH_PROPERTIES, index.search_properties},
+                        {EXTRA_PROPERTIES, index.extra_properties}};
                 index_pb->set_index_properties(to_json(properties_map));
             } else if (index.index_type == TIndexType::type::NGRAMBF) {
                 RETURN_IF(index.columns.size() != 1,
@@ -340,10 +340,10 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                     index_pb->add_col_unique_id(mit->second->unique_id());
                 } else {
                     return Status::Cancelled(
-                            strings::Substitute("index column $0 can not be found in table columns", index.columns[0]));
+                            strings::Substitute("index column $0 can not be found in table columns", index_col_name));
                 }
-                std::map<std::string, std::map<std::string, std::string>> properties_map;
-                properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {INDEX_PROPERTIES, index.index_properties}};
                 std::string str = to_json(properties_map);
                 index_pb->set_index_properties(str);
             } else if (index.index_type == TIndexType::type::VECTOR) {
@@ -359,14 +359,15 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                     index_pb->add_col_unique_id(mit->second->unique_id());
                 } else {
                     return Status::Cancelled(
-                            strings::Substitute("index column $0 can not be found in table columns", index.columns[0]));
+                            strings::Substitute("index column $0 can not be found in table columns", index_col_name));
                 }
 
-                std::map<std::string, std::map<std::string, std::string>> properties_map;
-                properties_map.emplace(COMMON_PROPERTIES, index.common_properties);
-                properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
-                properties_map.emplace(SEARCH_PROPERTIES, index.search_properties);
-                properties_map.emplace(EXTRA_PROPERTIES, index.extra_properties);
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {COMMON_PROPERTIES, index.common_properties},
+                        {INDEX_PROPERTIES, index.index_properties},
+                        {SEARCH_PROPERTIES, index.search_properties},
+                        {EXTRA_PROPERTIES, index.extra_properties}};
+                index_pb->set_index_properties(to_json(properties_map));
             } else {
                 std::string index_type;
                 EnumToString(TIndexType, index.index_type, index_type);
