@@ -183,7 +183,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             GenericRow genericRow = new GenericRow(3);
             genericRow.setField(0, BinaryString.fromString(String.valueOf(i)));
             genericRow.setField(1, BinaryString.fromString("2"));
-            batchTableWrite.write(genericRow);
+            batchTableWrite.write(genericRow, 1);
         }
         batchTableCommit.commit(batchTableWrite.prepareCommit());
     }
@@ -212,7 +212,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             genericRow.setField(0, BinaryString.fromString("1"));
             genericRow.setField(1, BinaryString.fromString("2"));
             genericRow.setField(2, (int) LocalDate.now().toEpochDay() + i);
-            batchTableWrite.write(genericRow);
+            batchTableWrite.write(genericRow, 1);
         }
         batchTableCommit.commit(batchTableWrite.prepareCommit());
     }
