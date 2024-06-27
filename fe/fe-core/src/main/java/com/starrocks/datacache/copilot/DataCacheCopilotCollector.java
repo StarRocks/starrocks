@@ -164,6 +164,10 @@ public class DataCacheCopilotCollector {
         }
 
         private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates) {
+            if (scanOperatorPredicates.getSelectedPartitionIds().size() == 1) {
+                // for none-partition table, it has one partition id
+                return false;
+            }
             return scanOperatorPredicates.getSelectedPartitionIds().size() ==
                     scanOperatorPredicates.getIdToPartitionKey().size();
         }

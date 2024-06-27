@@ -131,7 +131,7 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
                         "GROUP BY `$catalogName`, `$databaseName`, `$tableName`, `$accessTime`, `$count` " +
                         "ORDER BY `$count` DESC $limitCondition";
         private static final String CACHE_SELECT_TEMPLATE =
-                "CACHE SELECT $columnNames FROM `$catalogName`, `$databaseName`, `$tableName` $whereCondition";
+                "CACHE SELECT $columnNames FROM `$catalogName`.`$databaseName`.`$tableName` $whereCondition";
         private static final VelocityEngine DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
 
         public static String buildCollectSQL(Optional<QualifiedName> qualifiedName, long interval,
