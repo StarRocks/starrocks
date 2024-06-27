@@ -865,6 +865,8 @@ alterClause
     | compactionClause
     | modifyCommentClause
     | optimizeClause
+    | addFieldClause
+    | dropFieldClause
 
     //Apply Policy clause
     | applyMaskingPolicyClause
@@ -1028,6 +1030,22 @@ applyRowAccessPolicyClause
     : ADD ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
     | DROP ROW ACCESS POLICY policyName=qualifiedName
     | DROP ALL ROW ACCESS POLICIES
+    ;
+
+subfieldName
+    : identifier | ARRAY_ELEMENT
+    ;
+
+nestedFieldName
+    : subfieldName (DOT_IDENTIFIER | '.' subfieldName)*
+    ;
+
+addFieldClause
+    : MODIFY COLUMN identifier ADD FIELD subfieldDesc (FIRST | AFTER identifier)? properties?
+    ;
+
+dropFieldClause
+    : MODIFY COLUMN identifier DROP FIELD nestedFieldName properties?
     ;
 
 // ---------Alter partition clause---------
@@ -2562,7 +2580,7 @@ mapType
     ;
 
 subfieldDesc
-    : identifier type
+    : (identifier | nestedFieldName) type
     ;
 
 subfieldDescs
@@ -2699,4 +2717,6 @@ nonReserved
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT
+    | FIELD
+    | ARRAY_ELEMENT
     ;
