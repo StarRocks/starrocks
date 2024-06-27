@@ -320,9 +320,7 @@ public class AlterTest {
         CancelRefreshMaterializedViewStmt cancelRefresh =
                 (CancelRefreshMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .cancelRefreshMaterializedView(cancelRefresh.getMvName().getDb(),
-                            cancelRefresh.getMvName().getTbl());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().cancelRefreshMaterializedView(cancelRefresh);
             if (expectedException) {
                 Assert.fail();
             }

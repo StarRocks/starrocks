@@ -299,6 +299,10 @@ public class TaskRunStatus implements Writable {
 
     public void setProcessStartTime(long processStartTime) {
         this.processStartTime = processStartTime;
+        // update process start time in mvTaskRunExtraMessage to display in the web page
+        if (mvTaskRunExtraMessage != null) {
+            mvTaskRunExtraMessage.setProcessStartTime(processStartTime);
+        }
     }
 
     public Map<String, String> getProperties() {
