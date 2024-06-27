@@ -33,6 +33,8 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -702,5 +704,97 @@ public class TaskManagerTest {
             Assert.assertTrue(map1.equals(map3));
             Assert.assertTrue(map1.get(task1.getId()).equals(map3.get(task1.getId())));
         }
+    }
+
+    @Test
+    public void testSyncRefreshWithoutMergeable() {
+        Config.enable_mv_refresh_sync_refresh_mergeable = false;
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        for (int i = 0; i < 10; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, true));
+            taskRun.setProcessor(new MockTaskRunProcessor(5000));
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        Assert.assertEquals(pendingTaskRunsCount, 10);
+    }
+
+    @Test
+    public void testSyncRefreshWithMergeable1() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        Config.enable_mv_refresh_sync_refresh_mergeable = true;
+        for (int i = 0; i < 10; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, true));
+            taskRun.setProcessor(new MockTaskRunProcessor(5000));
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        Assert.assertTrue(pendingTaskRunsCount == 1);
+        Config.enable_mv_refresh_sync_refresh_mergeable = false;
+    }
+
+    @Test
+    public void testSyncRefreshWithMergeable2() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        Config.enable_mv_refresh_sync_refresh_mergeable = true;
+        for (int i = 0; i < 10; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, true));
+            taskRun.setProcessor(new MockTaskRunProcessor(5000));
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+            taskRunScheduler.scheduledPendingTaskRun(t -> {
+                try {
+                    t.getProcessor().postTaskRun(null);
+                } catch (Exception e) {
+                    Assert.fail("Process task run failed:" + e);
+                }
+            });
+        }
+        long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
+        Assert.assertTrue(pendingTaskRunsCount == 1);
+        Config.enable_mv_refresh_sync_refresh_mergeable = false;
+    }
+
+    @Test
+    public void testKillTaskRun() {
+        TaskManager tm = new TaskManager();
+        TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
+        for (int i = 0; i < 10; i++) {
+            Task task = new Task("test");
+            task.setDefinition("select 1");
+            TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, false));
+            taskRun.setProcessor(new MockTaskRunProcessor(5000));
+            tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
+        }
+        taskRunScheduler.scheduledPendingTaskRun(taskRun -> {
+            try {
+                taskRun.getProcessor().postTaskRun(null);
+            } catch (Exception e) {
+                Assert.fail("Process task run failed:" + e);
+            }
+        });
+        long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
+        Assert.assertEquals(1, runningTaskRunsCount);
+
+        new MockUp<TaskRun>() {
+            @Mock
+            public ConnectContext getRunCtx() {
+                return null;
+            }
+        };
+        // running task run will not be removed if force kill is false
+        TaskRunManager taskRunManager = tm.getTaskRunManager();
+        taskRunManager.killTaskRun(1L, false);
+        Assert.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+        taskRunManager.killTaskRun(1L, true);
+        Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
     }
 }
