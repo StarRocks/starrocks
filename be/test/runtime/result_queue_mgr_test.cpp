@@ -37,8 +37,8 @@
 #include <arrow/array.h>
 #include <arrow/builder.h>
 #include <arrow/record_batch.h>
-#include <arrow/type.h>
 #include <arrow/testing/gtest_util.h>
+#include <arrow/type.h>
 #include <gtest/gtest.h>
 
 #include <memory>
