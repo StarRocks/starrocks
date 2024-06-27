@@ -76,7 +76,7 @@ TEST(PersistentIndexMemtableTest, test_basic_api) {
     KeyIndexSet erase_not_found;
     size_t erase_num_found = 0;
     ASSERT_TRUE(memtable->erase(num, erase_key_slices.data(), erase_old_values.data(), &erase_not_found,
-                                &erase_num_found, -1)
+                                &erase_num_found, -1, 1)
                         .ok());
     ASSERT_EQ(erase_num_found, (N + 2) / 3);
     // N+2 not found
