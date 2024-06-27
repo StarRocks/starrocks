@@ -671,7 +671,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int query_queue_v2_num_rows_per_slot = 4096;
     @ConfField(mutable = true)
-    public static long query_queue_v2_cpu_costs_per_slot = 100_000_000;
+    public static long query_queue_v2_cpu_costs_per_slot = 1_000_000_000;
 
     /**
      * Number of worker threads for http server to deal with http requests which may do
