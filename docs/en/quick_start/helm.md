@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "English"
 description: Use Helm to deploy StarRocks
+toc_max_heading_level: 2
 ---
 
 import Tabs from '@theme/Tabs';
@@ -13,12 +14,19 @@ import Curl from '../assets/quick-start/_curl.mdx'
 
 # StarRocks with Helm
 
-This tutorial covers:
+## Goals
 
-- Deploying the StarRocks Kubernetes Operator and a StarRocks deployment with Helm
-- Loading two public datasets including basic transformation of the data
-- Analyzing the data with SELECT and JOIN
-- Basic data transformation (the **T** in ETL)
+The goals of this quickstart are:
+
+- Deploy the StarRocks Kubernetes Operator and a StarRocks cluster with Helm
+- Configure a password for the StarRocks database user `root`
+- Provide for high-availability with three FEs and three BEs
+- Store metadata in persistent storage
+- Store data in persistent storage
+- Allow MySQL clients to connect from outside the Kubernetes cluster
+- Allow loading data from outside the Kubernetes cluster using Stream Load
+- Load some public datasets
+- Query the data
 
 :::tip
 The datasets and queries are the same as the ones used in the Basic Quick Start. The main difference here is deploying with Helm and the StarRocks Operator.
@@ -26,12 +34,13 @@ The datasets and queries are the same as the ones used in the Basic Quick Start.
 
 The data used is provided by NYC OpenData and the National Centers for Environmental Information.
 
-Both of these datasets are large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run this with a GKE Kubernetes cluster built on three e2-standard-4 machines (or similar) with 80GB disk. For larger fault-tolerant and scalable deployments we have other documentation and will provide that later.
+Both of these datasets are large, and because this tutorial is intended to help you get exposed to working with StarRocks we are not going to load data for the past 120 years. You can run this with a GKE Kubernetes cluster built on three e2-standard-4 machines (or similar) with 80GB disk. For larger deployments, we have other documentation and will provide that later.
 
 There is a lot of information in this document, and it is presented with step-by-step content at the beginning, and the technical details at the end. This is done to serve these purposes in this order:
 
-1. Allow the reader to load data in StarRocks and analyze that data.
-2. Explain the basics of data transformation during loading.
+1. Get the system deployed with Helm.
+2. Allow the reader to load data in StarRocks and analyze that data.
+3. Explain the basics of data transformation during loading.
 
 ---
 
@@ -41,7 +50,7 @@ There is a lot of information in this document, and it is presented with step-by
 
 ### SQL client
 
-You can use the SQL client provided in the Kubernetes environment, or use one on your system. Many MySQL-compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Kubernetes environment, or use one on your system. This guide uses the `mysql CLI` Many MySQL-compatible clients will work.
 
 ### curl
 
@@ -61,24 +70,22 @@ Backend nodes are responsible for both data storage and executing query plans.
 
 ---
 
-## Deploy StarRocks with Helm
+## Add the StarRocks Helm chart repo
 
-## Procedure
+The Helm Chart contains the definitions of the StarRocks Operator and the custom resource StarRocksCluster.
+1. Add the Helm Chart Repo.
 
-1. Add the Helm Chart Repo for StarRocks. The Helm Chart contains the definitions of the StarRocks Operator and the custom resource StarRocksCluster.
-   1. Add the Helm Chart Repo.
+    ```Bash
+    helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
+    ```
 
-      ```Bash
-      helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
-      ```
-
-   2. Update the Helm Chart Repo to the latest version.
+2. Update the Helm Chart Repo to the latest version.
 
       ```Bash
       helm repo update
       ```
 
-   3. View the Helm Chart Repo that you added.
+3. View the Helm Chart Repo that you added.
 
       ```Bash
       helm search repo starrocks-community
@@ -112,97 +119,46 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 ---
 
+## Create a Helm values file
 
+The goals for this quick start are:
 
+1. Configure a password for the StarRocks database user `root`
+2. Provide for high-availability with three FEs and three BEs
+3. Store metadata in persistent storage
+4. Store data in persistent storage
+5. Allow MySQL clients to connect from outside the Kubernetes cluster
+6. Allow loading data from outside the Kubernetes cluster using Stream Load
 
+The Helm chart provides options to satisfy all of these goals, but they are not configured by default. The rest of this section covers the configuration needed to meet all of these goals. A complete values spec will be provided, but first read the details for each of the six sections and then copy the full spec.
 
+### 1. Password for the database user
 
-```bash
-kubectl get pods
-```
-
-```
-NAME                                     READY STATUS  RESTARTS AGE
-kube-starrocks-operator-58bdf9bb55-d4qd8 1/1   Running 0        3m3s
-quickstart-be-0                          0/1   Running 0        118s
-quickstart-be-1                          0/1   Running 0        117s
-quickstart-be-2                          1/1   Running 0        117s
-quickstart-fe-0                          1/1   Running 0        2m43s
-quickstart-fe-1                          1/1   Running 0        2m43s
-quickstart-fe-2                          1/1   Running 0        2m43s
-quickstart-fe-proxy-787fd777cf-r2rr7     1/1   Running 0        117s
-```
-
-```bash
-kubectl get starrocksclusters.starrocks.com
-```
-
-```bash
-NAME       PHASE    FESTATUS  BESTATUS  CNSTATUS  FEPROXYSTATUS
-quickstart running  running   running             running
-```
-
-```bash
-kubectl get services
-```
-
-```bash
-NAME                        TYPE         CLUSTER-IP     EXTERNAL-IP   PORT(S)
-kubernetes                  ClusterIP    34.118.224.1   <none>        443/TCP
-quickstart-be-search        ClusterIP    None           <none>        9050/TCP
-quickstart-be-service       ClusterIP    34.118.230.192 <none>        9060/TCP,8040/TCP,9050/TCP,8060/TCP
-quickstart-fe-proxy-service LoadBalancer 34.118.232.134 34.176.52.103 8080:30546/TCP
-quickstart-fe-search        ClusterIP    None           <none>        9030/TCP
-quickstart-fe-service       ClusterIP    34.118.238.5   <none>        8030/TCP,9020/TCP,9030/TCP,9010/TCP
-```
-
-TEST RUN
-
-## Add the `starrocks-community` Helm repo
-
-```bash
-helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
-helm repo update starrocks-community
-helm search repo starrocks-community
-```
-
-```
-NAME                              	CHART VERSION	APP VERSION	DESCRIPTION
-starrocks-community/kube-starrocks	1.9.7        	3.2-latest 	kube-starrocks includes two subcharts, operator...
-starrocks-community/operator      	1.9.7        	1.9.7      	A Helm chart for StarRocks operator
-starrocks-community/starrocks     	1.9.7        	3.2-latest 	A Helm chart for StarRocks cluster
-starrocks-community/warehouse     	1.9.7        	3.2-latest 	Warehouse is currently a feature of the StarRoc...
-```
-## Download the Helm values files
-
-There is a default Helm `values.yaml` file and a custom values file that overrides some of the defaults. For now look at the custom file and the defaults will be provided at the end of this quick start lab.
-
-The default `values.yaml` file deploys a single FE and a single BE. For this lab you will:
-
-- Configure a password for the StarRocks database user `root`
-- Provide for high-availability with three FEs and three BEs
-- Configure a LoadBalancer to allow MySQL clients to connect from outside the Kubernetes cluster
-- Configure a LoadBalancer to allow loading data from outside the Kubernetes cluster
-
-### Password for the database user
+This bit of YAML instructs the StarRocks operator to set the password for the database user `root` to the value of the `password` key of the Kubernetes secret `starrocks-root-pass.
 
 ```yaml
 starrocks:
     initPassword:
         enabled: true
-            # Set a password secret, for example:
-            # kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
+        # Set a password secret, for example:
+        # kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
         passwordSecret: starrocks-root-pass
 ```
 
-### High Availability with 3 FEs and 3 BEs
+- Task: Create the Kubernetes secret
+
+    ```bash
+    kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
+    ```
+
+### 2. High Availability with 3 FEs and 3 BEs
+
+By setting `starrocks.starrockFESpec.replicas` to 3, and `starrocks.starrockBeSpec.replicas` to 3 you will have enough FEs and BEs for high availability. Setting the CPU and memory requests low allows the pods to be created in a small Kubernetes environment.
 
 ```yaml
 starrocks:
     starrocksFESpec:
         replicas: 3
-        service:
-            type: LoadBalancer
         resources:
             requests:
                 cpu: 1
@@ -214,11 +170,50 @@ starrocks:
             requests:
                 cpu: 1
                 memory: 2Gi
+```
+
+### 3. Store metadata in persistent storage
+
+Setting a value for `starrocks.starrocksFESpec.storageSpec.name` to anything other than `""` causes:
+- Persistent storage to be used
+- the value of `starrocks.starrocksFESpec.storageSpec.name` to be used as the prefix for all storage volumes for the service.
+
+By setting the value to `fe` these PVs will be created for FE 0:
+
+- `fe-meta-kube-starrocks-fe-0`
+- `fe-log-kube-starrocks-fe-0`
+
+```yaml
+starrocks:
+    starrocksFESpec:
         storageSpec:
+            name: fe
+```
+
+### 4. Store data in persistent storage
+
+Setting a value for `starrocks.starrocksBeSpec.storageSpec.name` to anything other than `""` causes:
+- Persistent storage to be used
+- the value of `starrocks.starrocksBeSpec.storageSpec.name` to be used as the prefix for all storage volumes for the service.
+
+By setting the value to `be` these PVs will be created for BE 0:
+
+- `be-data-kube-starrocks-be-0`
+- `be-log-kube-starrocks-be-0`
+
+Setting the `storageSize` to 15Gi reduces the storage from the default of 1Ti to fit smaller quotas for storage.
+
+```yaml
+starrocks:
+    starrocksBeSpec:
+        storageSpec:
+            name: be
             storageSize: 15Gi
 ```
 
-### LoadBalancer for MySQL clients
+### 5. LoadBalancer for MySQL clients
+
+By default, access to the FE service is through cluster IPs. To allow external access, `service.type` is set to `LoadBalancer`
 
 ```yaml
 starrocks:
@@ -227,7 +222,9 @@ starrocks:
             type: LoadBalancer
 ```
 
-### LoadBalancer for external data loading
+### 6. LoadBalancer for external data loading
+
+Stream Load requires external access to both FEs and BEs. The requests are sent to the FE and then the FE assigns a BE to process the upload. To allow the `curl` command to be redirected to the BE the `starroclFeProxySpec` needs to be enabled and set to type `LoadBalancer`.
 
 ```yaml
 starrocks:
@@ -239,14 +236,14 @@ starrocks:
 
 ### The complete values file
 
-Putting together the above snippets:
+The above snippets combined provide a full values file. Save this to `my-values.yaml`:
 
 ```yaml
 starrocks:
     initPassword:
         enabled: true
-            # Set a password secret, for example:
-            # kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
+        # Set a password secret, for example:
+        # kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
         passwordSecret: starrocks-root-pass
 
     starrocksFESpec:
@@ -257,6 +254,8 @@ starrocks:
             requests:
                 cpu: 1
                 memory: 1Gi
+        storageSpec:
+            name: fe
 
     starrocksBeSpec:
         replicas: 3
@@ -265,6 +264,7 @@ starrocks:
                 cpu: 1
                 memory: 2Gi
         storageSpec:
+            name: be
             storageSize: 15Gi
 
     starrocksFeProxySpec:
@@ -285,9 +285,12 @@ kubectl create secret generic starrocks-root-pass --from-literal=password='g()()
 ```
 secret/starrocks-root-pass created
 ```
+---
+
+## Deploy the operator and StarRocks cluster
 
 ```bash
-helm install -f ha_cluster_with_proxy_and_password.yaml starrocks starrocks-community/kube-starrocks
+helm install -f my-values.yaml starrocks starrocks-community/kube-starrocks
 ```
 
 ```
@@ -338,7 +341,30 @@ kube-starrocks-initpwd-m84br               0/1     CrashLoopBackOff   3 (50s ago
 kube-starrocks-operator-54ffcf8c5c-xsjc8   1/1     Running            0             92s
 ```
 
-## Verify that the cluster is healthy
+```bash
+kubectl get pvc
+```
+
+```
+NAME                          STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+be-data-kube-starrocks-be-0   Bound    pvc-4ae0c9d8-7f9a-4147-ad74-b22569165448   15Gi       RWO            standard-rwo   <unset>                 82s
+be-data-kube-starrocks-be-1   Bound    pvc-28b4dbd1-0c8f-4b06-87e8-edec616cabbc   15Gi       RWO            standard-rwo   <unset>                 82s
+be-data-kube-starrocks-be-2   Bound    pvc-c7232ea6-d3d9-42f1-bfc1-024205a17656   15Gi       RWO            standard-rwo   <unset>                 82s
+be-log-kube-starrocks-be-0    Bound    pvc-6193c43d-c74f-4d12-afcc-c41ace3d5408   1Gi        RWO            standard-rwo   <unset>                 82s
+be-log-kube-starrocks-be-1    Bound    pvc-c01f124a-014a-439a-99a6-6afe95215bf0   1Gi        RWO            standard-rwo   <unset>                 82s
+be-log-kube-starrocks-be-2    Bound    pvc-136df15f-4d2e-43bc-a1c0-17227ce3fe6b   1Gi        RWO            standard-rwo   <unset>                 82s
+fe-log-kube-starrocks-fe-0    Bound    pvc-7eac524e-d286-4760-b21c-d9b6261d976f   5Gi        RWO            standard-rwo   <unset>                 2m23s
+fe-log-kube-starrocks-fe-1    Bound    pvc-38076b78-71e8-4659-b8e7-6751bec663f6   5Gi        RWO            standard-rwo   <unset>                 2m23s
+fe-log-kube-starrocks-fe-2    Bound    pvc-4ccfee60-02b7-40ba-a22e-861ea29dac74   5Gi        RWO            standard-rwo   <unset>                 2m23s
+fe-meta-kube-starrocks-fe-0   Bound    pvc-5130c9ff-b797-4f79-a1d2-4214af860d70   10Gi       RWO            standard-rwo   <unset>                 2m23s
+fe-meta-kube-starrocks-fe-1   Bound    pvc-13545330-63be-42cf-b1ca-3ed6f96a8c98   10Gi       RWO            standard-rwo   <unset>                 2m23s
+fe-meta-kube-starrocks-fe-2   Bound    pvc-609cadd4-c7b7-4cf9-84b0-a75678bb3c4d   10Gi       RWO            standard-rwo   <unset>                 2m23s
+```
+### Verify that the cluster is healthy
+
+:::tip
+These are the same commands as above, but show the desired state.
+:::
 
 ```bash
 kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
@@ -370,24 +396,40 @@ kube-starrocks-initpwd-m84br               0/1     Completed   4          2m9s
 kube-starrocks-operator-54ffcf8c5c-xsjc8   1/1     Running     0          2m9s
 ```
 
+The `EXTERNAL-IP` addresses in the highlighted lines will be used to provide SQL client and Stream Load access from outside the Kubernetes cluster.
 
-
-```
+```bash
 kubectl get services
+```
+
+```bash
 NAME                              TYPE           CLUSTER-IP       EXTERNAL-IP     PORT(S)                                                       AGE
 kube-starrocks-be-search          ClusterIP      None             <none>          9050/TCP                                                      78s
 kube-starrocks-be-service         ClusterIP      34.118.228.231   <none>          9060/TCP,8040/TCP,9050/TCP,8060/TCP                           78s
+# highlight-next-line
 kube-starrocks-fe-proxy-service   LoadBalancer   34.118.230.176   34.176.12.205   8080:30241/TCP                                                78s
 kube-starrocks-fe-search          ClusterIP      None             <none>          9030/TCP                                                      2m4s
+# highlight-next-line
 kube-starrocks-fe-service         LoadBalancer   34.118.226.82    34.176.215.97   8030:30620/TCP,9020:32461/TCP,9030:32749/TCP,9010:30911/TCP   2m4s
 kubernetes                        ClusterIP      34.118.224.1     <none>          443/TCP                                                       8h
 ```
 
+:::tip
+Store the `EXTERNAL-IP` addresses from the highlighted lines in environment variables so that you have them handy:
+
+```
+export MYSQL_IP=`kubectl get services kube-starrocks-fe-service --output jsonpath='{.status.loadBalancer.ingress[0].ip}'`
+```
+```
+export FE_PROXY=`kubectl get services kube-starrocks-fe-proxy-service --output jsonpath='{.status.loadBalancer.ingress[0].ip}'`:8080
+```
+:::
+
+
+
 ---
 
 ### Connect to StarRocks with a SQL client
-
-NOTE: Add info about `kubectl get services` and the external IP.
 
 :::tip
 
@@ -401,11 +443,17 @@ kubectl exec --stdin --tty kube-starrocks-fe-0 -- \
   mysql -P9030 -h127.0.0.1 -u root --prompt="StarRocks > "
 ```
 
+If you have the mysql CLI installed locally, you can use it instead of the one in the Kubernetes cluster:
+
+```sql
+mysql -P9030 -h $MYSQL_IP -u root --prompt="StarRocks > " -p
+```
+
 ---
 ## Create some tables
 
 ```bash
-mysql -h 34.176.215.97 -P9030 -uroot -p
+mysql -P9030 -h $MYSQL_IP -u root --prompt="StarRocks > " -p
 ```
 
 
@@ -423,19 +471,19 @@ exit
 
 There are many ways to load data into StarRocks. For this tutorial, the simplest way is to use curl and StarRocks Stream Load.
 
-
-Export the external IP and port number of the FE Proxy service in an environment variable `FE_PROXY` so that you can use the proxy in the `curl` commands to load the data with Stream Load.
-
-```bash
-export FE_PROXY=34.176.12.205:8080
-```
-
 Upload the two datasets that you downloaded earlier.
-
-There are many ways to load data into StarRocks. For this tutorial the simplest way is to use curl and StarRocks Stream Load.
 
 :::tip
 Open a new shell as these curl commands are run at the operating system prompt, not in the `mysql` client. The commands refer to the datasets that you downloaded, so run them from the directory where you downloaded the files.
+
+Since this is a new shell, run the export commands again:
+
+```bash
+
+export MYSQL_IP=`kubectl get services kube-starrocks-fe-service --output jsonpath='{.status.loadBalancer.ingress[0].ip}'`
+
+export FE_PROXY=`kubectl get services kube-starrocks-fe-proxy-service --output jsonpath='{.status.loadBalancer.ingress[0].ip}'`:8080
+```
 
 You will be prompted for a password. Use the password that you added to the Kubernetes secret `starrocks-root-pass`. If you used the command provided, the password is `g()()dpa$$word`.
 :::
@@ -517,7 +565,7 @@ Enter host password for user 'root':
 Connect with a MySQL client if you are not connected. Remember to use the external IP address of the `kube-starrocks-fe-service` service and the password that you configured in the Kubernetes secret `starrocks-root-pass`.
 
 ```bash
-mysql -h 34.176.215.97 -P9030 -uroot -p
+mysql -P9030 -h $MYSQL_IP -u root --prompt="StarRocks > " -p
 ```
 
 ## Answer some questions
@@ -559,11 +607,7 @@ There is more to learn; we intentionally glossed over the data transformation do
 
 ## More information
 
-default `values.yaml`
-
-[StarRocks table design](../table_design/StarRocks_table_design.md)
-
-[Materialized views](../cover_pages/mv_use_cases.mdx)
+Default [`values.yaml`](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)
 
 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
 
@@ -571,45 +615,6 @@ The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Sa
 
 The [Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) is provided by NOAA with this [disclaimer](https://www.noaa.gov/disclaimer) and this [privacy policy](https://www.noaa.gov/protecting-your-privacy).
 
-[Helm](https://helm.sh/) is a package manager for Kubernetes. A [Helm Chart](https://helm.sh/docs/topics/charts/) is a Helm package and contains all of the resource definitions necessary to run an application on a Kubernetes cluster. This topic describes how to use Helm to automatically deploy a StarRocks cluster on a Kubernetes cluster.
+[Helm](https://helm.sh/) is a package manager for Kubernetes. A [Helm Chart](https://helm.sh/docs/topics/charts/) is a Helm package and contains all of the resource definitions necessary to run an application on a Kubernetes cluster.
 
-
-## Next steps
-
-- Access StarRocks cluster
-
-  You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster./sr_operator.md#access-starrocks-cluster).
-
-- Manage StarRocks operator and StarRocks cluster
-
-  - If you need to update the configurations of the StarRocks operator and StarRocks cluster, see [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/).
-  - If you need to uninstall the StarRocks Operator and StarRocks cluster, run the following command:
-
-    ```bash
-    helm uninstall starrocks
-    ```
-
-## More information
-
-- The address of the GitHub repository: [starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator).
-
-- The docs in the GitHub repository provide more information, for example:
-
-  - If you need to manage objects like the StarRocks cluster via the Kubernetes API, see [API reference](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md).
-
-  - If you need to mount persistent volumes to FE and BE pods to store FE metadata and logs, as well as BE data and logs, see [Mount Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart).
-
-    :::info
-
-    If persistent volumes are not mounted, the StarRocks Operator will use emptyDir to store FE metadata and logs, as well as BE data and logs. When containers restart, data will be lost.
-
-    :::
-
-  - If you need to set the root user password:
-
-    - Manually set the root user's password after deploying the StarRocks cluster, see [Change root user password HOWTO](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md).
-
-    - Automatically set the root user's password when deploying the StarRocks cluster, see [Initialize root user password](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md).
-
-
-- The address of Helm Chart maintained by StarRocks on Artifact Hub: [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks).
+[`starrocks-kubernetes-operator` and `kube-starrocks` Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator).
