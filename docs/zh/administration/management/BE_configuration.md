@@ -3867,6 +3867,69 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Block 的元数据存储目录，可自定义。推荐创建在 `$STARROCKS_HOME` 路径下。
 - 引入版本：-
 
+##### datacache_auto_adjust_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。
+- 引入版本：v3.3.0
+
+##### datacache_disk_high_level
+
+- 默认值：80
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。
+- 引入版本：v3.3.0
+
+##### datacache_disk_safe_level
+
+- 默认值：70
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。
+- 引入版本：v3.3.0
+
+##### datacache_disk_low_level
+
+- 默认值：60
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘低水位（百分比）。当磁盘使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值，且用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
+- 引入版本：v3.3.0
+
+##### datacache_disk_adjust_interval_seconds
+
+- 默认值：10
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：Data Cache 容量自动调整周期。每隔这段时间系统会进行一次缓存磁盘使用率检测，必要时触发相应扩缩容操作。
+- 引入版本：v3.3.0
+
+##### datacache_disk_idle_seconds_for_expansion
+
+- 默认值：7200
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：Data Cache 自动扩容最小等待时间。只有当磁盘使用率在 `datacache_disk_low_level` 以下持续时间超过该时长，才会触发自动扩容。
+- 引入版本：v3.3.0
+
+##### datacache_min_disk_quota_for_adjustment
+
+- 默认值：107374182400
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Data Cache 自动扩缩容时的最小有效容量。当需要调整的目标容量小于该值时，系统会直接将缓存空间调整为 `0`，以避免缓存空间过小导致频繁填充和淘汰带来负优化。
+- 引入版本：v3.3.0
+
 <!--
 ##### datacache_block_size
 
