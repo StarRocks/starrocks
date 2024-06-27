@@ -34,6 +34,7 @@ import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PListCell;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.List;
@@ -105,7 +106,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     }
 
     @Override
-    public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException {
+    public Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException {
         return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
     }
 

@@ -3192,10 +3192,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
+        boolean isNonPartitioned = partitionInfo.isUnPartitioned();
         DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
         PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned);
-
         try {
             Set<Long> tabletIdSet = new HashSet<>();
             // process single partition info

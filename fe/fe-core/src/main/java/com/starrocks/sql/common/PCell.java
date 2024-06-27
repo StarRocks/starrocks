@@ -15,8 +15,10 @@
 package com.starrocks.sql.common;
 
 /**
- * {@link PartitionDiffer} is used to compare the difference between two partitions which can be range
- * partition or list partition.
+ * A cell means the basic unit of the partition, which can be a range partition, a list partition, etc.
+ * eg:
+ * For range partition, it can be {@code Range<PartitionKey>} to represent the range of the partition.
+ * For list partition, it can be {@code List<List<String>>} to represent the list values of the partition.
  */
-public abstract class PartitionDiffer {
+public abstract class PCell {
 }

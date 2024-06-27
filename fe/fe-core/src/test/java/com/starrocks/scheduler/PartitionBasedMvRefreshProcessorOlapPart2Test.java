@@ -67,7 +67,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
     @Test
     public void testMVRefreshWithTheSameTables1() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 int",
@@ -147,7 +147,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
     @Test
     public void testMVRefreshWithTheSameTables22() {
-        starRocksAssert.withTables(List.of(
+        starRocksAssert.withMTables(List.of(
                         new MTable("tt1", "k1",
                                 List.of(
                                         "k1 int",

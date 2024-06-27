@@ -61,7 +61,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.MvRefreshArbiter.getPartitionNamesToRefreshForMv;
+import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 
@@ -155,15 +155,12 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
 
         // mv's to refresh partition info
-        MvUpdateInfo mvUpdateInfo = getPartitionNamesToRefreshForMv(mv, true);
-        logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
+        MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo(mv, true);
         if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
             logMVRewrite(context, this, "Get mv to refresh partition info failed, and redirect to mv's defined query");
             return getOptExpressionByDefault(context, mv, mvPlanContext, olapScanOperator, queryTables);
         }
-
-        Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
-        logMVRewrite(context, this, "MV to refresh partitions: {}", partitionNamesToRefresh);
+        logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                 mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
@@ -210,7 +207,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                    LogicalOlapScanOperator olapScanOperator,
                                                    Set<Table> queryTables) {
         MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
-        mvUpdateInfo.getMvToRefreshPartitionNames().addAll(mv.getPartitionNames());
+        mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                 mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
