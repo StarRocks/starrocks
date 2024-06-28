@@ -424,8 +424,11 @@ public class InsertOverwriteJobRunner {
         if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
-        OlapTable targetTable = checkAndGetTable(db, tableId);
         try {
+            OlapTable targetTable = checkAndGetTable(db, tableId);
+            checkSourcePartitionExistence(db, targetTable);
+            checkTmpPartitionExistence(db, targetTable);
+
             List<String> sourcePartitionNames = job.getSourcePartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
@@ -470,7 +473,7 @@ public class InsertOverwriteJobRunner {
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
                     job.getTargetDbId(), job.getTargetTableId(), e);
-            throw new DmlException("replace partitions failed", e);
+            throw new DmlException("replace partitions failed: " + e.getMessage(), e);
         } finally {
             locker.unLockDatabase(db, tableId, LockType.WRITE);
         }
@@ -493,9 +496,7 @@ public class InsertOverwriteJobRunner {
         }
         try {
             OlapTable targetTable = checkAndGetTable(db, tableId);
-            if (job.getTmpPartitionIds().stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
-                throw new DmlException("partitions changed during insert");
-            }
+            checkTmpPartitionExistence(db, targetTable);
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
@@ -514,6 +515,18 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("prepareInsert exception", e);
         } finally {
             locker.unLockDatabase(db, tableId, LockType.READ);
+        }
+    }
+
+    private void checkTmpPartitionExistence(Database db, Table targetTable) {
+        if (job.getTmpPartitionIds().stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
+            throw new DmlException("partitions changed during insert, usually it's caused by concurrent jobs");
+        }
+    }
+
+    private void checkSourcePartitionExistence(Database db, Table targetTable) {
+        if (job.getSourcePartitionIds().stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
+            throw new DmlException("partitions changed during insert, usually it's caused by concurrent jobs");
         }
     }
 
