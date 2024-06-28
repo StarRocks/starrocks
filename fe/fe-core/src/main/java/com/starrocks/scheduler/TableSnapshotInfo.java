@@ -45,7 +45,7 @@ public class TableSnapshotInfo {
     }
 
     public long getId() {
-        return baseTableInfo.getTableId();
+        return baseTable.getId();
     }
 
     public String getName() {
