@@ -58,11 +58,13 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
             executor = new StmtExecutor(ctx, sqlStmt);
             ctx.setExecutor(executor);
             ctx.setThreadLocalInfo();
+            executor.addRunningQueryDetail(sqlStmt);
             executor.execute();
         } finally {
             Tracers.close();
             if (executor != null) {
                 auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+                executor.addFinishedQueryDetail();
             } else {
                 // executor can be null if we encounter analysis error.
                 auditAfterExec(context, null, null);
