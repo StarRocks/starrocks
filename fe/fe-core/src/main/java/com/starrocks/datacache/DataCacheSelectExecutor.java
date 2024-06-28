@@ -60,8 +60,11 @@ public class DataCacheSelectExecutor {
             connectContext.getExecutor().registerSubStmtExecutor(stmtExecutor);
         }
         stmtExecutor.addRunningQueryDetail(insertStmt);
-        stmtExecutor.execute();
-        stmtExecutor.addFinishedQueryDetail();
+        try {
+            stmtExecutor.execute();
+        } finally {
+            stmtExecutor.addFinishedQueryDetail();
+        }
 
         if (connectContext.getState().isError()) {
             // throw exception if StmtExecutor execute failed
