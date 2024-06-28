@@ -82,6 +82,13 @@ public abstract class ConnectorPartitionTraits {
         return TRAITS_TABLE.containsKey(tableType);
     }
 
+    public static boolean isSupportPCTRefresh(Table.TableType tableType) {
+        if (!isSupported(tableType)) {
+            return false;
+        }
+        return TRAITS_TABLE.get(tableType).get().isSupportPCTRefresh();
+    }
+
     public static ConnectorPartitionTraits build(Table.TableType tableType) {
         return Preconditions.checkNotNull(TRAITS_TABLE.get(tableType),
                 "traits not supported: " + tableType).get();
@@ -127,6 +134,8 @@ public abstract class ConnectorPartitionTraits {
     public String getTableName() {
         return table.getName();
     }
+
+    public abstract boolean isSupportPCTRefresh();
 
     /**
      * Build a partition key for the table, some of them have specific representations for null values

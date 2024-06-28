@@ -1481,7 +1481,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
             LOG.info("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
             return partitionInfos;
-        } else if (ConnectorPartitionTraits.isSupported(baseTable.getType())) {
+        } else if (ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType())) {
             return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames), baseTableInfo);
         } else {
             // FIXME: base table does not support partition-level refresh and does not update the meta
