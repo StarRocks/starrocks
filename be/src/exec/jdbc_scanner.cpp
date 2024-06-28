@@ -252,14 +252,14 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
         }
         return TYPE_FLOAT;
     } else if (java_class == "java.lang.Double") {
-        if (type != TYPE_DOUBLE) {
+        if (type != TYPE_DOUBLE && type != TYPE_FLOAT) {
             return Status::NotSupported(fmt::format(
-                    "Type mismatches on column[{}], JDBC result type is Double, please set the type to double",
+                    "Type mismatches on column[{}], JDBC result type is Double, please set the type to double/float",
                     slot_desc->col_name()));
         }
         return TYPE_DOUBLE;
     } else if (java_class == "java.sql.Timestamp") {
-        if (type != TYPE_DATETIME) {
+        if (type != TYPE_DATETIME && type != TYPE_VARCHAR) {
             return Status::NotSupported(fmt::format(
                     "Type mismatches on column[{}], JDBC result type is Timestamp, please set the type to datetime",
                     slot_desc->col_name()));
@@ -287,10 +287,11 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
         }
         return TYPE_VARCHAR;
     } else if (java_class == "java.math.BigDecimal") {
-        if (type != TYPE_DECIMAL32 && type != TYPE_DECIMAL64 && type != TYPE_DECIMAL128 && type != TYPE_VARCHAR) {
+        if (type != TYPE_DECIMAL32 && type != TYPE_DECIMAL64 && type != TYPE_DECIMAL128 && type != TYPE_VARCHAR &&
+            type != TYPE_DOUBLE) {
             return Status::NotSupported(
                     fmt::format("Type mismatches on column[{}], JDBC result type is BigDecimal, please set the type to "
-                                "decimal or varchar",
+                                "decimal、double or varchar",
                                 slot_desc->col_name()));
         }
         return TYPE_VARCHAR;
