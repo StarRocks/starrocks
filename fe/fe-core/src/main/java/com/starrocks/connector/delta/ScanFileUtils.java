@@ -22,6 +22,7 @@ import io.delta.kernel.utils.FileStatus;
 
 import java.util.Map;
 
+import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_ORDINAL;
 import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_STATS_ORDINAL;
 
 public class ScanFileUtils {
@@ -58,15 +59,24 @@ public class ScanFileUtils {
         return statistics;
     }
 
+    private static Row getAddFileEntry(Row scanFileInfo) {
+        if (scanFileInfo.isNullAt(ADD_FILE_ORDINAL)) {
+            throw new IllegalArgumentException("There is no `add` entry in the scan file row");
+        }
+        return scanFileInfo.getStruct(ADD_FILE_ORDINAL);
+    }
+
     public static FileScanTask convertFromRowToFileScanTask(boolean needStats, Row file) {
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
+        Row addFileRow = getAddFileEntry(file);
+
         FileScanTask fileScanTask;
         if (needStats) {
-            DeltaLakeStatsStruct stats = ScanFileUtils.getColumnStatistics(file);
+            DeltaLakeStatsStruct stats = ScanFileUtils.getColumnStatistics(addFileRow);
             fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues, stats);
         } else {
-            long records = ScanFileUtils.getFileRows(file);
+            long records = ScanFileUtils.getFileRows(addFileRow);
             fileScanTask = new FileScanTask(fileStatus, records, partitionValues);
         }
         return fileScanTask;
