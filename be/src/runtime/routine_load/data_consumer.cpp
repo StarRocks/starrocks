@@ -344,6 +344,10 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     RdKafka::Metadata* metadata = nullptr;
     RdKafka::ErrorCode err = _k_consumer->metadata(false /* all_topics */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
+        if (_k_event_cb.get_error_msg().empty()) {
+            // some authentication errors event can only be triggered when the consumer is closed.
+            _k_consumer->close();
+        }
         std::stringstream ss;
         ss << "failed to get kafka topic: " << _topic << " meta, err: " << RdKafka::err2str(err) << ", "
            << _k_event_cb.get_error_msg();
