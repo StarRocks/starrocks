@@ -291,7 +291,7 @@ CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 // cumulative compaction policy: max delta file's size unit:B
 CONF_mInt32(cumulative_compaction_check_interval_seconds, "1");
 CONF_mInt64(min_cumulative_compaction_num_singleton_deltas, "5");
-CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
+CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "500");
 // This config is to limit the max concurrency of running cumulative compaction tasks.
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
@@ -312,7 +312,7 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // if this value is 0, auto chunk size calculation algorithm will be used
 // set this value to none zero if auto algorithm isn't working well
 CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
-CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
+CONF_mInt64(max_update_compaction_num_singleton_deltas, "500");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
@@ -964,7 +964,7 @@ CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
-CONF_mInt64(lake_pk_compaction_max_input_rowsets, "1000");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
