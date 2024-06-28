@@ -47,6 +47,11 @@ public class JDBCPartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public boolean isSupportPCTRefresh() {
+        return true;
+    }
+
+    @Override
     public List<PartitionInfo> getPartitions(List<String> partitionNames) {
         JDBCTable jdbcTable = (JDBCTable) table;
         return GlobalStateMgr.getCurrentState().getMetadataMgr().
