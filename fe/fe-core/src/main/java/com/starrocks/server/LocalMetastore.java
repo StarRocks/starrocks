@@ -3688,7 +3688,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            renameColumnInternal(olapTable, colName, newColName);
+            olapTable.renameColumn(colName, newColName);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
@@ -3708,27 +3708,10 @@ public class LocalMetastore implements ConnectorMetadata {
         locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            renameColumnInternal(olapTable, colName, newColName);
+            olapTable.renameColumn(colName, newColName);
             LOG.info("replay rename column[{}] to {}", colName, newColName);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
-        }
-    }
-
-    private void renameColumnInternal(OlapTable olapTable, String colName, String newColName) {
-        olapTable.renameColumn(colName, newColName);
-
-        Set<String> bfColumns = olapTable.getBfColumnNames();
-        if (bfColumns != null) {
-            Iterator<String> iterator = bfColumns.iterator();
-            while (iterator.hasNext()) {
-                String bfColumn = iterator.next();
-                if (bfColumn.equalsIgnoreCase(colName)) {
-                    iterator.remove();
-                    bfColumns.add(newColName);
-                    break;
-                }
-            }
         }
     }
 
