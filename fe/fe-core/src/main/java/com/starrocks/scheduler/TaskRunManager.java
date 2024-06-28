@@ -78,16 +78,23 @@ public class TaskRunManager implements MemoryTrackable {
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
     }
 
-    public boolean killTaskRun(Long taskId) {
+    public boolean killTaskRun(Long taskId, boolean force) {
         TaskRun taskRun = taskRunScheduler.getRunningTaskRun(taskId);
         if (taskRun == null) {
             return false;
         }
-        taskRun.kill();
-        ConnectContext runCtx = taskRun.getRunCtx();
-        if (runCtx != null) {
-            runCtx.kill(false, "kill TaskRun");
-            return true;
+        try {
+            taskRun.kill();
+            ConnectContext runCtx = taskRun.getRunCtx();
+            if (runCtx != null) {
+                runCtx.kill(false, "kill TaskRun");
+                return true;
+            }
+        } finally {
+            // if it's force, remove it from running TaskRun map no matter it's killed or not
+            if (force) {
+                taskRunScheduler.removeRunningTask(taskRun.getTaskId());
+            }
         }
         return false;
     }
@@ -161,7 +168,7 @@ public class TaskRunManager implements MemoryTrackable {
                     GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
                     // update the state of the old TaskRun to MERGED in LEADER
                     oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
-                    taskRunScheduler.removePendingTaskRun(oldTaskRun);
+                    taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
                     taskRunHistory.addHistory(oldTaskRun.getStatus());
                 }
             }
