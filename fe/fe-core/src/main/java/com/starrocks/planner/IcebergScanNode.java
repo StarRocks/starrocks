@@ -31,7 +31,10 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
@@ -73,6 +76,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -98,6 +102,7 @@ public class IcebergScanNode extends ScanNode {
     private CloudConfiguration cloudConfiguration = null;
     private final List<Integer> deleteColumnSlotIds = new ArrayList<>();
     private final TupleDescriptor equalityDeleteTupleDesc;
+    private final Map<String, Pair<Integer, Long>> deleteFileToNumToRows = new HashMap<>();
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, TupleDescriptor equalityDeleteTupleDesc) {
         super(id, desc, planNodeName);
@@ -302,6 +307,14 @@ public class IcebergScanNode extends ScanNode {
                         currentEqualityIds = taskEqualityFieldIds;
                         prepareRequiredColumnsForDeletes(currentEqualityIds);
                     }
+                    String filePath = deleteFile.path().toString();
+                    if (!deleteFileToNumToRows.containsKey(filePath)) {
+                        Pair<Integer, Long> numToRows = Pair.create(1, deleteFile.recordCount());
+                        deleteFileToNumToRows.put(filePath, numToRows);
+                    } else {
+                        Pair<Integer, Long> numToRows = deleteFileToNumToRows.get(filePath);
+                        deleteFileToNumToRows.put(filePath, Pair.create(numToRows.first + 1, numToRows.second));
+                    }
                 }
 
                 TIcebergDeleteFile target = new TIcebergDeleteFile();
@@ -332,6 +345,13 @@ public class IcebergScanNode extends ScanNode {
 
         if (!currentEqualityIds.isEmpty()) {
             icebergTable.setIdentifierFieldIds(ImmutableSet.copyOf(currentEqualityIds));
+        }
+
+        if (!currentEqualityIds.isEmpty()) {
+            List<String> values = deleteFileToNumToRows.values().stream().map(Object::toString).collect(Collectors.toList());
+            String name = "ICEBERG.V2_EQ_FILES." + icebergTable.getRemoteDbName() + "[" +
+                    icebergTable.getRemoteTableName() + "]";
+            Tracers.record(Tracers.Module.EXTERNAL, name, values.toString());
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
