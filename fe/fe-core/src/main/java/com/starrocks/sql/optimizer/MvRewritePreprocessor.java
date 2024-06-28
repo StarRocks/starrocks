@@ -269,7 +269,9 @@ public class MvRewritePreprocessor {
                 // when there are candidate mvs.
                 if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
                     context.setQueryMaterializationContext(queryMaterializationContext);
-                    connectContext.setQueryMVContext(queryMaterializationContext);
+                    if (Config.enable_mv_query_context_cache) {
+                        connectContext.setQueryMVContext(queryMaterializationContext);
+                    }
                 }
 
                 // initialize mv rewrite strategy finally

@@ -2841,6 +2841,9 @@ public class Config extends ConfigBase {
                     "which would refresh the materialized view after creating")
     public static boolean default_mv_refresh_immediate = true;
 
+    @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
+    public static boolean enable_mv_query_context_cache = false;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
