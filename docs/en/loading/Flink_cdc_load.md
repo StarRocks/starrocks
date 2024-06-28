@@ -42,7 +42,7 @@ The synchronization process guarantees exactly-once semantics.
 
    a. The Flink SQL client executes the data loading statement `INSERT INTO SELECT` to submit one or more Flink jobs to the Flink cluster.
 
-   b. The Flink cluster runs the Flink jobs to obtain data. The [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/blob/master/docs/content/quickstart/build-real-time-data-lake-tutorial.md) first reads full historical data from the source database, then seamlessly switches to incremental reading, and sends the data to flink-connector-starrocks.
+   b. The Flink cluster runs the Flink jobs to obtain data. The Flink CDC connector first reads full historical data from the source database, then seamlessly switches to incremental reading, and sends the data to flink-connector-starrocks.
 
    c. flink-connector-starrocks accumulates data in mini-batches, and synchronizes each batch of data to StarRocks.
 
@@ -101,7 +101,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
       Starting taskexecutor daemon on host.
     ```
 
-2. Download [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases). This topic uses MySQL as the data source and therefore, `flink-sql-connector-mysql-cdc-x.x.x.jar` is downloaded. The connector version must match the [Flink](https://github.com/ververica/flink-cdc-connectors/releases) version. For detailed version mapping, see [Supported Flink Versions](https://ververica.github.io/flink-cdc-connectors/release-2.2/content/about.html#supported-flink-versions). This topic uses Flink 1.14.5 and you can download `flink-sql-connector-mysql-cdc-2.2.0.jar`.
+2. Download [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases). This topic uses MySQL as the data source and therefore, `flink-sql-connector-mysql-cdc-x.x.x.jar` is downloaded. The connector version must match the [Flink](https://github.com/ververica/flink-cdc-connectors/releases) version. This topic uses Flink 1.14.5 and you can download `flink-sql-connector-mysql-cdc-2.2.0.jar`.
 
     ```Bash
     wget https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.1.1/flink-sql-connector-mysql-cdc-2.2.0.jar
