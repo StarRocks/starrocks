@@ -36,6 +36,8 @@ HELPER=
 HOST_TYPE=
 ENABLE_DEBUGGER=0
 RUN_LOG_CONSOLE=0
+# min jdk version required
+MIN_JDK_VERSION=11
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
@@ -77,15 +79,13 @@ if [[ -z ${JAVA_HOME} ]]; then
         echo "Infered JAVA_HOME=$JAVA_HOME"
     else
       cat << EOF
-Error: The environment variable JAVA_HOME is not set. The FE program requires JDK version 8 or higher in order to run.
+Error: The environment variable JAVA_HOME is not set. The FE program requires JDK version $MIN_JDK_VERSION or higher in order to run.
 Please take the following steps to resolve this issue:
-1. Install OpenJDK 8 or higher using your Linux distribution's package manager.
-For example:
-sudo apt install openjdk-8-jdk  (on Ubuntu/Debian)
-sudo yum install java-1.8.0-openjdk-devel (on CentOS/RHEL)
+1. Install OpenJDK $MIN_JDK_VERSION or higher using your Linux distribution's package manager,
+   or following the openjdk installation instructions at https://openjdk.org/install/
 2. Set the JAVA_HOME environment variable to point to your installed OpenJDK directory.
-For example:
-export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+   For example:
+   export JAVA_HOME=/usr/lib/jvm/java-$MIN_JDK_VERSION
 3. Try running this script again.
 EOF
       exit 1
@@ -97,7 +97,7 @@ if [ ! -f "$JAVA_HOME/bin/javac" ]; then
   cat << EOF
 Error: It appears that your JAVA_HOME environment variable is pointing to a non-JDK path: $JAVA_HOME
 The FE program requires the full JDK to be installed and configured properly. Please check that JAVA_HOME
-is set to the installation directory of JDK 8 or higher, rather than the JRE installation directory.
+is set to the installation directory of JDK $MIN_JDK_VERSION or higher, rather than the JRE installation directory.
 EOF
   exit 1
 fi
@@ -106,8 +106,8 @@ JAVA=$JAVA_HOME/bin/java
 
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
-if [[ "$JAVA_VERSION" -lt 11 ]]; then
-    echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
+if [[ "$JAVA_VERSION" -lt $MIN_JDK_VERSION ]]; then
+    echo "Error: JDK $JAVA_VERSION is not supported, please use JDK version $MIN_JDK_VERSION or higher"
     exit -1
 fi
 
@@ -160,18 +160,10 @@ fi
 xmx=$(detect_jvm_xmx)
 final_java_opt="${final_java_opt} ${xmx}"
 
-if [[ "$JAVA_VERSION" -lt 11 ]]; then
-    echo "Tips: current JDK version is $JAVA_VERSION, JDK 11 or 17 is highly recommended for better GC performance(lower version JDK may not be supported in the future)"
-fi
-
 if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
     # Allow attaching debuggers to the FE process:
     # https://www.jetbrains.com/help/idea/attaching-to-local-process.html
-    if [[ "$JAVA_VERSION" -gt 8 ]]; then
-        final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
-    else
-        final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
-    fi
+    final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
     echo "Start debugger with: $final_java_opt"
 fi
 
