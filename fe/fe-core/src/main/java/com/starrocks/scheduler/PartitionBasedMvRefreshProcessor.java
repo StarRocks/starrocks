@@ -419,8 +419,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // ref table of materialized view : refreshed partition names
         Map<String, Set<String>> refTablePartitionNames = refTableRefreshPartitions.entrySet().stream()
                 .collect(Collectors.toMap(x -> x.getKey().getName(), Map.Entry::getValue));
-        LOG.info("materialized view:{} source partitions :{}",
-                materializedView.getName(), refTableRefreshPartitions);
+        LOG.info("materialized:{}, mvToRefreshedPartitions:{}, refTableRefreshPartitions:{}",
+                materializedView.getName(), mvToRefreshedPartitions, refTableRefreshPartitions);
         // add a message into information_schema
         logMvToRefreshInfoIntoTaskRun(mvToRefreshedPartitions, refTablePartitionNames);
         updateBaseTablePartitionSnapshotInfos(refTableRefreshPartitions);
@@ -713,6 +713,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         // check
         if (mvRefreshedPartitions == null || refTableAndPartitionNames == null) {
+            LOG.info("no partitions to refresh for materialized view {}, mvRefreshedPartitions:{}, " +
+                            "refTableAndPartitionNames:{}", materializedView.getName(), mvRefreshedPartitions,
+                    refTableAndPartitionNames);
             return;
         }
 
@@ -811,6 +814,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
                                         List<TableSnapshotInfo> changedTablePartitionInfos,
                                         Set<Long> refBaseTableIds) {
+        LOG.info("update meta for mv {} with olap tables:{}, refBaseTableIds:{}", materializedView.getName(),
+                changedTablePartitionInfos, refBaseTableIds);
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableVisibleVersionMap();
         boolean hasNextPartitionToRefresh = mvContext.hasNextBatchPartition();
@@ -830,6 +835,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // In the run1/run2 should only update the tblA's partition info, but tblB's partition
             // info meta should be updated at the last refresh.
             if (hasNextPartitionToRefresh && !refBaseTableIds.contains(snapshotTable.getId())) {
+                LOG.info("Skip update meta for olap base table {} with partitions info: {}, " +
+                                "because it is not a ref base table of materialized view {}",
+                        snapshotTable.getName(), snapshotInfo.getRefreshedPartitionInfos(), materializedView.getName());
                 continue;
             }
             Long tableId = snapshotTable.getId();
@@ -867,6 +875,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
                                             List<TableSnapshotInfo> changedTablePartitionInfos,
                                             Set<Long> refBaseTableIds) {
+        LOG.info("update meta for mv {} with external tables:{}, refBaseTableIds:{}", materializedView.getName(),
+                changedTablePartitionInfos, refBaseTableIds);
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableInfoVisibleVersionMap();
         boolean hasNextBatchPartition = mvContext.hasNextBatchPartition();
@@ -887,6 +897,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // In the run1/run2 should only update the tblA's partition info, but tblB's partition
             // info meta should be updated at the last refresh.
             if (hasNextBatchPartition && !refBaseTableIds.contains(snapshotTable.getId())) {
+                LOG.info("Skip update meta for external base table {} with partitions info: {}, " +
+                                "because it is not a ref base table of materialized view {}",
+                        snapshotTable.getName(), snapshotInfo.getRefreshedPartitionInfos(), materializedView.getName());
                 continue;
             }
             currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
@@ -1492,7 +1505,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
             LOG.info("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
             return partitionInfos;
-        } else if (ConnectorPartitionTraits.isSupported(baseTable.getType())) {
+        } else if (ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType())) {
             return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames), baseTableInfo);
         } else {
             // FIXME: base table does not support partition-level refresh and does not update the meta

@@ -37,6 +37,11 @@ public class PaimonPartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public boolean isSupportPCTRefresh() {
+        return true;
+    }
+
+    @Override
     public PartitionKey createEmptyKey() {
         return new PaimonPartitionKey();
     }
