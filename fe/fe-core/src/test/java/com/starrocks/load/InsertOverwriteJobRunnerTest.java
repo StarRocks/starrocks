@@ -35,6 +35,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.SQLException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 public class InsertOverwriteJobRunnerTest {
 
@@ -138,5 +140,25 @@ public class InsertOverwriteJobRunnerTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t3 partitions(p1, p1) select * from t4";
         cluster.runSql("insert_overwrite_test", sql);
+    }
+
+    @Test
+    public void testConcurrentOverwrite() {
+        final int concurrency = 20;
+
+        AtomicInteger failedJobs = new AtomicInteger();
+        IntStream.range(1, concurrency).parallel().forEach(x -> {
+            String sql = "insert overwrite t3 partitions(p1, p1) select * from t4";
+            try {
+                cluster.runSql("insert_overwrite_test", sql);
+            } catch (SQLException e) {
+                if (e.getMessage().contains("replace partitions failed: partitions changed during insert")) {
+                    failedJobs.addAndGet(1);
+                } else {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        Assert.assertTrue("some of concurrent jobs should fail gracefully", failedJobs.get() > 0);
     }
 }
