@@ -1571,7 +1571,7 @@ public class LocalMetastore implements ConnectorMetadata {
             indexMap.put(indexId, rollup);
         }
 
-        Long id = GlobalStateMgr.getCurrentState().getNextId();
+        long id = GlobalStateMgr.getCurrentState().getNextId();
         long shardGroupId = 0;
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
             shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().

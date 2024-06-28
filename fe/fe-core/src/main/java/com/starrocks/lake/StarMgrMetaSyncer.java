@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
@@ -81,8 +82,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
                                 .map(Partition::getSubPartitions)
-                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupId))
-                                .forEach(groupIds::add);
+                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
+                                .forEach(groupIds::addAll);
                     }
                 }
             } finally {
@@ -308,10 +309,16 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 }
                 // no need to check db/table/partition again, everything still works
                 long groupId = physicalPartition.getShardGroupId();
+                // Every materializedIndex belongs to a shardGroup now,
+                // so there must be no redundant shards
+                if (groupId == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
+                    continue;
+                }
                 List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
                 Set<Long> starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         starmgrShardIdsSet.remove(tablet.getId());
                     }

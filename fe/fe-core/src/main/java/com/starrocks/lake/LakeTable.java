@@ -31,6 +31,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.TableIndexes;
@@ -181,7 +182,8 @@ public class LakeTable extends OlapTable {
         List<Long> shardIds = null;
         try {
             // Ignore the parameter replicationNum
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, null, properties,
+            long indexShardGroupId = shardGroupId == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID ? index.getShardGroupId() : shardGroupId;
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, indexShardGroupId, null, properties,
                     StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         } catch (DdlException e) {
             LOG.error(e.getMessage(), e);
@@ -203,7 +205,13 @@ public class LakeTable extends OlapTable {
     public List<Long> getShardGroupIds() {
         List<Long> shardGroupIds = new ArrayList<>();
         for (Partition p : getAllPartitions()) {
-            shardGroupIds.add(p.getShardGroupId());
+            if (p.getShardGroupId() != PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
+                shardGroupIds.add(p.getShardGroupId());
+            } else {
+                for (MaterializedIndex index : p.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    shardGroupIds.add(index.getShardGroupId());
+                }
+            }
         }
         return shardGroupIds;
     }

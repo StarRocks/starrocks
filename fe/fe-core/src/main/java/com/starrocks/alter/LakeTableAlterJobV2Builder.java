@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
@@ -74,7 +75,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getParentId();
                 long physicalPartitionId = partition.getId();
-                long shardGroupId = partition.getShardGroupId();
+                long shardGroupId = partition.getIndex(originIndexId).getShardGroupId();
+                // for compatibility
+                if (shardGroupId == PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID) {
+                    shardGroupId = partition.getShardGroupId();
+                }
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.

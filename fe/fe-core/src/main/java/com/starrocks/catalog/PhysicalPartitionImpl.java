@@ -38,6 +38,8 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
 
     public static final long PARTITION_INIT_VERSION = 1L;
 
+    public static final long INVALID_SHARD_GROUP_ID = -1L;
+
     @SerializedName(value = "id")
     private long id;
 
@@ -48,7 +50,7 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
 
     // DEPRECATED
     @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private long shardGroupId = INVALID_SHARD_GROUP_ID;
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
