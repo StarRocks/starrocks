@@ -110,17 +110,17 @@ public class PaimonMetadataTest {
 
         List<DataFileMeta> meta1 = new ArrayList<>();
         meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
         meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL));
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
 
         List<DataFileMeta> meta2 = new ArrayList<>();
         meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL));
-        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).withDataFiles(meta1)
-                .isStreaming(false).build());
-        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1).withDataFiles(meta2)
-                .isStreaming(false).build());
+                1, 1, 1, DUMMY_LEVEL, 0L, null));
+        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
+                .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
+        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)
+                .withBucketPath("not used").withDataFiles(meta2).isStreaming(false).build());
     }
 
     @Test
@@ -213,8 +213,9 @@ public class PaimonMetadataTest {
         row2.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
         new MockUp<RecordReaderIterator>() {
             private int callCount;
-            private final GenericRow[] elements = { row1, row2 };
-            private final boolean[] hasNextOutputs = { true, true, false };
+            private final GenericRow[] elements = {row1, row2};
+            private final boolean[] hasNextOutputs = {true, true, false};
+
             @Mock
             public boolean hasNext() {
                 if (callCount < hasNextOutputs.length) {
@@ -305,8 +306,9 @@ public class PaimonMetadataTest {
 
         new MockUp<RecordReaderIterator>() {
             private int callCount;
-            private final GenericRow[] elements = { row1, row2 };
-            private final boolean[] hasNextOutputs = { true, true, false };
+            private final GenericRow[] elements = {row1, row2};
+            private final boolean[] hasNextOutputs = {true, true, false};
+
             @Mock
             public boolean hasNext() {
                 if (callCount < hasNextOutputs.length) {
@@ -359,8 +361,9 @@ public class PaimonMetadataTest {
 
         new MockUp<RecordReaderIterator>() {
             private int callCount;
-            private final GenericRow[] elements = { row1, row2 };
-            private final boolean[] hasNextOutputs = { true, true, false };
+            private final GenericRow[] elements = {row1, row2};
+            private final boolean[] hasNextOutputs = {true, true, false};
+
             @Mock
             public boolean hasNext() {
                 if (callCount < hasNextOutputs.length) {

@@ -16,6 +16,7 @@
 
 #include "exec/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
+#include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
@@ -37,6 +38,10 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                     runtime_state, _mor_processor));
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
+    } else if (scanner_params.paimon_deletion_file != nullptr) {
+        std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
+                new PaimonDeleteFileBuilder(scanner_params.fs, &_need_skip_rowids));
+        RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
     }
     return Status::OK();
 }
