@@ -198,7 +198,11 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
-        runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        if (status.getUserIdentity() != null) {
+            runCtx.setCurrentUserIdentity(status.getUserIdentity());
+        } else {
+            runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        }
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
@@ -302,6 +306,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setSource(task.getSource());
         status.setCreateTime(created);
         status.setUser(task.getCreateUser());
+        status.setUserIdentity(task.getUserIdentity());
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
         status.setPostRun(task.getPostRun());
