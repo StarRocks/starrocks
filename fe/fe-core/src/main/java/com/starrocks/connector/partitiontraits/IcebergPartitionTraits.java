@@ -38,6 +38,11 @@ public class IcebergPartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public boolean isSupportPCTRefresh() {
+        return true;
+    }
+
+    @Override
     public String getTableName() {
         return ((IcebergTable) table).getRemoteTableName();
     }

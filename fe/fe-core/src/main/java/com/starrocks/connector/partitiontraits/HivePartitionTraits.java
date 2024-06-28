@@ -37,6 +37,11 @@ public class HivePartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public boolean isSupportPCTRefresh() {
+        return true;
+    }
+
+    @Override
     public PartitionKey createEmptyKey() {
         return new HivePartitionKey();
     }

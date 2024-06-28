@@ -131,17 +131,17 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
-        OptExpression result = null;
         try {
             prepare(connectContext, logicOperatorTree, columnRefFactory);
-            result = optimizerConfig.isRuleBased() ?
+            OptExpression result = optimizerConfig.isRuleBased() ?
                     optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns) :
                     optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+            return result;
         } finally {
-            // clear caches in OptimizerContext
+            // make sure clear caches in OptimizerContext
             context.clear();
+            connectContext.setQueryMVContext(null);
         }
-        return result;
     }
 
     public void setQueryTables(Set<OlapTable> queryTables) {

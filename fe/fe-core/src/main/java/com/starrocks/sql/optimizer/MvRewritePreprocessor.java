@@ -214,8 +214,8 @@ public class MvRewritePreprocessor {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
 
-            QueryMaterializationContext queryMaterializationContext = connectContext.getQueryMVContext() != null ?
-                    connectContext.getQueryMVContext() : new QueryMaterializationContext();
+            // use a new context rather than reuse the existed context to avoid cache conflict.
+            QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
             try {
                 // 1. get related mvs for all input tables
                 Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
@@ -242,8 +242,9 @@ public class MvRewritePreprocessor {
 
                 // To avoid disturbing queries without mv, only initialize materialized view context
                 // when there are candidate mvs.
-                if (Config.enable_mv_query_context_cache && context.getCandidateMvs() != null
-                        && !context.getCandidateMvs().isEmpty()) {
+                if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
+                    // it's safe used in the optimize context here since the query mv context is not shared across the
+                    // connect-context.
                     context.setQueryMaterializationContext(queryMaterializationContext);
                     connectContext.setQueryMVContext(queryMaterializationContext);
                 }
