@@ -450,6 +450,7 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _index_map_col_unique_id.clear();
     _cols.clear();
     _compression_type = schema.compression_type();
+    _compression_level = schema.compression_level();
     for (auto& column_pb : schema.column()) {
         TabletColumn column;
         column.init_from_pb(column_pb);
@@ -518,6 +519,7 @@ Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t ver
     _num_short_key_columns = column_param.short_key_column_count();
     _num_rows_per_row_block = ori_tablet_schema.num_rows_per_row_block();
     _compression_type = ori_tablet_schema.compression_type();
+    _compression_level = ori_tablet_schema.compression_level();
 
     // todo(yixiu): unique_id
     _next_column_unique_id = ori_tablet_schema.next_column_unique_id();
@@ -592,6 +594,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     }
     tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
     tablet_schema_pb->set_compression_type(_compression_type);
+    tablet_schema_pb->set_compression_level(_compression_level);
     tablet_schema_pb->mutable_sort_key_idxes()->Add(_sort_key_idxes.begin(), _sort_key_idxes.end());
     tablet_schema_pb->mutable_sort_key_unique_ids()->Add(_sort_key_uids.begin(), _sort_key_uids.end());
     tablet_schema_pb->set_schema_version(_schema_version);

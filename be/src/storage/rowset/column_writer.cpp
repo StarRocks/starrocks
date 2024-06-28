@@ -372,7 +372,8 @@ ScalarColumnWriter::~ScalarColumnWriter() {
 }
 
 Status ScalarColumnWriter::init() {
-    RETURN_IF_ERROR(get_block_compression_codec(_opts.meta->compression(), &_compress_codec));
+    RETURN_IF_ERROR(
+            get_block_compression_codec(_opts.meta->compression(), &_compress_codec, _opts.meta->compression_level()));
 
     if (!_opts.need_speculate_encoding) {
         auto st = set_encoding(_opts.meta->encoding());

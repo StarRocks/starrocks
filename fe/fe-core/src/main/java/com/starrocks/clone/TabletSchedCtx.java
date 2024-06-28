@@ -964,6 +964,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
                     .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
                     .setCompressionType(olapTable.getCompressionType())
+                    .setCompressionLevel(olapTable.getCompressionLevel())
                     .setRecoverySource(RecoverySource.SCHEDULER)
                     .setTabletSchema(tabletSchema)
                     .build();

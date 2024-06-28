@@ -60,6 +60,7 @@ public class CreateReplicaTask extends AgentTask {
 
     private final long version;
     private final TCompressionType compressionType;
+    private final int compressionLevel;
     private final TStorageMedium storageMedium;
     private final boolean enablePersistentIndex;
     private TPersistentIndexType persistentIndexType;
@@ -94,6 +95,7 @@ public class CreateReplicaTask extends AgentTask {
         this.persistentIndexType = builder.getPersistentIndexType();
         this.tabletType = builder.getTabletType();
         this.compressionType = builder.getCompressionType();
+        this.compressionLevel = builder.getCompressionLevel();
         this.tabletSchema = builder.getTabletSchema();
         this.binlogConfig = builder.getBinlogConfig();
         this.createSchemaFile = builder.isCreateSchemaFile();
@@ -169,6 +171,7 @@ public class CreateReplicaTask extends AgentTask {
             createTabletReq.setBase_schema_hash(baseSchemaHash);
         }
         createTabletReq.setCompression_type(compressionType);
+        createTabletReq.setCompression_level(compressionLevel);
         createTabletReq.setTablet_type(tabletType);
         createTabletReq.setCreate_schema_file(createSchemaFile);
         return createTabletReq;
@@ -185,6 +188,7 @@ public class CreateReplicaTask extends AgentTask {
         private long tabletId = INVALID_ID;
         private long version = INVALID_ID;
         private TCompressionType compressionType;
+        private int compressionLevel;
         private TStorageMedium storageMedium;
         private boolean enablePersistentIndex;
         private TPersistentIndexType persistentIndexType;
@@ -272,6 +276,15 @@ public class CreateReplicaTask extends AgentTask {
             this.compressionType = compressionType;
             return this;
         }
+
+        public int getCompressionLevel() {
+            return compressionLevel;
+        }
+
+        public Builder setCompressionLevel(int compressionLevel) {
+            this.compressionLevel = compressionLevel;
+            return this;
+        }        
 
         public TStorageMedium getStorageMedium() {
             return storageMedium;

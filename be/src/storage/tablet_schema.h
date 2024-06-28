@@ -297,6 +297,7 @@ public:
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
+    int compression_level() const { return _compression_level; }
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
@@ -376,6 +377,8 @@ private:
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
+    // only use for zstd compression type
+    int _compression_level = -1;
 
     std::unordered_map<int32_t, int32_t> _unique_id_to_index;
 
