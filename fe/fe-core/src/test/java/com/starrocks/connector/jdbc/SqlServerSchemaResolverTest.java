@@ -35,7 +35,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class PostgresSchemaResolverTest {
+public class SqlServerSchemaResolverTest {
+
     @Mocked
     HikariDataSource dataSource;
 
@@ -48,24 +49,49 @@ public class PostgresSchemaResolverTest {
     private MockResultSet columnResult;
 
     @Before
-    public void setUp() throws SQLException {
+    public void setUp() {
         dbResult = new MockResultSet("catalog");
-        dbResult.addColumn("TABLE_SCHEM", Arrays.asList("postgres", "template1", "test"));
+        dbResult.addColumn("TABLE_SCHEM", Arrays.asList("sqlserver", "template1", "test"));
         tableResult = new MockResultSet("tables");
         tableResult.addColumn("TABLE_NAME", Arrays.asList("tbl1", "tbl2", "tbl3"));
         columnResult = new MockResultSet("columns");
-        columnResult.addColumn("DATA_TYPE", Arrays.asList(Types.BIT, Types.INTEGER, Types.INTEGER, Types.REAL, Types.DOUBLE,
-                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP));
-        columnResult.addColumn("TYPE_NAME", Arrays.asList("BOOL", "INTEGER", "SERIAL", "FLOAT4", "FLOAT8",
-                "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6));
-        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"));
-        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO", "NO"));
+        columnResult.addColumn("DATA_TYPE",
+                Arrays.asList(-155, Types.BIGINT, Types.BIT, Types.CHAR, Types.CHAR, Types.DATE, Types.DECIMAL,
+                        Types.DECIMAL, Types.DECIMAL, Types.DOUBLE, Types.INTEGER, Types.INTEGER, Types.LONGNVARCHAR,
+                        Types.LONGNVARCHAR,
+                        Types.LONGVARCHAR, Types.NCHAR, Types.NUMERIC, Types.NVARCHAR, Types.REAL, Types.SMALLINT,
+                        Types.TIME, Types.TIMESTAMP, Types.TIMESTAMP, Types.TIMESTAMP, Types.TINYINT, Types.VARCHAR,
+                        Types.LONGVARBINARY, Types.BINARY, Types.VARBINARY));
+        columnResult.addColumn("TYPE_NAME",
+                Arrays.asList("datetimeoffset", "bigint", "bit", "char", "uniqueidentifier", "date", "decimal",
+                        "smallmoney", "money", "float", "int identity", "int", "ntext", "xml",
+                        "text", "nchar", "numerics", "nvarchar", "real", "smallint",
+                        "time", "datetime2", "smalldatetime", "datetime", "tinyint", "varchar", "longvarbinary",
+                        "binary", "varbinary"));
+        columnResult.addColumn("COLUMN_SIZE",
+                Arrays.asList(34, 19, 1, 10, 36, 10, 18,
+                        10, 19, 53, 10, 10, 1073741823, 2147483647,
+                        2147483647, 10, 18, 50, 24, 5,
+                        16, 27, 16, 23, 3, 50, 0, 10, 100));
+        columnResult.addColumn("DECIMAL_DIGITS",
+                Arrays.asList(7, 0, 0, 0, 0, 0, 4,
+                        4, 4, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 0,
+                        7, 7, 0, 3, 0, 0, 0, 0, 0));
+        columnResult.addColumn("COLUMN_NAME",
+                Arrays.asList("a", "b", "c", "d", "e", "f", "g",
+                        "h", "i", "j", "k", "l", "m", "n",
+                        "o", "p", "q", "r", "s", "t",
+                        "u", "v", "w", "x", "y", "z", "aa", "bb", "cc"));
+        columnResult.addColumn("IS_NULLABLE",
+                Arrays.asList("YES", "YES", "YES", "YES", "YES", "YES", "YES",
+                        "YES", "YES", "YES", "NO", "YES", "YES", "YES",
+                        "YES", "YES", "YES", "YES", "YES", "YES",
+                        "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES", "YES"));
         properties = new HashMap<>();
-        properties.put(JDBCResource.DRIVER_CLASS, "org.postgresql.Driver");
-        properties.put(JDBCResource.URI, "jdbc:postgresql://127.0.0.1:5432/t1");
-        properties.put(JDBCResource.USER, "root");
+        properties.put(JDBCResource.DRIVER_CLASS, "com.microsoft.sqlserver.jdbc.SQLServerDriver");
+        properties.put(JDBCResource.URI, "jdbc:sqlserver://127.0.0.1:1433;databaseName=MyDatabase;");
+        properties.put(JDBCResource.USER, "sa");
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
@@ -87,7 +113,7 @@ public class PostgresSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listDbNames();
-            List<String> expectResult = Lists.newArrayList("postgres", "template1", "test");
+            List<String> expectResult = Lists.newArrayList("sqlserver", "template1", "test");
             Assert.assertEquals(expectResult, result);
         } catch (Exception e) {
             Assert.fail();
@@ -129,7 +155,7 @@ public class PostgresSchemaResolverTest {
                 minTimes = 0;
 
                 connection.getMetaData().getTables("t1", "test", null,
-                        new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"});
+                        new String[] {"TABLE", "VIEW"});
                 result = tableResult;
                 minTimes = 0;
             }
@@ -168,20 +194,39 @@ public class PostgresSchemaResolverTest {
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
             Assert.assertEquals("tbl1", table.getName());
             Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
-            Assert.assertEquals(11, table.getColumns().size());
-            Assert.assertTrue(table.getColumn("h").getType().isStringType());
+            Assert.assertTrue(table.getColumn("a").getType().isVarchar());
+            Assert.assertTrue(table.getColumn("b").getType().isBigint());
+            Assert.assertTrue(table.getColumn("c").getType().isBoolean());
+            Assert.assertTrue(table.getColumn("d").getType().isChar());
+            Assert.assertTrue(table.getColumn("e").getType().isChar());
+            Assert.assertTrue(table.getColumn("f").getType().isDate());
+            Assert.assertTrue(table.getColumn("g").getType().isDecimalV3());
+            Assert.assertTrue(table.getColumn("h").getType().isDecimalV3());
+            Assert.assertTrue(table.getColumn("i").getType().isDecimalV3());
+            Assert.assertTrue(table.getColumn("j").getType().isDouble());
+            Assert.assertTrue(table.getColumn("k").getType().isInt());
+            Assert.assertTrue(table.getColumn("l").getType().isInt());
+            Assert.assertTrue(table.getColumn("m").getType().isVarchar());
+            Assert.assertTrue(table.getColumn("n").getType().isVarchar());
+            Assert.assertTrue(table.getColumn("o").getType().isVarchar());
+            Assert.assertTrue(table.getColumn("p").getType().isChar());
+            Assert.assertTrue(table.getColumn("q").getType().isDecimalV3());
+            Assert.assertTrue(table.getColumn("r").getType().isVarchar());
+            Assert.assertTrue(table.getColumn("s").getType().isFloat());
+            Assert.assertTrue(table.getColumn("t").getType().isSmallint());
+            Assert.assertTrue(table.getColumn("u").getType().isTime());
+            Assert.assertTrue(table.getColumn("v").getType().isDatetime());
+            Assert.assertTrue(table.getColumn("w").getType().isDatetime());
+            Assert.assertTrue(table.getColumn("x").getType().isDatetime());
+            Assert.assertTrue(table.getColumn("y").getType().isSmallint());
+            Assert.assertTrue(table.getColumn("z").getType().isVarchar());
+            Assert.assertTrue(table.getColumn("aa").getType().isBinaryType());
+            Assert.assertTrue(table.getColumn("bb").getType().isBinaryType());
+            Assert.assertTrue(table.getColumn("cc").getType().isBinaryType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
         }
     }
 
-    @Test
-    public void testGetPartitions() {
-        PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
-        List<Partition> partitions = postgresSchemaResolver.getPartitions(null, new Table(1L, "tbl1",
-                Table.TableType.JDBC, Lists.newArrayList()));
-        Assert.assertEquals(partitions.size(), 1);
-        Assert.assertEquals(partitions.get(0).getPartitionName(), "tbl1");
-    }
 }
