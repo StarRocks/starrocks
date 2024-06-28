@@ -387,6 +387,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                                 .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                                 .setCompressionType(table.getCompressionType())
+                                .setCompressionLevel(table.getCompressionLevel())
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
                                 .build();

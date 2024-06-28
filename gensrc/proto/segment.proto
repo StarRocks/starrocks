@@ -192,6 +192,7 @@ message ColumnMetaPB {
     optional JsonMetaPB json_meta = 32;
     // for json flat column only
     optional bytes name = 33;
+    optional int32 compression_level = 34;
 }
 
 message SegmentFooterPB {
