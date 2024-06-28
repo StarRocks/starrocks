@@ -189,6 +189,7 @@ public class Optimizer {
         } finally {
             // make sure clear caches in OptimizerContext
             context.clear();
+            connectContext.setQueryMVContext(null);
         }
     }
 
