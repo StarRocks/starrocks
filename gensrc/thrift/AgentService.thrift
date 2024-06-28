@@ -120,6 +120,7 @@ struct TCreateTabletReq {
     19: optional i32 primary_index_cache_expire_sec;
     // Whether or not need to create a separate file to hold schema information.
     20: optional bool create_schema_file = true;
+    21: optional i32 compression_level = -1;
 }
 
 struct TDropTabletReq {

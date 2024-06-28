@@ -937,6 +937,7 @@ public class RestoreJob extends AbstractJob {
                                 .setPrimaryIndexCacheExpireSec(localTbl.primaryIndexCacheExpireSec())
                                 .setTabletType(localTbl.getPartitionInfo().getTabletType(restorePart.getId()))
                                 .setCompressionType(localTbl.getCompressionType())
+                                .setCompressionLevel(localTbl.getCompressionLevel())
                                 .setInRestoreMode(true)
                                 .setTabletSchema(tabletSchema)
                                 .build();

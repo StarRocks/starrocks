@@ -1979,6 +1979,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         .setBinlogConfig(table.getCurBinlogConfig())
                         .setTabletType(tabletType)
                         .setCompressionType(table.getCompressionType())
+                        .setCompressionLevel(table.getCompressionLevel())
                         .setTabletSchema(tabletSchema)
                         .setCreateSchemaFile(createSchemaFile)
                         .build();

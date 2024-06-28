@@ -378,6 +378,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
                                     .setTabletType(tbl.getPartitionInfo().getTabletType(partition.getParentId()))
                                     .setCompressionType(tbl.getCompressionType())
+                                    .setCompressionLevel(tbl.getCompressionLevel())
                                     .setBaseTabletId(baseTabletId)
                                     .setTabletSchema(tabletSchema)
                                     .build();
