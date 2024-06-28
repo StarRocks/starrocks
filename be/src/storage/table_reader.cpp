@@ -25,6 +25,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "util/brpc_stub_cache.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/ref_count_closure.h"
 
 namespace starrocks {
@@ -220,8 +221,7 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
             LOG(WARNING) << msg;
             st = Status::InternalError(msg);
         } else {
-            PInternalService_Stub* stub =
-                    ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+            auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
             if (stub == nullptr) {
                 string msg = strings::Substitute("multi_get fail to get brpc stub for $0:$1 tablet:$2", node_info->host,
                                                  node_info->brpc_port, tablet_id);
@@ -238,7 +238,8 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
     return st;
 }
 
-Status TableReader::_tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
+Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService_RecoverableStub>& stub,
+                                          int64_t tablet_id, int64_t version, Chunk& keys,
                                           const std::vector<std::string>& value_columns, std::vector<bool>& found,
                                           Chunk& values, SchemaPtr& value_schema) {
     PTabletReaderMultiGetRequest request;

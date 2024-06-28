@@ -22,6 +22,7 @@
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "storage/olap_define.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/reusable_closure.h"
 #include "util/spinlock.h"
 #include "util/threadpool.h"
@@ -65,7 +66,12 @@ private:
     const int64_t _node_id;
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
+<<<<<<< HEAD
     PInternalService_Stub* _stub = nullptr;
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> _stub;
+    MemTracker* _mem_tracker = nullptr;
+>>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
 
     bool _inited = false;
     Status _st = Status::OK();

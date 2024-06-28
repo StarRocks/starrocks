@@ -32,6 +32,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
@@ -218,7 +219,7 @@ private:
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    PInternalService_Stub* _stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _stub;
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
