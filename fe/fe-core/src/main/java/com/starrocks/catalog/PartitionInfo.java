@@ -40,7 +40,6 @@ import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
@@ -254,12 +253,8 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         buff.append("type: ").append(type.typeString).append("; ");
 
         for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
-            buff.append(entry.getKey()).append(" is HDD: ");
-            if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
-                buff.append(true);
-            } else {
-                buff.append(false);
-            }
+            buff.append(entry.getKey()).append(" is HDD: ")
+                    .append(DataProperty.DATA_PROPERTY_HDD.equals(entry.getValue()));
             buff.append(" data_property: ").append(entry.getValue().toString());
             buff.append(" replica number: ").append(idToReplicationNum.get(entry.getKey()));
             buff.append(" in memory: ").append(idToInMemory.get(entry.getKey()));
