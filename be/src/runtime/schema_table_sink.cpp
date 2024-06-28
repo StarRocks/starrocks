@@ -70,8 +70,12 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
     if (node_info == nullptr) {
         return Status::InternalError(strings::Substitute("set_config fail: be $0 not found", be_id));
     }
+<<<<<<< HEAD
     doris::PBackendService_Stub* stub =
             ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+=======
+    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+>>>>>>> cddf14194f ([BugFix] Fix brpc continuously fail after backend host restart (#40229))
     if (stub == nullptr) {
         return Status::InternalError(strings::Substitute("set_config fail to get brpc stub for $0:$1", node_info->host,
                                                          node_info->brpc_port));
