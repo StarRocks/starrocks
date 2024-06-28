@@ -584,12 +584,16 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // get compression type
             TCompressionType compressionType = TCompressionType.LZ4_FRAME;
+            Integer compressionLevel = -1;
             try {
-                compressionType = PropertyAnalyzer.analyzeCompressionType(properties);
+                Pair<TCompressionType, Integer> result = PropertyAnalyzer.analyzeCompressionType(properties);
+                compressionType = result.first;
+                compressionLevel = result.second;
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
             table.setCompressionType(compressionType);
+            table.setCompressionLevel(compressionLevel);
 
             // partition live number
             int partitionLiveNumber;
