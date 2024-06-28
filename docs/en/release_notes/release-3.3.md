@@ -66,7 +66,7 @@ Release date: June 21, 2024
 - Improved the performance and memory usage of Bitmap functions. Added the capability to export Bitmap data to Hive by using [Hive Bitmap UDFs](https://docs.starrocks.io/docs/integrations/hive_bitmap_udf/).
 - **[Preview] Supports [Flat JSON](https://docs.starrocks.io/docs/using_starrocks/Flat_json/).** This feature automatically detects JSON data during data loading, extracts common fields from the JSON data, and stores these fields in a columnar manner. This improves JSON query performance, comparable to querying STRUCT data.
 - **[Preview] Optimized global dictionary.** Provides a dictionary object to store the mapping of key-value pairs from a dictionary table in the BE memory. A new `dictionary_get()` function is now used to directly query the dictionary object in the BE memory, accelerating the speed of querying the dictionary table compared to using the `dict_mapping()` function. Furthermore, the dictionary object can also serve as a dimension table. Dimension values can be obtained by directly querying the dictionary object using `dictionary_get()`, resulting in faster query speeds than the original method of performing JOIN operations on the dimension table to obtain dimension values.
-- [Preview] Supports Colocate Group Execution. Significantly reduces memory usage for executing Join and Agg operators on the colocated tables, which ensures that large queries can be executed more stably.
+- [Preview] Supports Colocate Group Execution. Significantly reduces memory usage for executing Join and Agg operators on the colocate tables, which ensures that large queries can be executed more stably.
 - Optimized the performance of CodeGen. JIT is enabled by default, which achieves a 5X performance improvement for complex expression calculations.
 - Supports using vectorization technology to implement regular expression matching, which reduces the CPU consumption of the `regexp_replace` function.
 - Optimized Broadcast Join so that the Broadcast Join operation can be terminated in advance when the right table is empty.
@@ -112,15 +112,32 @@ Release date: June 21, 2024
 - [Experimental] Provides [ClickHouse SQL Rewriter](https://github.com/StarRocks/SQLTransformer), a new tool for converting the syntax in ClickHouse to the syntax in StarRocks.
 - The Flink connector v1.2.9 provided by StarRocks is integrated with the Flink CDC 3.0 framework, which can build a streaming ELT pipeline from CDC data sources to StarRocks. The pipeline can synchronize the entire database, sharded tables, and schema changes in the sources to StarRocks. For more information, see [Synchronize data with Flink CDC 3.0 (with schema change supported)](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/#synchronize-data-with-flink-cdc-30-with-schema-change-supported).
 
-### Behavior Changes (To be updated)
+### Behavior and Parameter Changes
+
+#### Table Creation and Data Distribution
+
+- Users must specify Distribution Key when creating a colocate table using CTAS. [#45537](https://github.com/StarRocks/starrocks/pull/45537)
+- When users create a non-partitioned table without specifying bucket number, the minimum bucket number the system set for the table is `16` (instead of `2` based on the formula `2*BE count`). If users want to set a smaller bucket number when creating a small table, they must set it explicitly. [#47005](https://github.com/StarRocks/starrocks/pull/47005)
+
+#### Loading and Unloading
+
+- `__op` is reserved by StarRocks for special purposes and creating columns with names prefixed by `__op` is forbidden by default. You can allow this such name format by setting FE configuration `allow_system_reserved_names` to `true`. Please note that creating such columns in Primary Key tables may result in undefined behaviors. [#46239](https://github.com/StarRocks/starrocks/pull/46239)
+- During Routine Load jobs, if the time duration that StarRocks cannot consume data exceeds the threshold specified in the FE configuration `routine_load_unstable_threshold_second` (Default value is `3600`, that is one hour), the status of the job will become `UNSTABLE`, but the job will continue. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- The default value of the FE configuration `enable_automatic_bucket` is changed from `false` to `true`. When this item is set to `true`, the system will automatically set `bucket_size` for newly created tables, thus enabling automatic bucketing, which is the optimized random bucketing feature. However, in v3.2, setting `enable_automatic_bucket` to `true` will take effect. Instead, the system only enables automatic bucketing when `bucket_size` is specified. This will prevent risks when users downgrade StarRocks from v3.3 to v3.2.
+
+#### Query and Semi-structured Data
+
+- When a single query is executed within the Pipeline framework, the memory limit is no longer restricted by `exec_mem_limit` but is only limited by `query_mem_limit`. A value of `0` for `query_mem_limit` indicates no limit. [#34120](https://github.com/StarRocks/starrocks/pull/34120)
+- NULL values in JSON is treated as SQL NULL values when they are executed by IS NULL and IS NOT NULL operators. For example, `parse_json('{"a": null}') -> 'a' IS NULL` returns `1`, and `parse_json('{"a": null}') -> 'a' IS NOT NULL` returns `0`. [#42765](https://github.com/StarRocks/starrocks/pull/42765) [#42909](https://github.com/StarRocks/starrocks/pull/42909)
+- A new session variable `cbo_decimal_cast_string_strict` is added to control how CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- The default value of `cbo_eq_base_type` is changed from `varchar` to `decimal`, indicating that the system will compare the DECIMAL-type data with strings as numerical values instead of strings. [#43443](https://github.com/StarRocks/starrocks/pull/43443)
+
+#### Others
 
 - The default value of the materialized view property `partition_refresh_num` has been changed from `-1` to `1`. When a partitioned materialized view needs to be refreshed, instead of refreshing all partitions in a single task, the new behavior will incrementally refresh one partition at a time. This change is intended to prevent excessive resource consumption caused by the original behavior. The default behavior can be adjusted using the FE configuration `default_mv_partition_refresh_number`.
 - Originally, the database consistency checker was scheduled based on GMT+8 time zone. Database consistency checker is scheduled based on the local time zone now. [#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - By default, Data Cache is enabled to accelerate data lake queries. Users can manually disable it by executing `SET enable_scan_datacache = false`. 
 - If users want to re-use the cached data in Block Cache after downgrading a shared-data cluster from v3.3 to v3.2.8 and earlier, they need to manually rename the Blockfile in the directory **starlet_cache** by changing the file name format from `blockfile_{n}.{version}` to `blockfile_{n}`, that is, to remove the suffix of version information. For more information, refer to the [Block Cache Usage Notes](https://docs.starrocks.io/docs/using_starrocks/block_cache/#usage-notes). v3.2.9 and later versions are compatible with the file name format in v3.3, so users do not need to perform this operation manually.
-
-### Parameter Changes (To be updated)
-
 - Supports dynamically modifying FE parameter `sys_log_level`. [#45062](https://github.com/StarRocks/starrocks/issues/45062)
 
 ### Bug Fixes

@@ -112,15 +112,32 @@ displayed_sidebar: "Chinese"
 - [Experimental] 新增 ClickHouse 语法转化工具 [ClickHouse SQL Rewriter](https://github.com/StarRocks/SQLTransformer)。
 - StarRocks 提供的 Flink connector v1.2.9 已与 Flink CDC 3.0 框架集成，构建从 CDC 数据源到 StarRocks 的流式 ELT 管道。该管道可以将整个数据库、分库分表以及来自源端的 Schema Change 都同步到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 Schema Change）](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/#使用-flink-cdc-30-同步数据支持-schema-change)。
 
-### 行为变更（待补充）
+### 行为及参数变更
+
+#### 建表与分区分桶
+
+- 用户使用 CTAS 创建 Colocate 表时，必须指定 Distribution Key。[#45537](https://github.com/StarRocks/starrocks/pull/45537)
+- 用户创建非分区表但未设置分桶数时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
+
+#### 导入与导出
+
+- `__op` 被系统保留作为特殊列名，默认设置下不再允许用户创建名字为 `__op` 前缀的列。如果需要使用，需要设置 FE 配置项 `allow_system_reserved_names` 为 `true`。请注意，在主键表中创建 `__op` 前缀的列，会导致未知行为。[#46239](https://github.com/StarRocks/starrocks/pull/46239)
+- Routine Load 作业运行中，如果无法消费到数据的时间超过了 FE 配置项 `routine_load_unstable_threshold_second` 中设置的时间（默认 1 小时），则作业状态会变成 `UNSTABLE`，但作业会继续运行。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- FE 配置项 `enable_automatic_bucket` 的默认值改为 `TRUE`。为 `TRUE` 时，系统会为新建表自动设置 `bucket_size` 参数，从而新建表就启用了自动分桶（优化版的随机分桶）。但在 V3.2 中，设置 `enable_automatic_bucket` 为 `true` 不会生效，用户必须设置 `bucket_size` 以开启自动分桶。此举可以方便从 V3.3 回滚到 V3.2，减少回滚风险。
+
+#### 查询与半结构化
+
+- 单个查询在 Pipeline 框架中执行时所使用的内存限制不再受 `exec_mem_limit` 限制，仅由 `query_mem_limit` 限制。取值为 `0` 表示没有限制。 [#34120](https://github.com/StarRocks/starrocks/pull/34120)
+- JSON 对象中 NULL 值，在 IS NULL 和 IS NOT NULL 的处理中，被当作 SQL NULL 值对待。如 `parse_json('{"a": null}') -> 'a' IS NULL` 返回 `1`，`parse_json('{"a": null}') -> 'a' IS NOT NULL` 返回 `0`。[#42765](https://github.com/StarRocks/starrocks/pull/42765) [#42909](https://github.com/StarRocks/starrocks/pull/42909)
+- 新增会话变量 `cbo_decimal_cast_string_strict` 用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。当取值为 `true` 时，使用 v2.5.x 及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；当取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- 系统变量 `cbo_eq_base_type` 的默认值修改为 `decimal`，表示 DECIMAL 类型和 STRING 类型的数据比较时的，默认按 DECIMAL 类型进行比较。[#43443](https://github.com/StarRocks/starrocks/pull/43443)
+
+#### 其他
 
 - 物化视图属性 `partition_refresh_num` 默认值从 `-1` 调整为 `1`，当物化视图有多个分区需要刷新时，原来在一个刷新任务重刷新所有的分区，当前会一个分区一个分区增量刷新，避免先前行为消耗过多资源。可以通过 FE 参数 `default_mv_partition_refresh_number` 调整默认行为。
 - 系统原先按照 GMT+8 时区的时间调度数据库一致性检查，现在将按照当地时区的时间进行调度。[#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - 默认启用 Data Cache 来加速数据湖查询。用户也可通过 `SET enable_scan_datacache = false` 手动关闭 Data Cache。
 - 对于存算分离场景，在降级到 v3.2.8 及其之前版本时，如需复用先前 Block Cache 中的缓存数据，需要手动修改 **starlet_cache** 目录下 Blockfile 文件名，将文件名格式从 `blockfile_{n}.{version}` 改为 `blockfile_{n}`，即去掉版本后缀。具体可参考 [Block Cache 使用说明](https://docs.starrocks.io/zh/docs/using_starrocks/block_cache/#使用说明)。v3.2.9 及以后版本自动兼容 v3.3 文件名，无需手动执行该操作。
-
-### 参数变更（待补充）
-
 - 支持动态修改 FE 参数 `sys_log_level`。[#45062](https://github.com/StarRocks/starrocks/issues/45062)
 
 ### 问题修复
