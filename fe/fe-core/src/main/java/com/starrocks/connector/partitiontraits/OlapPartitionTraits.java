@@ -49,6 +49,11 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public boolean isSupportPCTRefresh() {
+        return true;
+    }
+
+    @Override
     public boolean supportPartitionRefresh() {
         // TODO: check partition types
         return true;
