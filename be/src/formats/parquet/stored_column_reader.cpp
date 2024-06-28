@@ -237,7 +237,7 @@ void OptionalStoredColumnReader::reset_levels() {
 
 Status OptionalStoredColumnReader::_decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels) {
     size_t avail_levels = _reader->def_level_decoder().get_avail_levels(*num_rows, def_levels);
-    if (UNLIKELY(avail_levels == 0)) {
+    if (UNLIKELY(avail_levels == 0 || *num_rows > avail_levels)) {
         return Status::InternalError(
                 fmt::format("def levels need to parsed: {}, def levels parsed: {}", *num_rows, avail_levels));
     }
