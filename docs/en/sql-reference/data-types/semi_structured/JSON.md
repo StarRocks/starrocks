@@ -10,7 +10,7 @@ StarRocks starts to support the JSON data type since v2.2.0. This topic describe
 
 JSON is a lightweight, data-interchange format that is designed for semi-structured data. JSON presents data in a hierarchical tree structure, which is flexible and easy to read and write in a wide range of data storage and analytics scenarios. JSON supports `NULL` values and the following data types: NUMBER, STRING, BOOLEAN, ARRAY, and OBJECT.
 
-For more information about JSON, visit the [JSON website](http://www.json.org/?spm=a2c63.p38356.0.0.50756b9fVEfwCd). For information about the input and output syntax of JSON, see JSON specifications at [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4).
+For more information about JSON, visit the [JSON website](https://www.json.org/json-en.html). For information about the input and output syntax of JSON, see JSON specifications at [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4).
 
 StarRocks supports both storage and efficient querying and analytics of JSON data. StarRocks does not directly store the input text. Instead, it stores JSON data in a binary format to reduce the cost of parsing and increase query efficiency.
 
