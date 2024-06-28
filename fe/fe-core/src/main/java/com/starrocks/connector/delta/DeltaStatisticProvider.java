@@ -62,7 +62,7 @@ public class DeltaStatisticProvider {
                                 List<String> nonPartitionPrimitiveColumn) {
         StructType schema = table.getDeltaMetadata().getSchema();
 
-        DeltaLakeStatsStruct fileStat = file.getStats();
+        DeltaLakeStats fileStat = file.getStats();
 
         DeltaLakeFileStats fileStats;
         if (deltaLakeFileStatsMap.containsKey(key)) {
