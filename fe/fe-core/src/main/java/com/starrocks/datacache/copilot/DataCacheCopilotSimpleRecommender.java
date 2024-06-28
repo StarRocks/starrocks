@@ -14,6 +14,7 @@
 
 package com.starrocks.datacache.copilot;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
@@ -64,7 +65,7 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
         DataCacheCopilotRepo repository = GlobalStateMgr.getCurrentState().getDataCacheCopilotRepo();
         repository.flushStorageToBE();
 
-        String collectSQL = SQLBuilder.buildCollectSQL(stmt.getTarget(), stmt.getInterval(), stmt.getLimitElement());
+        String collectSQL = CollectSQLBuilder.build(stmt.getTarget(), stmt.getInterval(), stmt.getLimitElement());
 
         // get TStatisticData results from BE
         List<TStatisticData> tStatisticDataList = repository.collectCopilotStatistics(collectSQL);
@@ -73,7 +74,7 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
         // generate cache select sql based on StatisticsData
         List<List<String>> resultSQLs = new LinkedList<>();
         for (StatisticsData statisticsData : statisticDataList) {
-            String buildSQL = SQLBuilder.buildCacheSelectSQL(statisticsData);
+            String buildSQL = CacheSelectSQLBuilder.build(statisticsData);
             List<String> sql = new ArrayList<>(2);
             sql.add(buildSQL);
             sql.add(String.valueOf(statisticsData.count));
@@ -82,7 +83,8 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
         return new ShowResultSet(META_DATA, resultSQLs);
     }
 
-    private static class StatisticsData {
+    @VisibleForTesting
+    public static class StatisticsData {
         private final String catalogName;
         private final String databaseName;
         private final String tableName;
@@ -122,7 +124,8 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
         }
     }
 
-    private static class SQLBuilder {
+    @VisibleForTesting
+    public static class CollectSQLBuilder {
         private static final String COLLECT_SQL_TEMPLATE =
                 "SELECT CAST($copilotVersion AS INT), `$catalogName`, `$databaseName`, `$tableName`, " +
                         "GROUP_CONCAT(`$partitionName` SEPARATOR ',') AS `partition_names`, " +
@@ -130,11 +133,9 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
                         "FROM `$internalCatalog`.`$statisticsDb`.`$copilotTable` $whereCondition " +
                         "GROUP BY `$catalogName`, `$databaseName`, `$tableName`, `$accessTime`, `$count` " +
                         "ORDER BY `$count` DESC $limitCondition";
-        private static final String CACHE_SELECT_TEMPLATE =
-                "CACHE SELECT $columnNames FROM `$catalogName`.`$databaseName`.`$tableName` $whereCondition";
         private static final VelocityEngine DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
 
-        public static String buildCollectSQL(Optional<QualifiedName> qualifiedName, long interval,
+        public static String build(Optional<QualifiedName> qualifiedName, long interval,
                                              LimitElement limitElement) {
             VelocityContext context = new VelocityContext();
             context.put("copilotVersion", StatsConstants.STATISTICS_DATACACHE_COPILOT_VERSION);
@@ -198,8 +199,15 @@ public class DataCacheCopilotSimpleRecommender implements DataCacheCopilotRecomm
         private static String buildLimitCondition(LimitElement limitElement) {
             return limitElement.toSql();
         }
+    }
 
-        public static String buildCacheSelectSQL(StatisticsData statisticsData) {
+    @VisibleForTesting
+    public static class CacheSelectSQLBuilder {
+        private static final String CACHE_SELECT_TEMPLATE =
+                "CACHE SELECT $columnNames FROM `$catalogName`.`$databaseName`.`$tableName` $whereCondition";
+        private static final VelocityEngine DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
+
+        public static String build(StatisticsData statisticsData) {
             try {
                 Table table = MetaUtils.getTable(statisticsData.catalogName, statisticsData.databaseName,
                         statisticsData.tableName);
