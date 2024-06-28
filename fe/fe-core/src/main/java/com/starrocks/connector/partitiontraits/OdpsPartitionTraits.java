@@ -25,6 +25,11 @@ public class OdpsPartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public boolean isSupportPCTRefresh() {
+        return false;
+    }
+
+    @Override
     public PartitionKey createEmptyKey() {
         return new OdpsPartitionKey();
     }

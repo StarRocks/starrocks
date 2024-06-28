@@ -14,29 +14,29 @@
 package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.BaseTableInfo;
-import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HudiPartitionKey;
+import com.starrocks.catalog.KuduPartitionKey;
+import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 
 import java.util.List;
 import java.util.Set;
 
-public class HudiPartitionTraits extends DefaultTraits {
+public class KuduPartitionTraits extends DefaultTraits {
 
     @Override
     public String getDbName() {
-        return ((HiveMetaStoreTable) table).getDbName();
-    }
-
-    @Override
-    public PartitionKey createEmptyKey() {
-        return new HudiPartitionKey();
+        return ((KuduTable) table).getDbName();
     }
 
     @Override
     public boolean isSupportPCTRefresh() {
         return false;
+    }
+
+    @Override
+    public PartitionKey createEmptyKey() {
+        return new KuduPartitionKey();
     }
 
     @Override
@@ -46,4 +46,3 @@ public class HudiPartitionTraits extends DefaultTraits {
         return null;
     }
 }
-
