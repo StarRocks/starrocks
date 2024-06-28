@@ -27,6 +27,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
 import com.starrocks.connector.partitiontraits.HivePartitionTraits;
@@ -102,7 +103,7 @@ public abstract class ConnectorPartitionTraits {
      */
     public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
         ConnectorPartitionTraits delegate = buildWithoutCache(table);
-        if (ctx != null && ctx.getQueryMVContext() != null) {
+        if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
             return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
