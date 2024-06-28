@@ -1,0 +1,54 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.connector;
+
+import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
+import com.starrocks.connector.partitiontraits.HivePartitionTraits;
+import com.starrocks.connector.partitiontraits.HudiPartitionTraits;
+import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
+import com.starrocks.connector.partitiontraits.JDBCPartitionTraits;
+import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.util.Set;
+
+public class ConnectorPartitionTraitsTest {
+    @Test
+    public void testisSupportPCTRefresh() {
+        Assert.assertTrue(new OlapPartitionTraits().isSupportPCTRefresh());
+        Assert.assertTrue(new HivePartitionTraits().isSupportPCTRefresh());
+        Assert.assertTrue(new IcebergPartitionTraits().isSupportPCTRefresh());
+        Assert.assertTrue(new JDBCPartitionTraits().isSupportPCTRefresh());
+        Assert.assertFalse(new HudiPartitionTraits().isSupportPCTRefresh());
+        Assert.assertFalse(new DeltaLakePartitionTraits().isSupportPCTRefresh());
+
+        final Set<Table.TableType> supportedTableTypes = ImmutableSet.of(
+                Table.TableType.OLAP,
+                Table.TableType.MATERIALIZED_VIEW,
+                Table.TableType.CLOUD_NATIVE,
+                Table.TableType.CLOUD_NATIVE_MATERIALIZED_VIEW,
+                Table.TableType.HIVE,
+                Table.TableType.ICEBERG,
+                Table.TableType.JDBC
+        );
+        for (Table.TableType tableType : Table.TableType.values()) {
+            Assert.assertEquals(supportedTableTypes.contains(tableType),
+                    ConnectorPartitionTraits.isSupportPCTRefresh(tableType));
+        }
+    }
+}
