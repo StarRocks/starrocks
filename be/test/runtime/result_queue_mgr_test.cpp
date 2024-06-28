@@ -93,9 +93,9 @@ TEST_F(ResultQueueMgrTest, fetch_result_normal) {
 
     std::shared_ptr<arrow::Array> k1_col;
     arrow::NumericBuilder<arrow::Int32Type> builder;
-    builder.Reserve(1);
-    builder.Append(20);
-    builder.Finish(&k1_col);
+    std::ignore = builder.Reserve(1);
+    std::ignore = builder.Append(20);
+    std::ignore = builder.Finish(&k1_col);
 
     std::vector<std::shared_ptr<arrow::Array>> arrays;
     arrays.push_back(k1_col);

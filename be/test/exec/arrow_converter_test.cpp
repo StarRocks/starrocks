@@ -1257,18 +1257,18 @@ static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, cons
     arrow::TypeTraits<arrow::MapType>::BuilderType builder(arrow::default_memory_pool(), key_builder, item_builder);
 
     for (int i = 0; i < num_elements; i++) {
-        builder.Append();
+        std::ignore = builder.Append();
         for (auto& [key, value] : value) {
-            key_builder->Append(key);
-            item_builder->Append(value);
+            std::ignore = key_builder->Append(key);
+            std::ignore = item_builder->Append(value);
             if (null_dup) {
-                key_builder->Append(key);
-                item_builder->Append(value);
+                std::ignore = key_builder->Append(key);
+                std::ignore = item_builder->Append(value);
             }
         }
         counter += 1;
         if (null_dup) {
-            builder.AppendNull();
+            std::ignore = builder.AppendNull();
             counter++;
         }
     }
@@ -1292,12 +1292,12 @@ static std::shared_ptr<arrow::Array> create_struct_array(int elemnts_num, bool i
 
     for (int i = 0; i < elemnts_num; i++) {
         if (is_null && i % 2 == 0) {
-            builder.AppendNull();
+            std::ignore = builder.AppendNull();
         } else {
-            builder.Append();
-            int1_builder->Append(i);
-            str_builder->Append(fmt::format("char-{}", i));
-            int2_builder->Append(i * 10);
+            std::ignore = builder.Append();
+            std::ignore = int1_builder->Append(i);
+            std::ignore = str_builder->Append(fmt::format("char-{}", i));
+            std::ignore = int2_builder->Append(i * 10);
         }
     }
     return builder.Finish().ValueOrDie();
@@ -1358,13 +1358,13 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
     arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder(arrow::default_memory_pool(), value_builder,
                                                                      fix_size);
     for (auto num = 0; num < num_elements; num = num + fix_size) {
-        builder.Append();
+        std::ignore = builder.Append();
         for (int i = 0; i < fix_size; i++) {
-            value_builder->Append(counter);
+            std::ignore = value_builder->Append(counter);
             counter += 1;
         }
         if (add_null) {
-            builder.AppendNull();
+            std::ignore = builder.AppendNull();
         }
     }
     return builder.Finish().ValueOrDie();
@@ -1427,11 +1427,11 @@ static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents,
                                                                       num_children);
 
     for (auto num1 = 0; num1 < num_parents; ++num1) {
-        builder1.Append();
+        std::ignore = builder1.Append();
         for (auto num = 0; num < num_children; ++num) {
-            builder->Append();
+            std::ignore = builder->Append();
             for (int i = 0; i < num_child_values; ++i) {
-                value_builder->Append(counter);
+                std::ignore = value_builder->Append(counter);
                 counter += 1;
             }
         }
