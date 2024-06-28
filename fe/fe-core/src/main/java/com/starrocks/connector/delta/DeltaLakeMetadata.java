@@ -210,13 +210,18 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                                     "Delta table feature [deletion vectors] is not supported");
                         }
 
-                        FileScanTask fileScanTask = ScanFileUtils.convertFromRowToFileScanTask(
-                                enableCollectColumnStatistics(connectContext), scanFileRow);
-                        files.add(fileScanTask);
+                        if (enableCollectColumnStatistics(connectContext)) {
+                            FileScanTask fileScanTask = ScanFileUtils.convertFromRowToFileScanTask(
+                                    true, scanFileRow);
+                            files.add(fileScanTask);
 
-                        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
-                            statisticProvider.updateFileStats(deltaLakeTable, key, fileScanTask,
-                                    nonPartitionPrimitiveColumns);
+                            try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
+                                statisticProvider.updateFileStats(deltaLakeTable, key, fileScanTask,
+                                        nonPartitionPrimitiveColumns);
+                            }
+                        } else {
+                            FileScanTask fileScanTask = ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow);
+                            files.add(fileScanTask);
                         }
                     }
                 }
