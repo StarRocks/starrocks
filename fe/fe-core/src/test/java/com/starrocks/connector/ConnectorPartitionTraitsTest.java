@@ -23,7 +23,6 @@ import com.starrocks.connector.partitiontraits.HivePartitionTraits;
 import com.starrocks.connector.partitiontraits.HudiPartitionTraits;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.connector.partitiontraits.JDBCPartitionTraits;
-import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
 import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
@@ -68,7 +67,6 @@ public class ConnectorPartitionTraitsTest {
         Assert.assertTrue(new JDBCPartitionTraits().isSupportPCTRefresh());
         Assert.assertFalse(new HudiPartitionTraits().isSupportPCTRefresh());
         Assert.assertFalse(new OdpsPartitionTraits().isSupportPCTRefresh());
-        Assert.assertFalse(new KuduPartitionTraits().isSupportPCTRefresh());
         Assert.assertFalse(new DeltaLakePartitionTraits().isSupportPCTRefresh());
 
         final Set<Table.TableType> supportedTableTypes = ImmutableSet.of(
