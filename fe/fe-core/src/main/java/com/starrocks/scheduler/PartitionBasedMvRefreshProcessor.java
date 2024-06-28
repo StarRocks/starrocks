@@ -428,8 +428,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<Table, Set<String>> refTableRefreshPartitions = getRefTableRefreshPartitions(mvToRefreshedPartitions);
         Map<String, Set<String>> refTablePartitionNames = refTableRefreshPartitions.entrySet().stream()
                 .collect(Collectors.toMap(x -> x.getKey().getName(), Map.Entry::getValue));
-        LOG.info("materialized view:{} source partitions :{}",
-                materializedView.getName(), refTableRefreshPartitions);
+        LOG.info("materialized:{}, mvToRefreshedPartitions:{}, refTableRefreshPartitions:{}",
+                materializedView.getName(), mvToRefreshedPartitions, refTableRefreshPartitions);
         // add a message into information_schema
         logMvToRefreshInfoIntoTaskRun(mvToRefreshedPartitions, refTablePartitionNames);
 
@@ -700,6 +700,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         // check
         if (mvRefreshedPartitions == null || refTableAndPartitionNames == null) {
+            LOG.info("no partitions to refresh for materialized view {}, mvRefreshedPartitions:{}, " +
+                            "refTableAndPartitionNames:{}", materializedView.getName(), mvRefreshedPartitions,
+                    refTableAndPartitionNames);
             return;
         }
 
@@ -759,6 +762,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private void updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
                                         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedTablePartitionInfos) {
+        LOG.info("update meta for mv {} with olap tables:{}", materializedView.getName(),
+                changedTablePartitionInfos);
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableVisibleVersionMap();
         Table partitionTable = null;
@@ -804,6 +809,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void updateMetaForExternalTable(
             MaterializedView.AsyncRefreshContext refreshContext,
             Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedTablePartitionInfos) {
+        LOG.info("update meta for mv {} with external tables:{}", materializedView.getName(),
+                changedTablePartitionInfos);
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableInfoVisibleVersionMap();
         BaseTableInfo partitionTableInfo = null;
