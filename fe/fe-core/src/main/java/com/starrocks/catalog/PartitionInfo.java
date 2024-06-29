@@ -255,7 +255,7 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         out.writeInt(idToDataProperty.size());
         for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
             out.writeLong(entry.getKey());
-            if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
+            if (DataProperty.DATA_PROPERTY_HDD.equals(entry.getValue())) {
                 out.writeBoolean(true);
             } else {
                 out.writeBoolean(false);
@@ -300,12 +300,8 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         buff.append("type: ").append(type.typeString).append("; ");
 
         for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
-            buff.append(entry.getKey()).append(" is HDD: ");
-            if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
-                buff.append(true);
-            } else {
-                buff.append(false);
-            }
+            buff.append(entry.getKey()).append(" is HDD: ")
+                    .append(DataProperty.DATA_PROPERTY_HDD.equals(entry.getValue()));
             buff.append(" data_property: ").append(entry.getValue().toString());
             buff.append(" replica number: ").append(idToReplicationNum.get(entry.getKey()));
             buff.append(" in memory: ").append(idToInMemory.get(entry.getKey()));
