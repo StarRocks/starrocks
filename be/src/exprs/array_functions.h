@@ -31,6 +31,8 @@ public:
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
 
+    DEFINE_VECTORIZED_FN(repeat);
+
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_distinct(FunctionContext* context, const Columns& columns) {
         return ArrayDistinct<type>::process(context, columns);
