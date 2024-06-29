@@ -5640,4 +5640,176 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
         EXPECT_EQ(1, result->get(2).get_int8());
     }
 }
+
+TEST_F(ArrayFunctionsTest, array_repeat_int) {
+    auto src_column = Int32Column::create();
+    src_column->append(1);
+    src_column->append(2);
+    src_column->append(3);
+    src_column->append(4);
+    src_column->append(0);
+    src_column->append(6);
+    src_column->append(0);
+    src_column->append(-2);
+
+    auto repeat_count_column = Int32Column::create();
+    repeat_count_column->append(1);
+    repeat_count_column->append(2);
+    repeat_count_column->append(3);
+    repeat_count_column->append(1);
+    repeat_count_column->append(2);
+    repeat_count_column->append(0);
+    repeat_count_column->append(-1);
+    repeat_count_column->append(-2);
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(dest_column->size(), 8);
+    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
+    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
+    ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+    ASSERT_EQ(dest_column->get(3).get_array().size(), 1);
+    ASSERT_EQ(dest_column->get(4).get_array().size(), 2);
+    ASSERT_EQ(dest_column->get(5).get_array().size(), 0);
+    ASSERT_EQ(dest_column->get(6).get_array().size(), 0);
+    ASSERT_EQ(dest_column->get(7).get_array().size(), 0);
+    _check_array<int32_t>({(int32_t)1}, dest_column->get(0).get_array());
+    _check_array<int32_t>({(int32_t)2, (int32_t)2}, dest_column->get(1).get_array());
+    _check_array<int32_t>({(int32_t)3, (int32_t)3, (int32_t)3}, dest_column->get(2).get_array());
+    _check_array<int32_t>({(int32_t)4}, dest_column->get(3).get_array());
+    _check_array<int32_t>({(int32_t)0, (int32_t)0}, dest_column->get(4).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_repeat_float) {
+    auto src_column = FloatColumn::create();
+    src_column->append((float)0.1);
+    src_column->append((float)0);
+    src_column->append((float)0.2);
+
+    auto repeat_count_column = Int32Column::create();
+    repeat_count_column->append(1);
+    repeat_count_column->append(2);
+    repeat_count_column->append(0);
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(dest_column->size(), 3);
+    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
+    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
+    ASSERT_EQ(dest_column->get(2).get_array().size(), 0);
+    _check_array<float>({(float)0.1}, dest_column->get(0).get_array());
+    _check_array<float>({(float)0, (float)0}, dest_column->get(1).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_repeat_varchar) {
+    auto src_column = BinaryColumn::create();
+    src_column->append("1");
+    src_column->append("2");
+    src_column->append("3");
+
+    auto repeat_count_column = Int32Column::create();
+    repeat_count_column->append(1);
+    repeat_count_column->append(2);
+    repeat_count_column->append(0);
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(dest_column->size(), 3);
+    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
+    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
+    ASSERT_EQ(dest_column->get(2).get_array().size(), 0);
+    _check_array<Slice>({"1"}, dest_column->get(0).get_array());
+    _check_array<Slice>({"2", "2"}, dest_column->get(1).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_repeat_const) {
+    auto src_data_column = Int32Column::create();
+    src_data_column->append(3);
+    auto src_column = ConstColumn::create(std::move(src_data_column), 1);
+
+    auto repeat_count_data_column = Int32Column::create();
+    repeat_count_data_column->append(2);
+    auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), 1);
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(dest_column->size(), 1);
+    _check_array<int32_t>({(int32_t)3, (int32_t)3}, dest_column->get(0).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_repeat_int_array) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
+    src_column->append_datum(DatumArray{(int32_t)2, (int32_t)3, (int32_t)7, (int32_t)8});
+    src_column->append_datum(DatumArray{(int32_t)4, (int32_t)3, (int32_t)2, (int32_t)1});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(int32_t)4, Datum(), (int32_t)2, (int32_t)1});
+    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
+    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
+    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
+
+    auto repeat_count_column = Int32Column::create();
+    repeat_count_column->append(1);
+    repeat_count_column->append(2);
+    repeat_count_column->append(3);
+    repeat_count_column->append(1);
+    repeat_count_column->append(2);
+    repeat_count_column->append(0);
+    repeat_count_column->append(-1);
+    repeat_count_column->append(-2);
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(dest_column->size(), 8);
+    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
+    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
+    ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_EQ(dest_column->get(4).get_array().size(), 2);
+    ASSERT_EQ(dest_column->get(5).get_array().size(), 0);
+    ASSERT_EQ(dest_column->get(6).get_array().size(), 0);
+    ASSERT_EQ(dest_column->get(7).get_array().size(), 0);
+    _check_array<int32_t>({(int32_t)5, (int32_t)3, (int32_t)6}, dest_column->get(0).get_array()[0].get_array());
+    _check_array<int32_t>({(int32_t)2, (int32_t)3, (int32_t)7, (int32_t)8}, dest_column->get(1).get_array()[1].get_array());
+    _check_array<int32_t>({(int32_t)4, (int32_t)3, (int32_t)2, (int32_t)1}, dest_column->get(2).get_array()[2].get_array());
+    ASSERT_EQ(4,dest_column->get(4).get_array()[1].get_array()[0].get_int32());
+    ASSERT_TRUE(dest_column->get(4).get_array()[1].get_array()[1].is_null());
+    ASSERT_EQ(1,dest_column->get(4).get_array()[1].get_array()[3].get_int32());
+}
+
+TEST_F(ArrayFunctionsTest, array_repeat_varchar_array) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
+    src_column->append_datum(DatumArray{Slice("2"), Slice("3"), Slice("7"), Slice("8")});
+    src_column->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{Slice("4"), Slice("2"), Slice("2"), Slice("1")});
+
+    auto repeat_count_column = Int32Column::create();
+    repeat_count_column->append(1);
+    repeat_count_column->append(2);
+    repeat_count_column->append(3);
+    repeat_count_column->append(1);
+    repeat_count_column->append(0);
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(dest_column->size(), 5);
+    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
+    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
+    ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_EQ(dest_column->get(4).get_array().size(), 0);
+    _check_array<Slice>({Slice("5"), Slice("3"), Slice("6")}, dest_column->get(0).get_array()[0].get_array());
+    _check_array<Slice>({Slice("4"), Slice("3"), Slice("2"), Slice("1")}, dest_column->get(2).get_array()[0].get_array());
+    _check_array<Slice>({Slice("4"), Slice("3"), Slice("2"), Slice("1")}, dest_column->get(2).get_array()[2].get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_repeat_array_const) {
+    auto src_data_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_data_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
+    auto src_column = ConstColumn::create(std::move(src_data_column), 1);
+
+    auto repeat_count_data_column = Int32Column::create();
+    repeat_count_data_column->append(2);
+    auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), 1);
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(dest_column->size(), 1);
+    _check_array<int32_t>({(int32_t)5, (int32_t)3, (int32_t)6}, dest_column->get(0).get_array()[0].get_array());
+}
 } // namespace starrocks
