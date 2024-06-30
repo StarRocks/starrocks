@@ -710,6 +710,16 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
 
         if (root instanceof RuntimeFilterBuildNode) {
+            if (root instanceof HashJoinNode) {
+                HashJoinNode hashJoinNode = (HashJoinNode) root;
+                if (hashJoinNode.isSkewBroadJoin()) {
+                    HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
+                    for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
+                        int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
+                        description.setFilterId(filterId);
+                    }
+                }
+            }
             RuntimeFilterBuildNode rfBuildNode = (RuntimeFilterBuildNode) root;
             for (RuntimeFilterDescription description : rfBuildNode.getBuildRuntimeFilters()) {
                 buildRuntimeFilters.put(description.getFilterId(), description);
@@ -723,6 +733,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void collectProbeRuntimeFilters(PlanNode root) {
         for (RuntimeFilterDescription description : root.getProbeRuntimeFilters()) {
+            // do not add skew join's broadcast join's probe rf
+            if (description.isBoradCastJoinInSkew()) {
+                continue;
+            }
             probeRuntimeFilters.put(description.getFilterId(), description);
         }
 

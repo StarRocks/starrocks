@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.planner.HashJoinNode;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -26,8 +27,11 @@ import java.util.List;
 import java.util.Objects;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
+    // skewColumn and
     private ScalarOperator skewColumn;
     private List<ScalarOperator> skewValues;
+    private PhysicalHashJoinOperator skewJoinFriend;
+    private HashJoinNode mySelfAsNode;
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
@@ -75,6 +79,21 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
         return skewValues;
     }
 
+    public PhysicalHashJoinOperator getSkewJoinFriend() {
+        return skewJoinFriend;
+    }
+
+    public void setSkewJoinFriend(PhysicalHashJoinOperator skewJoinFriend) {
+        this.skewJoinFriend = skewJoinFriend;
+    }
+
+    public HashJoinNode getMySelfAsNode() {
+        return mySelfAsNode;
+    }
+
+    public void setMySelfAsNode(HashJoinNode mySelfAsNode) {
+        this.mySelfAsNode = mySelfAsNode;
+    }
 
     @Override
     public boolean equals(Object o) {
