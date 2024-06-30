@@ -45,6 +45,8 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 
+import java.util.HashMap;
+
 // Set executor
 public class SetExecutor {
     private final ConnectContext ctx;
@@ -95,8 +97,16 @@ public class SetExecutor {
      * @throws DdlException
      */
     public void execute() throws DdlException {
-        for (SetListItem var : stmt.getSetListItems()) {
-            setVariablesOfAllType(var);
+        HashMap<String, UserVariable> cloneUserVars = new HashMap<>();
+        cloneUserVars.putAll(ctx.getUserVariables());
+        try {
+            for (SetListItem var : stmt.getSetListItems()) {
+                setVariablesOfAllType(var);
+            }
+        } catch (Throwable e) {
+            //If the set sql contains more than one variable,
+            //the atomicity of the modification of this set of variables must be ensured.
+            ctx.setUserVariables(cloneUserVars);
         }
     }
 }

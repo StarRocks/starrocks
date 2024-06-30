@@ -64,32 +64,43 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 public class SetStmtAnalyzer {
     public static void analyze(SetStmt setStmt, ConnectContext session) {
         List<SetListItem> setVars = setStmt.getSetListItems();
-        for (SetListItem var : setVars) {
-            if (var instanceof SystemVariable) {
-                analyzeSystemVariable((SystemVariable) var);
-            } else if (var instanceof UserVariable) {
-                UserVariable userVar = (UserVariable) var;
-                UserVariable userVariableExisted = session.getUserVariable(userVar.getVariable());
-                if (userVariableExisted != null) {
-                    session.removeUserVariable(userVar.getVariable());
-                }
+        HashMap<String, UserVariable> cloneUserVars = new HashMap<>();
+        cloneUserVars.putAll(session.getUserVariables());
+        try {
+            for (SetListItem var : setVars) {
+                if (var instanceof SystemVariable) {
+                    analyzeSystemVariable((SystemVariable) var);
+                } else if (var instanceof UserVariable) {
+                    UserVariable userVar = (UserVariable) var;
+                    UserVariable userVariableExisted = session.getUserVariable(userVar.getVariable());
+                    if (userVariableExisted != null) {
+                        session.removeUserVariable(userVar.getVariable());
+                    }
 
-                analyzeUserVariable(userVar);
-                List<String> varDependency = ExpressionAnalyzer.
-                        analyzeUserVariableExprDependency((userVar).getUnevaluatedExpression(), ConnectContext.get());
-                userVar.setUserVariableDependencyWithoutFind(varDependency);
-            } else if (var instanceof SetUserPropertyVar) {
-                analyzeSetUserPropertyVar((SetUserPropertyVar) var);
-            } else if (var instanceof SetNamesVar) {
-                analyzeSetNames((SetNamesVar) var);
-            } else if (var instanceof SetPassVar) {
-                analyzeSetPassVar((SetPassVar) var, session);
+                    analyzeUserVariable(userVar);
+                    List<String> varDependency = ExpressionAnalyzer.
+                            analyzeUserVariableExprDependency((userVar).getUnevaluatedExpression(), ConnectContext.get());
+                    userVar.setUserVariableDependencyWithoutFind(varDependency);
+                } else if (var instanceof SetUserPropertyVar) {
+                    analyzeSetUserPropertyVar((SetUserPropertyVar) var);
+                } else if (var instanceof SetNamesVar) {
+                    analyzeSetNames((SetNamesVar) var);
+                } else if (var instanceof SetPassVar) {
+                    analyzeSetPassVar((SetPassVar) var, session);
+                }
             }
+        } catch (Throwable e) {
+            throw e;
+        } finally {
+            //If SetStmtAnalyzer encounters an exception, restore the UserVariables in the session.
+            //SetStmtAnalyzer can't modify session vars, only Executor can modify it.
+            session.setUserVariables(cloneUserVars);
         }
     }
 

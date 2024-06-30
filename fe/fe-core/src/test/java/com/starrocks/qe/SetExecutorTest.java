@@ -30,7 +30,9 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetNamesVar;
@@ -253,6 +255,36 @@ public class SetExecutorTest {
 
         literalExprC = (LiteralExpr) userVariableC.getEvaluatedExpression();
         Assert.assertEquals("NULL", literalExprC.getStringValue());
+
+        try {
+            sql = "set @fVar = 1, " +
+                    "@abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz=2";
+            stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            executor = new SetExecutor(ctx, stmt);
+            executor.execute();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("User variable name " +
+                    "'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz' is illegal"));
+        }
+        Assert.assertTrue(ctx.getUserVariable("fVar") == null);
+
+        ctx.getUserVariables().clear();
+        for (int i = 0; i < 1023; ++i) {
+            ctx.getUserVariables().put(String.valueOf(i), null);
+        }
+        System.out.println(ctx.getUserVariables().keySet().size());
+        try {
+            sql = "set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1";
+            stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            executor = new SetExecutor(ctx, stmt);
+            executor.execute();
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("User variable exceeds the maximum limit of 1024"));
+        }
+        Assert.assertFalse(ctx.getUserVariables().containsKey("aVar"));
+        Assert.assertFalse(ctx.getUserVariables().containsKey("bVar"));
+        Assert.assertFalse(ctx.getUserVariables().containsKey("cVar"));
+        Assert.assertTrue(ctx.getUserVariables().size() == 1023);
     }
 
     @Test

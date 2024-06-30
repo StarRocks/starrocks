@@ -435,6 +435,10 @@ public class ConnectContext {
         return userVariables.get(variable);
     }
 
+    public void setUserVariables(HashMap<String, UserVariable> userVariables) {
+        this.userVariables = userVariables;
+    }
+
     public void removeUserVariable(String variable) {
         userVariables.remove(variable);
     }
