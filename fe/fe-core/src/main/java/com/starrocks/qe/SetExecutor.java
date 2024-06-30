@@ -112,6 +112,7 @@ public class SetExecutor {
             if (hasUserVar) {
                 ctx.setUserVariables(cloneUserVars);
             }
+            throw e;
         }
     }
 }
