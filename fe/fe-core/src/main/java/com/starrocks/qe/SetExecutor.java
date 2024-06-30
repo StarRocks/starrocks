@@ -98,15 +98,20 @@ public class SetExecutor {
      */
     public void execute() throws DdlException {
         HashMap<String, UserVariable> cloneUserVars = new HashMap<>();
-        cloneUserVars.putAll(ctx.getUserVariables());
+        boolean hasUserVar = stmt.getSetListItems().stream().anyMatch(var -> var instanceof UserVariable);
+        if (hasUserVar) {
+            cloneUserVars.putAll(ctx.getUserVariables());
+        }
         try {
             for (SetListItem var : stmt.getSetListItems()) {
                 setVariablesOfAllType(var);
             }
         } catch (Throwable e) {
-            //If the set sql contains more than one variable,
+            //If the set sql contains more than one user variable,
             //the atomicity of the modification of this set of variables must be ensured.
-            ctx.setUserVariables(cloneUserVars);
+            if (hasUserVar) {
+                ctx.setUserVariables(cloneUserVars);
+            }
         }
     }
 }

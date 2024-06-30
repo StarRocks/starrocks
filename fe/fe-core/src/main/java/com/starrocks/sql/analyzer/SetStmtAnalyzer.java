@@ -71,7 +71,10 @@ public class SetStmtAnalyzer {
     public static void analyze(SetStmt setStmt, ConnectContext session) {
         List<SetListItem> setVars = setStmt.getSetListItems();
         HashMap<String, UserVariable> cloneUserVars = new HashMap<>();
-        cloneUserVars.putAll(session.getUserVariables());
+        boolean hasUserVar = setVars.stream().anyMatch(var -> var instanceof UserVariable);
+        if (hasUserVar) {
+            cloneUserVars.putAll(session.getUserVariables());
+        }
         try {
             for (SetListItem var : setVars) {
                 if (var instanceof SystemVariable) {
@@ -100,7 +103,9 @@ public class SetStmtAnalyzer {
         } finally {
             //If SetStmtAnalyzer encounters an exception, restore the UserVariables in the session.
             //SetStmtAnalyzer can't modify session vars, only Executor can modify it.
-            session.setUserVariables(cloneUserVars);
+            if (hasUserVar) {
+                session.setUserVariables(cloneUserVars);
+            }
         }
     }
 
