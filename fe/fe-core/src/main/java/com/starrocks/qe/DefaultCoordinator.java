@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -730,17 +731,29 @@ public class DefaultCoordinator extends Coordinator {
                 RuntimeFilterDescription rf = kv.getValue();
                 if (rf.isHasRemoteTargets()) {
                     if (rf.isBroadcastJoin()) {
-                        // for broadcast join, we send at most 3 copy to probers, the first arrival wins.
-                        topParams.getRuntimeFilterParams().putToRuntime_filter_builder_number(rid, 1);
-                        if (jobSpec.isEnablePipeline()) {
+                        if (rf.isBoradCastJoinInSkew()) {
+                            topParams.getRuntimeFilterParams().addToSkew_join_runtime_filters(rid);
                             rf.setBroadcastGRFSenders(broadcastGRfSenders);
-                            broadcastGRFList.add(rf);
                         } else {
-                            rf.setSenderFragmentInstanceId(execFragment.getInstances().get(0).getInstanceId());
+                            // for broadcast join, we send at most 3 copy to probers, the first arrival wins.
+                            topParams.getRuntimeFilterParams().putToRuntime_filter_builder_number(rid, 1);
+                            if (jobSpec.isEnablePipeline()) {
+                                rf.setBroadcastGRFSenders(broadcastGRfSenders);
+                                broadcastGRFList.add(rf);
+                            } else {
+                                rf.setSenderFragmentInstanceId(execFragment.getInstances().get(0).getInstanceId());
+                            }
                         }
                     } else {
+                        int builderNumber = 0;
+                        if (topParams.getRuntimeFilterParams().getRuntime_filter_builder_number().containsKey(rid)) {
+                            Preconditions.checkArgument(kv.getValue().isShuffleJoinInSkew());
+                            builderNumber =
+                                    topParams.getRuntimeFilterParams().getRuntime_filter_builder_number().get(rid);
+                        }
                         topParams.getRuntimeFilterParams()
-                                .putToRuntime_filter_builder_number(rid, execFragment.getInstances().size());
+                                .putToRuntime_filter_builder_number(rid,
+                                        builderNumber + execFragment.getInstances().size());
                     }
                 }
             }

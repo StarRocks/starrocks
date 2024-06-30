@@ -106,7 +106,7 @@ private:
     std::vector<ExprContext*> _build_equivalence_partition_expr_ctxs;
 
     std::list<ExprContext*> _runtime_in_filters;
-    std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
+    std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     bool _build_runtime_filters_from_planner;
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
@@ -115,6 +115,7 @@ private:
 
     bool _is_push_down = false;
     bool _enable_late_materialization = false;
+    bool _is_skew_join = false;
 
     JoinHashTable _ht;
 

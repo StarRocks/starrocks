@@ -55,6 +55,7 @@ public class RuntimeFilterDescription {
 
     private int filterId;
     private int buildPlanNodeId;
+    private JoinNode buildPlanNode;
     private Expr buildExpr;
     private int exprOrder; // order of expr in eq conjuncts.
     private final Map<Integer, Expr> nodeIdToProbeExpr;
@@ -78,6 +79,8 @@ public class RuntimeFilterDescription {
     // ExecGroupInfo. used for check build colocate runtime filter
     private boolean isBuildFromColocateGroup = false;
     private int execGroupId = -1;
+
+    private boolean isBroadCastInSkew = false;
 
     private RuntimeFilterType type;
 
@@ -147,6 +150,41 @@ public class RuntimeFilterDescription {
 
     public void setSortInfo(SortInfo sortInfo) {
         this.sortInfo = sortInfo;
+    }
+
+    public JoinNode getBuildPlanNode() {
+        return buildPlanNode;
+    }
+
+    public void setBuildPlanNode(JoinNode buildPlanNode) {
+        this.buildPlanNode = buildPlanNode;
+        inferBoradCastJoinInSkew();
+    }
+
+    private void inferBoradCastJoinInSkew() {
+        if (buildPlanNode != null && buildPlanNode instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) buildPlanNode;
+            if (hashJoinNode.isSkewJoin() && hashJoinNode.getDistrMode() == JoinNode.DistributionMode.BROADCAST) {
+                isBroadCastInSkew = true;
+            }
+        }
+
+        isBroadCastInSkew = false;
+    }
+
+    public boolean isBoradCastJoinInSkew() {
+        return isBroadCastInSkew;
+    }
+
+    public boolean isShuffleJoinInSkew() {
+        if (buildPlanNode != null && buildPlanNode instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) buildPlanNode;
+            if (hashJoinNode.isSkewJoin() && hashJoinNode.getDistrMode() == PARTITIONED) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
@@ -274,6 +312,10 @@ public class RuntimeFilterDescription {
 
     public void setExprOrder(int order) {
         exprOrder = order;
+    }
+
+    public int getExprOrder() {
+        return exprOrder;
     }
 
     public void setJoinMode(JoinNode.DistributionMode mode) {
@@ -547,6 +589,8 @@ public class RuntimeFilterDescription {
         } else {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
         }
+        
+        t.setIs_borad_cast_join_in_skew(isBroadCastInSkew);
 
         return t;
     }

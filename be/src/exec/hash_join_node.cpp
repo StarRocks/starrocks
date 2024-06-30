@@ -145,6 +145,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.late_materialization) {
         _enable_late_materialization = tnode.hash_join_node.late_materialization;
     }
+    if (tnode.hash_join_node.__isset.is_skew_join) {
+        _is_skew_join = tnode.hash_join_node.is_skew_join;
+    }
     return Status::OK();
 }
 
@@ -470,7 +473,8 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     HashJoinerParam param(pool, _hash_join_node, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
-                          _output_slots, _output_slots, _distribution_mode, false, _enable_late_materialization);
+                          _output_slots, _output_slots, _distribution_mode, false, _enable_late_materialization,
+                          _is_skew_join);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // Create a shared RefCountedRuntimeFilterCollector
