@@ -426,8 +426,8 @@ public class InsertOverwriteJobRunner {
         }
         try {
             OlapTable targetTable = checkAndGetTable(db, tableId);
-            checkSourcePartitionExistence(db, targetTable);
-            checkTmpPartitionExistence(db, targetTable);
+            checkSourcePartitionExistence(targetTable);
+            checkTmpPartitionExistence(targetTable);
 
             List<String> sourcePartitionNames = job.getSourcePartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
@@ -496,7 +496,7 @@ public class InsertOverwriteJobRunner {
         }
         try {
             OlapTable targetTable = checkAndGetTable(db, tableId);
-            checkTmpPartitionExistence(db, targetTable);
+            checkTmpPartitionExistence(targetTable);
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
@@ -518,13 +518,13 @@ public class InsertOverwriteJobRunner {
         }
     }
 
-    private void checkTmpPartitionExistence(Database db, Table targetTable) {
+    private void checkTmpPartitionExistence(Table targetTable) {
         if (job.getTmpPartitionIds().stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
             throw new DmlException("partitions changed during insert, usually it's caused by concurrent jobs");
         }
     }
 
-    private void checkSourcePartitionExistence(Database db, Table targetTable) {
+    private void checkSourcePartitionExistence(Table targetTable) {
         if (job.getSourcePartitionIds().stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
             throw new DmlException("partitions changed during insert, usually it's caused by concurrent jobs");
         }
