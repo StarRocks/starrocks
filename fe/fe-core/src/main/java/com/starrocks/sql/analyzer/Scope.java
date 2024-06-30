@@ -23,7 +23,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.LambdaArgument;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
