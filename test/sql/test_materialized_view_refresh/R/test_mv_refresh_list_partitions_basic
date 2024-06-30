@@ -516,6 +516,10 @@ function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
 -- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
 select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
 -- result:
 2024-01-01	beijing	100
@@ -560,6 +564,10 @@ select * from test_mv1 order by 1, 2;
 2024-01-01	guangdong	20
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
 -- !result
