@@ -38,6 +38,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -1097,6 +1099,45 @@ public class ConnectContext {
             executor.execute();
         } catch (Throwable e) {
             LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);
+        }
+    }
+
+    // We can not make sure the set variables are all valid. Even if some variables are invalid, we should let user continue
+    // to execute SQL.
+    public void updateByUserProperty(UserProperty userProperty) {
+        try {
+            // set session variables
+            Map<String, String> sessionVariables = userProperty.getSessionVariables();
+            for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
+                SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
+                modifySystemVariable(variable, true);
+            }
+
+            // set catalog and database
+            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(VariableMgr.getDefaultValue(SessionVariable.CATALOG)) ||
+                    !getDatabase().isEmpty();
+            if (!dbHasBeenSetByUser) {
+                String catalog = userProperty.getCatalog();
+                String database = userProperty.getDatabase();
+                if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
+                    if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                        changeCatalogDb(userProperty.getCatalogDbName());
+                    }
+                } else {
+                    if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                        changeCatalog(catalog);
+                    } else {
+                        changeCatalogDb(userProperty.getCatalogDbName());
+                    }
+                    SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
+                    modifySystemVariable(variable, true);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("set session env failed: ", e);
+            // In handshake, we will send error message to client. But it seems that client will ignore it.
+            getState().setOk(0L, 0,
+                    String.format("set session variables from user property failed: %s", e.getMessage()));
         }
     }
 
