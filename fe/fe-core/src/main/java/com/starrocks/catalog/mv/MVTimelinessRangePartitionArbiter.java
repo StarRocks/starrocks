@@ -74,7 +74,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         }
 
         // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
-        RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv);
+        RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null, true);
         if (differ == null) {
             throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
                     mv.getName()));
@@ -134,7 +134,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         RangePartitionDiff rangePartitionDiff = null;
         try {
             // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
-            RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv);
+            RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null, true);
             if (differ == null) {
                 return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.UNKNOWN);
             }

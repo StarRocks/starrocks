@@ -117,10 +117,10 @@ public class MvRefreshArbiter {
      * Check whether mv needs to refresh based on the ref base table. It's a shortcut version of getMvBaseTableUpdateInfo.
      * @return Optional<Boolean> : true if needs to refresh, false if not, empty if there are some unkown results.
      */
-    public static Optional<Boolean> needsToRefreshTable(MaterializedView mv,
-                                                        Table baseTable,
-                                                        boolean withMv,
-                                                        boolean isQueryRewrite) {
+    private static Optional<Boolean> needsToRefreshTable(MaterializedView mv,
+                                                         Table baseTable,
+                                                         boolean withMv,
+                                                         boolean isQueryRewrite) {
         if (baseTable.isView()) {
             // do nothing
             return Optional.of(false);
