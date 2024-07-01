@@ -31,6 +31,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.delta.DeltaLakeRemoteFileDesc;
 import com.starrocks.connector.delta.DeltaUtils;
+import com.starrocks.connector.delta.FileScanTask;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -147,15 +148,13 @@ public class DeltaLakeScanNode extends ScanNode {
             return;
         }
 
-        List<Row> splitsInfo = remoteFileDesc.getDeltaLakeScanTasks();
-        for (Row row : splitsInfo) {
-            FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(row);
-            Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(row);
+        List<FileScanTask> splitsInfo = remoteFileDesc.getDeltaLakeScanTasks();
+        for (FileScanTask split : splitsInfo) {
             List<String> partitionValues = new ArrayList<>();
-            partitionValueMap.forEach((key, value) -> partitionValues.add(value));
+            split.getPartitionValues().forEach((key, value) -> partitionValues.add(value));
             PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues,
                     deltaLakeTable.getPartitionColumns(), deltaLakeTable);
-            addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
+            addPartitionLocations(partitionKeys, partitionKey, descTbl, split.getFileStatus(), deltaMetadata);
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());
