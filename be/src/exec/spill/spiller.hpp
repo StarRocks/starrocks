@@ -259,7 +259,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 workgroup::ScanTask(_spiller->options().wg.get(), std::move(restore_task), std::move(yield_func));
         RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
-        COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_restore_tasks);
+        COUNTER_SET(_spiller->metrics().peak_restore_io_task_count, _running_restore_tasks);
     }
     return Status::OK();
 }
