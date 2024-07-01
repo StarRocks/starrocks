@@ -66,7 +66,6 @@ public class UnifiedConnector implements Connector {
         ConnectorContext derivedContext = new ConnectorContext(context.getCatalogName(), context.getType(),
                 derivedProperties.build());
 
-        boolean shouldCreatePaimonConnector = null != context.getProperties().get(PAIMON_CATALOG_WAREHOUSE);
         ImmutableMap.Builder<Table.TableType, Connector> builder = ImmutableMap.builder();
 
         builder.put(HIVE, new HiveConnector(derivedContext))
@@ -74,7 +73,8 @@ public class UnifiedConnector implements Connector {
                 .put(HUDI, new HudiConnector(derivedContext))
                 .put(DELTALAKE, new DeltaLakeConnector(derivedContext))
                 .put(KUDU, new KuduConnector(derivedContext));
-        if (shouldCreatePaimonConnector) {
+        boolean containsPaimon = null != context.getProperties().get(PAIMON_CATALOG_WAREHOUSE);
+        if (containsPaimon) {
             builder.put(PAIMON, new PaimonConnector(derivedContext));
         }
         connectorMap = builder.build();
