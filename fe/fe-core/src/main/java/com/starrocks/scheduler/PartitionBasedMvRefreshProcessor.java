@@ -66,6 +66,11 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
+<<<<<<< HEAD
+=======
+import com.starrocks.scheduler.mv.MVPCTMetaRepairer;
+import com.starrocks.scheduler.mv.MVPCTRefreshListPartitioner;
+>>>>>>> 7ea0e0fa02 ([Feature] List Partition For AMV(Part 2): Support list partition for asynchronous materialized view with non-nullable partition columns (#46680))
 import com.starrocks.scheduler.mv.MVPCTRefreshNonPartitioner;
 import com.starrocks.scheduler.mv.MVPCTRefreshPartitioner;
 import com.starrocks.scheduler.mv.MVPCTRefreshPlanBuilder;
@@ -964,6 +969,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             return new MVPCTRefreshNonPartitioner(mvContext, context, db, mv);
         } else if (partitionInfo.isRangePartition()) {
             return new MVPCTRefreshRangePartitioner(mvContext, context, db, mv);
+        } else if (partitionInfo.isListPartition()) {
+            return new MVPCTRefreshListPartitioner(mvContext, context, db, mv);
         } else {
             throw new DmlException(String.format("materialized view:%s in database:%s refresh failed: partition info %s not " +
                     "supported", mv.getName(), context.ctx.getDatabase(), partitionInfo));
