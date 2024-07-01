@@ -1427,8 +1427,9 @@ class StarrocksSQLApiLib(object):
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
+        plan = str(res["result"])
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
@@ -2021,3 +2022,8 @@ class StarrocksSQLApiLib(object):
         else:
             tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
                
+    def assert_table_partitions_num(self, table_name, expect_num):
+        res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
+        tools.assert_true(res["status"], "show schema change task error")
+        ans = res["result"]
+        tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))

@@ -69,6 +69,10 @@ public class MvBaseTableUpdateInfo {
         nameToPartKeys.put(partitionName, listPartitionKey);
     }
 
+    public void addListPartitionKeys(Map<String, PListCell> listPartitionKeys) {
+        nameToPartKeys.putAll(listPartitionKeys);
+    }
+
     /**
      * Get the partition name with its associated range partition key when the mv is range partitioned.
      */

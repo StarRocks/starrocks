@@ -103,6 +103,36 @@ public class ExecuteOption {
         isReplay = replay;
     }
 
+    private boolean containsKey(String key) {
+        return taskRunProperties.containsKey(key) && taskRunProperties.get(key) != null;
+    }
+
+    /**
+     * If the execute option contains the properties that need to be merged into the task run, eg: it's an internal partition
+     * refresh, needs to merge it into the newer task run.
+     * task in mv refresh
+     * @return
+     */
+    public boolean containsToMergeProperties() {
+        if (taskRunProperties == null) {
+            return false;
+        }
+        if (containsKey(TaskRun.PARTITION_START) || containsKey(TaskRun.PARTITION_END)
+                || containsKey(TaskRun.START_TASK_RUN_ID)) {
+            return true;
+        }
+        return false;
+    }
+
+    public void mergeProperties(ExecuteOption option) {
+        if (option.taskRunProperties != null) {
+            if (taskRunProperties == null) {
+                taskRunProperties = Maps.newHashMap();
+            }
+            taskRunProperties.putAll(option.taskRunProperties);
+        }
+    }
+
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);

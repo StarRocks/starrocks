@@ -14,10 +14,12 @@
 
 package com.starrocks.catalog.mv;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -29,6 +31,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 
 /**
@@ -146,5 +149,23 @@ public abstract class MVTimelinessArbiter {
             }
         }
         return needRefreshMvPartitionNames;
+    }
+
+    /**
+     * Collect ref base table's update partition infos
+     * @param refBaseTableAndColumns ref base table and columns of mv
+     * @return ref base table's changed partition names
+     */
+    protected Map<Table, Set<String>> collectBaseTableUpdatePartitionNames(Map<Table, Column> refBaseTableAndColumns,
+                                                                           MvUpdateInfo mvUpdateInfo) {
+        Map<Table, Set<String>> baseChangedPartitionNames = Maps.newHashMap();
+        for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
+            Table baseTable = e.getKey();
+            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
+                    true, true);
+            mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
+            baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPartitionNames());
+        }
+        return baseChangedPartitionNames;
     }
 }

@@ -42,6 +42,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -802,6 +803,21 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column");
                 }
                 partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
+            } else if (partitionInfo.isListPartition()) {
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                Set<String> partitionColumns = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
+                        .map(col -> col.getName())
+                        .collect(Collectors.toSet());
+                // mv's partition columns should be subset of the base table's partition columns
+                if (!partitionColumns.contains(slotRef.getColumnName())) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+                // TODO: only support not null list partitions
+                if (slotRef.isNullable()) {
+                    throw new SemanticException("Materialized view partition column only support not null list partition " +
+                            "columns for now");
+                }
             } else {
                 throw new SemanticException("Materialized view related base table partition type: " +
                         partitionInfo.getType().name() + " not supports");
@@ -1081,7 +1097,7 @@ public class MaterializedViewAnalyzer {
             if (statement.getPartitionRangeDesc() == null) {
                 return null;
             }
-            if (!table.getPartitionInfo().isRangePartition()) {
+            if (table.getPartitionInfo().isUnPartitioned()) {
                 throw new SemanticException("Not support refresh by partition for single partition mv",
                         mvName.getPos());
             }

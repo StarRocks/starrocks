@@ -1,0 +1,503 @@
+-- name: test_mv_refresh_list_partitions_rewrite
+CREATE TABLE t1 (
+      id BIGINT,
+      province VARCHAR(64) not null,
+      age SMALLINT,
+      dt VARCHAR(10)
+)
+PRIMARY KEY(id, province)
+PARTITION BY LIST (province) (
+     PARTITION p1 VALUES IN ("beijing", "chongqing") ,
+     PARTITION p2 VALUES IN ("guangdong") 
+)
+DISTRIBUTED BY HASH(id) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02');
+-- result:
+-- !result
+CREATE TABLE t2 (
+      id BIGINT,
+      province VARCHAR(64) not null,
+      age SMALLINT,
+      dt VARCHAR(10)
+)
+PRIMARY KEY(id, province)
+PARTITION BY LIST (province) (
+     PARTITION p1 VALUES IN ("chongqing"),
+     PARTITION p2 VALUES IN ("guangdong"),
+     PARTITION p3 VALUES IN ("beijing")
+)
+DISTRIBUTED BY HASH(id) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t2 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02');
+-- result:
+-- !result
+CREATE TABLE t3 (
+      id BIGINT,
+      province VARCHAR(64) not null,
+      age SMALLINT,
+      dt VARCHAR(10) not null
+)
+DUPLICATE KEY(id)
+PARTITION BY LIST (province, dt) (
+     PARTITION p1 VALUES IN (("beijing", "2024-01-01"))  ,
+     PARTITION p2 VALUES IN (("guangdong", "2024-01-01")), 
+     PARTITION p3 VALUES IN (("beijing", "2024-01-02"))  ,
+     PARTITION p4 VALUES IN (("guangdong", "2024-01-02")) 
+)
+DISTRIBUTED BY RANDOM;
+-- result:
+-- !result
+INSERT INTO t3 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02');
+-- result:
+-- !result
+create materialized view test_mv1
+partition by province 
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t1 group by dt, province;
+-- result:
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select * from test_mv1 order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+select dt, province, sum(age) from t1 group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+-- !result
+select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where dt = '2024-01-01' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+INSERT INTO t1 VALUES (2, 'beijing', 20, '2024-01-01');
+-- result:
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+select dt, province, sum(age) from t1 group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where province = 'beijing' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+-- !result
+select dt, province, sum(age) from t1 where province = 'guangdong' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where dt = '2024-01-01' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where dt = '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t1 where dt >= '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+create materialized view test_mv1
+partition by province 
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t2 group by dt, province;
+-- result:
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+select dt, province, sum(age) from t2 group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+-- !result
+select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where dt = '2024-01-01' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+INSERT INTO t2 VALUES (2, 'beijing', 20, '2024-01-01');
+-- result:
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+select dt, province, sum(age) from t2 group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where province = 'beijing' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+-- !result
+select dt, province, sum(age) from t2 where province = 'guangdong' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where dt = '2024-01-01' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where dt = '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t2 where dt >= '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+create materialized view test_mv1
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t3 group by dt, province;
+-- result:
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select * from test_mv1 order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+-- !result
+select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where dt = '2024-01-01' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	20
+2024-01-01	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
+-- result:
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+-- result:
+None
+-- !result
+select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where province = 'beijing' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+-- !result
+select dt, province, sum(age) from t3 where province = 'guangdong' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where province in ('beijing', 'guangdong') group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where dt = '2024-01-01' group by dt, province order by 1, 2;
+-- result:
+2024-01-01	beijing	40
+2024-01-01	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where dt = '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+select dt, province, sum(age) from t3 where dt >= '2024-01-02' group by dt, province order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop table t3;
+-- result:
+-- !result
