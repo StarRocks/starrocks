@@ -150,10 +150,13 @@ public class OptExpression {
         return op.getDomainProperty(inputs);
     }
 
-    public void initRowOutputInfo() {
+    public void clearStatsAndInitOutputInfo() {
         for (OptExpression optExpression : inputs) {
-            optExpression.initRowOutputInfo();
+            optExpression.clearStatsAndInitOutputInfo();
         }
+        // clear statistics cache and row output info cache
+        setStatistics(null);
+        op.clearRowOutputInfo();
         getRowOutputInfo();
     }
 
