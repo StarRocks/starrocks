@@ -88,9 +88,7 @@ public class CatalogMgrTest {
 
         config.put("type", "paimon");
         final ExternalCatalog catalog1 = new ExternalCatalog(10000, "catalog_3", "", config);
-        Assert.assertThrows(DdlException.class, () -> {
-            catalogMgr.replayCreateCatalog(catalog1);
-        });
+        catalogMgr.replayCreateCatalog(catalog1);
     }
 
     @Test
@@ -100,9 +98,7 @@ public class CatalogMgrTest {
 
         config.put("type", "paimon");
         final ExternalCatalog catalog = new ExternalCatalog(10000, "catalog_0", "", config);
-        Assert.assertThrows(DdlException.class, () -> {
-            catalogMgr.replayCreateCatalog(catalog);
-        });
+        catalogMgr.replayCreateCatalog(catalog);
     }
 
     @Test
