@@ -274,15 +274,13 @@ public class WarehouseManagerTest {
                 return RunMode.SHARED_DATA;
             }
         };
-        try {
-            OlapScanNode scanNode = newOlapScanNode();
-            Partition partition = new Partition(123, "aaa", null, null);
-            MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
-            scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1);
-            Assert.fail();
-        } catch (ErrorReportException e) {
-            Assert.assertEquals("No alive backend or compute node in warehouse null.", e.getMessage());   // can not be here
-        }
+
+        OlapScanNode scanNode = newOlapScanNode();
+        Partition partition = new Partition(123, "aaa", null, null);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
+                () -> scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(),1));
+        Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
     }
 
     private OlapScanNode newOlapScanNode() {
