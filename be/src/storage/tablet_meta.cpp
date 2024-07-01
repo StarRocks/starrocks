@@ -146,7 +146,7 @@ Status TabletMeta::create_from_file(const string& file_path) {
         LOG(WARNING) << "Fail to load tablet meta file: " << st;
         return st;
     }
-    init_from_pb(&tablet_meta_pb);
+    init_from_pb(&tablet_meta_pb, true); // use tablet schema map to share the tablet schemas with same schema id
     return Status::OK();
 }
 
@@ -157,7 +157,7 @@ Status TabletMeta::create_from_memory(std::string_view data) {
         LOG(WARNING) << "Fail to load tablet meta from memory: " << st;
         return st;
     }
-    init_from_pb(&tablet_meta_pb);
+    init_from_pb(&tablet_meta_pb, false); // not use tablet schema map to share the tablet schemas with same schema id
     return Status::OK();
 }
 
@@ -241,7 +241,7 @@ Status TabletMeta::deserialize(std::string_view data) {
     return Status::OK();
 }
 
-void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
+void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map) {
     auto& tablet_meta_pb = *ptablet_meta_pb;
     _table_id = tablet_meta_pb.table_id();
     _partition_id = tablet_meta_pb.partition_id();
@@ -292,7 +292,8 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     }
 
     // init _schema
-    if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
+    if (use_tablet_schema_map && tablet_meta_pb.schema().has_id() &&
+        tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
         // Does not collect the memory usage of |_schema|.
         _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
     } else {

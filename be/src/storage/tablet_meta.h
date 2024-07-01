@@ -116,6 +116,8 @@ public:
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
     [[nodiscard]] Status create_from_file(const std::string& file_path);
+    // Note that create_from_memory will not use tablet schema map to share the tablet schemas with same schema id,
+    // it's the difference from create_from_file
     [[nodiscard]] Status create_from_memory(std::string_view data);
     [[nodiscard]] Status save(const std::string& file_path);
     [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
@@ -125,7 +127,7 @@ public:
 
     [[nodiscard]] Status serialize(std::string* meta_binary);
     [[nodiscard]] Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map = true);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
