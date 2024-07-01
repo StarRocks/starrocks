@@ -1547,11 +1547,16 @@ public class OlapTable extends Table {
         for (ColumnId columnId : bfColumns) {
             Column column = idToColumn.get(columnId);
             if (column == null) {
-                throw new SemanticException(String.format("can not find column by column id: %s", columnId));
+                LOG.warn("can not find column by column id: {}, maybe the column has been dropped.", columnId);
+                continue;
             }
             columnNames.add(column.getName());
         }
-        return columnNames;
+        if (columnNames.isEmpty()) {
+            return null;
+        } else {
+            return columnNames;
+        }
     }
 
     public List<Index> getCopiedIndexes() {
