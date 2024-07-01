@@ -65,9 +65,4 @@ public class SubqueryRelation extends QueryRelation {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitSubquery(this, context);
     }
-
-    @Override
-    public boolean needAuditEncryption() {
-        return queryStatement.needAuditEncryption();
-    }
 }

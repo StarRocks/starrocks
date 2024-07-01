@@ -36,16 +36,6 @@ public class SetStmt extends StatementBase {
     }
 
     @Override
-    public boolean needAuditEncryption() {
-        for (SetListItem var : setListItems) {
-            if (var instanceof SetPassVar) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
     public RedirectStatus getRedirectStatus() {
         if (setListItems != null) {
             for (SetListItem var : setListItems) {

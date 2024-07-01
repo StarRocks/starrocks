@@ -9,6 +9,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.system.BrokerHbResponse;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -42,7 +43,7 @@ public class ExportRelativeStmtTest {
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
         Assert.assertNotNull(stmt.getRedirectStatus());
-        Assert.assertTrue(stmt.needAuditEncryption());
+        Assert.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
         Assert.assertNotNull(stmt.getRowDelimiter());
         Assert.assertNotNull(stmt.getTblName());
         Assert.assertEquals("EXPORT TABLE `test`.`tall`\n" +
