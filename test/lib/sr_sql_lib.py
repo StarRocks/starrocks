@@ -1905,7 +1905,7 @@ class StarrocksSQLApiLib(object):
                 True,
             )
 
-            status = res["result"][0][6]
+            status = res["result"][0][7]
             if status != ("REFRESHING") and status != ("COMMITTING"):
                 break
             time.sleep(0.5)

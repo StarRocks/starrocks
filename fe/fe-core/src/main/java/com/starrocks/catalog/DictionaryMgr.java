@@ -181,9 +181,9 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         return false;
     }
 
-    public void createDictionary(CreateDictionaryStmt stmt, String dbName) throws DdlException {
+    public void createDictionary(CreateDictionaryStmt stmt, String catalogName, String dbName) throws DdlException {
         Dictionary dictionary = new Dictionary(getAndIncrementDictionaryId(), stmt.getDictionaryName(),
-                                               stmt.getQueryableObject(), dbName, stmt.getDictionaryKeys(),
+                                               stmt.getQueryableObject(), catalogName, dbName, stmt.getDictionaryKeys(),
                                                stmt.getDictionaryValues(), stmt.getProperties());
         dictionary.buildDictionaryProperties();
         GlobalStateMgr.getCurrentState().getEditLog().logCreateDictionary(dictionary);
@@ -529,6 +529,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
         private ConnectContext buildConnectContext() {
             ConnectContext context = new ConnectContext();
+            context.setCurrentCatalog(dictionary.getCatalogName());
             context.setDatabase(dictionary.getDbName());
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);

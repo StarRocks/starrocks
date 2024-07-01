@@ -1982,8 +1982,8 @@ public class ExpressionAnalyzer {
                                             " but param give: " + Integer.toString(paramDictionaryKeysSize));
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dictionary.getDbName());
-            Table table = db.getTable(dictionary.getQueryableObject());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                                    dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());
             }
