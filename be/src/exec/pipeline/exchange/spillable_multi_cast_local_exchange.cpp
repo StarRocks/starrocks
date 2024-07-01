@@ -59,7 +59,7 @@ private:
     };
 
     struct Iterator {
-        // Iterator() = default;
+        Iterator() = default;
         Iterator(Block* blk, size_t idx): block(blk), index(idx) {}
         Block* block = nullptr;
         // @TODO canot use index as internal iterator
@@ -158,6 +158,7 @@ public:
 
     Status push(const ChunkPtr& chunk, MultiCastLocalExchangeSinkOperator* sink_operator) {
         std::unique_lock l(_mutex);
+        // @TODO we can move it into flush task
         if (UNLIKELY(_chunk_builder == nullptr)) {
             _chunk_builder = chunk->clone_empty();
         }
@@ -220,7 +221,7 @@ public:
             if (!_has_flush_io_task) {
                 // @TODO choose block
                 // pick block that need flush
-                auto status = submit_flush_task(_non_flushed_block);
+                auto status = submit_flush_task();
                 if (!status.ok()) {
                     _io_task_status = status;
                     return true;
@@ -463,7 +464,7 @@ private:
     bool _has_flush_io_task = false;
 
 
-    Status flush(Block* block) {
+    Status flush() {
         // @TODO opt lock
         std::unique_lock l(_mutex);
 
@@ -482,7 +483,7 @@ private:
             } else {
                 // check if need flush
                 bool need_flush = false;
-                for (auto& cell : block->cells) {
+                for (auto& cell : _non_flushed_block->cells) {
                     if (cell.chunk == nullptr || cell.used_count == _consumer_number) {
                         continue;
                     }
@@ -494,7 +495,7 @@ private:
                 _non_flushed_block = _non_flushed_block->next;
             }
         }
-        block = _non_flushed_block;
+        Block* block = _non_flushed_block;
         DCHECK(block != nullptr) << "block can't be null";
         if (block->next == nullptr) {
             LOG(INFO) << "last block, skip flush..." << (void*)(block);
@@ -595,8 +596,8 @@ private:
     }
 
     // trigger flush task
-    Status submit_flush_task(Block* block) {
-        auto flush_task = [this, block, guard = RESOURCE_TLS_MEMTRACER_GUARD(_state)] (auto& yield_ctx) {
+    Status submit_flush_task() {
+        auto flush_task = [this, guard = RESOURCE_TLS_MEMTRACER_GUARD(_state)] (auto& yield_ctx) {
             RETURN_IF(!guard.scoped_begin(), (void)0);
             DEFER_GUARD_END(guard);
             auto defer = DeferOp([&] () {
@@ -609,7 +610,7 @@ private:
 
             // DCHECK(_non_flushed_block->next != nullptr) << "last block should not flushed";
             // @TODO should find next flushed block
-            auto status = flush(_non_flushed_block);
+            auto status = flush();
             WARN_IF_ERROR(status, "flush block error");
             if (!status.ok()) {
                 std::unique_lock l(_mutex);
