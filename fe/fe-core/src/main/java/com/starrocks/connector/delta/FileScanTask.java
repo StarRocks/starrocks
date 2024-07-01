@@ -18,7 +18,7 @@ import io.delta.kernel.utils.FileStatus;
 
 import java.util.Map;
 
-// FileScanTask represents an AddFile file in DeltaLake.
+// FileScanTask represents one `AddFile` in DeltaLake.
 // TODO: The file representations of different Catalogs will be unified later.
 public class FileScanTask {
     private final FileStatus fileStatus;
