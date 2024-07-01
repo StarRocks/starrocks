@@ -253,6 +253,7 @@ set(EXEC_FILES
         ./storage/lake/metacache_test.cpp
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
+        ./storage/lake/lake_primary_key_consistency_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
