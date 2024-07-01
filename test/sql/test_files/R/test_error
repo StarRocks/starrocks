@@ -14,7 +14,7 @@ E: (1064, 'Access storage error. Error message: java.net.UnknownHostException: h
 
 
 shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
-shell: ossutil64 cp --force ./sql/test_files/orc_format/orc_lz4_map_decimal_date oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/orc_format/map_decimal_date.lz4.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
 -- result:
 0
 
