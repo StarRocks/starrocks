@@ -567,6 +567,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     public void testArrayCharOnScan() throws Exception {
         String sql = "select array_slice(S_PHONE,-1,2) from supplier_nullable where S_SUPPKEY = 1";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         assertNotContains(plan, "DictDecode");
         assertContains(plan, "<slot 9> : array_slice(5: S_PHONE, -1, 2)");
     }
@@ -681,5 +682,25 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "\n" +
                 "  5:Decode\n" +
                 "  |  <dict id 19> : <string id 6>"));
+    }
+
+    @Test
+    public void testCastStringToArray() throws Exception {
+        String sql = "select cast( S_COMMENT as array<string>) from supplier_nullable";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<VARCHAR(65533)>)"));
+
+        sql = "select cast( S_COMMENT as array<string>) from supplier_nullable limit 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<VARCHAR(65533)>)\n" +
+                "  |  limit: 1"));
+
+        sql = "select cast( S_COMMENT as array<array<string>>) from supplier_nullable limit 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 9> : CAST(7: S_COMMENT AS ARRAY<ARRAY<VARCHAR(65533)>>)\n" +
+                "  |  limit: 1"));
     }
 }
