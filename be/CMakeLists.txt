@@ -107,24 +107,9 @@ elseif (NOT APPLE)
     message(FATAL_ERROR "Compiler should be GNU")
 endif()
 
-set(PIC_LIB_PATH "${THIRDPARTY_DIR}")
-if(PIC_LIB_PATH)
-    message(STATUS "defined PIC_LIB_PATH")
-    set(CMAKE_SKIP_RPATH TRUE)
-    set(Boost_USE_STATIC_LIBS ON)
-    set(Boost_USE_STATIC_RUNTIME ON)
-    set(LIBBZ2 ${PIC_LIB_PATH}/lib/libbz2.a)
-    set(LIBZ ${PIC_LIB_PATH}/lib/libz.a)
-    set(LIBEVENT ${PIC_LIB_PATH}/lib/libevent.a)
-else()
-    message(STATUS "undefined PIC_LIB_PATH")
-    set(Boost_USE_STATIC_LIBS ON)
-    set(Boost_USE_STATIC_RUNTIME ON)
-    set(LIBBZ2 -lbz2)
-    set(LIBZ -lz)
-    set(LIBEVENT event)
-endif()
-
+set(CMAKE_SKIP_RPATH TRUE)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME ON)
 
 # Compile generated source if necessary
 message(STATUS "build gensrc if necessary")
@@ -399,6 +384,7 @@ message(STATUS "Using gRPC ${gRPC_VERSION}")
 get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
 include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 add_library(protobuf::libprotobuf ALIAS protobuf)
+add_library(ZLIB::ZLIB ALIAS libz)
 
 # Disable libdefalte on aarch64
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
@@ -858,11 +844,14 @@ set_target_properties(aws-cpp-sdk-core PROPERTIES INTERFACE_LINK_LIBRARIES AWS::
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
+    build_version
+    ${WL_START_GROUP}
+    ${LLVM_LIBRARIES}
+    ${WL_END_GROUP}
     ${WL_START_GROUP}
     clucene-core
     clucene-shared
     clucene-contribs-lib
-    build_version
     rocksdb
     libs2
     snappy
@@ -877,8 +866,8 @@ set(STARROCKS_DEPENDENCIES
     lz4
     libevent
     curl
-    ${LIBZ}
-    ${LIBBZ2}
+    libz
+    libbz2
     gflags
     brpc
     protobuf
@@ -924,7 +913,6 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
-    ${LLVM_LIBRARIES}
     ${WL_END_GROUP}
 )
 
