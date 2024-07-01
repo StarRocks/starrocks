@@ -86,11 +86,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         int partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         PeriodDuration partitionTTL = mv.getTableProperty().getPartitionTTL();
-<<<<<<< HEAD
         List<Column> partitionColumns = mv.getPartitionInfo().getPartitionColumns();
-=======
-        List<Column> partitionColumns = mv.getPartitionInfo().getPartitionColumns(mv.getIdToColumn());
->>>>>>> 7ea0e0fa02 ([Feature] List Partition For AMV(Part 2): Support list partition for asynchronous materialized view with non-nullable partition columns (#46680))
         return new RangePartitionDiffer(rangeToInclude, partitionTTLNumber, partitionTTL, partitionInfo, partitionColumns);
     }
 

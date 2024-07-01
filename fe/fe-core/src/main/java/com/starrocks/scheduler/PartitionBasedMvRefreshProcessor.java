@@ -66,11 +66,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
-<<<<<<< HEAD
-=======
-import com.starrocks.scheduler.mv.MVPCTMetaRepairer;
 import com.starrocks.scheduler.mv.MVPCTRefreshListPartitioner;
->>>>>>> 7ea0e0fa02 ([Feature] List Partition For AMV(Part 2): Support list partition for asynchronous materialized view with non-nullable partition columns (#46680))
 import com.starrocks.scheduler.mv.MVPCTRefreshNonPartitioner;
 import com.starrocks.scheduler.mv.MVPCTRefreshPartitioner;
 import com.starrocks.scheduler.mv.MVPCTRefreshPlanBuilder;
