@@ -28,7 +28,6 @@ Status JindoOutputStream::write(const void* data, int64_t size) {
             return init_status;
         }
     }
-    _buffer.append(static_cast<const char*>(data), size);
 
     JdoContext_t jdo_write_ctx = jdo_createContext2(*_jindo_client, _write_handle);
     jdo_write(jdo_write_ctx, static_cast<const char*>(data), size);

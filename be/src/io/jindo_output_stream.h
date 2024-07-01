@@ -67,7 +67,6 @@ private:
     std::shared_ptr<JdoSystem_t> _jindo_client;
     JdoHandle_t _write_handle;
     std::string _file_path;
-    std::string _buffer;
 
     Status flush();
 };
