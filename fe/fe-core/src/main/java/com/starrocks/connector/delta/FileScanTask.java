@@ -27,10 +27,7 @@ public class FileScanTask {
     private final DeltaLakeStats stats;
 
     public FileScanTask(FileStatus fileStatus, long records, Map<String, String> partitionValues) {
-        this.fileStatus = fileStatus;
-        this.records = records;
-        this.partitionValues = partitionValues;
-        this.stats = null;
+        this(fileStatus, records, partitionValues, null);
     }
 
     public FileScanTask(FileStatus fileStatus, long records, Map<String, String> partitionValues,
