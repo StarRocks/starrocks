@@ -33,30 +33,6 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
-CREATE TABLE `s4` (
-  `v1` bigint(20) NULL COMMENT "",
-  `v2` int(11) NULL COMMENT "",
-  `v3` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`v1`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`v1`) BUCKETS 10
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "false",
-"replicated_storage" = "false",
-"light_schema_change" = "true",
-"compression" = "LZ4"
-);
-
-insert into s4 values
-(1, 12, '["abc", "bca"]'),
-(2, 22, '["abcd", "bca"]'),
-(3, 32, '["abcde", "bca"]'),
-(4, 42, '["abcdef", "bca"]'),
-(5, 52, '["abcdefg", "bca"]'),
-(6, 62, '["abcdefgh", "bca"]');
-
 insert into s2 values
 (28222, 724, ['Hubei', 'Ningxia', 'Sichuan', 'Zhejiang'], ['HK', 'BJ', 'GD', 'GS', 'LN']),
 (28231, 607, ['Yunnan', 'Inner Mongolia', 'Taiwan', 'Hunan'], ['JL', 'HUN', 'GZ', 'XJ', 'GZ']),
@@ -318,13 +294,11 @@ insert into s2 select * from s2;
 
 [UC] analyze full table s1;
 [UC] analyze full table s2;
-[UC] analyze full table s4;
 
 function: wait_global_dict_ready('a1', 's1')
 function: wait_global_dict_ready('a2', 's1')
 function: wait_global_dict_ready('a1', 's2')
 function: wait_global_dict_ready('a2', 's2')
-function: wait_global_dict_ready('v3', 's4')
 
 select * from s1 order by v1 limit 2;
 select * from s2 order by v1 limit 2;
@@ -440,10 +414,36 @@ insert into s3 select * from s3;
 insert into s3 select * from s3;
 insert into s3 select * from s3;
 
+CREATE TABLE `s4` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+
+insert into s4 values
+(1, 12, '["abc", "bca"]'),
+(2, 22, '["abcd", "bca"]'),
+(3, 32, '["abcde", "bca"]'),
+(4, 42, '["abcdef", "bca"]'),
+(5, 52, '["abcdefg", "bca"]'),
+(6, 62, '["abcdefgh", "bca"]');
+
 [UC] analyze full table s3;
+[UC] analyze full table s4;
 
 function: wait_global_dict_ready('a1', 's3')
 function: wait_global_dict_ready('a2', 's3')
+function: wait_global_dict_ready('v3', 's4')
 
 
 select * from s3 order by v1 limit 2;

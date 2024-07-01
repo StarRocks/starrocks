@@ -332,15 +332,15 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-test_db_84260182377211ef91112207f0c28981.s1	analyze	status	OK
+test_db_ce2f9bf8377211ef86952207f0c28981.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_84260182377211ef91112207f0c28981.s2	analyze	status	OK
+test_db_ce2f9bf8377211ef86952207f0c28981.s2	analyze	status	OK
 -- !result
 [UC] analyze full table s4;
 -- result:
-test_db_84260182377211ef91112207f0c28981.s4	analyze	status	OK
+test_db_ce2f9bf8377211ef86952207f0c28981.s4	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's1')
 -- result:
@@ -530,7 +530,7 @@ insert into s3 select * from s3;
 -- !result
 [UC] analyze full table s3;
 -- result:
-test_db_84260362377211efaae82207f0c28981.s3	analyze	status	OK
+test_db_ce367b62377211efb4282207f0c28981.s3	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's3')
 -- result:
@@ -593,13 +593,13 @@ select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_opt
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_84260362377211efaae82207f0c28981.s4'.")
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_ce367b62377211efb4282207f0c28981.s4'.")
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_optimize_v2=false)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_84260362377211efaae82207f0c28981.s4'.")
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_ce367b62377211efb4282207f0c28981.s4'.")
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_optimize_v2=true)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_84260362377211efaae82207f0c28981.s4'.")
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_ce367b62377211efb4282207f0c28981.s4'.")
 -- !result
