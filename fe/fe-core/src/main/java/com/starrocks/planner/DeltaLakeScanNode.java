@@ -149,12 +149,12 @@ public class DeltaLakeScanNode extends ScanNode {
         }
 
         List<FileScanTask> splitsInfo = remoteFileDesc.getDeltaLakeScanTasks();
-        for (FileScanTask row : splitsInfo) {
+        for (FileScanTask split : splitsInfo) {
             List<String> partitionValues = new ArrayList<>();
-            row.getPartitionValues().forEach((key, value) -> partitionValues.add(value));
+            split.getPartitionValues().forEach((key, value) -> partitionValues.add(value));
             PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues,
                     deltaLakeTable.getPartitionColumns(), deltaLakeTable);
-            addPartitionLocations(partitionKeys, partitionKey, descTbl, row.getFileStatus(), deltaMetadata);
+            addPartitionLocations(partitionKeys, partitionKey, descTbl, split.getFileStatus(), deltaMetadata);
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());
