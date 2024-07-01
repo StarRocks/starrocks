@@ -140,7 +140,9 @@ public class QueryQueueManager {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnvAndQuery(coord);
 
         SlotEstimator estimator = SlotEstimatorFactory.create(opts);
-        int numSlots = estimator.estimateSlots(opts, context, coord);
+        final int numSlots = estimator.estimateSlots(opts, context, coord);
+        // Write numSlots to the audit log if query queue v2 is enabled, since numSlots is always 1 for query queue v1 and
+        // may be different for query queue v2.
         if (opts.isEnableQueryQueueV2()) {
             context.auditEventBuilder.setNumSlots(numSlots);
         }
