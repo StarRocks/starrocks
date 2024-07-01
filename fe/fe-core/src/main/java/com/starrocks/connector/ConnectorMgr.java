@@ -32,7 +32,7 @@ public class ConnectorMgr {
     private final ConcurrentHashMap<String, CatalogConnector> connectors = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    public CatalogConnector createConnector(ConnectorContext context) throws StarRocksConnectorException {
+    public CatalogConnector createConnector(ConnectorContext context, boolean isReplay) throws StarRocksConnectorException {
         String catalogName = context.getCatalogName();
         CatalogConnector connector = null;
         readLock();
@@ -40,6 +40,10 @@ public class ConnectorMgr {
             connector = ConnectorFactory.createConnector(context);
             Preconditions.checkState(!connectors.containsKey(catalogName),
                     "Connector of catalog '%s' already exists", catalogName);
+<<<<<<< HEAD
+=======
+            connector = ConnectorFactory.createConnector(context, isReplay);
+>>>>>>> e9757c5a0d ([Enhancement] lazy initialization external catalg (#47402))
             if (connector == null) {
                 return null;
             }

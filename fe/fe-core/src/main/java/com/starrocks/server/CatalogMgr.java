@@ -136,6 +136,19 @@ public class CatalogMgr {
                 Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
             }
 
+<<<<<<< HEAD
+=======
+            // TODO：please keep connector and catalog create together, they need keep in consistent asap.
+            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties), false);
+            if (null == connector) {
+                LOG.error("{} connector [{}] create failed", type, catalogName);
+                throw new DdlException("connector create failed");
+            }
+            long id = isResourceMappingCatalog(catalogName) ?
+                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
+                    GlobalStateMgr.getCurrentState().getNextId();
+            Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
+>>>>>>> e9757c5a0d ([Enhancement] lazy initialization external catalg (#47402))
             catalogs.put(catalogName, catalog);
 
             if (!isResourceMappingCatalog(catalogName)) {
@@ -285,6 +298,22 @@ public class CatalogMgr {
             Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
         }
 
+<<<<<<< HEAD
+=======
+        // TODO：please keep connector and catalog create together, they need keep in consistent asap.
+        try {
+            CatalogConnector catalogConnector = connectorMgr.createConnector(
+                    new ConnectorContext(catalogName, type, config), true);
+            if (catalogConnector == null) {
+                LOG.error("{} connector [{}] create failed.", type, catalogName);
+                throw new DdlException("connector create failed");
+            }
+        } catch (StarRocksConnectorException e) {
+            LOG.error("connector create failed [{}], reason {}", catalogName, e.getMessage());
+            throw new DdlException(String.format("connector create failed: %s", e.getMessage()));
+        }
+
+>>>>>>> e9757c5a0d ([Enhancement] lazy initialization external catalg (#47402))
         writeLock();
         try {
             catalogs.put(catalogName, catalog);
