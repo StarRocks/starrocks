@@ -59,6 +59,9 @@ Status YieldableRestoreTask::do_read(workgroup::YieldContext& yield_ctx, SerdeCo
 
         BREAK_IF_YIELD(wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
     }
+    if (yield_ctx.is_finished()) {
+        yield_ctx.need_yield = false;
+    }
 
     if (num_eos == _sub_stream.size()) {
         _input_stream->mark_is_eof();
