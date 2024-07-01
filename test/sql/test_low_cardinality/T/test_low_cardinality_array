@@ -432,11 +432,11 @@ PROPERTIES (
 
 insert into s4 values
 (1, 12, '["abc", "bca"]'),
-(2, 22, '["abcd", "bca"]'),
-(3, 32, '["abcde", "bca"]'),
-(4, 42, '["abcdef", "bca"]'),
-(5, 52, '["abcdefg", "bca"]'),
-(6, 62, '["abcdefgh", "bca"]');
+(2, 22, '["abc", "bca"]'),
+(3, 32, '["abc", "bca"]'),
+(4, 42, '["abc", "bca"]'),
+(5, 52, '["abc", "bca"]'),
+(6, 62, '["abc", "bca"]');
 
 [UC] analyze full table s3;
 [UC] analyze full table s4;
