@@ -1113,7 +1113,15 @@ public class ColocateTableBalancerTest {
         backend1.setAlive(false);
         Assert.assertFalse(balancer.isSystemStable(infoService));
         Assert.assertFalse(balancer.isSystemStable(infoService));
+<<<<<<< HEAD
         Thread.sleep(1001L);
+=======
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+>>>>>>> ebdd52f681 ([UT] add debug log for ColocateTableBalancerTest (#47685))
         Assert.assertTrue(balancer.isSystemStable(infoService));
     }
 }
