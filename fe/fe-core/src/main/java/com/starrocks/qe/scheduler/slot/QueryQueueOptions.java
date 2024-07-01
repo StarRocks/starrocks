@@ -28,7 +28,7 @@ public class QueryQueueOptions {
 
     public static QueryQueueOptions createFromEnvAndQuery(DefaultCoordinator coord) {
         if (!coord.getJobSpec().isEnableQueue() || !coord.getJobSpec().isNeedQueued()) {
-            return new QueryQueueOptions(false, new V2());
+            return new QueryQueueOptions(false, V2.DEFAULT);
         }
 
         return createFromEnv();
@@ -36,7 +36,7 @@ public class QueryQueueOptions {
 
     public static QueryQueueOptions createFromEnv() {
         if (!Config.enable_query_queue_v2) {
-            return new QueryQueueOptions(false, new V2());
+            return new QueryQueueOptions(false, V2.DEFAULT);
         }
 
         V2 v2 = new V2(Config.query_queue_v2_concurrency_level,
@@ -80,6 +80,8 @@ public class QueryQueueOptions {
     }
 
     public static class V2 {
+        private static final V2 DEFAULT = new V2();
+
         private final int numWorkers;
         private final int numRowsPerSlot;
 
