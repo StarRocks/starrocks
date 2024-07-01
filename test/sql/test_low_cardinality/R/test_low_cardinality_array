@@ -34,32 +34,6 @@ PROPERTIES (
 );
 -- result:
 -- !result
-CREATE TABLE `s4` (
-  `v1` bigint(20) NULL COMMENT "",
-  `v2` int(11) NULL COMMENT "",
-  `v3` varchar(65533) NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`v1`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`v1`) BUCKETS 10
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "false",
-"replicated_storage" = "false",
-"light_schema_change" = "true",
-"compression" = "LZ4"
-);
--- result:
--- !result
-insert into s4 values
-(1, 12, '["abc", "bca"]'),
-(2, 22, '["abcd", "bca"]'),
-(3, 32, '["abcde", "bca"]'),
-(4, 42, '["abcdef", "bca"]'),
-(5, 52, '["abcdefg", "bca"]'),
-(6, 62, '["abcdefgh", "bca"]');
--- result:
--- !result
 insert into s2 values
 (28222, 724, ['Hubei', 'Ningxia', 'Sichuan', 'Zhejiang'], ['HK', 'BJ', 'GD', 'GS', 'LN']),
 (28231, 607, ['Yunnan', 'Inner Mongolia', 'Taiwan', 'Hunan'], ['JL', 'HUN', 'GZ', 'XJ', 'GZ']),
@@ -332,15 +306,11 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-test_db_ce2f9bf8377211ef86952207f0c28981.s1	analyze	status	OK
+test_db_b769c0e6377311efa2bd2207f0c28981.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_ce2f9bf8377211ef86952207f0c28981.s2	analyze	status	OK
--- !result
-[UC] analyze full table s4;
--- result:
-test_db_ce2f9bf8377211ef86952207f0c28981.s4	analyze	status	OK
+test_db_b769c0e6377311efa2bd2207f0c28981.s2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's1')
 -- result:
@@ -355,10 +325,6 @@ function: wait_global_dict_ready('a1', 's2')
 
 -- !result
 function: wait_global_dict_ready('a2', 's2')
--- result:
-
--- !result
-function: wait_global_dict_ready('v3', 's4')
 -- result:
 
 -- !result
@@ -528,15 +494,49 @@ insert into s3 select * from s3;
 insert into s3 select * from s3;
 -- result:
 -- !result
+CREATE TABLE `s4` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into s4 values
+(1, 12, '["abc", "bca"]'),
+(2, 22, '["abcd", "bca"]'),
+(3, 32, '["abcde", "bca"]'),
+(4, 42, '["abcdef", "bca"]'),
+(5, 52, '["abcdefg", "bca"]'),
+(6, 62, '["abcdefgh", "bca"]');
+-- result:
+-- !result
 [UC] analyze full table s3;
 -- result:
-test_db_ce367b62377211efb4282207f0c28981.s3	analyze	status	OK
+test_db_b769c208377311efb6682207f0c28981.s3	analyze	status	OK
+-- !result
+[UC] analyze full table s4;
+-- result:
+test_db_b769c208377311efb6682207f0c28981.s4	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's3')
 -- result:
 
 -- !result
 function: wait_global_dict_ready('a2', 's3')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('v3', 's4')
 -- result:
 
 -- !result
@@ -593,13 +593,13 @@ select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_opt
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_ce367b62377211efb4282207f0c28981.s4'.")
+["abcd","bca"]
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_optimize_v2=false)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_ce367b62377211efb4282207f0c28981.s4'.")
+["abcdefg","bca"]
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=true, low_cardinality_optimize_v2=true)*/ cast(v3 as array<string>) from s4 limit 1;
 -- result:
-E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_db_ce367b62377211efb4282207f0c28981.s4'.")
+["abcd","bca"]
 -- !result
