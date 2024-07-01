@@ -70,4 +70,16 @@ public class SelectHintTest extends PlanTestBase {
         actual = UserVariable.removeEscapeCharacter(str);
         Assert.assertEquals("abc\\abc", actual);
     }
+
+    @Test
+    public void test() throws Exception {
+        String sql = "SELECT /*+ set_user_variable(@a = 1) */ col_1, col_2, LAG(col_2, @a, 0) OVER (ORDER BY col_1) " +
+                "FROM (SELECT 1 AS col_1, NULL AS col_2 UNION ALL SELECT 2 AS col_1, 4 AS col_2) AS T ORDER BY col_1;";
+        sql = "SELECT /*+ set_user_variable(@a = 1) */ col_1, col_2, LAG(col_2, @a, 0) OVER (ORDER BY col_1) " +
+                "FROM (SELECT 1 AS col_1, NULL AS col_2 UNION ALL SELECT 2 AS col_1, 4 AS col_2) AS T ORDER BY col_1;";
+        sql = "SELECT /*+ set_user_variable(@a = (select [1, 2])) */ col_1, col_2, LAG(col_2, @a, 0) OVER (ORDER BY col_1) " +
+                "FROM (SELECT 1 AS col_1, NULL AS col_2 UNION ALL SELECT 2 AS col_1, 4 AS col_2) AS T ORDER BY col_1;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
 }

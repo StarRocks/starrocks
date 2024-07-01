@@ -14,6 +14,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -47,6 +49,7 @@ public class UserVariableExpr extends Expr {
 
     public void setValue(Expr value) {
         this.value = value;
+        this.type = value.getType();
     }
 
     @Override
@@ -77,5 +80,23 @@ public class UserVariableExpr extends Expr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, value);
+    }
+
+
+    @Override
+    public boolean isConstantImpl() {
+        return value instanceof LiteralExpr;
+    }
+
+    @Override
+    public String toSqlImpl() {
+        return "@" + name;
+    }
+
+    @Override
+    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
+        UserVariableExpr userVariableExpr = new UserVariableExpr(this);
+        userVariableExpr.setValue(value.uncheckedCastTo(targetType));
+        return userVariableExpr;
     }
 }

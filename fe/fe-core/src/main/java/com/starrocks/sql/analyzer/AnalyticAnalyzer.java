@@ -19,14 +19,15 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.ExprUtil;
 
 import java.math.BigDecimal;
 
@@ -85,7 +86,7 @@ public class AnalyticAnalyzer {
 
         if (isOffsetFn(analyticFunction.getFn()) && analyticFunction.getChildren().size() > 1) {
             Expr offset = analyticFunction.getChild(1);
-            if (!ExprUtil.isPositiveConstantInteger(offset)) {
+            if (!isPositiveConstantInteger(offset)) {
                 throw new SemanticException(
                         "The offset parameter of LEAD/LAG must be a constant positive integer: " +
                                 analyticFunction.toSql(), analyticFunction.getPos());
@@ -123,7 +124,7 @@ public class AnalyticAnalyzer {
 
         if (isNtileFn(analyticFunction.getFn())) {
             Expr numBuckets = analyticFunction.getChild(0);
-            if (!ExprUtil.isPositiveConstantInteger(numBuckets)) {
+            if (!isPositiveConstantInteger(numBuckets)) {
                 throw new SemanticException(
                         "The num_buckets parameter of NTILE must be a constant positive integer: " +
                                 analyticFunction.toSql(), numBuckets.getPos());
@@ -364,5 +365,16 @@ public class AnalyticAnalyzer {
         }
 
         return fn.functionName().equalsIgnoreCase(AnalyticExpr.HLL_UNION_AGG);
+    }
+
+    private static boolean isPositiveConstantInteger(Expr offset) {
+        if (offset instanceof UserVariableExpr) {
+            offset = ((UserVariableExpr) offset).getValue();
+        }
+
+        if (offset instanceof LiteralExpr && offset.getType().isFixedPointType()) {
+            return ((LiteralExpr) offset).getLongValue() > 0;
+        }
+        return false;
     }
 }
