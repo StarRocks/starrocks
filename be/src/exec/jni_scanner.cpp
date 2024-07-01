@@ -26,17 +26,6 @@
 
 namespace starrocks {
 
-Status JniScanner::_check_jni_exception(JNIEnv* env, const std::string& message) {
-    if (jthrowable thr = env->ExceptionOccurred(); thr) {
-        std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr);
-        env->ExceptionDescribe();
-        env->ExceptionClear();
-        env->DeleteLocalRef(thr);
-        return Status::InternalError(message + " java exception details: " + jni_error_message);
-    }
-    return Status::OK();
-}
-
 Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     RETURN_IF_ERROR(detect_java_runtime());
     return Status::OK();
@@ -47,12 +36,12 @@ Status JniScanner::do_open(RuntimeState* state) {
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     RETURN_IF_ERROR(update_jni_scanner_params());
     if (env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
-        RETURN_IF_ERROR(_check_jni_exception(env, "Failed to ensure the local capacity."));
+        RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to ensure the local capacity."));
     }
     RETURN_IF_ERROR(_init_jni_table_scanner(env, state));
     RETURN_IF_ERROR(_init_jni_method(env));
     env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_open);
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to open the off-heap table scanner."));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to open the off-heap table scanner."));
     return Status::OK();
 }
 
@@ -74,19 +63,20 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
 Status JniScanner::_init_jni_method(JNIEnv* env) {
     // init jmethod
     _jni_scanner_open = env->GetMethodID(_jni_scanner_cls, "open", "()V");
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `open` jni method"));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to get `open` jni method"));
 
     _jni_scanner_get_next_chunk = env->GetMethodID(_jni_scanner_cls, "getNextOffHeapChunk", "()J");
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `getNextOffHeapChunk` jni method"));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to get `getNextOffHeapChunk` jni method"));
 
     _jni_scanner_close = env->GetMethodID(_jni_scanner_cls, "close", "()V");
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `close` jni method"));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to get `close` jni method"));
 
     _jni_scanner_release_column = env->GetMethodID(_jni_scanner_cls, "releaseOffHeapColumnVector", "(I)V");
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `releaseOffHeapColumnVector` jni method"));
+    RETURN_IF_ERROR(
+            JVMFunctionHelper::_check_jni_exception(env, "Failed to get `releaseOffHeapColumnVector` jni method"));
 
     _jni_scanner_release_table = env->GetMethodID(_jni_scanner_cls, "releaseOffHeapTable", "()V");
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `releaseOffHeapTable` jni method"));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to get `releaseOffHeapTable` jni method"));
     return Status::OK();
 }
 
@@ -98,19 +88,19 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
             env->GetMethodID(scanner_factory_class, "getScannerClass", "(Ljava/lang/String;)Ljava/lang/Class;");
     jstring scanner_type = env->NewStringUTF(_scanner_type().c_str());
     _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to init the scanner class."));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to init the scanner class."));
     env->DeleteLocalRef(scanner_factory_class);
     env->DeleteLocalRef(scanner_factory_obj);
 
     jmethodID scanner_constructor = env->GetMethodID(_jni_scanner_cls, "<init>", "(ILjava/util/Map;)V");
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get a scanner class constructor."));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to get a scanner class constructor."));
 
     jclass hashmap_class = env->FindClass("java/util/HashMap");
     jmethodID hashmap_constructor = env->GetMethodID(hashmap_class, "<init>", "(I)V");
     jobject hashmap_object = env->NewObject(hashmap_class, hashmap_constructor, _jni_scanner_params.size());
     jmethodID hashmap_put =
             env->GetMethodID(hashmap_class, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get the HashMap methods."));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to get the HashMap methods."));
 
     std::string message = "Initialize a scanner with parameters: ";
     for (const auto& it : _jni_scanner_params) {
@@ -135,7 +125,7 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
     _jni_scanner_obj = env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
     env->DeleteLocalRef(hashmap_object);
     DCHECK(_jni_scanner_obj != nullptr);
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to initialize a scanner instance."));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(env, "Failed to initialize a scanner instance."));
 
     return Status::OK();
 }
@@ -145,7 +135,8 @@ Status JniScanner::_get_next_chunk(JNIEnv* env, long* chunk_meta) {
     SCOPED_RAW_TIMER(&_app_stats.io_ns);
     _app_stats.io_count += 1;
     *chunk_meta = env->CallLongMethod(_jni_scanner_obj, _jni_scanner_get_next_chunk);
-    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(
+            env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
     return Status::OK();
 }
 
@@ -364,7 +355,7 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
                             .must_nullable = true};
         RETURN_IF_ERROR(_fill_column(&args));
         env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
-        RETURN_IF_ERROR(_check_jni_exception(
+        RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(
                 env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));
     }
     return num_rows;
@@ -372,8 +363,8 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
 
 Status JniScanner::_release_off_heap_table(JNIEnv* env) {
     env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_table);
-    RETURN_IF_ERROR(
-            _check_jni_exception(env, "Failed to call the releaseOffHeapTable method of off-heap table scanner."));
+    RETURN_IF_ERROR(JVMFunctionHelper::_check_jni_exception(
+            env, "Failed to call the releaseOffHeapTable method of off-heap table scanner."));
     return Status::OK();
 }
 
@@ -562,6 +553,7 @@ std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOp
     jni_scanner_params["predicate_info"] = scan_range.paimon_predicate_info;
     jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
     jni_scanner_params["time_zone"] = paimon_table->get_time_zone();
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(*(options.fs_options));
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);

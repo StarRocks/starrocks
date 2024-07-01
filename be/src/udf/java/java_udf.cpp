@@ -273,6 +273,17 @@ Status JVMFunctionHelper::_check_exception_status() {
     return Status::OK();
 }
 
+Status JVMFunctionHelper::_check_jni_exception(JNIEnv* _jni_env, const std::string& message) {
+    if (jthrowable thr = _jni_env->ExceptionOccurred(); thr) {
+        std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr);
+        _jni_env->ExceptionDescribe();
+        _jni_env->ExceptionClear();
+        _jni_env->DeleteLocalRef(thr);
+        return Status::InternalError(message + " java exception details: " + jni_error_message);
+    }
+    return Status::OK();
+}
+
 std::string JVMFunctionHelper::array_to_string(jobject object) {
     _env->ExceptionClear();
     std::string value;

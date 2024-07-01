@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class PaimonTable extends Table {
+    public static final String FILE_FORMAT = "file.format";
     private String catalogName;
     private String databaseName;
     private String tableName;
@@ -138,6 +139,10 @@ public class PaimonTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public boolean supportInsert() {
+        return "parquet".equalsIgnoreCase(paimonNativeTable.options().get(FILE_FORMAT));
     }
 
     @Override

@@ -249,6 +249,8 @@ public class ListPartitionDesc extends PartitionDesc {
             checkIcebergPartitionColPos(columnDefs);
         } else if (engineName.equalsIgnoreCase("hive")) {
             checkHivePartitionColPos(columnDefs);
+        } else if (engineName.equalsIgnoreCase("paimon")) {
+            checkPaimonPartitionColPos(columnDefs);
         }
     }
 
@@ -262,6 +264,21 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     public void checkHivePartitionColPos(List<ColumnDef> columnDefs) {
+        List<String> allColNames = columnDefs.stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+
+        if (allColNames.size() == partitionColNames.size()) {
+            throw new SemanticException("Table contains only partition columns");
+        }
+
+        if (!allColNames.subList(allColNames.size() - partitionColNames.size(), allColNames.size()).equals(partitionColNames)) {
+            throw new SemanticException("Partition columns must be the last columns in the table and " +
+                    "in the same order as partition by clause: %s", partitionColNames);
+        }
+    }
+
+    public void checkPaimonPartitionColPos(List<ColumnDef> columnDefs) {
         List<String> allColNames = columnDefs.stream()
                 .map(ColumnDef::getName)
                 .collect(Collectors.toList());

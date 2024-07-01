@@ -38,6 +38,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.AnalysisException;
@@ -101,6 +102,8 @@ public abstract class DataSink {
         } else if (table instanceof TableFunctionTable) {
             return true;
         } else if (table.isBlackHoleTable()) {
+            return true;
+        } else if (table instanceof PaimonTable) {
             return true;
         }
 

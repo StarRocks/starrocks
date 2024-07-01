@@ -161,6 +161,7 @@ TEST_F(JniScannerTest, test_create_paimon_jni_scanner) {
     print_jni_scanner_params(scanner->_jni_scanner_params);
 
     std::map<std::string, std::string> expected = {
+            {"fs_options_props", "xxx\x1xxx0\x2yyy\x1yyy0\x2zzz\x1zzz0"},
             {"native_table",
              "rO0ABXNyADBvcmcuYXBhY2hlLnBhaW1vbi50YWJsZS5BcHBlbmRPbmx5RmlsZVN0b3JlVGFibGUAAAAAAAAAAQIAAHhyAC5vcmcuYXBhY"
              "2hlLnBhaW1vbi50YWJsZS5B"},

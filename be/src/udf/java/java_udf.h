@@ -78,6 +78,7 @@ public:
     JVMFunctionHelper(const JVMFunctionHelper&) = delete;
     // get env
     JNIEnv* getEnv() { return _env; }
+    [[nodiscard]] static Status _check_jni_exception(JNIEnv* jni_env, const std::string& message);
     // Arrays.toString()
     std::string array_to_string(jobject object);
     // Object::toString()

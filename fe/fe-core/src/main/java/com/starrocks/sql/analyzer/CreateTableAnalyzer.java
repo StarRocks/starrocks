@@ -275,6 +275,13 @@ public class CreateTableAnalyzer {
 
     private static void analyzeKeysDesc(CreateTableStmt stmt) {
         KeysDesc keysDesc = stmt.getKeysDesc();
+        if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            if (keysDesc != null && keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
+                throw new SemanticException("Create Paimon table does not support keys desc type "
+                        + keysDesc.getKeysType().name());
+            }
+            return;
+        }
         if (!stmt.isOlapEngine()) {
             // mysql, broker, iceberg, hudi and hive do not need key desc
             if (keysDesc != null) {
@@ -632,7 +639,8 @@ public class CreateTableAnalyzer {
             if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzeDistributionDesc(distributionDesc);
             } else if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.ICEBERG.name())
-                    || stmt.getEngineName().equalsIgnoreCase(Table.TableType.HIVE.name())) {
+                    || stmt.getEngineName().equalsIgnoreCase(Table.TableType.HIVE.name())
+                    || stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
                 // no special analyze
             } else {
                 if (distributionDesc != null) {

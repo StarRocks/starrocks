@@ -79,6 +79,7 @@
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
+#include "runtime/paimon_table_sink.h"
 #include "runtime/result_sink.h"
 #include "runtime/runtime_state.h"
 #include "runtime/schema_table_sink.h"
@@ -229,6 +230,13 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
             return Status::InternalError("dictionary cache only support pipeline engine");
         }
         *sink = std::make_unique<DictionaryCacheSink>();
+        break;
+    }
+    case TDataSinkType::PAIMON_TABLE_SINK: {
+        if (!thrift_sink.__isset.paimon_table_sink) {
+            return Status::InternalError("Missing paimon table sink");
+        }
+        *sink = std::make_unique<PaimonTableSink>(state->obj_pool(), output_exprs);
         break;
     }
 
@@ -492,6 +500,9 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 
         prev_operators.emplace_back(op);
         context->add_pipeline(std::move(prev_operators));
+    } else if (typeid(*this) == typeid(starrocks::PaimonTableSink)) {
+        auto* paimon_table_sink = down_cast<starrocks::PaimonTableSink*>(this);
+        RETURN_IF_ERROR(paimon_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
     } else {
         return Status::InternalError(fmt::format("Unknown data sink type: {}", typeid(*this).name()));
     }

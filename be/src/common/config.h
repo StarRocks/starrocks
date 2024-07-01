@@ -877,6 +877,7 @@ CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
 CONF_Int64(pipeline_sink_brpc_dop, "64");
+CONF_mInt64(paimon_sink_commit_chunk_num, "16");
 // Used to reject coming fragment instances, when the number of running drivers
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");

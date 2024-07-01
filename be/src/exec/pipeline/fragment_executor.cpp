@@ -744,7 +744,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             tsink.type == TDataSinkType::MULTI_OLAP_TABLE_SINK || tsink.type == TDataSinkType::MEMORY_SCRATCH_SINK ||
             tsink.type == TDataSinkType::ICEBERG_TABLE_SINK || tsink.type == TDataSinkType::HIVE_TABLE_SINK ||
             tsink.type == TDataSinkType::EXPORT_SINK || tsink.type == TDataSinkType::BLACKHOLE_TABLE_SINK ||
-            tsink.type == TDataSinkType::DICTIONARY_CACHE_SINK) {
+            tsink.type == TDataSinkType::DICTIONARY_CACHE_SINK || tsink.type == TDataSinkType::PAIMON_TABLE_SINK) {
             _query_ctx->set_final_sink();
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,

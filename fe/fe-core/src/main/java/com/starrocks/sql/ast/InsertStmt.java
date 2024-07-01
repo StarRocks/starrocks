@@ -310,8 +310,8 @@ public class InsertStmt extends DmlStmt {
     }
 
     public boolean isSpecifyKeyPartition() {
-        return targetTable != null && (targetTable.isHiveTable() || targetTable.isIcebergTable()) &&
-                isStaticKeyPartitionInsert();
+        return targetTable != null && (targetTable.isHiveTable() || targetTable.isIcebergTable()
+                || targetTable.isPaimonTable()) && isStaticKeyPartitionInsert();
     }
 
     public boolean isStaticKeyPartitionInsert() {

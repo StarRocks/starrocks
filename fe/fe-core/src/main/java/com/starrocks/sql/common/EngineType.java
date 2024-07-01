@@ -26,6 +26,7 @@ public enum EngineType {
     HIVE,
     ICEBERG,
     HUDI,
+    PAIMON,
     JDBC,
     ODPS,
     FILE;

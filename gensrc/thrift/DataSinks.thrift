@@ -59,6 +59,7 @@ enum TDataSinkType {
     DICTIONARY_CACHE_SINK,
     MULTI_OLAP_TABLE_SINK,
     SPLIT_DATA_STREAM_SINK
+    PAIMON_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -272,6 +273,17 @@ struct TSplitDataStreamSink {
     3: optional list<Exprs.TExpr> splitExprs;
 }
 
+struct TPaimonTableSink {
+    1: optional string location
+    2: optional string file_format
+    3: optional i64 target_table_id
+    4: optional list<string> data_column_names
+    5: optional list<string> data_column_types
+    6: optional Types.TCompressionType compression_type
+    7: optional bool is_static_partition_sink
+    8: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -289,4 +301,5 @@ struct TDataSink {
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
+  18: optional TPaimonTableSink paimon_table_sink
 }

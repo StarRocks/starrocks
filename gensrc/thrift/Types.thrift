@@ -590,9 +590,14 @@ struct THiveFileInfo {
     5: optional i64 file_size_in_bytes
 }
 
+struct TPaimonCommitMessage {
+    1: optional string commit_info_string_list
+}
+
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     2: optional THiveFileInfo hive_file_info
+    3: optional TPaimonCommitMessage paimon_commit_message
     // ... for other tables sink commit info
 
     100: optional bool is_overwrite;

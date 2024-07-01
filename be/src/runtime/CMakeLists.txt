@@ -113,6 +113,7 @@ set(RUNTIME_FILES
     customized_result_writer.cpp
     int128_to_double.cpp
     diagnose_daemon.cpp
+    paimon_table_sink.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}
