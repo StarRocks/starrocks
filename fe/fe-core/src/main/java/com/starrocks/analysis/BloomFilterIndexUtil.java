@@ -18,7 +18,6 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -79,11 +78,10 @@ public class BloomFilterIndexUtil {
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {
-        IndexParams indexParams = IndexParams.getInstance();
-        properties.computeIfAbsent(FPP_KEY, k -> indexParams.getParam(NgramBfIndexParamsKey.BLOOM_FILTER_FPP.name()).getDefaultValue());
-        properties.computeIfAbsent(GRAM_NUM_KEY, k -> indexParams.getParam(NgramBfIndexParamsKey.GRAM_NUM.name()).getDefaultValue());
+        properties.computeIfAbsent(FPP_KEY, k -> NgramBfIndexParamsKey.BLOOM_FILTER_FPP.getIndexParamItem().getDefaultValue());
+        properties.computeIfAbsent(GRAM_NUM_KEY, k -> NgramBfIndexParamsKey.GRAM_NUM.getIndexParamItem().getDefaultValue());
         properties.computeIfAbsent(CASE_SENSITIVE_KEY,
-                k -> indexParams.getParam(NgramBfIndexParamsKey.CASE_SENSITIVE.name()).getDefaultValue());
+                k -> NgramBfIndexParamsKey.CASE_SENSITIVE.getIndexParamItem().getDefaultValue());
     }
 
     public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)

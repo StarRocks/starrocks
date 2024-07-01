@@ -14,9 +14,16 @@
 
 package com.starrocks.common.io;
 
+import com.starrocks.catalog.IndexParams;
+import com.starrocks.catalog.IndexParams.IndexParamItem;
+
 public interface ParamsKey {
     String name();
 
     default void check(String value) {
+    }
+
+    default IndexParamItem getIndexParamItem() {
+        return IndexParams.getInstance().getParam(name());
     }
 }

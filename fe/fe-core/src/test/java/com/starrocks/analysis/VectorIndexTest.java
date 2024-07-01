@@ -25,7 +25,6 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.IndexParams.IndexParamItem;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
@@ -161,8 +160,8 @@ public class VectorIndexTest extends PlanTestBase {
         }};
 
         // Add default properties
-        IndexParamItem m = IndexParams.getInstance().getParam(IndexParamsKey.M.name());
-        IndexParamItem efConstruction = IndexParams.getInstance().getParam(VectorIndexParams.IndexParamsKey.EFCONSTRUCTION.name());
+        IndexParamItem m = IndexParamsKey.M.getIndexParamItem();
+        IndexParamItem efConstruction = VectorIndexParams.IndexParamsKey.EFCONSTRUCTION.getIndexParamItem();
         Assertions.assertDoesNotThrow(() -> VectorIndexUtil.checkVectorIndexValid(c4, paramItemMap, KeysType.DUP_KEYS));
         Assertions.assertTrue(m.getDefaultValue()
                 .equalsIgnoreCase(paramItemMap.get(m.getParamKey().name().toLowerCase(Locale.ROOT))));
