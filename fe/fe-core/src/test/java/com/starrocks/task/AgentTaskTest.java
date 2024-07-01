@@ -137,7 +137,7 @@ public class AgentTaskTest {
                 .setTabletType(TTabletType.TABLET_TYPE_DISK)
                 .setCompressionType(TCompressionType.LZ4_FRAME)
                 .setTabletSchema(tabletSchema)
-                .setUseSharedTabletInitialMetadata(false)
+                .setEnableTabletCreationOptimization(false)
                 .build();
 
         // drop

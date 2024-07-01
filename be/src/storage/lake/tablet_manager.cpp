@@ -185,7 +185,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
     }
 
-    if (req.use_shared_tablet_initial_metadata) {
+    if (req.enable_tablet_creation_optimization) {
         return put_tablet_metadata(std::move(tablet_metadata_pb), tablet_initial_metadata_location(req.tablet_id));
     }
 
@@ -274,7 +274,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 Status TabletManager::delete_tablet_metadata(int64_t tablet_id, int64_t version) {
     auto location = tablet_metadata_location(tablet_id, version);
     _metacache->erase(location);
-    return ignore_not_found(fs::delete_file(location));
+    if (version <= kInitialVersion) {
+        return ignore_not_found(fs::delete_file(location));
+    }
+    return fs::delete_file(location);
 }
 
 StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_id) {

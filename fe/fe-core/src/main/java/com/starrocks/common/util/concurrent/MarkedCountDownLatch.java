@@ -91,13 +91,6 @@ public class MarkedCountDownLatch<K, V> extends CountDownLatch {
         return st;
     }
 
-    public synchronized void countDown(int count) {
-        for (int i = 0; i < count; ++i) {
-            super.countDown();
-        }
-        triggerListeners();
-    }
-
     public synchronized void countDownToZero(Status status) {
         // update status first before countDown.
         // so that the waiting thread will get the correct status.

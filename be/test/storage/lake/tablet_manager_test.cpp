@@ -139,7 +139,7 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
 }
 
-TEST_F(LakeTabletManagerTest, create_tablet_use_shared_tablet_initial_metadata) {
+TEST_F(LakeTabletManagerTest, create_tablet_enable_tablet_creation_optimization) {
     auto fs = FileSystem::Default();
     auto tablet_id = next_id();
     auto schema_id = next_id();
@@ -150,7 +150,7 @@ TEST_F(LakeTabletManagerTest, create_tablet_use_shared_tablet_initial_metadata) 
     req.__set_version_hash(0);
     req.__set_enable_persistent_index(true);
     req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
-    req.__set_use_shared_tablet_initial_metadata(true);
+    req.__set_enable_tablet_creation_optimization(true);
     req.tablet_schema.__set_id(schema_id);
     req.tablet_schema.__set_schema_hash(270068375);
     req.tablet_schema.__set_short_key_column_count(2);
