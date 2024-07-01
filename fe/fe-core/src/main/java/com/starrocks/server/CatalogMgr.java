@@ -128,7 +128,7 @@ public class CatalogMgr {
             }
 
             // TODO：please keep connector and catalog create together, they need keep in consistent asap.
-            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties), false);
             if (null == connector) {
                 LOG.error("{} connector [{}] create failed", type, catalogName);
                 throw new DdlException("connector create failed");
@@ -277,7 +277,8 @@ public class CatalogMgr {
 
         // TODO：please keep connector and catalog create together, they need keep in consistent asap.
         try {
-            CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+            CatalogConnector catalogConnector = connectorMgr.createConnector(
+                    new ConnectorContext(catalogName, type, config), true);
             if (catalogConnector == null) {
                 LOG.error("{} connector [{}] create failed.", type, catalogName);
                 throw new DdlException("connector create failed");
