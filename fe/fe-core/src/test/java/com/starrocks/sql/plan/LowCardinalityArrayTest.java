@@ -567,7 +567,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     public void testArrayCharOnScan() throws Exception {
         String sql = "select array_slice(S_PHONE,-1,2) from supplier_nullable where S_SUPPKEY = 1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertNotContains(plan, "DictDecode");
         assertContains(plan, "<slot 9> : array_slice(5: S_PHONE, -1, 2)");
     }
