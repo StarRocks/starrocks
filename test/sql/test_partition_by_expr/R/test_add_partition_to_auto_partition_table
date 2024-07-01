@@ -30,7 +30,7 @@ E: (1064, 'Getting analyzing error. Detail message: Batch build partition range 
 -- !result
 alter table t1 add partitions start ("2020-01-20") end ("2020-01-15") every (interval 1 day);
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Batch build partition start date should less than end date..')
+E: (1064, 'Getting analyzing error. Detail message: Batch build partition start date should less than end date..')
 -- !result
 alter table t1 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 day);
 -- result:
@@ -67,7 +67,7 @@ E: (1064, 'Getting analyzing error. Detail message: Batch build partition range 
 -- !result
 alter table t2 add partitions start ("2020-01-20") end ("2020-01-15") every (interval 1 day);
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Batch build partition start date should less than end date..')
+E: (1064, 'Getting analyzing error. Detail message: Batch build partition start date should less than end date..')
 -- !result
 alter table t2 add partitions start ("2024-01-05") end ("2024-01-10") every (interval 1 day);
 -- result:

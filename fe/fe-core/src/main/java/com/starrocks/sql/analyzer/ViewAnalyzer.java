@@ -88,9 +88,8 @@ public class ViewAnalyzer {
                 String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
                 alterViewClause.setInlineViewDef(viewSql);
             } else {
-                AlterTableClauseVisitorEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitorEPack();
-                alterTableClauseAnalyzerVisitor.setTable(table);
-                alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
+                AlterTableClauseVisitorEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitorEPack(table);
+                alterTableClauseAnalyzerVisitor.analyze(context, alterClause);
             }
             return null;
         }

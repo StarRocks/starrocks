@@ -30,9 +30,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 
 import java.time.DayOfWeek;
@@ -71,14 +74,37 @@ public class PartitionDescAnalyzer {
 
     public static void analyzePartitionDescWithExistsTable(PartitionDesc partitionDesc, OlapTable table) {
         PartitionInfo partitionInfo = table.getPartitionInfo();
-        if (!(partitionInfo instanceof RangePartitionInfo)) {
-            ErrorReport.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
+
+        if (!partitionInfo.isRangePartition() && partitionInfo.getType() != PartitionType.LIST) {
+            throw new SemanticException("Only support adding partition to range/list partitioned table");
         }
 
+        boolean isAutomaticPartition = partitionInfo.isAutomaticPartition();
+
         if (partitionDesc instanceof SingleRangePartitionDesc) {
+            if (!(partitionInfo instanceof RangePartitionInfo)) {
+                ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
+            }
+
             analyzeSingleRangePartitionDescWithExistsTable((SingleRangePartitionDesc) partitionDesc, partitionInfo);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
+            if (!(partitionInfo instanceof RangePartitionInfo)) {
+                ErrorReportException.report(ErrorCode.ERR_ADD_PARTITION_WITH_ERROR_PARTITION_TYPE);
+            }
+
             analyzeMultiRangePartitionDescWithExistsTable((MultiRangePartitionDesc) partitionDesc, partitionInfo);
+        } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
+            SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
+            if (isAutomaticPartition && singleItemListPartitionDesc.getValues().size() > 1) {
+                throw new SemanticException("Automatically partitioned tables does not support " +
+                        "multiple values in the same partition");
+            }
+        } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
+            MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
+            if (isAutomaticPartition && multiItemListPartitionDesc.getMultiValues().size() > 1) {
+                throw new SemanticException("Automatically partitioned tables does not support " +
+                        "multiple values in the same partition");
+            }
         }
     }
 

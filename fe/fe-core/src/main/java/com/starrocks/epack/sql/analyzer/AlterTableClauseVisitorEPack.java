@@ -19,12 +19,16 @@ import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AlterTableClauseVisitor;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 
-public class AlterTableClauseVisitorEPack extends AlterTableClauseVisitor implements AstVisitorEPack<Void, ConnectContext> {
+public class AlterTableClauseVisitorEPack extends AlterTableClauseAnalyzer implements AstVisitorEPack<Void, ConnectContext> {
+    public AlterTableClauseVisitorEPack(Table table) {
+        super(table);
+    }
+
     @Override
     public Void visitApplyMaskingPolicyClause(ApplyMaskingPolicyClause clause, ConnectContext context) {
         clause.getWithColumnMaskingPolicy().analyze(context, clause.getMaskingColumn());
@@ -54,7 +58,7 @@ public class AlterTableClauseVisitorEPack extends AlterTableClauseVisitor implem
         SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         Policy policy = securityPolicyMgr.getPolicyByName(policyType, policyName);
 
-        Table table = this.getTable();
+        Table table = this.table;
         for (int i = 0; i < usingColumns.size(); ++i) {
             Column column = table.getColumn(usingColumns.get(i));
             if (column == null) {
