@@ -3676,10 +3676,8 @@ public class CreateMaterializedViewTest {
                 "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(
-                    e.getMessage().contains("Materialized view related base table partition type: LIST not supports."));
+            Assert.fail(e.getMessage());
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }
