@@ -18,11 +18,13 @@ import io.delta.kernel.utils.FileStatus;
 
 import java.util.Map;
 
+// FileScanTask represents an AddFile file in DeltaLake.
+// TODO: The file representations of different Catalogs will be unified later.
 public class FileScanTask {
-    private FileStatus fileStatus = null;
-    private long records = 0;
-    private Map<String, String> partitionValues = null;
-    private DeltaLakeStats stats = null;
+    private final FileStatus fileStatus;
+    private final long records;
+    private final Map<String, String> partitionValues;
+    private final DeltaLakeStats stats;
 
     public FileScanTask(FileStatus fileStatus, long records, Map<String, String> partitionValues) {
         this.fileStatus = fileStatus;
