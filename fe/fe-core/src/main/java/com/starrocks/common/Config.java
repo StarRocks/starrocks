@@ -664,6 +664,11 @@ public class Config extends ConfigBase {
     @ConfField
     public static int http_port = 8030;
 
+    /**
+     * Configs for query queue v2.
+     * The configs {@code query_queue_v2_xxx} are effective only when {@code enable_query_queue_v2} is true.
+     * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
+     */
     @ConfField
     public static boolean enable_query_queue_v2 = false;
     /**
@@ -674,15 +679,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int query_queue_v2_concurrency_level = 4;
     /**
-     * Used to estimate the number of slots of a query based on the cardinality of the Source Node.
-     * It is equal to the cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP].
+     * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
+     * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
      * It will be set to `1` if it is non-positive.
      */
     @ConfField(mutable = true)
     public static int query_queue_v2_num_rows_per_slot = 4096;
     /**
      * Used to estimate the number of slots of a query based on the plan cpu costs.
-     * It is equal to the plan cpu costs divided by the configuration value.
+     * It is equal to the plan cpu costs divided by the configuration value and is limited to between [1, totalSlots].
      * It will be set to `1` if it is non-positive.
      */
     @ConfField(mutable = true)

@@ -78,6 +78,7 @@ public class SlotEstimatorFactory {
             int numSlotsByCpuCosts = (int) (planCpuCosts / opts.v2().getCpuCostsPerSlot());
             numSlotsByCpuCosts = Math.max(1, numSlotsByCpuCosts / numWorkers) * numWorkers;
 
+            // Restrict numSlotsByCpuCosts to be within [numSlots / 2, numSlots].
             return Math.min(Math.max(numSlots / 2, numSlotsByCpuCosts), numSlots);
         }
 
