@@ -64,7 +64,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -143,6 +143,18 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    public static void fillBackendsOrComputeNodes(List<TNetworkAddress> nodes) {
+        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
+        for (Backend backend : backends) {
+            nodes.add(backend.getBrpcAddress());
+        }
+
+        List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+        for (ComputeNode cn : computeNodes) {
+            nodes.add(cn.getBrpcAddress());
         }
     }
 
@@ -260,11 +272,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         request.type = PProcessDictionaryCacheRequestType.CLEAR;
 
         List<TNetworkAddress> beNodes = Lists.newArrayList();
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<Backend> backends = currentSystemInfo.getBackends();
-        for (Backend backend : backends) {
-            beNodes.add(backend.getBrpcAddress());
-        }
+        fillBackendsOrComputeNodes(beNodes);
 
         DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, null);
     }
@@ -383,11 +391,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         request.type = PProcessDictionaryCacheRequestType.STATISTIC;
 
         List<TNetworkAddress> beNodes = Lists.newArrayList();
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<Backend> backends = currentSystemInfo.getBackends();
-        for (Backend backend : backends) {
-            beNodes.add(backend.getBrpcAddress());
-        }
+        fillBackendsOrComputeNodes(beNodes);
 
         List<PProcessDictionaryCacheResult> results = Lists.newArrayList();
         DictionaryMgr.processDictionaryCacheInteranl(request, null, beNodes, results);
@@ -520,11 +524,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
 
         private void initializeBeNodesAddress() {
-            final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            List<Backend> backends = currentSystemInfo.getBackends();
-            for (Backend backend : backends) {
-                this.beNodes.add(backend.getBrpcAddress());
-            }
+            fillBackendsOrComputeNodes(this.beNodes);
         }
 
         private ConnectContext buildConnectContext() {
