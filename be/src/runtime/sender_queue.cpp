@@ -699,15 +699,18 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     const bool use_pass_through = request.use_pass_through();
     DCHECK(!(keep_order && use_pass_through));
     DCHECK(request.chunks_size() > 0 || use_pass_through);
+    size_t total_chunk_bytes = 0;
     if (_is_cancelled || _num_remaining_senders <= 0) {
         VLOG_ROW << print_id(request.finst_id()) << " adds chunks to "
                  << (_is_cancelled ? "cancelled queue" : "ended queue");
+        if (use_pass_through) {
+            get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes);
+        }
         return Status::OK();
     }
 
     RETURN_IF_ERROR(try_to_build_chunk_meta(request, metrics));
 
-    size_t total_chunk_bytes = 0;
     _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
 
     // NOTE: in the merge scenario, chunk is obtained through try_get_chunk and its return type is not Status.
