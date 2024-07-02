@@ -32,6 +32,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.sample.ColumnSampleManager;
+import com.starrocks.statistic.sample.PrimitiveTypeColumnStats;
+import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.statistic.sample.TabletSampleManager;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -127,20 +131,30 @@ public class StatisticsSQLTest extends PlanTestBase {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> columnNames = Lists.newArrayList("v3", "j1", "s1");
-        SampleStatisticsCollectJob job = new SampleStatisticsCollectJob(db, t0, columnNames,
-                StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+        List<Type> columnTypes = Lists.newArrayList(Type.BIGINT, Type.JSON, Type.STRING);
+        TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
 
-        String sql = job.buildSampleInsertSQL(db.getId(), t0StatsTableId, columnNames, job.columnTypes, 200);
-        starRocksAssert.useDatabase("_statistics_");
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, t0,
+                sampleInfo);
+
+        sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                columnSampleManager.getComplexTypeStats());
+        String complexSql = sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                columnSampleManager.getComplexTypeStats());
+        assertCContains(complexSql, "INSERT INTO _statistics_.table_statistic_v1 VALUES");
+
+        String simpleSql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(),
+                db.getFullName(), columnSampleManager.splitPrimitiveTypeStats().get(0), tabletSampleManager);
         String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
                 t0.getId(), "v3", db.getId(), "test.stat0", "test");
-        assertCContains(sql, except);
+        assertCContains(simpleSql, except);
+        starRocksAssert.useDatabase("_statistics_");
 
-        String plan = getFragmentPlan(sql);
+        String plan = getFragmentPlan(simpleSql);
 
-        Assert.assertEquals(3, StringUtils.countMatches(plan, "OlapScanNode"));
+        Assert.assertEquals(2, StringUtils.countMatches(plan, "OlapScanNode"));
         assertCContains(plan, "left(");
-        assertCContains(plan, "count * 1024");
     }
 
     @Test
@@ -282,13 +296,15 @@ public class StatisticsSQLTest extends PlanTestBase {
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
-        List<String> columnNames = t0.getColumns().stream().map(Column::getName).collect(Collectors.toList());
-        SampleStatisticsCollectJob job = new SampleStatisticsCollectJob(db, t0, columnNames,
-                StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
-
-        for (String column : columnNames) {
-            String sql = job.buildSampleInsertSQL(db.getId(), t0.getId(), Lists.newArrayList(column),
-                    Lists.newArrayList(t0.getColumn(column).getType()), 200);
+        for (Column column : t0.getColumns()) {
+            if (!column.getType().canStatistic()) {
+                continue;
+            }
+            TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
+            SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
+            String sql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                    Lists.newArrayList(new PrimitiveTypeColumnStats(column.getName(), column.getType())),
+                    tabletSampleManager);
             starRocksAssert.useDatabase("_statistics_");
             ExecPlan plan = getExecPlan(sql);
             List<Expr> output = plan.getOutputExprs();
@@ -296,7 +312,7 @@ public class StatisticsSQLTest extends PlanTestBase {
             Assert.assertEquals(output.get(3).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
             Assert.assertEquals(output.get(4).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
 
-            assertCContains(plan.getColNames().get(1).replace("\\", ""), column);
+            assertCContains(plan.getColNames().get(1).replace("\\", ""), column.getName());
             assertCContains(plan.getColNames().get(3).replace("\\", ""), "escape0['abc']");
         }
     }

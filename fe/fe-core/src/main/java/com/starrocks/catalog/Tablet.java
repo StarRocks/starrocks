@@ -42,6 +42,10 @@ public abstract class Tablet extends MetaObject implements Writable {
 
     public abstract long getRowCount(long version);
 
+    public long getFuzzyRowCount() {
+        return 1L;
+    }
+
     public abstract Set<Long> getBackendIds();
 
     public abstract List<Replica> getAllReplicas();

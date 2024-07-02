@@ -91,6 +91,11 @@ public class LakeTablet extends Tablet {
         return rowCount;
     }
 
+    @Override
+    public long getFuzzyRowCount() {
+        return rowCount;
+    }
+
     public void setRowCount(long rowCount) {
         this.rowCount = rowCount;
     }
