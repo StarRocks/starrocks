@@ -150,7 +150,10 @@ public class TaskRunManager implements MemoryTrackable {
                     mergedTaskRuns.add(oldTaskRun);
                 }
             }
-            if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
+
+            // recheck it again to avoid pending task run is too much
+            long validPendingCount = taskRunScheduler.getPendingQueueCount();
+            if (validPendingCount >= Config.task_runs_queue_length || !taskRunScheduler.addPendingTaskRun(taskRun)) {
                 LOG.warn("failed to offer task: {}", taskRun);
                 return false;
             }
@@ -158,7 +161,7 @@ public class TaskRunManager implements MemoryTrackable {
             // if it 's not replay, update the status of the old TaskRun to MERGED in FOLLOWER/LEADER.
             // if it is replay, no need to update the status of the old TaskRun because follower FE cannot
             // update edit log.
-            if (!isReplay && !mergedTaskRuns.isEmpty()) {
+            if (!isReplay) {
                 // TODO: support batch update to reduce the number of edit logs.
                 for (TaskRun oldTaskRun : mergedTaskRuns) {
                     oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
@@ -167,6 +170,14 @@ public class TaskRunManager implements MemoryTrackable {
                             oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
                     GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
                     // update the state of the old TaskRun to MERGED in LEADER
+                    oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
+                    taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
+                    taskRunHistory.addHistory(oldTaskRun.getStatus());
+                }
+            } else {
+                for (TaskRun oldTaskRun : mergedTaskRuns) {
+                    // update the state of the old TaskRun to MERGED in LEADER
+                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
                     oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
                     taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
                     taskRunHistory.addHistory(oldTaskRun.getStatus());
