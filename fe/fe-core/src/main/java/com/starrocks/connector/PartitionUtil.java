@@ -239,6 +239,27 @@ public class PartitionUtil {
         return filteredPartitionName;
     }
 
+
+    public static List<PartitionKey> getPartitionKeys(Table table) {
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        if (table.isUnPartitioned()) {
+            partitionKeys.add(new PartitionKey());
+        } else {
+            List<String> partitionNames = getPartitionNames(table);
+            List<Column> partitionColumns = getPartitionColumns(table);
+            try {
+                for (String partitionName : partitionNames) {
+                    partitionKeys.add(
+                            createPartitionKey(toPartitionValues(partitionName), partitionColumns, table));
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to get partition keys", e);
+                throw new StarRocksConnectorException("Failed to get partition keys", e);
+            }
+        }
+        return partitionKeys;
+    }
+
     public static List<Column> getPartitionColumns(Table table) {
         return ConnectorPartitionTraits.build(table).getPartitionColumns();
     }

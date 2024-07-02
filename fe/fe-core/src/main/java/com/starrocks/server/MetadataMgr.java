@@ -24,6 +24,11 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+>>>>>>> cfe866d77a ([BugFix] Fix stats are not correct in skew join rule for partitioned hive table (#47690))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
@@ -461,16 +466,52 @@ public class MetadataMgr {
                                          ScalarOperator predicate,
                                          long limit) {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
-        Statistics statistics = FeConstants.runningUnitTest ? null :
+        // Get basic/histogram stats from internal statistics.
+        Statistics internalStatistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
+<<<<<<< HEAD
         if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
             session.setObtainedFromInternalStatistics(false);
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
             return connectorMetadata.map(metadata -> metadata.getTableStatistics(
                     session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+=======
+        if (internalStatistics == null ||
+                internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+            // Get basic stats from connector metadata.
+            session.setObtainedFromInternalStatistics(false);
+            // Avoid `analyze table` to collect table statistics from metadata.
+            if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+                return internalStatistics;
+            } else {
+                Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+                Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
+                        session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+                if (connectorBasicStats != null && internalStatistics != null &&
+                        internalStatistics.getColumnStatistics().values().stream().anyMatch(
+                                columnStatistic -> columnStatistic.getHistogram() != null)) {
+                    // combine connector metadata basic stats and histogram from internal stats
+                    Map<ColumnRefOperator, ColumnStatistic> internalColumnStatsMap = internalStatistics.getColumnStatistics();
+                    Map<ColumnRefOperator, ColumnStatistic> combinedColumnStatsMap = Maps.newHashMap();
+                    connectorBasicStats.getColumnStatistics().forEach((key, value) -> {
+                        if (internalColumnStatsMap.containsKey(key)) {
+                            combinedColumnStatsMap.put(key, ColumnStatistic.buildFrom(value).
+                                    setHistogram(internalColumnStatsMap.get(key).getHistogram()).build());
+                        } else {
+                            combinedColumnStatsMap.put(key, value);
+                        }
+                    });
+
+                    return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                } else {
+                    return connectorBasicStats;
+                }
+            }
+>>>>>>> cfe866d77a ([BugFix] Fix stats are not correct in skew join rule for partitioned hive table (#47690))
         } else {
             session.setObtainedFromInternalStatistics(true);
-            return statistics;
+            return internalStatistics;
         }
     }
 
