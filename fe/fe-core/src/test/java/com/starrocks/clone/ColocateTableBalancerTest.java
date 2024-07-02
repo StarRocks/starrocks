@@ -109,6 +109,7 @@ public class ColocateTableBalancerTest {
         starRocksAssert = new StarRocksAssert(ctx);
         GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
         GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
+        ColocateTableBalancer.getInstance().setStop();
     }
 
     @Before
