@@ -87,7 +87,7 @@ public class SelectHintTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "functions: [, lag(1, 1, NULL), ]");
 
-        sql = "select /*+ set_user_variable(@a = 1, @b = 100000) */ APPROX_TOP_K(v1, @a), APPROX_TOP_K(v1, @a, @b)from t0";
+        sql = "select /*+ set_user_variable(@a = 1, @b = 100000) */ APPROX_TOP_K(v1, @a), APPROX_TOP_K(v1, @a, @b) from t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "approx_top_k(1: v1, 1), approx_top_k(1: v1, 1, 100000)");
 

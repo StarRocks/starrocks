@@ -160,6 +160,10 @@ select @test = ["abc\\'"];
 set @test = concat(upper('a'), '\'', '\\' 'b', '"');
 select @test = concat(upper('a'), '\'', '\\' 'b', '"');
 
+SELECT /*+ set_user_variable(@a = 1, @b = 1) */c1,  lag(c1, @a, @b) over (ORDER BY c2), lead(c1, 1, @b) over (ORDER BY c2), lead(@a, 1, @b) over (ORDER BY c2) from t1;
+SELECT /*+ set_user_variable(@a = 1, @b = 1) */c1,  lag(c1, @a, @b) over (ORDER BY c2), lead(c1, 1, @b) over (ORDER BY c2), lead(@a, 1, @b) over (ORDER BY c2) from t1;
+select /*+ set_user_variable(@a = 1, @b = 100000) */ APPROX_TOP_K(c1, @a), APPROX_TOP_K(c2, @a, @b) from t1;
+select /*+ set_user_variable(@a = 1, @b = 10) */ c1, ntile(@a) over (partition by c2 order by c3) as bucket_id from t0;
 
 
 
