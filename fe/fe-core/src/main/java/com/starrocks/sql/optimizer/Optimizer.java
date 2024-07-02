@@ -654,9 +654,11 @@ public class Optimizer {
 
     private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {
         SkewJoinOptimizeRule rule = new SkewJoinOptimizeRule();
-        // merge projects before calculate statistics
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new MergeTwoProjectRule());
-        Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+        if (context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
+            // merge projects before calculate statistics
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new MergeTwoProjectRule());
+            Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+        }
         if (ruleRewriteOnlyOnce(tree, rootTaskContext, rule)) {
             // skew join generate new join and on predicate, need to push down join on expression to child project again
             ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());

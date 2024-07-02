@@ -288,4 +288,14 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
                 "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
     }
+
+    @Test
+    public void testSkewJoinWithStats2() throws Exception {
+        // test hive partitioned table
+        String sql = "select l_returnflag, t3.c3 from hive0.partitioned_db.lineitem_par join hive0.partitioned_db.t3" +
+                " on l_returnflag = t3.c3";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
+                "  |  equal join conjunct: 9: l_returnflag = 19: c3", "cardinality=540034112");
+    }
 }
