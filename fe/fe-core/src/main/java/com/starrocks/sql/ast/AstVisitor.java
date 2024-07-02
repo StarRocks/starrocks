@@ -1130,6 +1130,14 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAddFieldClause(AddFieldClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropFieldClause(DropFieldClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     //Alter partition clause
 
     default R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {

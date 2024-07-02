@@ -1,0 +1,258 @@
+-- name: test_add_drop_field_struct
+create database test_add_drop_field_struct;
+-- result:
+-- !result
+use test_add_drop_field_struct;
+-- result:
+-- !result
+CREATE TABLE `tab1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` STRUCT<v1 INT, v2 Struct<v3 int, v4 int>>
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tab1 values (1, row(1, row(1,1))), (2, row(2, row(2,2)));
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1}}
+2	{"v1":2,"v2":{"v3":2,"v4":2}}
+-- !result
+alter table tab1 modify column c1 add field v1.v5 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Field v1 type INT is not valid.')
+-- !result
+alter table tab1 modify column c1 add field v2 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Field v2 is already exist.')
+-- !result
+alter table tab1 modify column c1 add field v2.v3 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Field v3 is already exist.')
+-- !result
+alter table tab1 modify column c1 add field val1 int;
+-- result:
+E: (1064, 'Add field is not support so far')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1}}
+2	{"v1":2,"v2":{"v3":2,"v4":2}}
+-- !result
+insert into tab1 values (3, row(3, row(3,3), 3));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Cannot cast 'row(3, row(3, 3), 3)' from struct<col1 tinyint(4), col2 struct<col1 tinyint(4), col2 tinyint(4)>, col3 tinyint(4)> to struct<v1 int(11), v2 struct<v3 int(11), v4 int(11)>>.")
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1}}
+2	{"v1":2,"v2":{"v3":2,"v4":2}}
+-- !result
+alter table tab1 modify column c1 drop field v2.v5;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze drop field definition failed: Drop field v5 is not found.')
+-- !result
+alter table tab1 modify column c1 drop field v1;
+-- result:
+E: (1064, 'Drop field is not support so far')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1}}
+2	{"v1":2,"v2":{"v3":2,"v4":2}}
+-- !result
+alter table tab1 modify column c1 add field v1 int AFTER v2;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Field v1 is already exist.')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1}}
+2	{"v1":2,"v2":{"v3":2,"v4":2}}
+-- !result
+insert into tab1 values (4, row(row(4,4), 4, 4));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Cannot cast 'row(row(4, 4), 4, 4)' from struct<col1 struct<col1 tinyint(4), col2 tinyint(4)>, col2 tinyint(4), col3 tinyint(4)> to struct<v1 int(11), v2 struct<v3 int(11), v4 int(11)>>.")
+-- !result
+select * from tab1;
+-- result:
+1	{"v1":1,"v2":{"v3":1,"v4":1}}
+2	{"v1":2,"v2":{"v3":2,"v4":2}}
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_struct;
+-- result:
+-- !result
+-- name: test_add_drop_field_array
+create database test_add_drop_field_array;
+-- result:
+-- !result
+use test_add_drop_field_array;
+-- result:
+-- !result
+CREATE TABLE `tab1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` Array<Struct<v1 int, v2 int>>
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tab1 values (1, [row(1,1), row(1,2)]), (2, [row(2,1), row(2,2)]);
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1},{"v1":1,"v2":2}]
+2	[{"v1":2,"v2":1},{"v1":2,"v2":2}]
+-- !result
+alter table tab1 modify column c1 drop field [*];
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze drop field definition failed: Target Field is not struct.')
+-- !result
+alter table tab1 modify column c1 drop field [*].v3;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze drop field definition failed: Drop field v3 is not found.')
+-- !result
+alter table tab1 modify column c1 add field val1 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Target Field is not struct.')
+-- !result
+alter table tab1 modify column c1 add field [*].val1 int;
+-- result:
+E: (1064, 'Add field is not support so far')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1},{"v1":1,"v2":2}]
+2	[{"v1":2,"v2":1},{"v1":2,"v2":2}]
+-- !result
+insert into tab1 values (3, [row(3,1,1), row(3,2,1)]);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Cannot cast '[row(3, 1, 1),row(3, 2, 1)]' from ARRAY<struct<col1 tinyint(4), col2 tinyint(4), col3 tinyint(4)>> to ARRAY<struct<v1 int(11), v2 int(11)>>.")
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1},{"v1":1,"v2":2}]
+2	[{"v1":2,"v2":1},{"v1":2,"v2":2}]
+-- !result
+alter table tab1 modify column c1 drop field [*].v1;
+-- result:
+E: (1064, 'Drop field is not support so far')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1},{"v1":1,"v2":2}]
+2	[{"v1":2,"v2":1},{"v1":2,"v2":2}]
+-- !result
+insert into tab1 values (4, [row(4,4), row(4,5)]);
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1},{"v1":1,"v2":2}]
+2	[{"v1":2,"v2":1},{"v1":2,"v2":2}]
+4	[{"v1":4,"v2":4},{"v1":4,"v2":5}]
+-- !result
+alter table tab1 modify column c1 add field [*].v1 int;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition failed: Field v1 is already exist.')
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1},{"v1":1,"v2":2}]
+2	[{"v1":2,"v2":1},{"v1":2,"v2":2}]
+4	[{"v1":4,"v2":4},{"v1":4,"v2":5}]
+-- !result
+insert into tab1 values (5, [row(5,5,5), row(5,6,6)]);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Cannot cast '[row(5, 5, 5),row(5, 6, 6)]' from ARRAY<struct<col1 tinyint(4), col2 tinyint(4), col3 tinyint(4)>> to ARRAY<struct<v1 int(11), v2 int(11)>>.")
+-- !result
+select * from tab1;
+-- result:
+1	[{"v1":1,"v2":1},{"v1":1,"v2":2}]
+2	[{"v1":2,"v2":1},{"v1":2,"v2":2}]
+4	[{"v1":4,"v2":4},{"v1":4,"v2":5}]
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_array;
+-- result:
+-- !result
+-- name: test_add_drop_field_not_allowed
+create database test_add_drop_field_not_allowed;
+-- result:
+-- !result
+use test_add_drop_field_not_allowed;
+-- result:
+-- !result
+CREATE TABLE `tab1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` Array<Struct<v1 int, v2 int>>
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "false",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+alter table tab1 modify column c1 add field [*].val1 int;
+-- result:
+E: (1064, 'Add field is not support so far')
+-- !result
+alter table tab1 modify column c1 add field [*].v3 int;
+-- result:
+E: (1064, 'Add field is not support so far')
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_not_allowed;
+-- result:
+-- !result

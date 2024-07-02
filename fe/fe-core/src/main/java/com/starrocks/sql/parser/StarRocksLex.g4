@@ -485,6 +485,7 @@ TUNESPACE: 'TUNESPACE';
 APPEND: 'APPEND';
 POPULATE: 'POPULATE';
 RECOMMENDATIONS: 'RECOMMENDATIONS';
+FIELD: 'FIELD';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -493,6 +494,7 @@ LTE : '<=';
 GT  : '>';
 GTE : '>=';
 EQ_FOR_NULL: '<=>';
+ARRAY_ELEMENT: '[*]';
 
 PLUS_SYMBOL: '+';
 MINUS_SYMBOL: '-';
