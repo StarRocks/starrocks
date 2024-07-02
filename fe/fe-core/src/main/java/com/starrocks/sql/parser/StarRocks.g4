@@ -3053,11 +3053,7 @@ nonReserved
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT | NGRAMBF
-<<<<<<< HEAD
     | TUNESPACE | APPEND | POPULATE | RECOMMENDATIONS
-    ;
-=======
     | FIELD
     | ARRAY_ELEMENT
     ;
->>>>>>> 93f333ee97... [Feature]Support add/drop field for struct column(part2) (#46619)
