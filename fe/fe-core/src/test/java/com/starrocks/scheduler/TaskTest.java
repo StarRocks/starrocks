@@ -29,9 +29,6 @@ public class TaskTest {
         Assert.assertEquals(Constants.TaskState.UNKNOWN, task.getState());
         Assert.assertEquals(Constants.TaskType.MANUAL, task.getType());
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testTaskRunState() {
@@ -57,4 +54,3 @@ public class TaskTest {
         Assert.assertEquals(false, Constants.TaskRunState.RUNNING.isSuccessState());
     }
 }
->>>>>>> 6264a16d05 ([BugFix] Fix replaying task run bug (#47738))

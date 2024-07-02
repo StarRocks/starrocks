@@ -299,50 +299,6 @@ public class TaskRunStatus implements Writable {
         this.properties = properties;
     }
 
-<<<<<<< HEAD
-=======
-    public Constants.TaskRunState getLastRefreshState() {
-        if (isRefreshFinished()) {
-            Preconditions.checkArgument(state.isFinishState(), String.format("state %s must be finish state", state));
-            return state;
-        } else {
-            // {@code processStartTime == 0} means taskRun have not been scheduled, its state should be pending.
-            // TODO: how to distinguish TaskRunStatus per partition.
-            return processStartTime == 0 ? state : Constants.TaskRunState.RUNNING;
-        }
-    }
-
-    public boolean isRefreshFinished() {
-        if (state.equals(Constants.TaskRunState.FAILED)) {
-            return true;
-        }
-        if (!state.equals(Constants.TaskRunState.SUCCESS)) {
-            return false;
-        }
-        if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||
-                !Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart())) {
-            return false;
-        }
-        return true;
-    }
-
-    public long calculateRefreshProcessDuration() {
-        if (finishTime > processStartTime) {
-            return finishTime - processStartTime;
-        } else {
-            return 0L;
-        }
-    }
-
-    public long calculateRefreshDuration() {
-        if (finishTime > createTime) {
-            return finishTime - createTime;
-        } else {
-            return 0L;
-        }
-    }
-
->>>>>>> 6264a16d05 ([BugFix] Fix replaying task run bug (#47738))
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
