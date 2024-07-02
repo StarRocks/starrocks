@@ -74,6 +74,13 @@ public class TableKeeper {
         }
     }
 
+    /**
+     * Is the table ready for insert
+     */
+    public synchronized boolean isReady() {
+        return databaseExisted && tableExisted;
+    }
+
     public boolean checkDatabaseExists() {
         return GlobalStateMgr.getCurrentState().getDb(databaseName) != null;
     }

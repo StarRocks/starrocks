@@ -19,12 +19,12 @@ import com.google.gson.JsonParser;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
-import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.util.Strings;
 
 import java.nio.ByteBuffer;
@@ -32,6 +32,7 @@ import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * History storage that leverage a regular starrocks table to store the data.
@@ -39,6 +40,7 @@ import java.util.List;
  */
 public class TaskRunHistoryTable {
 
+    public static final int INSERT_BATCH_SIZE = 128;
     public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
     public static final String TABLE_NAME = "task_run_history";
     public static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
@@ -78,21 +80,27 @@ public class TaskRunHistoryTable {
             "(task_id, task_run_id, task_name, " +
             "create_time, finish_time, expire_time, " +
             "history_content_json) " +
-            "VALUES({1}, {2}, {3}, {4}, {5}, {6}, {7})";
+            "VALUES";
+    private static final String INSERT_SQL_VALUE = "({0}, {1}, {2}, {3}, {4}, {5}, {6})";
     private static final String SELECT_BY_TASK_NAME =
             "SELECT history_content_json FROM " + TABLE_FULL_NAME + " WHERE task_name = {0}";
     private static final String SELECT_ALL = "SELECT history_content_json FROM " + TABLE_FULL_NAME;
     private static final String COUNT_TASK_RUNS = "SELECT count(*) as cnt FROM " + TABLE_FULL_NAME;
 
+    private static final TableKeeper keeper = new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS);
+
     public static TableKeeper createKeeper() {
-        return new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS);
+        return keeper;
     }
 
-    public void addHistory(TaskRunStatus status, boolean isReplay) {
-        if (isReplay) {
-            return;
+    private void checkTableReady() {
+        if (!keeper.isReady()) {
+            throw new IllegalStateException("The table is not ready: " + TABLE_NAME);
         }
+    }
 
+    public void addHistory(TaskRunStatus status) {
+        checkTableReady();
         String createTime =
                 Strings.quote(DateUtils.formatTimeStampInMill(status.getCreateTime(), ZoneId.systemDefault()));
         String finishTime =
@@ -100,28 +108,52 @@ public class TaskRunHistoryTable {
         String expireTime =
                 Strings.quote(DateUtils.formatTimeStampInMill(status.getExpireTime(), ZoneId.systemDefault()));
 
-        final String sql = MessageFormat.format(INSERT_SQL_TEMPLATE, TABLE_FULL_NAME,
-                String.valueOf(status.getTaskId()), Strings.quote(status.getStartTaskRunId()),
+        String value = MessageFormat.format(INSERT_SQL_VALUE,
+                String.valueOf(status.getTaskId()),
+                Strings.quote(status.getStartTaskRunId()),
                 Strings.quote(status.getTaskName()),
-                createTime, finishTime, expireTime, Strings.quote(status.toJSON()));
+                createTime,
+                finishTime,
+                expireTime,
+                Strings.quote(status.toJSON())
+        );
+        final String sql = MessageFormat.format(INSERT_SQL_TEMPLATE, TABLE_FULL_NAME) + " " + value;
         RepoExecutor.getInstance().executeDML(sql);
+    }
+
+    public void addHistories(List<TaskRunStatus> histories) {
+        checkTableReady();
+
+        List<List<TaskRunStatus>> batches = ListUtils.partition(histories, INSERT_BATCH_SIZE);
+        for (var batch : batches) {
+            String insert = MessageFormat.format(INSERT_SQL_TEMPLATE, TABLE_FULL_NAME);
+            String values = batch.stream().map(status -> {
+                String createTime =
+                        Strings.quote(DateUtils.formatTimeStampInMill(status.getCreateTime(), ZoneId.systemDefault()));
+                String finishTime =
+                        Strings.quote(DateUtils.formatTimeStampInMill(status.getFinishTime(), ZoneId.systemDefault()));
+                String expireTime =
+                        Strings.quote(DateUtils.formatTimeStampInMill(status.getExpireTime(), ZoneId.systemDefault()));
+
+                return MessageFormat.format(INSERT_SQL_VALUE,
+                        String.valueOf(status.getTaskId()),
+                        Strings.quote(status.getStartTaskRunId()),
+                        Strings.quote(status.getTaskName()),
+                        status,
+                        finishTime,
+                        expireTime,
+                        Strings.quote(status.toJSON()));
+            }).collect(Collectors.joining(", "));
+
+            String sql = insert + values;
+            RepoExecutor.getInstance().executeDML(sql);
+        }
     }
 
     public List<TaskRunStatus> getTaskByName(String taskName) {
         final String sql = MessageFormat.format(SELECT_BY_TASK_NAME, Strings.quote(taskName));
         List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
         return TaskRunStatus.fromResultBatch(batch);
-    }
-
-    public void replayTaskRunChange(String queryId, TaskRunStatusChange change) {
-    }
-
-    public void gc() {
-        // TableBasedHistory could do the gc by itself
-    }
-
-    public void forceGC() {
-        // TODO
     }
 
     // TODO: don't return all history, which is very expensive

@@ -14,14 +14,19 @@
 
 package com.starrocks.scheduler.history;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -35,6 +40,8 @@ public class TaskRunHistory {
             Collections.synchronizedMap(Maps.newLinkedHashMap());
     private final Map<String, TaskRunStatus> taskName2Status =
             Collections.synchronizedMap(Maps.newLinkedHashMap());
+
+    private final TaskRunHistoryTable historyTable = new TaskRunHistoryTable();
 
     public void addHistory(TaskRunStatus status) {
         historyTaskRunMap.put(status.getQueryId(), status);
@@ -68,6 +75,70 @@ public class TaskRunHistory {
         return historyRunStatus;
     }
 
+    // TODO: make it thread safe
+    /**
+     * Remove expired task runs
+     */
+    public void vacuum() {
+        long currentTimeMs = System.currentTimeMillis();
+        List<String> historyToDelete = Lists.newArrayList();
+        List<TaskRunStatus> taskRunHistory = getAllHistory();
+        // only SUCCESS and FAILED in taskRunHistory
+        Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
+        while (iterator.hasNext()) {
+            TaskRunStatus taskRunStatus = iterator.next();
+            long expireTime = taskRunStatus.getExpireTime();
+            if (currentTimeMs > expireTime) {
+                historyToDelete.add(taskRunStatus.getQueryId());
+                removeTask(taskRunStatus.getQueryId());
+                iterator.remove();
+            }
+        }
+
+        // trigger to force gc to avoid too many history task runs.
+        forceGC();
+
+        // archive histories
+        archiveHistory();
+
+        LOG.info("remove run history:{}", historyToDelete);
+    }
+
+    public void replay(ArchiveTaskRunsLog log) {
+        for (String queryId : ListUtils.emptyIfNull(log.getTaskRuns())) {
+            removeTask(queryId);
+        }
+    }
+
+    private void archiveHistory() {
+        if (!Config.enable_task_archive) {
+            return;
+        }
+
+        // TODO: reserve some of histories ?
+        List<TaskRunStatus> runs = getAllHistory();
+
+        try {
+            // 1. Persist into table
+            historyTable.addHistories(runs);
+
+            // 2. Remove from memory
+            for (var run : runs) {
+                removeTask(run.getQueryId());
+            }
+
+            // 3. Write EditLog
+            List<String> queryIdList = runs.stream().map(TaskRunStatus::getQueryId).collect(Collectors.toList());
+            ArchiveTaskRunsLog log = new ArchiveTaskRunsLog(queryIdList);
+            GlobalStateMgr.getCurrentState().getEditLog().logArchiveTaskRuns(log);
+        } catch (Throwable e) {
+            LOG.warn("archive TaskRun history failed: ", e);
+        }
+    }
+
+    /**
+     * Keep only limited task runs to save memory usage
+     */
     public void forceGC() {
         List<TaskRunStatus> allHistory = getAllHistory();
         int beforeSize = allHistory.size();

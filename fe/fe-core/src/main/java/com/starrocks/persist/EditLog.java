@@ -89,6 +89,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -763,11 +764,17 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
-                case OperationType.OP_UPDATE_TASK_RUN_STATE:
+                case OperationType.OP_UPDATE_TASK_RUN_STATE: {
                     TaskRunPeriodStatusChange taskRunPeriodStatusChange = (TaskRunPeriodStatusChange) journal.getData();
                     globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
                             taskRunPeriodStatusChange.getTaskRunProgressMap());
                     break;
+                }
+                case OperationType.OP_ARCHIVE_TASK_RUNS: {
+                    ArchiveTaskRunsLog log = (ArchiveTaskRunsLog) journal.getData();
+                    globalStateMgr.getTaskManager().replayArchiveTaskRuns(log);
+                    break;
+                }
                 case OperationType.OP_CREATE_SMALL_FILE:
                 case OperationType.OP_CREATE_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
@@ -1345,6 +1352,10 @@ public class EditLog {
 
     public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+    }
+
+    public void logArchiveTaskRuns(ArchiveTaskRunsLog log) {
+        logEdit(OperationType.OP_ARCHIVE_TASK_RUNS, log);
     }
 
     public void logAlterRunningTaskRunProgress(TaskRunPeriodStatusChange info) {

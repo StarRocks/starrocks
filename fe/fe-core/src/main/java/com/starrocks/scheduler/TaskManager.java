@@ -22,17 +22,14 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -42,6 +39,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.scheduler.history.TaskRunHistory;
+import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -50,18 +48,15 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TGetTasksParams;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -573,33 +568,6 @@ public class TaskManager implements MemoryTrackable {
         return new ShowResultSet(builder.build(), result);
     }
 
-    public long loadTasks(DataInputStream dis, long checksum) throws IOException {
-        int taskCount = 0;
-        try {
-            String s = Text.readString(dis);
-            SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-            if (data != null) {
-                if (data.tasks != null) {
-                    for (Task task : data.tasks) {
-                        replayCreateTask(task);
-                    }
-                    taskCount = data.tasks.size();
-                }
-
-                if (data.runStatus != null) {
-                    for (TaskRunStatus runStatus : data.runStatus) {
-                        replayCreateTaskRun(runStatus);
-                    }
-                }
-            }
-            checksum ^= taskCount;
-            LOG.info("finished replaying TaskManager from image");
-        } catch (EOFException e) {
-            LOG.info("no TaskManager to replay.");
-        }
-        return checksum;
-    }
-
     public void loadTasksV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int size = reader.readInt();
@@ -613,24 +581,6 @@ public class TaskManager implements MemoryTrackable {
             TaskRunStatus status = reader.readJson(TaskRunStatus.class);
             replayCreateTaskRun(status);
         }
-    }
-
-    public long saveTasks(DataOutputStream dos, long checksum) throws IOException {
-        SerializeData data = new SerializeData();
-        data.tasks = new ArrayList<>(nameToTaskMap.values());
-        checksum ^= data.tasks.size();
-        data.runStatus = getMatchedTaskRunStatus(null);
-        int beforeSize = data.runStatus.size();
-        if (beforeSize >= Config.task_runs_max_history_number) {
-            taskRunManager.getTaskRunHistory().forceGC();
-            data.runStatus = getMatchedTaskRunStatus(null);
-            String s = GsonUtils.GSON.toJson(data);
-            Text.writeString(dos, s);
-        } else {
-            String s = GsonUtils.GSON.toJson(data);
-            Text.writeString(dos, s);
-        }
-        return checksum;
     }
 
     public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
@@ -877,12 +827,9 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayDropTaskRuns(List<String> queryIdList) {
-        Map<String, String> index = Maps.newHashMapWithExpectedSize(queryIdList.size());
-        for (String queryId : queryIdList) {
-            index.put(queryId, null);
+        for (String queryId : ListUtils.emptyIfNull(queryIdList)) {
+            taskRunManager.getTaskRunHistory().removeTask(queryId);
         }
-        taskRunManager.getTaskRunHistory().getAllHistory()
-                .removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
     }
 
     public void replayAlterRunningTaskRunProgress(Map<Long, Integer> taskRunProgresMap) {
@@ -894,6 +841,10 @@ public class TaskManager implements MemoryTrackable {
                 taskRun.getStatus().setProgress(entry.getValue());
             }
         }
+    }
+
+    public void replayArchiveTaskRuns(ArchiveTaskRunsLog log) {
+        taskRunManager.getTaskRunHistory().replay(log);
     }
 
     public void removeExpiredTasks() {
@@ -931,33 +882,14 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void removeExpiredTaskRuns() {
-        long currentTimeMs = System.currentTimeMillis();
-
-        List<String> historyToDelete = Lists.newArrayList();
-
         if (!taskRunManager.tryTaskRunLock()) {
             return;
         }
         try {
-            // only SUCCESS and FAILED in taskRunHistory
-            List<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
-            Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
-            while (iterator.hasNext()) {
-                TaskRunStatus taskRunStatus = iterator.next();
-                long expireTime = taskRunStatus.getExpireTime();
-                if (currentTimeMs > expireTime) {
-                    historyToDelete.add(taskRunStatus.getQueryId());
-                    taskRunManager.getTaskRunHistory().removeTask(taskRunStatus.getQueryId());
-                    iterator.remove();
-                }
-            }
-
-            // trigger to force gc to avoid too many history task runs.
-            taskRunManager.getTaskRunHistory().forceGC();
+            taskRunManager.getTaskRunHistory().vacuum();
         } finally {
             taskRunManager.taskRunUnlock();
         }
-        LOG.info("remove run history:{}", historyToDelete);
     }
 
     @Override
@@ -968,14 +900,6 @@ public class TaskManager implements MemoryTrackable {
     @Override
     public long estimateSize() {
         return SizeEstimator.estimate(idToTaskMap.values());
-    }
-
-    private static class SerializeData {
-        @SerializedName("tasks")
-        public List<Task> tasks;
-
-        @SerializedName("runStatus")
-        public List<TaskRunStatus> runStatus;
     }
 
     public boolean containTask(String taskName) {
@@ -1000,7 +924,4 @@ public class TaskManager implements MemoryTrackable {
         return nameToTaskMap.get(taskName);
     }
 
-    public long getTaskCount() {
-        return this.idToTaskMap.size();
-    }
 }

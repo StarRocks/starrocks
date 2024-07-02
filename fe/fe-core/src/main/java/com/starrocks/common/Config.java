@@ -346,12 +346,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
-    /**
-     * For Task framework do some background operation like cleanup Task/TaskRun.
-     * It will run every *task_check_interval_second* to do background job.
-     */
-    @ConfField
-    public static int task_check_interval_second = 1 * 3600; // 1 hour
+    @ConfField(mutable = true, comment = "Internal of task background jobs")
+    public static int task_check_interval_second = 60; // 1 minute
 
     /**
      * for task set expire time
@@ -373,6 +369,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
     public static int task_min_schedule_interval_s = 10;
+
+    @ConfField(mutable = true, comment = "Whether enable the task archive functionality")
+    public static boolean enable_task_archive = true;
 
     /**
      * The max keep time of some kind of jobs.

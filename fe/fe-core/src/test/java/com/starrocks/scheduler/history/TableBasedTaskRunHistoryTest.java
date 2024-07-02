@@ -79,7 +79,7 @@ class TableBasedTaskRunHistoryTest {
         TaskRunStatus status = new TaskRunStatus();
         status.setStartTaskRunId("aaa");
         status.setTaskName("t1");
-        history.addHistory(status, false);
+        history.addHistory(status);
 
         // getTaskByName
         new Expectations() {
