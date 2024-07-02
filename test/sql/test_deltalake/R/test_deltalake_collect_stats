@@ -22,39 +22,39 @@ function: assert_explain_costs_contains('select col_tinyint from delta_test_${uu
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_smallint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_smallint-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_smallint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_smallint-->[-Infinity, Infinity, 0.0, 2.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_int from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_int-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_int from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_int-->[-Infinity, Infinity, 0.0, 4.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_long from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_long-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_long from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_long-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_float from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_float-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_float from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_float-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_double from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_double-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_double from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_double-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_date from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_date-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_date from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_date-->[-Infinity, Infinity, 0.0, 4.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_timestamp-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_timestamp-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_string from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_string-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_string from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_string-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_decimal from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_decimal-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_decimal from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_decimal-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
@@ -66,23 +66,23 @@ function: assert_explain_costs_contains('select col_byte from delta_test_${uuid0
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_array from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_array-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_array from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_array-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_binary from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_binary-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_binary from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_binary-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_map from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_map-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_map from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_map-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_struct-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_struct-->[-Infinity, Infinity, 0.0, 36.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz', 'col_timestamp_ntz-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz', 'col_timestamp_ntz-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
@@ -93,71 +93,71 @@ function: assert_explain_costs_contains('select col_tinyint from delta_test_${uu
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_tinyint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_tinyint-->[1.0, 6.0, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_tinyint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_tinyint-->[1.0, 6.0, 0.0, 1.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_smallint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_smallint-->[100.0, 600.0, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_smallint from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_smallint-->[100.0, 600.0, 0.0, 2.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_int from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_int-->[1000.0, 6000.0, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_int from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_int-->[1000.0, 6000.0, 0.0, 4.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_long from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_long-->[10000.0, 60000.0, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_long from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_long-->[10000.0, 60000.0, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_float from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_float-->[3.14, 18.84, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_float from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_float-->[3.14, 18.84, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_double from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_double-->[3.14159, 18.84956, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_double from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_double-->[3.14159, 18.84956, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_date from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_date-->[1.7139168E9, 1.7143488E9, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_date from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_date-->[1.7139168E9, 1.7143488E9, 0.0, 4.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_timestamp-->[1.7139312E9, 1.7143632E9, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_timestamp from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_timestamp-->[1.7139312E9, 1.7143632E9, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_string from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_string-->[-Infinity, Infinity, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_string from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_string-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_decimal from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_decimal-->[-Infinity, Infinity, NaN, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_decimal from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_decimal-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_boolean from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_boolean-->[-Infinity, Infinity, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_boolean from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_boolean-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_byte from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_byte-->[1.0, 6.0, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_byte from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_byte-->[1.0, 6.0, 0.0, 1.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_array from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_array-->[-Infinity, Infinity, NaN, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_array from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_array-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_binary from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_binary-->[-Infinity, Infinity, 0.0, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_binary from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_binary-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_map from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_map-->[-Infinity, Infinity, NaN, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_map from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_map-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_struct-->[-Infinity, Infinity, NaN, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_struct from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_struct-->[-Infinity, Infinity, 0.0, 36.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz', 'col_timestamp_ntz-->[1.704157323E9, 1.704427506E9, 0.2, NaN, NaN] UNKNOWN')
+function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz', 'col_timestamp_ntz-->[1.704157323E9, 1.704427506E9, 0.2, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
