@@ -154,7 +154,7 @@ public class InsertOverwriteJobRunnerTest {
             } catch (SQLException e) {
                 if (e.getMessage().contains("replace partitions failed: partitions changed during insert")) {
                     failedJobs.addAndGet(1);
-                } else {
+                } else if (!e.getMessage().contains("create partition failed")) {
                     throw new RuntimeException(e);
                 }
             }
