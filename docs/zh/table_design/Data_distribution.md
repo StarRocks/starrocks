@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: "Chinese"
 keywords: ['fenqu','fentong', 'lengre']
+<<<<<<< HEAD
+=======
+toc_max_heading_level: 4
+description: 分区与分桶
+>>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
 ---
 
 # 数据分布
