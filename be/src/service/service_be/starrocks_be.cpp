@@ -118,8 +118,8 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
             // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
             // and then automatically adjusted based on the current avalible disk space.
             if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
-                std::string percent = fmt::format("{}%", config::starlet_star_cache_disk_size_percent);
-                int64_t starlet_cache_size = DataCacheUtils::parse_conf_datacache_disk_size(datacache_path, percent, -1);
+                int64_t starlet_cache_size = DataCacheUtils::parse_conf_datacache_disk_size(
+                        datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1);
                 disk_size = std::max(disk_size, starlet_cache_size);
             }
 #endif
@@ -148,6 +148,7 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
         cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
         cache_options.engine = config::datacache_engine;
+        cache_options.eviction_policy = config::datacache_eviction_policy;
         return cache->init(cache_options);
     }
     return Status::OK();

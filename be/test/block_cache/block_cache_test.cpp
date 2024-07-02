@@ -139,6 +139,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     options.max_concurrent_inserts = 100000;
     options.max_flying_memory_mb = 100;
     options.engine = "starcache";
+    options.inline_item_count_limit = 1000;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 

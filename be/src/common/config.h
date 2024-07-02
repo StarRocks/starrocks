@@ -1201,6 +1201,10 @@ CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
 CONF_Int32(datacache_inline_item_count_limit, "130172");
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
+// The eviction policy for datacache, alternatives: [lru, slru].
+// * lru: the typical `Least Recently Used` eviction policy.
+// * slru: segment lru eviction policies, which can better reduce cache pollution problem.
+CONF_String(datacache_eviction_policy, "slru");
 
 // The following configurations will be deprecated, and we use the `datacache` prefix instead.
 // But it is temporarily necessary to keep them for a period of time to be compatible with

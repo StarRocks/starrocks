@@ -109,7 +109,7 @@ private:
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
-void init_staros_worker(std::shared_ptr<starcache::StarCache> star_cache);
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
 void shutdown_staros_worker();
 void update_staros_starcache();
 

@@ -28,6 +28,8 @@ public:
         set_enable_async_populate_mode(false);
         set_enable_cache_io_adaptor(false);
         set_enable_block_buffer(false);
+        // Set a high frequecy for cache item that will be populated by cache select.
+        set_frequency(1);
     }
 
     ~CacheSelectInputStream() override = default;

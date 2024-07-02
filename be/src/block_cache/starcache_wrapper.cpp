@@ -46,6 +46,12 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
         opt.durability_type = starcache::DurabilityType::ROCKSDB;
     }
     opt.instance_name = "default_cache";
+
+    if (options.eviction_policy == "slru") {
+        opt.lru_segment_ratios = {35, 65};
+    }
+    opt.lru_segment_freq_bits = 0;
+
     _enable_tiered_cache = options.enable_tiered_cache;
     _enable_datacache_persistence = options.enable_datacache_persistence;
     _cache = std::make_unique<starcache::StarCache>();
