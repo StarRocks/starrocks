@@ -108,10 +108,10 @@ public class DeltaLakeFileStats {
         Type colType = col.getType();
 
         // set default value
-        builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
+        builder.setNullsFraction(0);
         builder.setAverageRowSize(colType.getTypeSize());
         builder.setDistinctValuesCount(1);
-        builder.setNullsFraction(0);
+        builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
 
         if (schema == null) {
             return builder.build();
