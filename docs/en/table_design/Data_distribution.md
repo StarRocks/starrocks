@@ -1,10 +1,7 @@
 ---
 displayed_sidebar: "English"
-<<<<<<< HEAD
-=======
 toc_max_heading_level: 4
 description: Partition and bucket data
->>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
 ---
 
 # Data distribution
@@ -204,11 +201,7 @@ You only need to configure a partition expression (a time function expression or
 
 #### Range partitioning
 
-<<<<<<< HEAD
-Range partitioning is suitable for storing simple, contiguous data, such as time series data (dates or timestamps), or continuous numerical data. And you frequently query and manage data based on continuous date/numerical ranges. Also, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
-=======
 Range partitioning is suitable for storing simple contiguous data, such as time series data, or continuous numerical data. Range partitioning is appropriate for frequently queried data based on continuous date/numerical ranges. Additionally, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
->>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
 
 StarRocks stores data in the corresponding partitions based on the explicit mapping of the explicitly defined range for each partition.
 
