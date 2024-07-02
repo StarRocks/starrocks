@@ -119,7 +119,12 @@ public class DeltaStatisticProvider {
     }
 
     public Map<ColumnRefOperator, ColumnStatistic> buildUnknownColumnStatistics(Set<ColumnRefOperator> columns) {
-        return columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown()));
+        return columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.builder()
+                .setNullsFraction(0)
+                .setAverageRowSize(column.getType().getTypeSize())
+                .setDistinctValuesCount(1)
+                .setType(ColumnStatistic.StatisticType.UNKNOWN)
+                .build()));
     }
 
     private Map<ColumnRefOperator, ColumnStatistic> buildColumnStatistics(
