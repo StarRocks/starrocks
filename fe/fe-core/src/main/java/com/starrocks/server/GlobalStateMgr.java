@@ -62,10 +62,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveView;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
@@ -2297,6 +2294,11 @@ public class GlobalStateMgr {
         return task;
     }
 
+    private boolean supportRefreshTableType(Table table) {
+        return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
+                || table.isJDBCTable() || table.isDeltalakeTable();
+    }
+
     public void refreshExternalTable(TableName tableName, List<String> partitions) {
         String catalogName = tableName.getCatalog();
         String dbName = tableName.getDb();
@@ -2311,10 +2313,14 @@ public class GlobalStateMgr {
         locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)
-                    && !(table instanceof IcebergTable) && !(table instanceof JDBCTable)) {
-                throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps/jdbc external table/view");
+            if (table == null) {
+                throw new StarRocksConnectorException("table %s.%s.%s not exists", catalogName, dbName,
+                        tblName);
+            }
+            if (!supportRefreshTableType(table)) {
+                throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
+                                "do not support refresh external table which type is %s", catalogName, dbName,
+                        tblName, table.getType());
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);
