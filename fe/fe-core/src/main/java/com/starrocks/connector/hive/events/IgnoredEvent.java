@@ -16,7 +16,7 @@
 package com.starrocks.connector.hive.events;
 
 import com.google.common.collect.Lists;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 
 import java.util.List;
@@ -25,12 +25,12 @@ import java.util.List;
  * An event type which is ignored. Useful for unsupported metastore event types
  */
 public class IgnoredEvent extends MetastoreEvent {
-    protected IgnoredEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+    protected IgnoredEvent(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         super(event, cacheProcessor, catalogName);
     }
 
     private static List<MetastoreEvent> getEvents(NotificationEvent event,
-                                                  CacheUpdateProcessor cacheProcessor, String catalogName) {
+                                                  HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         return Lists.newArrayList(new IgnoredEvent(event, cacheProcessor, catalogName));
     }
 

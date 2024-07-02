@@ -15,17 +15,37 @@
 
 package com.starrocks.connector.delta;
 
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.CacheUpdateProcessor;
+import com.starrocks.connector.DatabaseTableName;
 
-public class DeltaLakeCacheUpdateProcessor {
-    private final String catalogName;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+
+public class DeltaLakeCacheUpdateProcessor implements CacheUpdateProcessor {
     private final CachingDeltaLakeMetastore cachingMetastore;
-    public DeltaLakeCacheUpdateProcessor(String catalogName, CachingDeltaLakeMetastore cachingMetastore) {
-        this.catalogName = catalogName;
+    public DeltaLakeCacheUpdateProcessor(CachingDeltaLakeMetastore cachingMetastore) {
         this.cachingMetastore = cachingMetastore;
     }
 
     public void refreshTable(String dbName, Table table, boolean onlyCachedPartitions) {
         cachingMetastore.refreshTable(dbName, table.getName(), onlyCachedPartitions);
     }
+
+    @Override
+    public Set<DatabaseTableName> getCachedTableNames() {
+        return cachingMetastore.getCachedTableNames();
+    }
+
+    @Override
+    public void refreshTableBackground(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
+        DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+        cachingMetastore.refreshTableBackground(deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+    }
+
+    public void invalidateAll() {
+        cachingMetastore.invalidateAll();
+    }
+
 }

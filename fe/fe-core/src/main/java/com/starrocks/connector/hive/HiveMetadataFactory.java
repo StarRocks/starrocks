@@ -84,15 +84,15 @@ public class HiveMetadataFactory {
                 hdfsEnvironment.getConfiguration());
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
 
-        Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new HiveMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations, remoteFileOperations,
                 statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor);
     }
 
-    public synchronized Optional<CacheUpdateProcessor> getCacheUpdateProcessor() {
-        Optional<CacheUpdateProcessor> cacheUpdateProcessor;
+    public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {
+        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
-            cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(
+            cacheUpdateProcessor = Optional.of(new HiveCacheUpdateProcessor(
                     catalogName, metastore, remoteFileIO, pullRemoteFileExecutor,
                     isRecursive, enableHmsEventsIncrementalSync));
         } else {
