@@ -393,7 +393,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             long commitVersion = commitVersionMap.get(partitionId);
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
-            partition.updateVisibleVersion(commitVersion);
+            partition.updateVisibleVersion(commitVersion, finishedTimeMs);
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
                     jobId, partition.getId(), commitVersion);
