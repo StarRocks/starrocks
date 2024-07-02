@@ -462,12 +462,12 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS || olapTable.getKeysType() == KeysType.UNIQUE_KEYS) {
                 List<String> keyColumnNames =
-                        olapTable.getKeyColumns().stream().map(column -> column.getName()).collect(Collectors.toList());
+                        olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
                 return columnNames.containsAll(keyColumnNames);
             }
         }
         return table.hasUniqueConstraints() && table.getUniqueConstraints().stream().anyMatch(
-                uniqueConstraint -> columnNames.containsAll(uniqueConstraint.getUniqueColumns()));
+                uniqueConstraint -> columnNames.containsAll(uniqueConstraint.getUniqueColumnNames()));
     }
 
     private boolean isSupportedPredicate(
@@ -977,7 +977,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 if (mvParentTableScanDescs == null || mvParentTableScanDescs.isEmpty()) {
                     continue;
                 }
-                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
+                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnNameRefPairs(mvTableScanDesc.getTable());
                 List<String> childKeys = columnPairs.stream().map(pair -> pair.first)
                         .map(String::toLowerCase).collect(Collectors.toList());
                 List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)
@@ -1055,7 +1055,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         for (ForeignKeyConstraint foreignKeyConstraint : materializedView.getForeignKeyConstraints()) {
             if (foreignKeyConstraint.getChildTableInfo() != null &&
                     MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo()).equals(childTable)) {
-                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
+                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnNameRefPairs(materializedView);
                 Set<String> mvChildKeySet = columnPairs.stream().map(pair -> pair.first)
                         .map(String::toLowerCase).collect(Collectors.toSet());
                 if (childKeySet.equals(mvChildKeySet)) {

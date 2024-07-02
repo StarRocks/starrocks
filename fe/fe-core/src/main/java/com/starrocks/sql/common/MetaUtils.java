@@ -356,7 +356,8 @@ public class MetaUtils {
         for (String name : names) {
             Column column = table.getColumn(name);
             if (column == null) {
-                throw new SemanticException(String.format("can not find column by name: %s", name));
+                throw new SemanticException(String.format("can not find column by name: %s, from table: %s",
+                        name, table.getName()));
             }
             columnIds.add(column.getColumnId());
         }
