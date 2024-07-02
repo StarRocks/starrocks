@@ -38,6 +38,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,9 +76,9 @@ public class DeltaLakeFileStats {
             this.corruptedStats = null;
             this.hasValidColumnMetrics = false;
         } else {
-            this.minValues = fileStat.minValues;
-            this.maxValues = fileStat.maxValues;
-            this.nullCounts = fileStat.nullCount;
+            this.minValues = new HashMap<>(fileStat.minValues);
+            this.maxValues = new HashMap<>(fileStat.maxValues);
+            this.nullCounts = new HashMap<>(fileStat.nullCount);
             this.corruptedStats = nonPartitionPrimitiveColumns.stream()
                     .filter(col -> !minValues.containsKey(col) &&
                             (!nullCounts.containsKey(col) || ((Double) nullCounts.get(col)).longValue() != recordCount))
