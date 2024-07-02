@@ -29,4 +29,32 @@ public class TaskTest {
         Assert.assertEquals(Constants.TaskState.UNKNOWN, task.getState());
         Assert.assertEquals(Constants.TaskType.MANUAL, task.getType());
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testTaskRunState() {
+        Assert.assertFalse(Constants.TaskRunState.PENDING.isFinishState());
+        Assert.assertFalse(Constants.TaskRunState.RUNNING.isFinishState());
+        Assert.assertTrue(Constants.TaskRunState.FAILED.isFinishState());
+        Assert.assertTrue(Constants.TaskRunState.SUCCESS.isFinishState());
+    }
+
+    @Test
+    public void testConstantTaskState() {
+        // whether it's a finished state
+        Assert.assertEquals(true, Constants.TaskRunState.FAILED.isFinishState());
+        Assert.assertEquals(true, Constants.TaskRunState.MERGED.isFinishState());
+        Assert.assertEquals(true, Constants.TaskRunState.SUCCESS.isFinishState());
+        Assert.assertEquals(false, Constants.TaskRunState.PENDING.isFinishState());
+        Assert.assertEquals(false, Constants.TaskRunState.RUNNING.isFinishState());
+        // whether it's a success state
+        Assert.assertEquals(false, Constants.TaskRunState.FAILED.isSuccessState());
+        Assert.assertEquals(true, Constants.TaskRunState.MERGED.isSuccessState());
+        Assert.assertEquals(true, Constants.TaskRunState.SUCCESS.isSuccessState());
+        Assert.assertEquals(false, Constants.TaskRunState.PENDING.isSuccessState());
+        Assert.assertEquals(false, Constants.TaskRunState.RUNNING.isSuccessState());
+    }
+}
+>>>>>>> 6264a16d05 ([BugFix] Fix replaying task run bug (#47738))
