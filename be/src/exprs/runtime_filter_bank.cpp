@@ -117,13 +117,12 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntim
 
 size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column) {
     size_t size = RF_VERSION_SZ;
-    size += (sizeof(bool) + sizeof(size_t) + sizeof(bool) + sizeof(bool) + sizeof(TTypeDesc));
+    size += (sizeof(bool) + sizeof(size_t) + sizeof(bool) + sizeof(bool));
     size += serde::ColumnArraySerde::max_serialized_size(*column);
     return size;
 }
 
 size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_boradcast_join(const ColumnPtr& column, bool eq_null,
-                                                                             const TTypeDesc& type_desc,
                                                                              uint8_t* data) {
     size_t offset = 0;
 #define JRF_COPY_FIELD(field)                     \
@@ -138,7 +137,6 @@ size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_boradcast_join(con
     JRF_COPY_FIELD(is_nullable)
     bool is_const = column->is_constant();
     JRF_COPY_FIELD(is_const);
-    JRF_COPY_FIELD(type_desc);
 
     uint8_t* cur = data + offset;
     cur = serde::ColumnArraySerde::serialize(*column, cur);
@@ -150,7 +148,8 @@ size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_boradcast_join(con
 // |version|eq_null|num_rows|is_null|is_const|type|column_data|
 int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_boradcast_join(ObjectPool* pool,
                                                                             SkewBroadcastRfMaterial** material,
-                                                                            const uint8_t* data, size_t size) {
+                                                                            const uint8_t* data, size_t size,
+                                                                            const PTypeDesc& ptype) {
     *material = nullptr;
     SkewBroadcastRfMaterial* rf_material = pool->add(new SkewBroadcastRfMaterial());
     size_t offset = 0;
@@ -181,12 +180,9 @@ int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_boradcast_join(Obje
     bool is_const;
     JRF_COPY_FIELD(is_const);
 
-    TypeDescriptor t;
-    TTypeDesc t_type_desc;
-    JRF_COPY_FIELD(t_type_desc);
-    t.from_thrift(t_type_desc);
+    TypeDescriptor type_descriptor = TypeDescriptor::from_protobuf(ptype);
 
-    auto columnPtr = ColumnHelper::create_column(t, is_null, is_const, num_rows);
+    auto columnPtr = ColumnHelper::create_column(type_descriptor, is_null, is_const, num_rows);
 
     const uint8_t* cur = data + offset;
     cur = serde::ColumnArraySerde::deserialize(cur, columnPtr.get());
@@ -194,7 +190,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_boradcast_join(Obje
 
     DCHECK(offset == size);
 
-    rf_material->build_type = t.type;
+    rf_material->build_type = type_descriptor.type;
     rf_material->eq_null = eq_null;
     rf_material->key_column = columnPtr;
 

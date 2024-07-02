@@ -49,7 +49,7 @@ public:
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
     bool can_generate_global_runtime_filter() const;
     TJoinDistributionMode::type distribution_mode() const;
-    const std::list<RuntimeFilterBuildDescriptor*>& build_runtime_filters() const;
+    const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters() const;
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
 
 private:

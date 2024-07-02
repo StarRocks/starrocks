@@ -104,10 +104,11 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     // for skew join's boradcast site, we need key column for runtime filter
     std::vector<ColumnPtr> keyColumns;
     std::vector<bool> null_safe;
-    std::vector<TTypeDesc> type_descs;
+    std::vector<TypeDescriptor> type_descs;
     if (_join_builder->is_skew_join() && _distribution_mode == TJoinDistributionMode::BROADCAST) {
         keyColumns.reserve(partial_bloom_filter_build_params.size());
         null_safe.reserve(partial_bloom_filter_build_params.size());
+        type_descs.reserve(partial_bloom_filter_build_params.size());
         for (auto& param : partial_bloom_filter_build_params) {
             if (UNLIKELY(!param.has_value())) {
                 return Status::InternalError("skew join build rf failed");
@@ -174,7 +175,8 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
             }
 
             // publish runtime bloom
-            state->runtime_filter_port()->publish_runtime_filters(bloom_filters, std::cref(keyColumns));
+            state->runtime_filter_port()->publish_runtime_filters(bloom_filters, std::cref(keyColumns),
+                                                                  std::cref(null_safe), std::cref(type_descs));
             // move runtime filters into RuntimeFilterHub.
             runtime_filter_hub()->set_collector(_plan_node_id,
                                                 std::make_unique<RuntimeFilterCollector>(std::move(in_filters)));

@@ -20,6 +20,7 @@
 
 #include "column/bytes.h"
 #include "common/config.h"
+#include "exec/hash_join_node.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -114,7 +115,7 @@ void RuntimeFilterPort::publish_runtime_filters(
         const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
         std::optional<std::reference_wrapper<const std::vector<ColumnPtr>>> keyColumns,
         std::optional<std::reference_wrapper<const std::vector<bool>>> null_safe,
-        std::optional<std::reference_wrapper<const std::vector<TTypeDesc>>> type_descs) {
+        std::optional<std::reference_wrapper<const std::vector<TypeDescriptor>>> type_descs) {
     RuntimeState* state = _state;
     for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
@@ -141,8 +142,9 @@ void RuntimeFilterPort::publish_runtime_filters(
             DCHECK(type_descs.has_value());
             auto& keyColumnsValue = keyColumns.value().get()[i];
             bool eq_null = null_safe.value().get()[i];
-            const TTypeDesc& type_desc = type_descs.value().get()[i];
+            const TypeDescriptor& type_desc = type_descs.value().get()[i];
             publish_skew_boradcast_runtime_filters(rf_desc, keyColumnsValue, eq_null, type_desc);
+            continue;
         }
 
         if (filter == nullptr || !rf_desc->has_remote_targets()) continue;
@@ -201,7 +203,7 @@ void RuntimeFilterPort::publish_runtime_filters(
 
 void RuntimeFilterPort::publish_skew_boradcast_runtime_filters(RuntimeFilterBuildDescriptor* rf_desc,
                                                                const ColumnPtr& keyColumn, bool null_safe,
-                                                               const TTypeDesc& type_desc) {
+                                                               const TypeDescriptor& type_desc) {
     DCHECK(rf_desc->has_remote_targets());
     DCHECK(rf_desc->join_mode() == TRuntimeFilterBuildJoinMode::BORADCAST);
     DCHECK(!rf_desc->merge_nodes().empty());
@@ -225,8 +227,9 @@ void RuntimeFilterPort::publish_skew_boradcast_runtime_filters(RuntimeFilterBuil
     size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(keyColumn);
     rf_data->resize(max_size);
     size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter_for_skew_boradcast_join(
-            keyColumn, null_safe, type_desc, reinterpret_cast<uint8_t*>(rf_data->data()));
+            keyColumn, null_safe, reinterpret_cast<uint8_t*>(rf_data->data()));
     rf_data->resize(actual_size);
+    *(params.mutable_columntype()) = type_desc.to_protobuf();
     int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
 
     int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
@@ -294,9 +297,9 @@ void RuntimeFilterMergerStatus::_merge_skew_broadcast_runtime_filter(JoinRuntime
     DCHECK(skew_broadcast_rf_material->key_column != nullptr);
     // add boradcast's hash table's key column into out's _hash_partition_bf's every element(Instance and driver side)
     // because we can't know which element should be used when insert one row(need partition columns and partition exprs)
-    RuntimeFilterHelper::fill_runtime_bloom_filter(skew_broadcast_rf_material->key_column,
-                                                   skew_broadcast_rf_material->build_type, out, 0,
-                                                   skew_broadcast_rf_material->eq_null, false);
+    RuntimeFilterHelper::fill_runtime_bloom_filter(
+            skew_broadcast_rf_material->key_column, skew_broadcast_rf_material->build_type, out,
+            kHashJoinKeyColumnOffset, skew_broadcast_rf_material->eq_null, false);
 }
 
 RuntimeFilterMerger::RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options,
@@ -447,7 +450,7 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
     status->skew_broadcast_rf_material = nullptr;
     int rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_boradcast_join(
             &(status->pool), &(status->skew_broadcast_rf_material),
-            reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size());
+            reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size(), params.columntype());
 
     if (status->skew_broadcast_rf_material == nullptr) {
         // something wrong with deserialization.
@@ -746,7 +749,7 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
                      << ", filter_id = " << params.filter_id();
         return;
     }
-    _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_PART_RF"});
+    _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", EventTypeToString(type)});
     RuntimeFilterWorkerEvent ev;
     ev.type = type;
     ev.transmit_timeout_ms = timeout_ms;
@@ -1062,7 +1065,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
 
 void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                                        PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
-                                                       int64_t rpc_http_min_size) {
+                                                       int64_t rpc_http_min_size, std::string msg) {
     RuntimeFilterRpcClosures rpc_closures;
     rpc_closures.reserve(transmit_addrs.size());
     BatchClosuresJoinAndClean join_and_clean(rpc_closures);
@@ -1142,10 +1145,16 @@ void RuntimeFilterWorker::execute() {
             merger.store_skew_broadcast_join_runtime_filter(ev.transmit_rf_request);
             break;
         }
+        case SEND_SKEW_JOIN_BROADCAST_RF:
+            _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
+            _deliver_part_runtime_filter(std::move(ev.transmit_addrs), std::move(ev.transmit_rf_request),
+                                         ev.transmit_timeout_ms, ev.transmit_via_http_min_size,
+                                         "SEND_SKEW_BROADCAST_RF_RPC");
+            break;
         case SEND_PART_RF: {
             _metrics->update_rf_bytes(ev.type, -ev.transmit_rf_request.data().size());
             _deliver_part_runtime_filter(std::move(ev.transmit_addrs), std::move(ev.transmit_rf_request),
-                                         ev.transmit_timeout_ms, ev.transmit_via_http_min_size);
+                                         ev.transmit_timeout_ms, ev.transmit_via_http_min_size, "SEND_PART_RF_RPC");
             break;
         }
         case SEND_BROADCAST_GRF: {

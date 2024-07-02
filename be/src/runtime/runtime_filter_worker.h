@@ -57,7 +57,7 @@ public:
             const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
             std::optional<std::reference_wrapper<const std::vector<ColumnPtr>>> keyColumns = std::nullopt,
             std::optional<std::reference_wrapper<const std::vector<bool>>> null_safe = std::nullopt,
-            std::optional<std::reference_wrapper<const std::vector<TTypeDesc>>> type_descs = std::nullopt);
+            std::optional<std::reference_wrapper<const std::vector<TypeDescriptor>>> type_descs = std::nullopt);
     void publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
     // receiver runtime filter allocated in this fragment instance(broadcast join generate it)
     // or allocated in this query(shuffle join generate global runtime filter)
@@ -67,7 +67,7 @@ public:
 
 private:
     void publish_skew_boradcast_runtime_filters(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
-                                                bool null_safe, const TTypeDesc& type_desc);
+                                                bool null_safe, const TypeDescriptor& type_desc);
     void static prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
                                RuntimeFilterBuildDescriptor* rf_desc);
     std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _listeners;
@@ -164,6 +164,8 @@ inline std::string EventTypeToString(EventType type) {
         return "OPEN_QUERY";
     case RECEIVE_PART_RF:
         return "RECEIVE_PART_RF";
+    case SEND_SKEW_JOIN_BROADCAST_RF:
+        return "SEND_SKEW_JOIN_BROADCAST_RF";
     case SEND_PART_RF:
         return "SEND_PART_RF";
     case SEND_BROADCAST_GRF:
@@ -241,7 +243,7 @@ private:
 
     void _deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
-                                      int64_t rpc_http_min_size);
+                                      int64_t rpc_http_min_size, std::string msg);
 
     bool _reach_queue_limit();
 

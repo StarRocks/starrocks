@@ -537,12 +537,14 @@ public:
     }
 
     void insert(const CppType& value, bool insert_into_bf = true) {
-        if (LIKELY(_bf.can_use())) {
-            size_t hash = compute_hash(value);
-            if (insert_into_bf) {
+        size_t hash = compute_hash(value);
+        if (insert_into_bf) {
+            if (LIKELY(_bf.can_use())) {
                 _bf.insert_hash(hash);
-            } else {
-                for (auto& partition_bf : _hash_partition_bf) {
+            }
+        } else {
+            for (auto& partition_bf : _hash_partition_bf) {
+                if (LIKELY(partition_bf.can_use())) {
                     partition_bf.insert_hash(hash);
                 }
             }
