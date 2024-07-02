@@ -96,6 +96,9 @@ public class SelectHintTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "functions: [, ntile(1), ]");
 
+        sql = "select /*+ set_user_variable(@a = 1, @b = 10) */ percentile_approx(v1, @a) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx(CAST(1: v1 AS DOUBLE), 1.0)");
 
         Exception exception = Assert.assertThrows(SemanticException.class, () -> {
             String invalidSql = "select /*+ set_user_variable(@a = 1, @b = 1000000) */ APPROX_TOP_K(v1, @a), " +
@@ -110,5 +113,11 @@ public class SelectHintTest extends PlanTestBase {
             getFragmentPlan(invalidSql);
         });
         assertContains(exception.getMessage(), "The offset parameter of LEAD/LAG must be a constant positive integer");
+
+        exception = Assert.assertThrows(SemanticException.class, () -> {
+            String invalidSql = "select /*+ set_user_variable(@a = 1, @b = 10) */ percentile_approx(@a, @b) from t0";
+            getFragmentPlan(invalidSql);
+        });
+        assertContains(exception.getMessage(), " percentile_approx second parameter'value must be between 0 and 1");
     }
 }
