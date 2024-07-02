@@ -2334,8 +2334,13 @@ public class StmtExecutor {
             return;
         }
         String sql;
+<<<<<<< HEAD
         if (parsedStmt.needAuditEncryption()) {
             sql = AstToSQLBuilder.toSQL(parsedStmt);
+=======
+        if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
+>>>>>>> 2b226bb4a3 ([BugFix] Fix ast to sql exception when writing audit log (#47700))
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
