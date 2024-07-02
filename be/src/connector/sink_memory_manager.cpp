@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "connector/sink_memory_manager.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 
@@ -66,6 +67,7 @@ int64_t SinkOperatorMemoryManager::update_writer_occupied_memory() {
 
 SinkMemoryManager::SinkMemoryManager(MemTracker* query_pool_tracker, MemTracker* query_tracker)
         : _query_pool_tracker(query_pool_tracker), _query_tracker(query_tracker) {
+    _process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
     _high_watermark_ratio = config::connector_sink_mem_high_watermark_ratio;
     _low_watermark_ratio = config::connector_sink_mem_low_watermark_ratio;
     _urgent_space_ratio = config::connector_sink_mem_urgent_space_ratio;
@@ -79,6 +81,9 @@ SinkOperatorMemoryManager* SinkMemoryManager::create_child_manager() {
 }
 
 bool SinkMemoryManager::can_accept_more_input(SinkOperatorMemoryManager* child_manager) {
+    if (!_apply_on_mem_tracker(child_manager, _process_tracker)) {
+        return false;
+    }
     if (!_apply_on_mem_tracker(child_manager, _query_pool_tracker)) {
         return false;
     }

@@ -74,6 +74,7 @@ private:
     double _high_watermark_ratio = 0;
     double _low_watermark_ratio = 0;
     double _urgent_space_ratio = 0;
+    MemTracker* _process_tracker = nullptr;
     MemTracker* _query_pool_tracker = nullptr;
     MemTracker* _query_tracker = nullptr;
     std::vector<std::unique_ptr<SinkOperatorMemoryManager>> _children;
