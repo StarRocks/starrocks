@@ -759,12 +759,8 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
-
-        if (status.getState() == Constants.TaskRunState.SUCCESS ||
-                status.getState() == Constants.TaskRunState.FAILED) {
-            if (System.currentTimeMillis() > status.getExpireTime()) {
-                return;
-            }
+        if (status.getState().isFinishState() && System.currentTimeMillis() > status.getExpireTime()) {
+            return;
         }
         LOG.debug("replayCreateTaskRun:" + status);
 
@@ -843,6 +839,9 @@ public class TaskManager implements MemoryTrackable {
                 status.setProgress(100);
                 status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
+            } else {
+                LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
+                        statusChange.getQueryId(), fromStatus, toStatus);
             }
         } else if (fromStatus == Constants.TaskRunState.RUNNING &&
                 (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
