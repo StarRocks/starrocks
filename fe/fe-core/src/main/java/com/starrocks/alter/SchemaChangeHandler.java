@@ -1897,11 +1897,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
-
-                // NOTE
-                // Here is already hold the write lock of database (AlterJobMgr::processAlterTable)
-                // So there is no need to lock db again.    
-                int id = olapTable.incAndGetMaxColUniqueId();
+  
+                int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
                 if (RunMode.isSharedDataMode()) {

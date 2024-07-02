@@ -233,7 +233,7 @@ public class OlapTable extends Table {
     protected TableProperty tableProperty;
 
     @SerializedName(value = "maxColUniqueId")
-    protected int maxColUniqueId = -1;
+    protected AtomicInteger maxColUniqueId = new AtomicInteger(-1);
 
     // We can utilize a monotonically increasing IndexId,
     // which is based on the OlapTable, to uniquely identify an index. When adding a multi-column index,
@@ -447,16 +447,15 @@ public class OlapTable extends Table {
     }
 
     public int incAndGetMaxColUniqueId() {
-        this.maxColUniqueId++;
-        return this.maxColUniqueId;
+        return this.maxColUniqueId.incrementAndGet();
     }
 
     public int getMaxColUniqueId() {
-        return this.maxColUniqueId;
+        return this.maxColUniqueId.get();
     }
 
     public void setMaxColUniqueId(int maxColUniqueId) {
-        this.maxColUniqueId = maxColUniqueId;
+        this.maxColUniqueId.set(maxColUniqueId);
     }
 
     public synchronized long incAndGetMaxIndexId() {
