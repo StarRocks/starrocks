@@ -126,7 +126,7 @@ SHOW ALTER TABLE COLUMN [FROM db_name];
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
 ```
 
-:::NOTE
+:::note
 
 创建 Bitmap 索引为异步过程，使用如上语句只能查看到已经创建完成的索引。
 

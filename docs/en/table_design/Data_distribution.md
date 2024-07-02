@@ -1,5 +1,10 @@
 ---
 displayed_sidebar: "English"
+<<<<<<< HEAD
+=======
+toc_max_heading_level: 4
+description: Partition and bucket data
+>>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
 ---
 
 # Data distribution
@@ -9,7 +14,11 @@ Configuring appropriate partitioning and bucketing at table creation can help to
 > **NOTE**
 >
 > - Since v3.1, you do not need to specify the bucketing key in the DISTRIBUTED BY clause when creating a table or adding a partition. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
+<<<<<<< HEAD
 > - Since v2.5.7, you can choose not to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
+=======
+> - Since v2.5.7, you can choose not to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets, and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#set-the-number-of-buckets).
+>>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
 
 ## Distribution methods
 
@@ -187,15 +196,23 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 
 > **NOTICE**
 >
+<<<<<<< HEAD
 > Since v3.1,  StarRocks's [shared-data mode](../deployment/shared_data/s3.md) supports the time function expression and does not support the column expression.
+=======
+> Since v3.1, StarRocks's shared-data mode supports the time function expression and does not support the column expression.
+>>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
 
-Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy-to-use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or enum values.
+Since v3.0, StarRocks has supported [expression partitioning](./expression_partitioning.md)](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy to use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or ENUM values.
 
 You only need to configure a partition expression (a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions during data loading. You no longer need to manually create numerous partitions in advance, nor configure dynamic partition properties.
 
 #### Range partitioning
 
+<<<<<<< HEAD
 Range partitioning is suitable for storing simple, contiguous data, such as time series data (dates or timestamps), or continuous numerical data. And you frequently query and manage data based on continuous date/numerical ranges. Also, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
+=======
+Range partitioning is suitable for storing simple contiguous data, such as time series data, or continuous numerical data. Range partitioning is appropriate for frequently queried data based on continuous date/numerical ranges. Additionally, it can be applied in some special cases where historical data needs to be partitioned by month, and recent data needs to be partitioned by day.
+>>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
 
 StarRocks stores data in the corresponding partitions based on the explicit mapping of the explicitly defined range for each partition.
 
@@ -232,7 +249,7 @@ Multiple partitions can be created  in batch at and after table creation. You ca
 
 - **Partition a table on a date-type column (DATE and DATETIME) at table creation**
 
-  When the partitioning column is of date type, at table creation, you can use `START()` and `END()` to specify the start date and end date for all the partitions created in batch, and `EVERY(INTERVAL xxx)` to specify the incremental interval between two partitions. Currently the interval granularity supports `HOUR` (since v3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
+  When the partitioning column is of date type, at table creation, you can use `START()` and `END()` to specify the start date and end date for all the partitions created in batch, and `EVERY(INTERVAL xxx)` to specify the incremental interval between two partitions. Currently, the interval granularity supports `HOUR` (since v3.0), `DAY`, `WEEK`, `MONTH`, and `YEAR`.
 
   In the following example, the date range of all the partitions created in batch starts from 2021-01-01 and ends on 2021-01-04, with an incremental interval of one day:
 
@@ -358,7 +375,7 @@ Multiple partitions can be created  in batch at and after table creation. You ca
 
 #### List partitioning (since v3.1)
 
-[List Partitioning](./list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on enum values. It is especially useful for scenarios where a partition needs to include data with different values in a partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partitioning column. In this case, one partition can contain data of various cities belonging to one country.
+[List Partitioning](./list_partitioning.md) is suitable for accelerating queries and efficiently managing data based on enum values. It is especially useful for scenarios where a partition needs to include data with different values in a partitioning column. For example, if you frequently query and manage data based on countries and cities, you can use this partitioning method and select the `city` column as the partitioning column. In this case, one partition can contain data for various cities belonging to one country.
 
 StarRocks stores data in the corresponding partitions based on the explicit mapping of the predefined value list for each partition.
 
@@ -409,7 +426,7 @@ SHOW PARTITIONS FROM site_access;
 
 ### Random bucketing (since v3.1)
 
-StarRocks distributes the data in a partition randomly across all buckets. It is suitable for scenarios with small data sizes and relatively low requirement for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically sets the number of buckets.
+StarRocks distributes the data in a partition randomly across all buckets. It is suitable for scenarios with small data sizes and relatively low requirements for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically sets the number of buckets.
 
 However, note that if you query massive amounts of data and frequently use certain columns as filter conditions, the query performance provided by random bucketing may not be optimal. In such scenarios, it is recommended to use [hash bucketing](#hash-bucketing). When these columns are used as filter conditions for queries, only data in a small number of buckets that the query hits need to be scanned and computed, which can significantly improve query performance.
 
@@ -458,7 +475,7 @@ StarRocks can use hash bucketing to subdivide data in a partition into buckets b
 
 #### How to choose the bucketing columns
 
-We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
+We recommend that you choose the column that satisfies the following two requirements as the bucketing column.
 
 - high cardinality column such as ID
 - column that often used in a filter for queries
@@ -560,7 +577,53 @@ Buckets reflect how data files are actually organized in StarRocks.
 
      Since v2.4.0, StarRocks supports using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
 
+<<<<<<< HEAD
      To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
+=======
+  - To enable the on-demand and dynamic increase of the number of buckets, you need to set the table property `PROPERTIES("bucket_size"="xxx")` to specify the size of a single bucket. If the data volume in a partition is small, you can set the `bucket_size` to 1 GB. Otherwise, you can set the `bucket_size` to 4 GB.
+  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) before rolling back.
+
+  :::
+
+  Example:
+
+  ```sql
+  CREATE TABLE details1 (
+      event_day DATE,
+      site_id INT DEFAULT '10', 
+      pv BIGINT DEFAULT '0',
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '')
+  DUPLICATE KEY (event_day,site_id,pv)
+  PARTITION BY date_trunc('day', event_day)
+  -- The number of buckets in a partition is automatically determined by StarRocks and the number dynamically increases on demand because the size of a bucket is set to 1 GB.
+  PROPERTIES("bucket_size"="1073741824")
+  ;
+  
+  CREATE TABLE details2 (
+      event_day DATE,
+      site_id INT DEFAULT '10',
+      pv BIGINT DEFAULT '0' ,
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '')
+  DUPLICATE KEY (event_day,site_id,pv)
+  PARTITION BY date_trunc('day', event_day)
+  -- The number of buckets in the table partition is automatically determined by StarRocks, and the number is fixed and does not dynamically increases on demand because the size of a bucket is not set.
+  ;
+  ```
+
+  </TabItem>
+  </Tabs>
+
+- Manually set the number of buckets
+
+  Since v2.4.0, StarRocks supports using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
+
+  To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
+
+  <Tabs groupId="manualexamples1">
+  <TabItem value="example1" label="Table configured with hash bucketing" default>
+>>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
 
     ```SQL
     CREATE TABLE site_access (
@@ -588,6 +651,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
     You can also manually specify the bucket count when adding a new partition. To calculate the number of buckets for a new partition, you can refer to the approach used when manually setting the number of buckets at table creation, as mentioned above.
 
+<<<<<<< HEAD
     ```SQL
     -- Manually create partitions
     ALTER TABLE <table_name> 
@@ -598,3 +662,146 @@ Buckets reflect how data files are actually organized in StarRocks.
     ALTER TABLE <table_name> 
     SET ("dynamic_partition.buckets"="xxx");
     ```
+=======
+  :::tip
+  
+  If the raw data size of a partition exceeds 100 GB, we recommend that you manually configure the number of buckets using Method 2.
+  :::
+
+  <Tabs groupId="automaticexamples2">
+  <TabItem value="example1" label="Table configured with hash bucketing" default>
+
+  ```sql
+  -- Automatically set the number of buckets for all partitions.
+  ALTER TABLE site_access DISTRIBUTED BY HASH(site_id,city_code);
+  
+  -- Automatically set the number of buckets for specific partitions.
+  ALTER TABLE site_access PARTITIONS (p20230101, p20230102)
+  DISTRIBUTED BY HASH(site_id,city_code);
+  
+  -- Automatically set the number of buckets for new partitions.
+  ALTER TABLE site_access ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY HASH(site_id,city_code);
+  ```
+
+  </TabItem>
+  <TabItem value="example2" label="Table configured with random bucketing">
+
+  As for tables configured with random bucketing, in addition to automatically setting the number of buckets in a partition, StarRocks further optimizes the logic since v3.2.0. StarRocks also can **dynamically increase** the number of buckets in a partition **during data loading**, based on the cluster capacity and the volume of loaded data. This not only makes partition creation easier but also increases bulk load performance.
+
+  :::warning
+
+  - To enable the on-demand and dynamic increase of the number of buckets, you need to set the table property `PROPERTIES("bucket_size"="xxx")` to specify the size of a single bucket. If the data volume in a partition is small, you can set the `bucket_size` to 1 GB. Otherwise, you can set the `bucket_size` to 4 GB.
+  - Once the on-demand and dynamic increase of the number of buckets is enabled, and you need to rollback to version 3.1, you have to first delete the table which enables the dynamic increase in the number of buckets. Then you need to manually execute a metadata checkpoint using [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) before rolling back.
+
+  :::
+
+  ```sql
+  -- The number of buckets for all partitions is automatically set by StarRocks and this number is fixed because the on-demand and dynamic increase of the number of buckets is disabled.
+  ALTER TABLE details DISTRIBUTED BY RANDOM;
+  -- The number of buckets for all partitions is automatically set by StarRocks and the on-demand and dynamic increase of the number of buckets is enabled.
+  ALTER TABLE details SET("bucket_size"="1073741824");
+  
+  -- Automatically set the number of buckets for specific partitions.
+  ALTER TABLE details PARTITIONS (p20230103, p20230104)
+  DISTRIBUTED BY RANDOM;
+  
+  -- Automatically set the number of buckets for new partitions.
+  ALTER TABLE details ADD PARTITION  p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY RANDOM;
+  ```
+
+  </TabItem>
+  </Tabs>
+
+- Manually set the number of buckets
+
+  You can also manually specify the buckets number. To calculate the number of buckets for a partition, you can refer to the approach used when manually setting the number of buckets at table creation, [as mentioned above](#at-table-creation).
+
+  <Tabs groupId="manualexamples2">
+  <TabItem value="example1" label="Table configured with hash bucketing" default>
+
+  ```sql
+  -- Manually set the number of buckets for all partitions 
+  ALTER TABLE site_access
+  DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
+  -- Manually set the number of buckets for specific partitions.
+  ALTER TABLE site_access
+  partitions p20230104
+  DISTRIBUTED BY HASH(site_id,city_code)  BUCKETS 30;
+  -- Manually set the number of buckets for new partitions.
+  ALTER TABLE site_access
+  ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
+  ```
+
+  </TabItem>
+  <TabItem value="example2" label="Table configured with random bucketing">
+
+  ```sql
+  -- Manually set the number of buckets for all partitions 
+  ALTER TABLE details
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  -- Manually set the number of buckets for specific partitions.
+  ALTER TABLE details
+  partitions p20230104
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  -- Manually set the number of buckets for new partitions.
+  ALTER TABLE details
+  ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  ```
+
+  Manually set the default number of buckets for dynamic partitions.
+
+  ```sql
+  ALTER TABLE details_dynamic
+  SET ("dynamic_partition.buckets"="xxx");
+  ```
+
+  </TabItem>
+  </Tabs>
+
+#### View the number of buckets
+
+After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. Tables configured with hash bucketing have a fixed number of buckets per partition.
+
+:::info
+
+- As for a table configured with random bucketing which enable the on-demand and dynamic increase of the number of buckets, the number of buckets in each partition dynamically increases. So the returned result displays the current number of buckets for each partition.
+- For this table type, the actual hierarchy within a partition is as follows: partition > subpartition > bucket. To increase the number of buckets, StarRocks actually adds a new subpartition which includes a certain number of buckets. As a result, the SHOW PARTITIONS statement may return multiple data rows with the same partition name, which show the information of the subpartitions within the same partition.
+
+:::
+
+## Optimize data distribution after table creation (since 3.2)
+
+> **NOTICE**
+>
+> StarRocks's shared-data mode currently does not support this feature.
+
+As query patterns and data volume evolve in business scenarios, the configurations specified at table creation, such as the bucketing method, the number of buckets, and the sort key, may no longer be suitable for the new business scenario and even may cause query performance to decrease. At this point, you can use `ALTER TABLE` to modify the bucketing method, the number of buckets, and the sort key to optimize data distribution. For example:
+
+- **Increase the number of buckets when data volume within partitions is significantly increased**
+
+  When the data volume within partitions becomes significantly larger than before, it is necessary to modify the number of buckets to maintain tablet sizes generally within the range of 1 GB to 10 GB.
+  
+- **Modify the bucketing key to avoid data skew**
+
+  When the current bucketing key can cause data skew (for example, only the `k1` column is configured as the bucketing key), it is necessary to specify more suitable columns or add additional columns to the bucketing key. For example:
+  
+  ```SQL
+  ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
+  -- When the StarRocks's version is 3.1 or later, and the table is Duplicate Key table, you can consider directly using the system's default bucketing settings, that is, random bucketing and the number of buckets automatically set by StarRocks.
+  ALTER TABLE t DISTRIBUTED BY RANDOM;
+  ```
+
+- **Adapting the sort key due to changes in query patterns**
+  
+  If the business query patterns are significantly changed and additional columns are used as conditional columns, it can be beneficial to adjust the sort key. For example:
+  
+  ```SQL
+  ALTER TABLE t ORDER BY k2, k1;
+  ```
+
+For more information, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+>>>>>>> 703a58898a ([Doc] change search ranking for partition (#47713))
