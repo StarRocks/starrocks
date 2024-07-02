@@ -392,7 +392,7 @@ public class FunctionAnalyzer {
             if (functionCallExpr.hasChild(1)) {
                 kExpr = functionCallExpr.getChild(1);
                 k = extractIntegerValue(kExpr);
-                if (!k.isPresent()) {
+                if (!k.isPresent() || k.get() <= 0) {
                     throw new SemanticException(
                             "The second parameter of APPROX_TOP_K must be a constant positive integer: " +
                                     functionCallExpr.toSql(), kExpr.getPos());
@@ -401,7 +401,7 @@ public class FunctionAnalyzer {
             if (functionCallExpr.hasChild(2)) {
                 counterNumExpr = functionCallExpr.getChild(2);
                 counterNum = extractIntegerValue(counterNumExpr);
-                if (!counterNum.isPresent()) {
+                if (!counterNum.isPresent() || counterNum.get() <= 0) {
                     throw new SemanticException(
                             "The third parameter of APPROX_TOP_K must be a constant positive integer: " +
                                     functionCallExpr.toSql(), counterNumExpr.getPos());
