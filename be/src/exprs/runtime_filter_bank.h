@@ -52,10 +52,11 @@ public:
     static size_t serialize_runtime_filter(RuntimeState* state, const JoinRuntimeFilter* rf, uint8_t* data);
     static size_t serialize_runtime_filter(int serialize_version, const JoinRuntimeFilter* rf, uint8_t* data);
     static size_t serialize_runtime_filter_for_skew_boradcast_join(const ColumnPtr& column, bool eq_null,
-                                                                   const TTypeDesc& type_desc, uint8_t* data);
+                                                                   uint8_t* data);
     static int deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data, size_t size);
     static int deserialize_runtime_filter_for_skew_boradcast_join(ObjectPool* pool, SkewBroadcastRfMaterial** material,
-                                                                  const uint8_t* data, size_t size);
+                                                                  const uint8_t* data, size_t size,
+                                                                  const PTypeDesc& ptype);
     static JoinRuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
 
     // ====================================

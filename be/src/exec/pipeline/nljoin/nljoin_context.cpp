@@ -174,18 +174,18 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
         ASSIGN_OR_RETURN(auto rfs, CrossJoinNode::rewrite_runtime_filter(pool, _rf_descs, one_row_chunk.get(),
                                                                          _rf_conjuncts_ctx));
         _rf_hub->set_collector(_plan_node_id,
-                               std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeBloomFilterList{}));
+                               std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeBloomFilters{}));
     } else {
         // notify cross join left child
-        _rf_hub->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{},
-                                                                                       RuntimeBloomFilterList{}));
+        _rf_hub->set_collector(_plan_node_id,
+                               std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, RuntimeBloomFilters{}));
     }
     return Status::OK();
 }
 
 void NLJoinContext::_notify_runtime_filter_collector(RuntimeState* state) {
     _rf_hub->set_collector(_plan_node_id,
-                           std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, RuntimeBloomFilterList{}));
+                           std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, RuntimeBloomFilters{}));
 }
 
 bool NLJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {

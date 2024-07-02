@@ -55,7 +55,7 @@ public class RuntimeFilterDescription {
 
     private int filterId;
     private int buildPlanNodeId;
-    private JoinNode buildPlanNode;
+    private PlanNode buildPlanNode;
     private Expr buildExpr;
     private int exprOrder; // order of expr in eq conjuncts.
     private final Map<Integer, Expr> nodeIdToProbeExpr;
@@ -81,6 +81,9 @@ public class RuntimeFilterDescription {
     private int execGroupId = -1;
 
     private boolean isBroadCastInSkew = false;
+
+    // only set when isBroadCastInSkew is true, and the value is the id of shuffle join's corresponding filter id
+    private int skew_shuffle_filter_id;
 
     private RuntimeFilterType type;
 
@@ -152,13 +155,21 @@ public class RuntimeFilterDescription {
         this.sortInfo = sortInfo;
     }
 
-    public JoinNode getBuildPlanNode() {
+    public PlanNode getBuildPlanNode() {
         return buildPlanNode;
     }
 
-    public void setBuildPlanNode(JoinNode buildPlanNode) {
+    public void setBuildPlanNode(PlanNode buildPlanNode) {
         this.buildPlanNode = buildPlanNode;
         inferBoradCastJoinInSkew();
+    }
+
+    public int getSkew_shuffle_filter_id() {
+        return skew_shuffle_filter_id;
+    }
+
+    public void setSkew_shuffle_filter_id(int skew_shuffle_filter_id) {
+        this.skew_shuffle_filter_id = skew_shuffle_filter_id;
     }
 
     private void inferBoradCastJoinInSkew() {
@@ -166,6 +177,7 @@ public class RuntimeFilterDescription {
             HashJoinNode hashJoinNode = (HashJoinNode) buildPlanNode;
             if (hashJoinNode.isSkewJoin() && hashJoinNode.getDistrMode() == JoinNode.DistributionMode.BROADCAST) {
                 isBroadCastInSkew = true;
+                return;
             }
         }
 

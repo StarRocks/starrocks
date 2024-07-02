@@ -716,7 +716,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                     HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
                     for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
                         int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
-                        description.setFilterId(filterId);
+                        // skew join's boradcast join rf need to remember the filter id of corresponding skew shuffle join
+                        description.setSkew_shuffle_filter_id(filterId);
                     }
                 }
             }
