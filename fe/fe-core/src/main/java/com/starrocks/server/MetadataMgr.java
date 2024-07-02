@@ -24,11 +24,7 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-<<<<<<< HEAD
-=======
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
->>>>>>> cfe866d77a ([BugFix] Fix stats are not correct in skew join rule for partitioned hive table (#47690))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
@@ -65,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -469,13 +466,6 @@ public class MetadataMgr {
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-<<<<<<< HEAD
-        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
-            session.setObtainedFromInternalStatistics(false);
-            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-            return connectorMetadata.map(metadata -> metadata.getTableStatistics(
-                    session, table, columns, partitionKeys, predicate, limit)).orElse(null);
-=======
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
@@ -508,7 +498,6 @@ public class MetadataMgr {
                     return connectorBasicStats;
                 }
             }
->>>>>>> cfe866d77a ([BugFix] Fix stats are not correct in skew join rule for partitioned hive table (#47690))
         } else {
             session.setObtainedFromInternalStatistics(true);
             return internalStatistics;
