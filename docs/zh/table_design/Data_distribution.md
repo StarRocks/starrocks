@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 keywords: ['fenqu','fentong', 'lengre']
 toc_max_heading_level: 4
-description: Partition and bucket data
+description: 分区与分桶
 ---
 
 # 数据分布
