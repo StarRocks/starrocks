@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.scheduler;
+package com.starrocks.scheduler.history;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
