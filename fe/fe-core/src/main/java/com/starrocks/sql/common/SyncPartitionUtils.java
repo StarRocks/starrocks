@@ -54,8 +54,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
 import java.util.List;
@@ -65,6 +67,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FunctionSet.WEEK;
 import static com.starrocks.sql.common.PRangeCellPlus.toPRangeCellPlus;
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
@@ -393,6 +396,9 @@ public class SyncPartitionUtils {
             case DAY:
                 return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.DATEKEY_FORMATTER) +
                         "_" + upperDateTime.format(DateUtils.DATEKEY_FORMATTER);
+            case WEEK:
+                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.DATEKEY_FORMATTER) +
+                        "_" + upperDateTime.format(DateUtils.DATEKEY_FORMATTER);
             case MONTH:
                 return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.MONTH_FORMATTER) +
                         "_" + upperDateTime.format(DateUtils.MONTH_FORMATTER);
@@ -431,6 +437,13 @@ public class SyncPartitionUtils {
                     truncUpperDateTime = upperDateTime;
                 } else {
                     truncUpperDateTime = upperDateTime.plusDays(1).with(LocalTime.MIN);
+                }
+                break;
+            case WEEK:
+                if (upperDateTime.with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS).equals(upperDateTime)) {
+                    truncUpperDateTime = upperDateTime;
+                } else {
+                    truncUpperDateTime = upperDateTime.plusWeeks(1).with(LocalTime.MIN);
                 }
                 break;
             case MONTH:
@@ -480,6 +493,9 @@ public class SyncPartitionUtils {
             case DAY:
                 truncUpperDateTime = upperDateTime.plusDays(1).with(LocalTime.MIN);
                 break;
+            case WEEK:
+                truncUpperDateTime = upperDateTime.plusWeeks(1).with(LocalTime.MIN);
+                break;
             case MONTH:
                 truncUpperDateTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
                 break;
@@ -512,6 +528,9 @@ public class SyncPartitionUtils {
                 break;
             case DAY:
                 truncLowerDateTime = lowerDateTime.with(LocalTime.MIN);
+                break;
+            case WEEK:
+                truncLowerDateTime = lowerDateTime.with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS);
                 break;
             case MONTH:
                 truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfMonth());

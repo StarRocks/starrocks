@@ -140,7 +140,15 @@ import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
 
-    public static final Set<String> SUPPORTED_PARTITION_FORMAT = ImmutableSet.of("hour", "day", "month", "year");
+    // The partition format supported by date_trunc
+    public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
+            ImmutableSet.of("hour", "day", "month", "year");
+    // The partition format supported by time_slice
+    public static final Set<String> TIME_SLICE_SUPPORTED_PARTITION_FORMAT =
+            ImmutableSet.of("hour", "day", "month", "year");
+    // The partition format supported by mv date_trunc
+    public static final Set<String> MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
+            ImmutableSet.of("hour", "day", "week", "month", "year");
 
     public static String getOrDefaultDatabase(String dbName, ConnectContext context) {
         if (Strings.isNullOrEmpty(dbName)) {
@@ -1543,8 +1551,20 @@ public class AnalyzerUtils {
         }
     }
 
-    // check the partition expr is legal and extract partition columns
     public static List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs) {
+        return checkAndExtractPartitionCol(expr, columnDefs, AnalyzerUtils.DATE_TRUNC_SUPPORTED_PARTITION_FORMAT);
+    }
+
+    /**
+     * Check the partition expr is legal and extract partition columns
+     * TODO: support date_trunc('week', dt) for normal olap table.
+     * @param expr partition expr
+     * @param columnDefs partition column defs
+     * @param supportedDateTruncFormats date trunc supported formats which are a bit different bewtween mv and olap table
+     * @return partition column names
+     */
+    public static List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs,
+                                                           Set<String> supportedDateTruncFormats) {
         String functionName = expr.getFnName().getFunction();
         NodePosition pos = expr.getPos();
         List<String> columnList = Lists.newArrayList();
@@ -1566,7 +1586,7 @@ public class AnalyzerUtils {
             if (firstExpr instanceof StringLiteral) {
                 StringLiteral stringLiteral = (StringLiteral) firstExpr;
                 String fmt = stringLiteral.getValue();
-                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                if (!supportedDateTruncFormats.contains(fmt.toLowerCase())) {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
                             pos);
                 }
@@ -1592,7 +1612,7 @@ public class AnalyzerUtils {
             if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
                 StringLiteral stringLiteral = (StringLiteral) thirdExpr;
                 String fmt = stringLiteral.getValue();
-                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                if (!AnalyzerUtils.TIME_SLICE_SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
                             pos);
                 }
