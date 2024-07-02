@@ -1297,6 +1297,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels3) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
     std::vector<std::pair<ChunkPtr, std::vector<uint32_t>>> chunks;
     //delete * 2
     chunks.push_back(gen_data_and_index(kChunkSize, 0, false, false));

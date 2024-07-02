@@ -268,7 +268,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         for (const auto& each : collect_del_files) {
             rowset->add_del_files()->CopyFrom(each);
         }
-        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
+        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     }
 
     VLOG(2) << fmt::format(
