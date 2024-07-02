@@ -49,6 +49,7 @@
 #include "util/sm3.h"
 #include "util/utf8.h"
 #include "util/utf8_encoding.h"
+#include "util/UtfConv.c"
 
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
@@ -1921,6 +1922,28 @@ StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context, const
     return VectorizedStrictUnaryFunction<utf8LengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0]);
 }
 
+std::string utf8_to_upper(const std::string& str) {
+    std::string result;
+    result.resize(str.size() * 2); // Allocate enough space (twice the size of the input string)
+    Utf8Char* temp = Utf8StrMakeUprUtf8Str(reinterpret_cast<const Utf8Char*>(str.c_str()));
+    if (temp) {
+        result = reinterpret_cast<char*>(temp);
+        free(temp);
+    }
+    return result;
+}
+
+std::string utf8_to_lower(const std::string& str) {
+    std::string result;
+    result.resize(str.size() * 2); // Allocate enough space (twice the size of the input string)
+    Utf8Char* temp = Utf8StrMakeLwrUtf8Str(reinterpret_cast<const Utf8Char*>(str.c_str()));
+    if (temp) {
+        result = reinterpret_cast<char*>(temp);
+        free(temp);
+    }
+    return result;
+}
+
 template <char CA, char CZ>
 static inline void vectorized_toggle_case(const Bytes* src, Bytes* dst) {
     const size_t size = src->size();
@@ -1974,10 +1997,24 @@ public:
         auto& dst_offsets = dst->get_offset();
         auto& dst_bytes = dst->get_bytes();
         dst_offsets.assign(src_offsets.begin(), src_offsets.end());
-        if constexpr (to_upper) {
-            vectorized_toggle_case<'a', 'z'>(&src_bytes, &dst_bytes);
+        const auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
+        if (is_ascii) {
+            if constexpr (to_upper) {
+                vectorized_toggle_case<'a', 'z'>(&src_bytes, &dst_bytes);
+            } else {
+                vectorized_toggle_case<'A', 'Z'>(&src_bytes, &dst_bytes);
+            }
         } else {
-            vectorized_toggle_case<'A', 'Z'>(&src_bytes, &dst_bytes);
+            for (size_t i = 0; i < src_offsets.size() - 1; ++i) {
+                std::string sv(reinterpret_cast<const char*>(src_bytes.data()) + src_offsets[i], src_offsets[i + 1] - src_offsets[i]);
+                std::string result;
+                if constexpr (to_upper) {
+                    result = utf8_to_upper(sv);
+                } else {
+                    result = utf8_to_lower(sv);
+                }
+                dst_bytes.insert(dst_bytes.end(), result.begin(), result.end());
+            }
         }
         return dst;
     }
