@@ -40,6 +40,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -581,7 +582,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             } else {
                 predicates = ((PhysicalScanOperator) node).getScanOperatorPredicates();
             }
-            List<PartitionKey> partitionKeys = predicates.getSelectedPartitionKeys();
+            // If partition pruned, we should use the selected partition keys to estimate the statistics,
+            // otherwise, we should use all partition keys to estimate the statistics.
+            List<PartitionKey> partitionKeys = predicates.hasPrunedPartition() ? predicates.getSelectedPartitionKeys() :
+                    PartitionUtil.getPartitionKeys(table);
 
             String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
             Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
