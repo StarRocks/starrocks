@@ -113,7 +113,11 @@ public class AnalyticAnalyzer {
                 // but the nullable info in FE is a more relax than BE (such as the nullable info in upper('a') is true,
                 // but the actually derived column in BE is not nullableColumn)
                 // which make the input colum in chunk not match the _agg_input_column in BE. so add this check in FE.
-                if (!analyticFunction.getChild(2).isLiteral() && analyticFunction.getChild(2).isNullable()) {
+                Expr theThirdChild = analyticFunction.getChild(2);
+                if (theThirdChild instanceof UserVariableExpr) {
+                    theThirdChild = ((UserVariableExpr) theThirdChild).getValue();
+                }
+                if (!theThirdChild.isLiteral() && theThirdChild.isNullable()) {
                     throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
                             analyticFunction.getChild(2).getPos());
                 }
