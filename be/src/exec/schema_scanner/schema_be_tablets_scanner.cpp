@@ -59,6 +59,7 @@ SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
         {"INDEX_DISK", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"MEDIUM_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"NUM_SEGMENT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"COMPACTION_SCORE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaBeTabletsScanner::SchemaBeTabletsScanner()
@@ -155,7 +156,7 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 20) {
+            if (slot_id < 1 || slot_id > 21) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -262,6 +263,10 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
             case 20: {
                 // NUM_SEGMENT
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_segment);
+            }
+            case 21: {
+                // COMPACT_SCORE
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.compaction_score);
             }
             default:
                 break;

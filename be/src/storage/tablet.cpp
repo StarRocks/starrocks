@@ -1694,6 +1694,12 @@ bool Tablet::enable_compaction() {
 }
 
 void Tablet::get_basic_info(TabletBasicInfo& info) {
+    if (_updates != nullptr) {
+        info.compaction_score = _updates->get_last_compaction_score();
+    } else {
+        info.compaction_score = static_cast<int64_t>(compaction_score());
+    }
+
     std::shared_lock rdlock(_meta_lock);
     info.table_id = _tablet_meta->table_id();
     info.partition_id = _tablet_meta->partition_id();
