@@ -253,7 +253,7 @@ public class ConnectProcessor {
 
         if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             // Some information like username, password in the stmt should not be printed.
-            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQL(parsedStmt));
+            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQLOrDefault(parsedStmt, origStmt));
         } else if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);

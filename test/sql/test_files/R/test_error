@@ -1,5 +1,8 @@
 -- name: test_error
 
+create database db_${uuid0};
+use db_${uuid0};
+
 select * from files("path" = "xxx", "format" = "parquet");
 -- result:
 E: (1064, 'Access storage error. Error message: invalid path. scheme is null')
@@ -8,3 +11,25 @@ select * from files("path" = "hdfs://hdfs://test/x", "format" = "parquet");
 -- result:
 E: (1064, 'Access storage error. Error message: java.net.UnknownHostException: hdfs')
 -- !result
+
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/orc_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/orc_format/map_decimal_date.lz4.orc oss://${oss_bucket}/test_files/orc_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 619. OK num: 1(upload 1 files).
+-- !result
+
+admin set frontend config ("enable_collect_query_detail_info" = "true");
+-- result:
+-- !result
+select count(*) from files('path' = 'oss://${oss_bucket}/test_files/orc_format/${uuid0}/*', 'format'='orc') where map_keys(col_map) != [-99999.99999];
+-- result:
+18
+-- !result
+admin set frontend config ("enable_collect_query_detail_info" = "false");
+-- result:
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/orc_format/${uuid0}/ > /dev/null

@@ -40,6 +40,8 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +57,7 @@ import static java.util.stream.Collectors.toList;
  * Such as string serialization of views
  */
 public class AstToSQLBuilder {
+    private static final Logger LOG = LogManager.getLogger(AstToSQLBuilder.class);
 
     public static String buildSimple(StatementBase statement) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
@@ -64,6 +67,18 @@ public class AstToSQLBuilder {
 
     public static String toSQL(ParseNode statement) {
         return new AST2SQLBuilderVisitor(false, false).visit(statement);
+    }
+
+    // return sql from ast or default sql if builder throws exception.
+    // for example, `select from files` needs file schema to generate sql from ast.
+    // If BE is down, the schema will be null, and an exception will be thrown when writing audit log.
+    public static String toSQLOrDefault(ParseNode statement, String defaultSql) {
+        try {
+            return toSQL(statement);
+        } catch (Exception e) {
+            LOG.info("Ast to sql failed.", e);
+            return defaultSql;
+        }
     }
 
     public static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
