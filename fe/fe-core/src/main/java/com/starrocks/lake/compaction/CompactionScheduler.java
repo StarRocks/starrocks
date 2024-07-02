@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.compaction;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -53,6 +52,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -78,7 +78,6 @@ public class CompactionScheduler extends Daemon {
     private final GlobalStateMgr stateMgr;
     private final ConcurrentHashMap<PartitionIdentifier, CompactionJob> runningCompactions;
     private final SynchronizedCircularQueue<CompactionRecord> history;
-    private final SynchronizedCircularQueue<CompactionRecord> failHistory;
     private boolean finishedWaiting = false;
     private long waitTxnId = -1;
     private long lastPartitionCleanTime;
@@ -95,7 +94,6 @@ public class CompactionScheduler extends Daemon {
         this.runningCompactions = new ConcurrentHashMap<>();
         this.lastPartitionCleanTime = System.currentTimeMillis();
         this.history = new SynchronizedCircularQueue<>(Config.lake_compaction_history_size);
-        this.failHistory = new SynchronizedCircularQueue<>(Config.lake_compaction_fail_history_size);
         this.disabledTables = Collections.unmodifiableSet(new HashSet<>());
 
         disableTables(disableTablesStr);
@@ -113,7 +111,6 @@ public class CompactionScheduler extends Daemon {
         if (stateMgr.isLeader() && stateMgr.isReady() && allCommittedCompactionsBeforeRestartHaveFinished()) {
             schedule();
             history.changeMaxSize(Config.lake_compaction_history_size);
-            failHistory.changeMaxSize(Config.lake_compaction_fail_history_size);
         }
     }
 
@@ -177,7 +174,7 @@ public class CompactionScheduler extends Daemon {
                 if (errorMsg != null) {
                     iterator.remove();
                     job.finish();
-                    failHistory.offer(CompactionRecord.build(job, errorMsg));
+                    history.offer(CompactionRecord.build(job, errorMsg));
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
                     abortTransactionIgnoreException(job, errorMsg);
                     continue;
@@ -325,7 +322,7 @@ public class CompactionScheduler extends Daemon {
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(job, e.getMessage());
             job.finish();
-            failHistory.offer(CompactionRecord.build(job, e.getMessage()));
+            history.offer(CompactionRecord.build(job, e.getMessage()));
             return null;
         } finally {
             compactionManager.enableCompactionAfter(partitionIdentifier, nextCompactionInterval);
@@ -438,15 +435,21 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    // get running compaction and history compaction, sorted by start time
     @NotNull
     List<CompactionRecord> getHistory() {
-        ImmutableList.Builder<CompactionRecord> builder = ImmutableList.builder();
-        history.forEach(builder::add);
-        failHistory.forEach(builder::add);
-        for (CompactionJob job : runningCompactions.values()) {
-            builder.add(CompactionRecord.build(job));
+        List<CompactionRecord> list = new ArrayList<>();
+        history.forEach(list::add);
+        for (CompactionJob job : getRunningCompactions().values()) {
+            list.add(CompactionRecord.build(job));
         }
-        return builder.build();
+        Collections.sort(list, new Comparator<CompactionRecord>() {
+            @Override
+            public int compare(CompactionRecord l, CompactionRecord r) {
+                return l.getStartTs() > r.getStartTs() ? -1 : (l.getStartTs() < r.getStartTs()) ? 1 : 0;
+            }
+        });
+        return list;
     }
 
     @NotNull
