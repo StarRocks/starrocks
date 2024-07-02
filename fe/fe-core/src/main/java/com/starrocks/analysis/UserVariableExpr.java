@@ -90,12 +90,6 @@ public class UserVariableExpr extends Expr {
     }
 
     @Override
-    public boolean isConstantImpl() {
-        Preconditions.checkState(value != null, "should analyze UserVariableExpr first then invoke isConstantImpl");
-        return value instanceof LiteralExpr;
-    }
-
-    @Override
     public String toSqlImpl() {
         return "@" + name;
     }
