@@ -91,10 +91,10 @@ public class SelectHintTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "approx_top_k(1: v1, 1), approx_top_k(1: v1, 1, 100000)");
 
-        sql = "select /*+ set_user_variable(@a = 1, @b = 10) */ ntile(@a) over (partition by v2 order by v3) as bucket_id from t0;";
+        sql = "select /*+ set_user_variable(@a = 1, @b = 10) */ ntile(@a) over (partition by v2 order by v3) " +
+                "as bucket_id from t0;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "functions: [, ntile(1), ]");
-
 
 
         Exception exception = Assert.assertThrows(SemanticException.class, () -> {
