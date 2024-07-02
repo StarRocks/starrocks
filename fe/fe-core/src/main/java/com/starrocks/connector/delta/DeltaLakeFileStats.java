@@ -110,8 +110,8 @@ public class DeltaLakeFileStats {
             return;
         }
 
-        // TODO: Currently not set avg size, will be optimized later.
-        // builder.setAverageRowSize(xxx);
+        builder.setAverageRowSize(col.getType().getTypeSize());
+        builder.setDistinctValuesCount(1);
         builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
 
         String colName = col.getName();
@@ -146,6 +146,8 @@ public class DeltaLakeFileStats {
             } else {
                 builder.setNullsFraction(nullCount * 1.0 / Math.max(recordCount, 1));
             }
+        } else {
+            builder.setNullsFraction(0);
         }
     }
 
