@@ -31,7 +31,11 @@ public class DeltaLakeStats {
     @SerializedName(value = "nullCount")
     public Map<String, Object> nullCount;
 
-    public DeltaLakeStats(long numRecords) {
+    public DeltaLakeStats(long numRecords, Map<String, Object> minValues, Map<String, Object> maxValues,
+                          Map<String, Object> nullCount) {
         this.numRecords = numRecords;
+        this.minValues = minValues;
+        this.maxValues = maxValues;
+        this.nullCount = nullCount;
     }
 }

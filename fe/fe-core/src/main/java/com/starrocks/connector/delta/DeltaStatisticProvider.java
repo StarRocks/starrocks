@@ -67,30 +67,11 @@ public class DeltaStatisticProvider {
         DeltaLakeFileStats fileStats;
         if (deltaLakeFileStatsMap.containsKey(key)) {
             fileStats = deltaLakeFileStatsMap.get(key);
-            fileStats.incrementRecordCount(fileStat.numRecords);
-            fileStats.incrementSize(file.getFileSize());
-            updateSummaryMin(fileStats, fileStat.minValues, fileStat.nullCount, fileStat.numRecords);
-            updateSummaryMax(fileStats, fileStat.maxValues, fileStat.nullCount, fileStat.numRecords);
-            fileStats.updateNullCount(fileStat.nullCount, nonPartitionPrimitiveColumn);
+            fileStats.update(fileStat, file.getFileSize());
         } else {
-            fileStats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumn, fileStat.numRecords,
-                    file.getFileSize(), fileStat.minValues, fileStat.maxValues, fileStat.nullCount);
+            fileStats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumn, fileStat, file.getFileSize());
             deltaLakeFileStatsMap.put(key, fileStats);
         }
-    }
-
-    private void updateSummaryMin(DeltaLakeFileStats deltaLakeFileStats,
-                                  Map<String, Object> lowerBounds,
-                                  Map<String, Object> nullCounts,
-                                  long recordCount) {
-        deltaLakeFileStats.updateMinStats(lowerBounds, nullCounts, recordCount, i -> (i > 0));
-    }
-
-    private void updateSummaryMax(DeltaLakeFileStats deltaLakeFileStats,
-                                  Map<String, Object> upperBounds,
-                                  Map<String, Object> nulCounts,
-                                  long recordCount) {
-        deltaLakeFileStats.updateMaxStats(upperBounds, nulCounts, recordCount, i -> (i < 0));
     }
 
     public Statistics getTableStatistics(DeltaLakeTable deltaLakeTable,
@@ -141,15 +122,9 @@ public class DeltaStatisticProvider {
                 columnStatistics.put(entry.getKey(), ColumnStatistic.unknown());
             }
 
-            columnStatistics.put(entry.getKey(), buildColumnStatistic(entry.getValue(), fileStats));
+            columnStatistics.put(entry.getKey(), fileStats.fillColumnStats(entry.getValue()));
         }
 
         return columnStatistics;
-    }
-
-    private ColumnStatistic buildColumnStatistic(Column column, DeltaLakeFileStats fileStats) {
-        ColumnStatistic.Builder builder = ColumnStatistic.builder();
-        fileStats.fillColumnStats(builder, column);
-        return builder.build();
     }
 }

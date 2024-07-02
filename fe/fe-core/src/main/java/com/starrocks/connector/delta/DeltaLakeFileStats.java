@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import io.delta.kernel.types.BasePrimitiveType;
@@ -60,27 +61,23 @@ public class DeltaLakeFileStats {
     private final Set<String> corruptedStats;
     private boolean hasValidColumnMetrics;
 
-    public DeltaLakeFileStats(StructType schema,
-                              List<String> nonPartitionPrimitiveColumns,
-                              long recordCount,
-                              long size,
-                              Map<String, Object> minValues,
-                              Map<String, Object> maxValues,
-                              Map<String, Object> nullCounts) {
+    public DeltaLakeFileStats(StructType schema, List<String> nonPartitionPrimitiveColumns,
+                              DeltaLakeStats fileStat, long fileSize) {
         this.schema = schema;
         this.nonPartitionPrimitiveColumns = nonPartitionPrimitiveColumns;
-        this.recordCount = recordCount;
-        this.size = size;
-        if (minValues == null || maxValues == null || nullCounts == null) {
+        this.recordCount = fileStat.numRecords;
+        this.size = fileSize;
+
+        if (fileStat.minValues == null || fileStat.maxValues == null || fileStat.nullCount == null) {
             this.minValues = null;
             this.maxValues = null;
             this.nullCounts = null;
             this.corruptedStats = null;
             this.hasValidColumnMetrics = false;
         } else {
-            this.minValues = minValues;
-            this.maxValues = maxValues;
-            this.nullCounts = nullCounts;
+            this.minValues = fileStat.minValues;
+            this.maxValues = fileStat.maxValues;
+            this.nullCounts = fileStat.nullCount;
             this.corruptedStats = nonPartitionPrimitiveColumns.stream()
                     .filter(col -> !minValues.containsKey(col) &&
                             (!nullCounts.containsKey(col) || ((Double) nullCounts.get(col)).longValue() != recordCount))
@@ -105,38 +102,44 @@ public class DeltaLakeFileStats {
         return recordCount;
     }
 
-    public void fillColumnStats(ColumnStatistic.Builder builder, Column col) {
-        // Set default value
-        builder.setNullsFraction(0);
-        builder.setAverageRowSize(col.getType().getTypeSize());
-        builder.setDistinctValuesCount(1);
+    public ColumnStatistic fillColumnStats(Column col) {
+        ColumnStatistic.Builder builder = ColumnStatistic.builder();
+        String colName = col.getName();
+        Type colType = col.getType();
+
+        // set default value
         builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
+        builder.setAverageRowSize(colType.getTypeSize());
+        builder.setDistinctValuesCount(1);
+        builder.setNullsFraction(0);
 
         if (schema == null) {
-            return;
+            return builder.build();
         }
-
-        String colName = col.getName();
+        StructField field = schema.get(colName);
+        if (field == null) {
+            return builder.build();
+        }
         if (!nonPartitionPrimitiveColumns.contains(colName)) {
-            return;
+            return builder.build();
         }
 
         if (minValues != null) {
             if (col.getType().isStringType()) {
-                String minString = getBoundStatistic(colName, minValues).toString();
+                String minString = minValues.get(colName).toString();
                 builder.setMinString(minString);
             } else {
-                Optional<Double> res = getBoundStatistic(colName, minValues);
+                Optional<Double> res = getBoundStatistic(colName, field.getDataType(), minValues);
                 res.ifPresent(builder::setMinValue);
             }
         }
 
         if (maxValues != null) {
             if (col.getType().isStringType()) {
-                String maxString = getBoundStatistic(colName, maxValues).toString();
-                builder.setMinString(maxString);
+                String maxString = maxValues.get(colName).toString();
+                builder.setMaxString(maxString);
             } else {
-                Optional<Double> res = getBoundStatistic(colName, maxValues);
+                Optional<Double> res = getBoundStatistic(colName, field.getDataType(), maxValues);
                 res.ifPresent(builder::setMaxValue);
             }
         }
@@ -147,51 +150,37 @@ public class DeltaLakeFileStats {
                 builder.setNullsFraction(nullCount * 1.0 / Math.max(recordCount, 1));
             }
         }
+
+        return builder.build();
     }
 
-    public void incrementRecordCount(long count) {
-        this.recordCount += count;
-    }
+    public void update(DeltaLakeStats stat, long fileSize) {
+        this.recordCount += stat.numRecords;
+        this.size += fileSize;
 
-    public void incrementSize(long numberOfBytes) {
-        this.size += numberOfBytes;
-    }
-
-    public void updateMinStats(Map<String, Object> newStat, Map<String, Object> nullCounts,
-                               long recordCount, Predicate<Integer> predicate) {
         if (!hasValidColumnMetrics) {
             return;
         }
-
-        updateStats(this.minValues, newStat, nullCounts, recordCount, predicate);
-    }
-
-    public void updateMaxStats(Map<String, Object> newStat, Map<String, Object> nullCounts,
-                               long recordCount, Predicate<Integer> predicate) {
-        if (!hasValidColumnMetrics) {
+        if (stat.minValues == null || stat.maxValues == null || stat.nullCount == null) {
+            hasValidColumnMetrics = false;
             return;
         }
 
-        updateStats(this.maxValues, newStat, nullCounts, recordCount, predicate);
+        updateStats(this.minValues, stat.minValues, stat.nullCount, stat.numRecords, i -> (i > 0));
+        updateStats(this.maxValues, stat.maxValues, stat.nullCount, stat.numRecords, i -> (i < 0));
+        updateNullCount(stat.nullCount, this.nonPartitionPrimitiveColumns);
     }
 
     private static Object sumNullCount(Object left, Object value) {
         return (Double) left + (Double) value;
     }
 
-    private Optional<Double> getBoundStatistic(String colName, Map<String, Object> boundValues) {
-        if (boundValues == null) {
-            return Optional.empty();
-        }
-        StructField field = schema.get(colName);
-        if (field == null) {
-            return Optional.empty();
-        }
+    private Optional<Double> getBoundStatistic(String colName, DataType type, Map<String, Object> boundValues) {
         Object value = boundValues.get(colName);
         if (value == null) {
             return Optional.empty();
         }
-        return convertObjectToOptionalDouble(field.getDataType(), value);
+        return convertObjectToOptionalDouble(type, value);
     }
 
     private void updateStats(Map<String, Object> curStat,
@@ -199,10 +188,6 @@ public class DeltaLakeFileStats {
                             Map<String, Object> nullCounts,
                             long recordCount,
                             Predicate<Integer> predicate) {
-        if (newStat == null || nullCounts == null) {
-            hasValidColumnMetrics = false;
-            return;
-        }
         for (String col : nonPartitionPrimitiveColumns) {
             if (corruptedStats.contains(col)) {
                 continue;
@@ -229,15 +214,7 @@ public class DeltaLakeFileStats {
         }
     }
 
-    public void updateNullCount(Map<String, Object> nullCounts, List<String> nonPartitionPrimitiveColumns) {
-        if (!hasValidColumnMetrics) {
-            return;
-        }
-        if (nullCounts == null) {
-            hasValidColumnMetrics = false;
-            return;
-        }
-
+    private void updateNullCount(Map<String, Object> nullCounts, List<String> nonPartitionPrimitiveColumns) {
         for (String col : nonPartitionPrimitiveColumns) {
             DataType type = schema.get(col).getDataType();
             if (BasePrimitiveType.isPrimitiveType(type.toString())) {
