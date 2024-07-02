@@ -16,7 +16,6 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -28,7 +27,6 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.Version;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
@@ -42,13 +40,10 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -428,46 +423,13 @@ public class HiveMetadata implements ConnectorMetadata {
 
     @Override
     public void alterTable(AlterTableStmt stmt, ConnectContext context) throws UserException {
-        // (FIXME) add this api just for tests of external table
-        List<AlterClause> alterClauses = stmt.getOps();
-        for (AlterClause alterClause : alterClauses) {
-            if (alterClause instanceof AddPartitionClause) {
-                addPartition(stmt, alterClause);
-            } else {
-                throw new StarRocksConnectorException("This connector doesn't support alter table type: %s",
-                        alterClause.getOpType());
-            }
+        Table table = getTable(stmt.getDbName(), stmt.getTableName());
+        if (table == null) {
+            throw new StarRocksConnectorException(
+                    "Failed to load hive table: " + stmt.getTbl().toString());
         }
-    }
-
-    private void addPartition(AlterTableStmt stmt, AlterClause alterClause) {
-        HiveTable table = (HiveTable) getTable(stmt.getDbName(), stmt.getTableName());
-        AddPartitionClause addPartitionClause = (AddPartitionClause) alterClause;
-        List<String> partitionColumns = table.getPartitionColumnNames();
-        // now do not support to specify location of hive partition in add partition
-        if (!(addPartitionClause.getPartitionDesc() instanceof SingleItemListPartitionDesc)) {
-            return;
-        }
-        SingleItemListPartitionDesc partitionDesc = (SingleItemListPartitionDesc) addPartitionClause.getPartitionDesc();
-        String tablePath = table.getTableLocation();
-        String partitionString = partitionColumns.get(0) + "=" + partitionDesc.getValues().get(0);
-        String partitionPath = tablePath + "/" + partitionString;
-        HivePartition hivePartition = HivePartition.builder()
-                .setDatabaseName(table.getDbName())
-                .setTableName(table.getTableName())
-                .setColumns(table.getDataColumnNames().stream()
-                        .map(table::getColumn)
-                        .collect(Collectors.toList()))
-                .setValues(partitionDesc.getValues())
-                .setParameters(ImmutableMap.<String, String>builder()
-                        .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
-                        .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
-                        .buildOrThrow())
-                .setStorageFormat(table.getStorageFormat())
-                .setLocation(partitionPath)
-                .build();
-        HivePartitionWithStats partitionWithStats =
-                new HivePartitionWithStats(partitionString, hivePartition, HivePartitionStats.empty());
-        hmsOps.addPartitions(table.getDbName(), table.getTableName(), Lists.newArrayList(partitionWithStats));
+        HiveTable hiveTable = (HiveTable) table;
+        HiveAlterTableExecutor executor = new HiveAlterTableExecutor(stmt, hiveTable, context, hmsOps);
+        executor.execute();
     }
 }
