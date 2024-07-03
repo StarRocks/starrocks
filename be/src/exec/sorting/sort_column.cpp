@@ -94,6 +94,7 @@ static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, cons
             sort_and_tie_column(cancel, data_column.get(), sort_desc, permutation, tie, std::move(ranges), build_tie));
     return Status::OK();
 }
+
 // Sort a column by permtuation
 template <RangeOrRanges Range>
 class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter<Range>> {
