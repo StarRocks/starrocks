@@ -254,6 +254,9 @@ public interface AggregatePolicy {
         @Override
         public Optional<AggregatePiece> convert(AggregatePiece aggPiece) {
             Optional<AggregatePiece> optPiece = policy.convert(aggPiece);
+            if (policy.getClass().getSimpleName().isEmpty()) {
+                return optPiece;
+            }
             String status = optPiece.map(a -> "SUCCESS").orElse("FAIL");
             prettyPrinter.add("RUN AggregatePolicy [").add(status).add("]: ")
                     .add("'").add(policy.getClass().getSimpleName()).add("'").newLine();

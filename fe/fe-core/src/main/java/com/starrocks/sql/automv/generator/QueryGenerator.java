@@ -222,6 +222,12 @@ public class QueryGenerator {
                 conjuncts = conjuncts.concat(topAggHoistConjuncts);
             }
 
+            ColumnRefSet columnIds = ColumnRefSet.createByIds(columnAliases.keySet());
+            TieredMap<Integer, GenericColumn> derivedColumns = planPiece.getColumns().entrySet().stream()
+                    .filter(e -> e.getValue().isDerived() && !columnIds.contains(e.getKey()))
+                    .collect(TieredMap.toMap());
+            conjuncts = OpUtil.subst(conjuncts, OpUtil.columnsToOpMap(derivedColumns));
+
             Optional<List<String>> whereConjuncts = OpUtil.conjunctsToSql(conjuncts, opToSql);
             final PrettyPrinter newSubquery = new PrettyPrinter();
             if (finalNewTableAlias != null) {
@@ -257,20 +263,35 @@ public class QueryGenerator {
             List<Pair<Integer, GenericColumn>> tableOutputColumns =
                     tablePiece.getOutputColumns(inputColumnIds);
 
+            boolean onlyOriginalColumns = tableOutputColumns.stream().noneMatch(p -> p.second.isDerived());
+            List<Pair<Integer, GenericColumn>> tableOriginalOutputColumns = tableOutputColumns;
+            if (!onlyOriginalColumns) {
+                ColumnRefSet requiredOriginalColumnIds = ColumnRefSet.of();
+                tableOutputColumns.forEach(p -> {
+                    int columnId = p.first;
+                    GenericColumn column = p.second;
+                    if (column.isOriginal()) {
+                        requiredOriginalColumnIds.union(columnId);
+                    } else {
+                        requiredOriginalColumnIds.union(column.getOp().getIds());
+                    }
+                });
+                tableOriginalOutputColumns = tablePiece.getOutputColumns(requiredOriginalColumnIds);
+            }
+
             String tableName = tablePiece.getTableName();
             String tableAlias = aliasGenerator.nextAliasIfTableNameAbsent(tableName);
 
             TieredMap<Integer, ColumnAlias> columnAliases =
-                    tableOutputColumns.stream().collect(
+                    tableOriginalOutputColumns.stream().collect(
                             TieredMap.toMap(
                                     p -> p.first,
                                     p -> aliasGenerator
                                             .nextAliasIfColumnNameAbsent(p.second.getColumnName())
                                             .rename(tableName, null)));
 
-            boolean noDerivedColumn = context.getOutputColumns().stream().noneMatch(p -> p.second.isDerived());
             boolean noWhereClause = tablePiece.getConjuncts().isEmpty();
-            boolean tableAliasNotNeed = noWhereClause && noDerivedColumn && tableAlias.equals(tableName);
+            boolean tableAliasNotNeed = noWhereClause && onlyOriginalColumns && tableAlias.equals(tableName);
 
             final String newTableAlias = tableAliasNotNeed ? null : tableAlias;
             PrettyPrinter subquery = new PrettyPrinter();

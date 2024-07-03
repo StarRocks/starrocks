@@ -94,7 +94,7 @@ public class TimeGranuleExtractPolicy extends AggregatePolicy.SimplePolicy {
                 .build();
         AggregatePiece newAggPiece = aggPiece.builder().mustCast(AggregatePiece.Builder.class)
                 .setRollupDimensions(newRollupDimensions)
-                .setHoistConjuncts(newConjuncts)
+                .setNonHoistConjuncts(newConjuncts)
                 .setFlatTable(newFlatTable)
                 .setCommonState(newCommonState)
                 .build().cast();

@@ -108,10 +108,11 @@ public class PlanPieceInfo {
         PlanPiece planPiece = PlanPieceBuilder.createPlanPiece(subPlan, idConverter, fqTableMap);
         PrettyPrinter traceLog = enableTrace ? new PrettyPrinter() : null;
         AggregatePolicy policy = AggregatePolicies.defaultPolicies(options, traceLog);
+        PlanPieceInfo planPieceInfo = PlanPieceInfo.from(planPiece, policy, fqTableMap);
         if (traceLog != null) {
             System.out.println(traceLog.getResult());
         }
-        return PlanPieceInfo.from(planPiece, policy, fqTableMap);
+        return planPieceInfo;
     }
 
     public static PlanPieceInfo fromLegacyMV(MaterializedViewPlus mvPlus, OptExpression entirePlan,

@@ -240,6 +240,13 @@ public class PlanPieceTest {
                 "    Metrics.tier#0\n" +
                 "      {49} = D:(sum[decimal(38, 2)][O] (var[decimal(7, 2)] #12))\n" +
                 "  DistinctMetrics:\n" +
+                "  NonHoistConjuncts:\n" +
+                "    NonHoistConjuncts.tier#0\n" +
+                "      [0] = ($inRange[boolean][O] (var[int(11)] #27) ($setOf[int(11)][U] " +
+                "($closedRangeOf[int(11)][O] (val[int(11)] 2000) (val[int(11)] 2000))))\n" +
+                "  HoistConjuncts:\n" +
+                "    HoistConjuncts.tier#0\n" +
+                "      [0] = ($modify[boolean][O] (val[varchar] M_IS_NOT_NULL) (var[int(11)] #9))\n" +
                 "  Columns:\n" +
                 "    Columns.tier#0\n" +
                 "      {5} = O:`tpcds`.`store_returns`.`sr_customer_sk`\n" +

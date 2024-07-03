@@ -20,18 +20,27 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
+import com.starrocks.sql.automv.options.AutoMVOptions;
+import com.starrocks.sql.automv.pattern.PlanPiecePattern;
+import com.starrocks.sql.automv.pieces.FQTable;
+import com.starrocks.sql.automv.qe.RboOptimizer;
 import com.starrocks.sql.automv.qe.TunespaceExecutor;
+import com.starrocks.sql.automv.tunespace.PlanPieceInfo;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TestUtil;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.wildfly.common.Assert;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -144,6 +153,43 @@ public class AutoMVSSBTest {
             printer.addItemsWithDelNl(";", row);
             System.out.println(printer.getResult());
         }
+    }
+
+    @Test
+    public void testFlatQ13() {
+        Optional<Pair<String, String>> optNameAndQuery = TestUtil.getSsbLineorderFlatQueryList()
+                .stream()
+                .filter(p -> p.first.equals("Q1.3"))
+                .findFirst();
+        Assert.assertTrue(optNameAndQuery.isPresent());
+        String query = optNameAndQuery.get().second;
+        Pair<Map<String, FQTable>, List<OptExpression>> fqTablesAndSubPlans =
+                RboOptimizer.getSubPlans(query, getStarRocksAssert().getCtx(), PlanPiecePattern.getSPJG());
+        AutoMVOptions options = AutoMVOptions.of(getStarRocksAssert().getCtx().getSessionVariable());
+        Map<String, FQTable> fqTableMap = fqTablesAndSubPlans.first;
+        List<OptExpression> subPlans = fqTablesAndSubPlans.second;
+        Assert.assertFalse(subPlans.isEmpty());
+        PlanPieceInfo pieceInfo = PlanPieceInfo.from(options, subPlans.get(0), false, fqTableMap);
+        System.out.println(pieceInfo.getQuery());
+        Assert.assertTrue(pieceInfo.getQuery().contains("SELECT\n" +
+                "  (1) AS _ca0003\n" +
+                "  ,(sum((_ta0000.lo_extendedprice * _ta0000.lo_discount))) AS _ca0004\n" +
+                "FROM\n" +
+                "  (\n" +
+                "    SELECT\n" +
+                "      `ssb`.`lineorder_flat`.lo_extendedprice\n" +
+                "      ,`ssb`.`lineorder_flat`.lo_discount\n" +
+                "    FROM\n" +
+                "      `ssb`.`lineorder_flat`\n" +
+                "    WHERE\n" +
+                "      (6 = weekofyear(`ssb`.`lineorder_flat`.lo_orderdate))\n" +
+                "      AND (\"1994-01-01\" <= `ssb`.`lineorder_flat`.lo_orderdate)\n" +
+                "      AND (`ssb`.`lineorder_flat`.lo_orderdate <= \"1994-12-31\")\n" +
+                "      AND (5 <= `ssb`.`lineorder_flat`.lo_discount)\n" +
+                "      AND (`ssb`.`lineorder_flat`.lo_discount <= 7)\n" +
+                "      AND (26 <= `ssb`.`lineorder_flat`.lo_quantity)\n" +
+                "      AND (`ssb`.`lineorder_flat`.lo_quantity <= 35)\n" +
+                "  ) _ta0000"));
     }
 
     @Test

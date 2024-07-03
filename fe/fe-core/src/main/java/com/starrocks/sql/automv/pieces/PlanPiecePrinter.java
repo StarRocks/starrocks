@@ -121,6 +121,10 @@ public class PlanPiecePrinter {
                 aggPiece.getMetrics().format("Metrics", printer);
                 printer.add("DistinctMetrics:").newLine();
                 aggPiece.getDistinctMetrics().format("DistinctMetrics", printer);
+                printer.add("NonHoistConjuncts:").newLine();
+                printer.indentEnclose(() -> aggPiece.getNonHoistConjuncts().format("NonHoistConjuncts", printer));
+                printer.add("HoistConjuncts:").newLine();
+                printer.indentEnclose(() -> aggPiece.getHoistConjuncts().format("HoistConjuncts", printer));
             });
             aggPiece.getInputPieces().forEach(input -> context.addIndent(0));
             return visit(aggPiece, context);
