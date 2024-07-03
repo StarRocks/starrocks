@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -47,6 +48,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.datacache.collector.TableAccessCollectorConstants;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
@@ -407,6 +409,21 @@ public class StatisticUtils {
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
+        } else if (tableName.equals(TableAccessCollectorConstants.TABLE_ACCESS_STATISTICS_TABLE_NAME)) {
+            ScalarType accessTimeType = ScalarType.createType(PrimitiveType.DATETIME);
+            ScalarType countType = ScalarType.createType(PrimitiveType.BIGINT);
+
+            return ImmutableList.of(
+                    new ColumnDef(TableAccessCollectorConstants.CATALOG_NAME, new TypeDef(catalogNameType)),
+                    new ColumnDef(TableAccessCollectorConstants.DATABASE_NAME, new TypeDef(dbNameType)),
+                    new ColumnDef(TableAccessCollectorConstants.TABLE_NAME, new TypeDef(tableNameType)),
+                    new ColumnDef(TableAccessCollectorConstants.PARTITION_NAME, new TypeDef(partitionNameType)),
+                    new ColumnDef(TableAccessCollectorConstants.COLUMN_NAME, new TypeDef(columnNameType)),
+                    new ColumnDef(TableAccessCollectorConstants.ACCESS_TIME_NAME, new TypeDef(accessTimeType)),
+                    // agg sum() column
+                    new ColumnDef(TableAccessCollectorConstants.COUNT_NAME, new TypeDef(countType), false,
+                            AggregateType.SUM, false,
+                            new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), ""));
         } else {
             throw new StarRocksPlannerException("Not support stats table " + tableName, ErrorType.INTERNAL_ERROR);
         }

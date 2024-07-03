@@ -36,6 +36,7 @@ public class DeltaLakeScanImplementationRule extends ImplementationRule {
         LogicalDeltaLakeScanOperator logicalDeltaLakeScanOperator = (LogicalDeltaLakeScanOperator) input.getOp();
         PhysicalDeltaLakeScanOperator physicalDeltaLakeScan =
                 new PhysicalDeltaLakeScanOperator(logicalDeltaLakeScanOperator);
+        physicalDeltaLakeScan.setColumnAccessPaths(logicalDeltaLakeScanOperator.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalDeltaLakeScan);
         return Lists.newArrayList(result);
     }

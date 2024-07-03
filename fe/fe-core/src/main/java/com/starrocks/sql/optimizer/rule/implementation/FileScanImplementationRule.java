@@ -35,6 +35,7 @@ public class FileScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFileScanOperator scan = (LogicalFileScanOperator) input.getOp();
         PhysicalFileScanOperator physicalFileScan = new PhysicalFileScanOperator(scan);
+        physicalFileScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalFileScan);
         return Lists.newArrayList(result);
     }

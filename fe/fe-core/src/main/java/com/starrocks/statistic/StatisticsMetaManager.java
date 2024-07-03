@@ -17,6 +17,10 @@ package com.starrocks.statistic;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -30,6 +34,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.datacache.collector.TableAccessCollectorConstants;
 import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -38,8 +43,10 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -47,6 +54,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -270,6 +278,65 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
     }
 
+    // same as:
+    // CREATE TABLE IF NOT EXISTS table_access_statistics (
+    //    catalog_name string NOT NULL,
+    //    database_name string NOT NULL,
+    //    table_name string NOT NULL,
+    //    partition_name string NOT NULL,
+    //    -- if it's struct subfield access, it will store as col.a.b
+    //    column_name string NOT NULL,
+    //    access_time datetime NOT NULL,
+    //    count bigint SUM NOT NULL DEFAULT "0"
+    // )
+    // AGGREGATE KEY(`catalog_name`, `database_name`, `table_name`, `partition_name`, `column_name`, `access_time`)
+    // PARTITION BY date_trunc('day', access_time)
+    // DISTRIBUTED BY HASH(catalog_name, database_name, table_name) buckets 10;
+    private boolean createTableAccessStatisticsTable(ConnectContext context) {
+        LOG.info("start to create table_access_statistics table");
+        TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
+                TableAccessCollectorConstants.TABLE_ACCESS_STATISTICS_TABLE_NAME);
+        Map<String, String> properties = Maps.newHashMap();
+
+        try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+
+            // build partition expression
+            // PARTITION BY date_trunc('day', `access_time`)
+            List<String> columnList = List.of(TableAccessCollectorConstants.ACCESS_TIME_NAME);
+            RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, new ArrayList<>());
+            rangePartitionDesc.setAutoPartitionTable(true);
+            List<Expr> exprs = new ArrayList<>();
+            exprs.add(new StringLiteral("day"));
+            exprs.add(new SlotRef(null, TableAccessCollectorConstants.ACCESS_TIME_NAME,
+                    TableAccessCollectorConstants.ACCESS_TIME_NAME));
+            FunctionCallExpr functionCallExpr = new FunctionCallExpr("date_trunc", exprs);
+            ExpressionPartitionDesc expressionPartitionDesc =
+                    new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
+
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(TableAccessCollectorConstants.TABLE_ACCESS_STATISTICS_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    null,
+                    expressionPartitionDesc,
+                    new HashDistributionDesc(10, List.of(TableAccessCollectorConstants.CATALOG_NAME,
+                            TableAccessCollectorConstants.DATABASE_NAME, TableAccessCollectorConstants.TABLE_NAME)),
+                    properties,
+                    null,
+                    "Store DataCacheCopilot collected statistics");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (UserException e) {
+            LOG.warn("Failed to create datacache_copilot_statistics table, " + e.getMessage());
+            return false;
+        }
+        LOG.info("create datacache_copilot_statistics table done");
+        return checkTableExist(TableAccessCollectorConstants.TABLE_ACCESS_STATISTICS_TABLE_NAME);
+    }
+
     private boolean createExternalHistogramStatisticsTable(ConnectContext context) {
         LOG.info("create external histogram statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
@@ -361,6 +428,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return createExternalFullStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return createExternalHistogramStatisticsTable(context);
+        } else if (tableName.equals(TableAccessCollectorConstants.TABLE_ACCESS_STATISTICS_TABLE_NAME)) {
+            return createTableAccessStatisticsTable(context);
         } else {
             throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
         }
@@ -401,6 +470,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+        refreshStatisticsTable(TableAccessCollectorConstants.TABLE_ACCESS_STATISTICS_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
