@@ -43,6 +43,10 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
+    // some pipeline may have multiple limit operators with same plan_node_id, so add operator id to profile name
+    if (upper_name == "LIMIT") {
+        profile_name += " (operator id=" + std::to_string(id) + ")";
+    }
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
 
