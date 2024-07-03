@@ -18,10 +18,34 @@ import com.google.gson.annotations.SerializedName;
 
 import java.util.Map;
 
-public class DeltaLakeStats {
+// This class is used to deserialize AddFileStats in metadata. Example:
+// "stats":
+//      "{
+//          \"numRecords\":1,
+//          \"minValues\":
+//          {
+//              \"c1\":1,
+//              \"c2\":11,
+//              \"c3\":\"111\"
+//          },
+//          \"maxValues\":
+//          {
+//              \"c1\":1,
+//              \"c2\":11,
+//              \"c3\":\"111\"
+//          },
+//          \"nullCount\":
+//          {
+//              \"c1\":0,
+//              \"c2\":0,
+//              \"c3\":0
+//          }
+//       }"
+public class DeltaLakeAddFileStatsSerDe {
     @SerializedName(value = "numRecords")
     public long numRecords;
 
+    // The key of map is column name
     @SerializedName(value = "minValues")
     public Map<String, Object> minValues;
 
@@ -31,7 +55,11 @@ public class DeltaLakeStats {
     @SerializedName(value = "nullCount")
     public Map<String, Object> nullCount;
 
-    public DeltaLakeStats(long numRecords) {
+    public DeltaLakeAddFileStatsSerDe(long numRecords, Map<String, Object> minValues,
+                                      Map<String, Object> maxValues, Map<String, Object> nullCount) {
         this.numRecords = numRecords;
+        this.minValues = minValues;
+        this.maxValues = maxValues;
+        this.nullCount = nullCount;
     }
 }
