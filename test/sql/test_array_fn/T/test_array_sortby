@@ -47,7 +47,6 @@ insert into __row_util_base select * from __row_util_base; -- 80000
 insert into __row_util_base select * from __row_util_base; -- 160000
 insert into __row_util_base select * from __row_util_base; -- 320000
 insert into __row_util_base select * from __row_util_base; -- 640000
-insert into __row_util_base select * from __row_util_base; -- 1280000
 
 CREATE TABLE __row_util (
   idx bigint NULL,
@@ -61,7 +60,7 @@ PROPERTIES (
 insert into __row_util 
 select 
     row_number() over() as idx,
-    array_generate(100)
+    array_generate(10)
 from __row_util_base;
 
 
@@ -74,7 +73,7 @@ CREATE TABLE t1 (
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(id)
+DISTRIBUTED BY HASH(id) BUCKETS 32
 PROPERTIES (
     "replication_num" = "1"
 );
@@ -83,12 +82,156 @@ insert into t1
 select
     idx,
     array_c1,
+    array_map(array_c1, x -> case when idx % 13 != 0 then x % 3 else null end),
+    array_map(array_c1, x -> case when idx % 13 != 0 then concat('abc-', x % 5) else null end),
+    array_map(array_c1, x -> case when idx % 13 != 0 then date_sub('2023-11-02', interval cast(x % 2 as int) day) else null end)
+from __row_util;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2) as x from t1
+)
+select array_join(x, '-'), int_1, int_2
+from w1
+order by id limit 10;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2, str_1, date_1) as x from t1
+)
+select array_join(x, '-'), int_1, int_2, str_1, date_1
+from w1
+order by id limit 10;
+
+
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t1
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+with w1 as (
+    select id, array_sortby(int_1, int_2, str_1, date_1) as x from t1
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+
+CREATE TABLE t2 (
+    id INT(11) not null,
+    int_1 ARRAY<INT>,
+    int_2 ARRAY<INT>,
+    str_1 ARRAY<VARCHAR(20)>,
+    date_1 ARRAY<DATE>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(id) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t2 
+select
+    idx,
+    array_c1,
+    case when idx % 11 != 0 then array_map(array_c1, x -> case when idx % 13 != 0 then x % 3 else null end) else null end,
+    case when idx % 11 != 0 then array_map(array_c1, x -> case when idx % 13 != 0 then concat('abc-', x % 5) else null end) else null end,
+    case when idx % 11 != 0 then array_map(array_c1, x -> case when idx % 13 != 0 then date_sub('2023-11-02', interval cast(x % 2 as int) day) else null end) else null end
+from __row_util;
+
+
+with w1 as (
+    select *, array_sortby(int_1, int_2) as x from t2
+)
+select array_join(x, '-'), int_1, int_2
+from w1
+order by id limit 10;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2, str_1, date_1) as x from t2
+)
+select array_join(x, '-'), int_1, int_2, str_1, date_1
+from w1
+order by id limit 10;
+
+
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t2
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+with w1 as (
+    select id, array_sortby(int_1, int_2, str_1, date_1) as x from t2
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+
+CREATE TABLE t3 (
+    id INT(11) not null,
+    int_1 ARRAY<INT> not null,
+    int_2 ARRAY<INT> not null,
+    str_1 ARRAY<VARCHAR(20)> not null,
+    date_1 ARRAY<DATE> not null
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(id) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t3 
+select
+    idx,
+    array_c1,
     array_map(array_c1, x -> x % 3),
     array_map(array_c1, x -> concat('abc-', x % 5)),
     array_map(array_c1, x -> date_sub('2023-11-02', interval cast(x % 2 as int) day))
 from __row_util;
 
-select count(x)
-from (
-    select array_sortby(int_1, int_2, str_1, date_1) as x from t1
-)t
+with w1 as (
+    select *, array_sortby(int_1, int_2) as x from t3
+)
+select array_join(x, '-'), int_1, int_2
+from w1
+order by id limit 10;
+
+with w1 as (
+    select *, array_sortby(int_1, int_2, str_1, date_1) as x from t3
+)
+select array_join(x, '-'), int_1, int_2, str_1, date_1
+from w1
+order by id limit 10;
+
+
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t3
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
+with w1 as (
+    select id, array_sortby(int_1, int_2, str_1, date_1) as x from t3
+), w2 as (
+    select array_join(x, '-') as x
+    from w1
+)
+select ifnull(sum(murmur_hash3_32(x)), 0)
+from w2;
+
