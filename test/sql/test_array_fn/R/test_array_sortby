@@ -354,3 +354,67 @@ from w2;
 -- result:
 -1140996549120000
 -- !result
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t3 where id < -1
+)
+select count(x)
+from w1;
+-- result:
+0
+-- !result
+select array_sortby([1,2,3,4,5,6], cast(null as array<int>), cast(null as array<int>), cast(null as array<string>));
+-- result:
+[1,2,3,4,5,6]
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(null as array<int>), cast(null as array<string>), [11, 22, 32, 31, 21, 12], cast(null as array<int>));
+-- result:
+[1,6,5,2,4,3]
+-- !result
+select array_sortby(cast(null as array<int>), cast(null as array<int>), cast(null as array<int>));
+-- result:
+None
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+-- result:
+[1,6,5,2,4,3]
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+-- result:
+[1,6,2,5,3,4]
+-- !result
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+-- result:
+[1,6,5,2,4,null]
+-- !result
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+-- result:
+[1,6,2,5,null,4]
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+-- result:
+[4,3,1,6,5,2]
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, null, null]);
+-- result:
+[4,3,6,1,5,2]
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', null ,null] as array<date>));
+-- result:
+[3,4,6,1,5,2]
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+-- result:
+[1,6,2,5,3,4]
+-- !result
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a', 1], [11, 22, 32, 31, 21, 12]);
+-- result:
+E: (1064, "Input arrays' size are not equal in array_sortby_multi.")
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a', 1], [11, 22, 32, 31, 21, 12]);
+-- result:
+E: (1064, "Input arrays' size are not equal in array_sortby_multi.")
+-- !result
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, null, null, 1]);
+-- result:
+E: (1064, "Input arrays' size are not equal in array_sortby_multi.")
+-- !result
