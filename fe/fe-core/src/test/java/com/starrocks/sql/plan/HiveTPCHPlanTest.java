@@ -33,7 +33,12 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
         ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.tpch");
+=======
+        connectContext.changeCatalogDb("hive0.tpch");
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+>>>>>>> b8687750c4 ([Enhancement] Set session variable enable_stats_to_optimize_skew_join to false (#47760))
     }
 
     @AfterClass

@@ -35,6 +35,8 @@ public class TPCHPlanWithHistogramCostTest extends DistributedEnvPlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         int scale = 100;
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
         setTableStatistics(t0, 5);
 
