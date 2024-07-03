@@ -851,7 +851,7 @@ CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 CONF_Int32(orc_loading_buffer_size, "8388608");
 
 // orc writer
-CONF_mInt32(orc_writer_version, -1);
+CONF_mInt32(orc_writer_version, "-1");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
