@@ -34,6 +34,7 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.tpch");
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
     }
 
     @AfterClass
