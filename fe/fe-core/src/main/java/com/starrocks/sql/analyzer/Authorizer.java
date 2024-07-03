@@ -138,10 +138,10 @@ public class Authorizer {
     }
 
     public static void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
-                                          TableName tableName, Set<String> columns,
+                                          TableName tableName, String column,
                                           PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkColumnsAction(currentUser, roleIds,
-                tableName, columns, privilegeType);
+                tableName, column, privilegeType);
     }
 
     public static void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,

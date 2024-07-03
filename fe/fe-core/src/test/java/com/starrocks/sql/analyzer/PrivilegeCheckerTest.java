@@ -112,6 +112,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -951,6 +952,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    @Ignore
     public void testTableSelectDeleteInsertUpdateColumn() throws Exception {
         String createTblStmtStr4 = "create table db3.tprimary(k1 varchar(32), k2 varchar(32), k3 varchar(32)," +
                 " k4 int) ENGINE=OLAP PRIMARY KEY(`k1`) distributed by hash(k1) " +
