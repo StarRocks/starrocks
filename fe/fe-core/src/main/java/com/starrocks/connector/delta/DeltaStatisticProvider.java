@@ -18,74 +18,24 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import io.delta.kernel.engine.Engine;
 import io.delta.kernel.types.StructType;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class DeltaStatisticProvider {
     private final Map<PredicateSearchKey, DeltaLakeFileStats> deltaLakeFileStatsMap = new HashMap<>();
 
     public DeltaStatisticProvider() {}
 
-    public Statistics getCardinalityStats(Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
-                                          List<FileScanTask> fileScanTasks) {
-        Statistics.Builder builder = Statistics.builder();
-        long cardinality = 0;
-        Set<String> currentFiles = new HashSet<>();
-
-        for (FileScanTask file : fileScanTasks) {
-            String path = file.getFileStatus().getPath();
-
-            if (currentFiles.contains(path)) {
-                continue;
-            }
-            currentFiles.add(path);
-
-            cardinality += file.getRecords();
-        }
-
-        return builder.setOutputRowCount(cardinality)
-                .addColumnStatistics(buildUnknownColumnStatistics(columnRefOperatorColumnMap.keySet()))
-                .build();
-    }
-
-    public void updateFileStats(DeltaLakeTable table, PredicateSearchKey key, FileScanTask file,
-                                List<String> nonPartitionPrimitiveColumn) {
-        StructType schema = table.getDeltaMetadata().getSchema();
-
-        DeltaLakeAddFileStatsSerDe fileStat = file.getStats();
-
-        DeltaLakeFileStats fileStats;
-        if (deltaLakeFileStatsMap.containsKey(key)) {
-            fileStats = deltaLakeFileStatsMap.get(key);
-            fileStats.update(fileStat, file.getFileSize());
-        } else {
-            fileStats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumn, fileStat, file.getFileSize());
-            deltaLakeFileStatsMap.put(key, fileStats);
-        }
-    }
-
-    public Statistics getTableStatistics(DeltaLakeTable deltaLakeTable,
-                                         Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
-                                         ScalarOperator predicate) {
-        String dbName = deltaLakeTable.getDbName();
-        String tableName = deltaLakeTable.getTableName();
-        Engine engine = deltaLakeTable.getDeltaEngine();
-        long snapshotId = deltaLakeTable.getDeltaSnapshot().getVersion(engine);
-        StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
-
+    public Statistics getCardinalityStats(StructType schema,
+                                          PredicateSearchKey key,
+                                          Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
         Statistics.Builder builder = Statistics.builder();
 
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, predicate);
         DeltaLakeFileStats deltaLakeFileStats;
         if (deltaLakeFileStatsMap.containsKey(key)) {
             deltaLakeFileStats = deltaLakeFileStatsMap.get(key);
@@ -99,13 +49,37 @@ public class DeltaStatisticProvider {
         return builder.build();
     }
 
-    public Map<ColumnRefOperator, ColumnStatistic> buildUnknownColumnStatistics(Set<ColumnRefOperator> columns) {
-        return columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.builder()
-                .setNullsFraction(0)
-                .setAverageRowSize(column.getType().getTypeSize())
-                .setDistinctValuesCount(1)
-                .setType(ColumnStatistic.StatisticType.UNKNOWN)
-                .build()));
+    public void updateFileStats(DeltaLakeTable table, PredicateSearchKey key, FileScanTask file,
+                                DeltaLakeAddFileStatsSerDe fileStatsSerDe, List<String> nonPartitionPrimitiveColumn) {
+        StructType schema = table.getDeltaMetadata().getSchema();
+
+        DeltaLakeFileStats fileStats;
+        if (deltaLakeFileStatsMap.containsKey(key)) {
+            fileStats = deltaLakeFileStatsMap.get(key);
+            fileStats.update(fileStatsSerDe, file.getRecords(), file.getFileSize());
+        } else {
+            fileStats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumn, fileStatsSerDe,
+                    file.getRecords(), file.getFileSize());
+            deltaLakeFileStatsMap.put(key, fileStats);
+        }
+    }
+
+    public Statistics getTableStatistics(StructType schema,
+                                         PredicateSearchKey key,
+                                         Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        Statistics.Builder builder = Statistics.builder();
+
+        DeltaLakeFileStats deltaLakeFileStats;
+        if (deltaLakeFileStatsMap.containsKey(key)) {
+            deltaLakeFileStats = deltaLakeFileStatsMap.get(key);
+        } else {
+            deltaLakeFileStats = new DeltaLakeFileStats(0);
+        }
+
+        builder.setOutputRowCount(deltaLakeFileStats.getRecordCount());
+        builder.addColumnStatistics(buildColumnStatistics(schema, columnRefOperatorColumnMap, deltaLakeFileStats));
+
+        return builder.build();
     }
 
     private Map<ColumnRefOperator, ColumnStatistic> buildColumnStatistics(
