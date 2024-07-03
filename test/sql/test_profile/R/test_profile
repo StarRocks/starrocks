@@ -62,6 +62,9 @@ Analyze profile succeeded
 Analyze profile succeeded
 Analyze profile succeeded
 Analyze profile succeeded
+Analyze profile succeeded
+Analyze profile succeeded
+Analyze profile succeeded
 -- !result
 shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_profile_non_default_variables.sh
 -- result:
