@@ -1101,15 +1101,11 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
         tsid.tablet_id = tablet_id;
         for (auto& delvec_pair : new_del_vecs) {
             tsid.segment_id = delvec_pair.first;
-<<<<<<< HEAD
-            manager->set_cached_del_vec(tsid, delvec_pair.second);
-=======
             st = manager->set_cached_del_vec(tsid, delvec_pair.second);
             if (!st.ok()) {
                 failure_handler("set_cached_del_vec failed", st);
                 return apply_st;
             }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
             // try to set empty dcg cache, for improving latency when reading
             manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
             num_dels += delvec_pair.second->cardinality();
@@ -1331,17 +1327,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     int64_t full_rowset_size = 0;
     if (rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes_size() == 0) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-<<<<<<< HEAD
             state.load_upserts(rowset.get(), i);
-=======
-            st = state.load_upserts(rowset.get(), i);
-            if (!st.ok()) {
-                std::string msg = strings::Substitute("_apply_rowset_commit error: load upserts failed: $0 $1",
-                                                      st.to_string(), debug_string());
-                failure_handler(msg, st.code(), true);
-                return apply_st;
-            }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
             auto& upserts = state.upserts();
             if (upserts[i] != nullptr) {
                 // used for auto increment delete-partial update conflict
@@ -1367,9 +1353,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 }
                 manager->index_cache().update_object_size(index_entry, index.memory_usage());
                 if (delete_pks != nullptr) {
-<<<<<<< HEAD
-                    index.erase(*delete_pks, &new_deletes);
-=======
                     st = index.erase(*delete_pks, &new_deletes);
                     if (!st.ok()) {
                         std::string msg = strings::Substitute("_apply_rowset_commit error: index erase failed: $0 $1",
@@ -1377,7 +1360,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                         failure_handler(msg, st.code(), true);
                         return apply_st;
                     }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
                 }
             }
             state.release_upserts(i);
@@ -1387,12 +1369,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
         // 2. pure upsert. no delete files, the following logic will be skip
         for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
-<<<<<<< HEAD
-            state.load_deletes(rowset.get(), i);
-            auto& deletes = state.deletes();
-            delete_op += deletes[i]->size();
-            index.erase(*deletes[i], &new_deletes);
-=======
             st = state.load_deletes(rowset.get(), i);
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_rowset_commit error: load deletes failed: $0 $1",
@@ -1409,7 +1385,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 failure_handler(msg, st.code(), true);
                 return apply_st;
             }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
             state.release_deletes(i);
         }
     } else {
@@ -1426,9 +1401,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 del_idx = rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes(loaded_delfile);
             }
             while (i < del_idx) {
-<<<<<<< HEAD
-                state.load_upserts(rowset.get(), loaded_upsert);
-=======
                 st = state.load_upserts(rowset.get(), loaded_upsert);
                 FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_upserts_failed,
                                            { st = Status::InternalError("inject tablet_apply_load_upserts_failed"); });
@@ -1438,7 +1410,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                     failure_handler(msg, st.code(), true);
                     return apply_st;
                 }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
                 auto& upserts = state.upserts();
                 if (upserts[loaded_upsert] != nullptr) {
                     // used for auto increment delete-partial update conflict
@@ -1470,9 +1441,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                     }
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
                     if (delete_pks != nullptr) {
-<<<<<<< HEAD
-                        index.erase(*delete_pks, &new_deletes);
-=======
                         st = index.erase(*delete_pks, &new_deletes);
                         if (!st.ok()) {
                             std::string msg =
@@ -1481,7 +1449,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                             failure_handler(msg, st.code(), true);
                             return apply_st;
                         }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
                     }
                 }
                 i++;
@@ -1490,12 +1457,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             }
             if (loaded_delfile < delfile_num) {
                 DCHECK(i == del_idx);
-<<<<<<< HEAD
-                state.load_deletes(rowset.get(), loaded_delfile);
-                auto& deletes = state.deletes();
-                delete_op += deletes[loaded_delfile]->size();
-                index.erase(*deletes[loaded_delfile], &new_deletes);
-=======
                 st = state.load_deletes(rowset.get(), loaded_delfile);
                 FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_deletes_failed,
                                            { st = Status::InternalError("inject tablet_apply_load_deletes_failed"); });
@@ -1516,7 +1477,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                     failure_handler(msg, st.code(), true);
                     return apply_st;
                 }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
                 state.release_deletes(loaded_delfile);
                 i++;
                 loaded_delfile++;
@@ -1698,9 +1658,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         tsid.tablet_id = tablet_id;
         for (auto& delvec_pair : new_del_vecs) {
             tsid.segment_id = delvec_pair.first;
-<<<<<<< HEAD
-            manager->set_cached_del_vec(tsid, delvec_pair.second);
-=======
             st = manager->set_cached_del_vec(tsid, delvec_pair.second);
             FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_cache_del_vec_failed, {
                 st = Status::InternalError("inject tablet_apply_cache_del_vec_failed");
@@ -1712,7 +1669,6 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 failure_handler(msg, st.code(), false);
                 return apply_st;
             }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
             // try to set empty dcg cache, for improving latency when reading
             manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
         }
@@ -2263,20 +2219,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     if (output_rowset == nullptr) {
         string msg = strings::Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
                                          _tablet.tablet_id(), rowset_id);
-<<<<<<< HEAD
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
-    }
-    if (!use_light_apply_compaction && !(st = _compaction_state->load(output_rowset)).ok()) {
-        manager->index_cache().release(index_entry);
-        std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
-                                              st.to_string(), debug_string());
-        failure_handler(msg);
-        return;
-    }
-    index.prepare(version, 0);
-=======
         failure_handler(msg, TStatusCode::NOT_FOUND);
         return apply_st;
     }
@@ -2300,7 +2242,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         failure_handler(msg, st.code());
         return apply_st;
     }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
     int64_t t_load = MonotonicMillis();
     // 2. iterator new rowset's pks, update primary index, generate delvec
     size_t total_deletes = 0;
@@ -2392,17 +2333,10 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_index_commit_failed,
                                { st = Status::InternalError("inject tablet_apply_index_commit_failed"); });
     if (!st.ok()) {
-<<<<<<< HEAD
-        std::string msg = strings::Substitute("primary index commit failed: $0", st.to_string());
-        LOG(ERROR) << msg << " " << _debug_string(false, true);
-        _set_error(msg);
-        return;
-=======
         std::string msg =
                 strings::Substitute("primary index commit failed: $0 $1", st.to_string(), _debug_string(false, true));
         failure_handler(msg, st.code());
         return apply_st;
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
     }
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
@@ -2419,23 +2353,14 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
             manager->index_cache().release(index_entry);
             std::string msg = strings::Substitute("_apply_compaction_commit error: write meta failed: $0 $1",
                                                   st.to_string(), _debug_string(false));
-<<<<<<< HEAD
-            LOG(ERROR) << msg;
-            _set_error(msg);
-            return;
-=======
             failure_handler(msg, st.code());
             return apply_st;
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
         }
         // 4. put delvec in cache
         TabletSegmentId tsid;
         tsid.tablet_id = _tablet.tablet_id();
         for (auto& delvec_pair : delvecs) {
             tsid.segment_id = delvec_pair.first;
-<<<<<<< HEAD
-            manager->set_cached_del_vec(tsid, delvec_pair.second);
-=======
             st = manager->set_cached_del_vec(tsid, delvec_pair.second);
             FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_cache_del_vec_failed, {
                 st = Status::InternalError("inject tablet_apply_cache_del_vec_failed");
@@ -2447,7 +2372,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                 failure_handler(msg, st.code());
                 return apply_st;
             }
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
             // try to set empty dcg cache, for improving latency when reading
             manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
         }
@@ -2460,14 +2384,8 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     st = index.on_commited();
     if (!st.ok()) {
         std::string msg = strings::Substitute("primary index on_commit failed: $0", st.to_string());
-<<<<<<< HEAD
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
-=======
         failure_handler(msg, st.code());
         return apply_st;
->>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
     }
     _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
 
