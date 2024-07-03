@@ -51,7 +51,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
 
 public class ListPartitionInfo extends PartitionInfo {
-
     private static final Logger LOG = LogManager.getLogger(ListPartitionInfo.class);
 
     @SerializedName("partitionColumns")
@@ -113,8 +112,8 @@ public class ListPartitionInfo extends PartitionInfo {
         for (String value : values) {
             //there only one partition column for single partition list
             Type type = idToColumn.get(partitionColumnIds.get(0)).getType();
-            LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
-            partitionValues.add(partitionValue);
+            LiteralExpr literalExpr = new PartitionValue(value).getValue(type);
+            partitionValues.add(literalExpr);
         }
         this.idToLiteralExprValues.put(partitionId, partitionValues);
     }

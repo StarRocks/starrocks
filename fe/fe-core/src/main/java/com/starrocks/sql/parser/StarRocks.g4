@@ -2381,11 +2381,19 @@ listPartitionDesc
     ;
 
 singleItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN stringList propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN listPartitionValueList propertyList?
     ;
 
 multiItemListPartitionDesc
-    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' stringList (',' stringList)* ')' propertyList?
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' listPartitionValueList (',' listPartitionValueList)* ')' propertyList?
+    ;
+
+listPartitionValueList
+    : '(' listPartitionValue (',' listPartitionValue)* ')'
+    ;
+
+listPartitionValue
+    : NULL | string
     ;
 
 stringList
