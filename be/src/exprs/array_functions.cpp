@@ -1530,7 +1530,7 @@ static Status sort_multi_array_column(FunctionContext* ctx, const Column* src_co
     dest_offsets_column->get_data() = src_offsets_column->get_data();
 
     // Unpack each key array column.
-    std::vector<const Column*> elements_per_key_col(num_key_columns);
+    std::vector<Column*> elements_per_key_col(num_key_columns);
     std::vector<std::span<const uint32_t>> offsets_per_key_col(num_key_columns);
     std::vector<const uint8_t*> nulls_per_key_col(num_key_columns, nullptr);
     for (size_t i = 0; i < num_key_columns; ++i) {

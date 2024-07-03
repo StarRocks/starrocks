@@ -474,8 +474,11 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
     return column->accept(&column_sorter);
 }
 
-static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
+static Status sort_and_tie_column(const std::atomic<bool>& cancel, Column* column, const SortDesc& sort_desc,
                                   SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie) {
+    if (column->is_nullable() && !column->is_constant()) {
+        down_cast<NullableColumn*>(column)->fill_null_with_default();
+    }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
     return column->accept(&column_sorter);
 }
@@ -502,7 +505,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
     return Status::OK();
 }
 
-Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<Column*>& columns,
                             const SortDescs& sort_desc, SmallPermutation& perm,
                             const std::span<const uint32_t> src_offsets,
                             const std::vector<std::span<const uint32_t>>& offsets_per_key) {
@@ -552,7 +555,7 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<c
     }
 
     for (int col_i = 0; col_i < num_keys; col_i++) {
-        const Column* column = columns[col_i];
+        Column* column = columns[col_i];
         const bool build_tie = (col_i != (columns.size() - 1));
         shift_perm(offsets_per_key[col_i].data());
         RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_i), perm, tie,
