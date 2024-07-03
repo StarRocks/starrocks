@@ -1562,7 +1562,7 @@ static Status sort_multi_array_column(FunctionContext* ctx, const Column* src_co
             const auto cur_num_key_elements =
                     offsets_per_key_col[key_col_i][row_i + 1] - offsets_per_key_col[key_col_i][row_i];
             if (cur_num_src_elements != cur_num_key_elements) {
-                return Status::InvalidArgument("Input arrays' size are not equal in array_sortby_multi.");
+                return Status::InvalidArgument("Input arrays' size are not equal in array_sortby.");
             }
         }
     }

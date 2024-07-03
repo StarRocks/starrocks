@@ -78,6 +78,7 @@ PROPERTIES (
     "replication_num" = "1"
 );
 
+-- Some array elements of key columns are null, but all the array rows are non-null.
 insert into t1 
 select
     idx,
@@ -121,6 +122,7 @@ select ifnull(sum(murmur_hash3_32(x)), 0)
 from w2;
 
 
+-- Some array rows and array elements of key columns are null.
 CREATE TABLE t2 (
     id INT(11) not null,
     int_1 ARRAY<INT>,
@@ -134,6 +136,7 @@ DISTRIBUTED BY HASH(id) BUCKETS 32
 PROPERTIES (
     "replication_num" = "1"
 );
+
 
 insert into t2 
 select
@@ -179,6 +182,7 @@ select ifnull(sum(murmur_hash3_32(x)), 0)
 from w2;
 
 
+-- Non-nullable source and key columns.
 CREATE TABLE t3 (
     id INT(11) not null,
     int_1 ARRAY<INT> not null,
@@ -235,3 +239,31 @@ with w1 as (
 select ifnull(sum(murmur_hash3_32(x)), 0)
 from w2;
 
+-- Empty source column.
+with w1 as (
+    select id, array_sortby(int_1, int_2) as x from t3 where id < -1
+)
+select count(x)
+from w1;
+
+-- Empty key columns.
+select array_sortby([1,2,3,4,5,6], cast(null as array<int>), cast(null as array<int>), cast(null as array<string>));
+
+select array_sortby(cast(null as array<int>), cast(null as array<int>), cast(null as array<int>));
+
+
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, null, null]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', null ,null] as array<date>));
+select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-11-02', '2023-11-03', '2023-11-04', '2023-11-05', '2023-11-06', '2023-11-07'] as array<date>));
+
+-- invalid
+select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a', 1], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a', 1], [11, 22, 32, 31, 21, 12]);
+select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, null, null, 1]);
