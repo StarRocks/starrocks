@@ -29,7 +29,7 @@ import java.time.LocalTime;
 
 public class PartitionValue implements ParseNode {
     // default partition value for `NULL` value
-    public static final String STARROCKS_DEFAULT_PARTITION_VALUE = "__DEFAULT_PARTITION__";
+    public static final String STARROCKS_DEFAULT_PARTITION_VALUE = "__STARROCKS_DEFAULT_PARTITION__";
 
     public static final PartitionValue MAX_VALUE = new PartitionValue();
 

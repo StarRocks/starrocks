@@ -204,33 +204,28 @@ struct PartionKeyComparator {
     }
 
 private:
-    Column* _get_data_column(const ColumnPtr& column) const {
-        if (column->is_nullable()) {
-            auto v = ColumnHelper::as_raw_column<NullableColumn>(column);
-            return v->data_column().get();
-        } else {
-            return column.get();
-        }
-    }
-
+    /**
+     * @brief Compare left column and right column at l_idx and r_idx which column can be nullable.
+     * @param lc  left column
+     * @param rc  right column
+     * @param l_idx  left column index
+     * @param r_idx  right column index
+     * @return 0 if equal or left & right both null, -1 if left < right or left is null, 1 if left > right or right is null
+     */
     int _compare_at(const ColumnPtr& lc, const ColumnPtr& rc, uint32_t l_idx, uint32_t r_idx) const {
-        if (!lc->is_nullable() && !rc->is_nullable()) {
-            return lc->compare_at(l_idx, r_idx, *rc, -1);
+        bool is_l_null = lc->is_null(l_idx);
+        bool is_r_null = rc->is_null(r_idx);
+        if (!is_l_null && !is_r_null) {
+            Column* ldc = ColumnHelper::get_data_column(lc.get());
+            Column* rdc = ColumnHelper::get_data_column(rc.get());
+            return ldc->compare_at(l_idx, r_idx, *rdc, -1);
         } else {
-            bool is_l_null = lc->is_null(l_idx);
-            bool is_r_null = rc->is_null(r_idx);
-            if (!is_l_null && !is_r_null) {
-                Column* ldc = _get_data_column(lc);
-                Column* rdc = _get_data_column(rc);
-                return ldc->compare_at(l_idx, r_idx, *rdc, -1);
+            if (is_l_null && is_r_null) {
+                return 0;
+            } else if (is_l_null) {
+                return -1;
             } else {
-                if (is_l_null && is_r_null) {
-                    return 0;
-                } else if (is_l_null) {
-                    return -1;
-                } else {
-                    return 1;
-                }
+                return 1;
             }
         }
     }
@@ -275,6 +270,7 @@ private:
     /**
      * @brief  find tablets with range partition table
      * @param chunk  input chunk
+     * @param partition_columns input partition columns 
      * @param partitions  output partitions
      * @param indexes  output partition indexes
      * @param selection  chunk's selection
@@ -282,7 +278,8 @@ private:
      * @param partition_not_exist_row_values  output partition not exist row values
      * @return Status 
      */
-    Status _find_tablets_with_range_partition(Chunk* chunk, std::vector<OlapTablePartition*>* partitions,
+    Status _find_tablets_with_range_partition(Chunk* chunk, Columns partition_columns,
+                                              std::vector<OlapTablePartition*>* partitions,
                                               std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
                                               std::vector<int>* invalid_row_indexs,
                                               std::vector<std::vector<std::string>>* partition_not_exist_row_values);
@@ -290,6 +287,7 @@ private:
     /**
      * @brief  find tablets with list partition table
      * @param chunk  input chunk
+     * @param partition_columns input partition columns 
      * @param partitions  output partitions
      * @param indexes  output partition indexes
      * @param selection  chunk's selection
@@ -297,7 +295,8 @@ private:
      * @param partition_not_exist_row_values  output partition not exist row values
      * @return Status 
      */
-    Status _find_tablets_with_list_partition(Chunk* chunk, std::vector<OlapTablePartition*>* partitions,
+    Status _find_tablets_with_list_partition(Chunk* chunk, Columns partition_columns,
+                                             std::vector<OlapTablePartition*>* partitions,
                                              std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
                                              std::vector<int>* invalid_row_indexs,
                                              std::vector<std::vector<std::string>>* partition_not_exist_row_values);

@@ -18,7 +18,6 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
 #include "storage/tablet_schema.h"
@@ -29,7 +28,7 @@ namespace starrocks {
 
 static const std::string LOAD_OP_COLUMN = "__op";
 // NOTE: This value should keep the same with the value in FE's `STARROCKS_DEFAULT_PARTITION_VALUE` constant.
-static const std::string STARROCKS_DEFAULT_PARTITION_VALUE = "__DEFAULT_PARTITION__";
+static const std::string STARROCKS_DEFAULT_PARTITION_VALUE = "__STARROCKS_DEFAULT_PARTITION__";
 
 struct VectorCompare {
     bool operator()(const std::vector<std::string>& a, const std::vector<std::string>& b) const {
@@ -529,10 +528,11 @@ Status OlapTablePartitionParam::remove_partitions(const std::vector<int64_t>& pa
     return Status::OK();
 }
 
-Status OlapTablePartitionParam::find_tablets_with_list_partition(
-        Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
-        std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
+Status OlapTablePartitionParam::_find_tablets_with_list_partition(
+        Chunk* chunk, Columns partition_columns, std::vector<OlapTablePartition*>* partitions,
+        std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
         std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
+    size_t num_rows = chunk->num_rows();
     ChunkRow row;
     row.columns = &partition_columns;
     row.index = 0;
@@ -541,8 +541,9 @@ Status OlapTablePartitionParam::find_tablets_with_list_partition(
     for (auto& column : *(row.columns)) {
         partition_data_columns.emplace_back(ColumnHelper::get_data_column(column.get()));
     }
-    bool is_list_partition = _t_param.partitions[0].__isset.in_keys;
+
     int partition_column_size = partition_columns.size();
+    std::set<std::vector<std::string>, VectorCompare> partition_columns_set;
     for (size_t i = 0; i < num_rows; ++i) {
         OlapTablePartition* part = nullptr;
         if (!((*selection)[i])) {
@@ -585,13 +586,16 @@ Status OlapTablePartitionParam::find_tablets_with_list_partition(
     return Status::OK();
 }
 
-Status OlapTablePartitionParam::find_tablets_with_range_partition(
-        Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
-        std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
+Status OlapTablePartitionParam::_find_tablets_with_range_partition(
+        Chunk* chunk, Columns partition_columns, std::vector<OlapTablePartition*>* partitions,
+        std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
         std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
+    size_t num_rows = chunk->num_rows();
     ChunkRow row;
     row.columns = &partition_columns;
     row.index = 0;
+
+    std::set<std::vector<std::string>, VectorCompare> partition_columns_set;
     for (size_t i = 0; i < num_rows; ++i) {
         OlapTablePartition* part = nullptr;
         if (!((*selection)[i])) {
@@ -644,7 +648,6 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
 
     _compute_hashes(chunk, indexes);
 
-    std::set<std::vector<std::string>, VectorCompare> partition_columns_set;
     if (!_partition_columns.empty()) {
         Columns partition_columns(_partition_slot_descs.size());
         if (!_partitions_expr_ctxs.empty()) {
@@ -662,11 +665,11 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
 
         bool is_list_partition = _t_param.partitions[0].__isset.in_keys;
         if (is_list_partition) {
-            return find_tablets_with_list_partition(chunk, partitions, indexes, selection, invalid_row_indexs,
-                                                    partition_not_exist_row_values);
+            return _find_tablets_with_list_partition(chunk, partition_columns, partitions, indexes, selection,
+                                                     invalid_row_indexs, partition_not_exist_row_values);
         } else {
-            return find_tablets_with_range_partition(chunk, partitions, indexes, selection, invalid_row_indexs,
-                                                     partition_not_exist_row_values);
+            return _find_tablets_with_range_partition(chunk, partition_columns, partitions, indexes, selection,
+                                                      invalid_row_indexs, partition_not_exist_row_values);
         }
     } else {
         if (_partitions_map.empty()) {
