@@ -1595,6 +1595,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_sortby_multi(FunctionContext* ctx, con
     ColumnPtr dest_column = src_column->clone_empty();
 
     std::vector<const Column*> key_columns;
+    key_columns.reserve(columns.size() - 1);
     for (size_t i = 1; i < columns.size(); ++i) {
         if (!columns[i]->only_null()) {
             const auto* key_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[i]).get();
