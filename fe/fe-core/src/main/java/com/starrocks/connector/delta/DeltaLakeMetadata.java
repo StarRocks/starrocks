@@ -22,6 +22,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
@@ -144,6 +145,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String dbName = deltaLakeTable.getDbName();
         String tableName = deltaLakeTable.getTableName();
         Engine engine = deltaLakeTable.getDeltaEngine();
+        StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshot.getVersion(engine), predicate);
 
         DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), snapshot.getMetadata());
@@ -157,10 +159,12 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
 
         if (session.getSessionVariable().enableDeltaLakeColumnStatistics()) {
-            return statisticProvider.getTableStatistics(deltaLakeTable, columns, predicate);
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.getTableStatistics" + key)) {
+                return statisticProvider.getTableStatistics(schema, key, columns);
+            }
         } else {
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.calculateCardinality" + key)) {
-                return statisticProvider.getCardinalityStats(columns, deltaLakeScanTasks);
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.getCardinalityStats" + key)) {
+                return statisticProvider.getCardinalityStats(schema, key, columns);
             }
         }
     }
@@ -211,17 +215,23 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                         }
 
                         if (enableCollectColumnStatistics(connectContext)) {
-                            FileScanTask fileScanTask = ScanFileUtils.convertFromRowToFileScanTask(
-                                    true, scanFileRow);
-                            files.add(fileScanTask);
+                            Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
+                                    ScanFileUtils.convertFromRowToFileScanTask(true, scanFileRow);
+                            files.add(pair.first);
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
-                                statisticProvider.updateFileStats(deltaLakeTable, key, fileScanTask,
+                                statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
                                         nonPartitionPrimitiveColumns);
                             }
                         } else {
-                            FileScanTask fileScanTask = ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow);
-                            files.add(fileScanTask);
+                            Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
+                                    ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow);
+                            files.add(pair.first);
+
+                            try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeCardinality")) {
+                                statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
+                                        nonPartitionPrimitiveColumns);
+                            }
                         }
                     }
                 }

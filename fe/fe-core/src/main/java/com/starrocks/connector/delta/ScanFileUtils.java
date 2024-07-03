@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.internal.InternalScanFileUtils;
@@ -66,7 +67,7 @@ public class ScanFileUtils {
         return scanFileInfo.getStruct(ADD_FILE_ORDINAL);
     }
 
-    public static FileScanTask convertFromRowToFileScanTask(boolean needStats, Row file) {
+    public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(boolean needStats, Row file) {
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
         Row addFileRow = getAddFileEntry(file);
@@ -74,11 +75,12 @@ public class ScanFileUtils {
         FileScanTask fileScanTask;
         if (needStats) {
             DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(addFileRow);
-            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues, stats);
+            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues);
+            return new Pair<>(fileScanTask, stats);
         } else {
             long records = ScanFileUtils.getFileRows(addFileRow);
             fileScanTask = new FileScanTask(fileStatus, records, partitionValues);
+            return new Pair<>(fileScanTask, null);
         }
-        return fileScanTask;
     }
 }

@@ -78,7 +78,7 @@ public class DeltaLakeFileStatsTest {
         };
 
         DeltaLakeAddFileStatsSerDe stat = new DeltaLakeAddFileStatsSerDe(10, minValues, maxValues, nullCounts);
-        DeltaLakeFileStats stats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumns, stat, 4096);
+        DeltaLakeFileStats stats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumns, stat, 10, 4096);
 
         ColumnStatistic columnStatistic = stats.fillColumnStats(new Column("c_char", Type.CHAR));
         ColumnStatistic checkStatistic = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
@@ -149,13 +149,13 @@ public class DeltaLakeFileStatsTest {
         nonPartitionPrimitiveColumns.add("c_string");
 
         DeltaLakeAddFileStatsSerDe stat1 = new DeltaLakeAddFileStatsSerDe(10, minValues1, maxValues1, nullCounts1);
-        DeltaLakeFileStats stats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumns, stat1, 4096);
+        DeltaLakeFileStats stats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumns, stat1, 10, 4096);
 
         DeltaLakeAddFileStatsSerDe stat2 = new DeltaLakeAddFileStatsSerDe(10, minValues2, maxValues2, nullCounts2);
-        stats.update(stat2, 4096);
+        stats.update(stat2, 10, 4096);
 
         DeltaLakeAddFileStatsSerDe stat3 = new DeltaLakeAddFileStatsSerDe(10, minValues3, maxValues3, nullCounts3);
-        stats.update(stat3, 4096);
+        stats.update(stat3, 10, 4096);
 
         ColumnStatistic checkStatistic = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
                 0, 16, 1, null, ColumnStatistic.StatisticType.UNKNOWN);
