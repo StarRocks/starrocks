@@ -18,10 +18,9 @@
 
 #include <memory>
 
-#include "common/config.h"
-
 #include "ColumnWriter.hh"
 #include "Timezone.hh"
+#include "common/config.h"
 #include "orc/Common.hh"
 #include "orc/OrcFile.hh"
 
