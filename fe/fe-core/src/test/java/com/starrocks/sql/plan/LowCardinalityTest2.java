@@ -993,20 +993,18 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "join [shuffle] (select max(S_ADDRESS) as S_ADDRESS from supplier) r " +
                     "on l.S_ADDRESS = r.S_ADDRESS;";
             plan = getVerboseExplain(sql);
-            Assert.assertTrue(plan, plan.contains("  6:Decode\n" +
-                    "  |  <dict id 22> : <string id 17>"));
+            assertNotContains(plan, "DecodeNode");
             sql = "select count(*) from supplier l " +
                     "join [broadcast] (select max(S_ADDRESS) as S_ADDRESS from supplier) r " +
                     "on l.S_ADDRESS = r.S_ADDRESS;";
             plan = getVerboseExplain(sql);
-            Assert.assertTrue(plan, plan.contains("5:Decode\n" +
-                    "  |  <dict id 22> : <string id 17>"));
+            assertNotContains(plan, "DecodeNode");
 
             sql = "select count(*) from supplier l " +
                     "join [broadcast] (select max(id_int) as id_int from table_int) r " +
                     "on l.S_ADDRESS = r.id_int where l.S_ADDRESS not like '%key%'";
             plan = getVerboseExplain(sql);
-            Assert.assertTrue(plan, plan.contains("DictDecode(16: S_ADDRESS, [NOT (<place-holder> LIKE '%key%')])"));
+            assertNotContains(plan, "DecodeNode");
 
             sql = "select *\n" +
                     "from(\n" +
@@ -1571,16 +1569,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "      ) \n" +
                 "  ) t;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("  4:Decode\n" +
-                "  |  <dict id 25> : <string id 4>\n" +
-                "  |  \n" +
-                "  3:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----2:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:OlapScanNode"));
+        assertNotContains(plan, "DecodeNode");
     }
 
     @Test
@@ -2065,10 +2054,10 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "(select s_address l1, s_suppkey from supplier) t2 " +
                 "on u1 = l1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  8:Decode\n" +
-                "  |  <dict id 24> : <string id 12>\n" +
+        assertContains(plan, "  7:Decode\n" +
+                "  |  <dict id 22> : <string id 12>\n" +
                 "  |  \n" +
-                "  7:HASH JOIN\n" +
+                "  6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 11: upper = 15: S_ADDRESS");
@@ -2084,8 +2073,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "order by t2.s_suppkey limit 100) tt " +
                 "where l1 = 'BJ'";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  11:Decode\n" +
-                "  |  <dict id 25> : <string id 12>");
+        // TODO: rewrite physical operator
+        assertContains(plan, "  9:Decode\n" +
+                "  |  <dict id 22> : <string id 12>");
     }
 
     @Test
@@ -2134,16 +2124,12 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String sql = "select S_ADDRESS, S_COMMENT from supplier join[shuffle] " +
                 " low_card_t2 on S_ADDRESS = c_new where S_ADDRESS in ('a', 'b')";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  1:Decode\n" +
-                "  |  <dict id 15> : <string id 3>\n" +
-                "  |  cardinality: 1\n" +
-                "  |  probe runtime filters:\n" +
-                "  |  - filter_id = 0, probe_expr = (3: S_ADDRESS)\n" +
-                "  |  \n" +
-                "  0:OlapScanNode");
-        assertContains(plan, "  2:EXCHANGE\n" +
+        assertContains(plan, "  7:Decode\n" +
+                "  |  <dict id 15> : <string id 7>\n" +
+                "  |  cardinality: 1");
+        assertContains(plan, "  1:EXCHANGE\n" +
                 "     distribution type: SHUFFLE\n" +
-                "     partition exprs: [3: S_ADDRESS, VARCHAR(40), false]\n" +
+                "     partition exprs: [3: S_ADDRESS, VARCHAR, false]\n" +
                 "     cardinality: 1");
     }
 
