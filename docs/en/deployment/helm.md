@@ -17,7 +17,7 @@ displayed_sidebar: "English"
    1. Add the Helm Chart Repo.
 
       ```Bash
-      helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
+      helm repo add starrocks https://starrocks.github.io/starrocks-kubernetes-operator
       ```
 
    2. Update the Helm Chart Repo to the latest version.
@@ -29,11 +29,11 @@ displayed_sidebar: "English"
    3. View the Helm Chart Repo that you added.
 
       ```Bash
-      $ helm search repo starrocks-community
+      $ helm search repo starrocks
       NAME                                    CHART VERSION    APP VERSION  DESCRIPTION
-      starrocks-community/kube-starrocks      1.8.0            3.1-latest   kube-starrocks includes two subcharts, starrock...
-      starrocks-community/operator            1.8.0            1.8.0        A Helm chart for StarRocks operator
-      starrocks-community/starrocks           1.8.0            3.1-latest   A Helm chart for StarRocks cluster
+      starrocks/kube-starrocks      1.8.0            3.1-latest   kube-starrocks includes two subcharts, starrock...
+      starrocks/operator            1.8.0            1.8.0        A Helm chart for StarRocks operator
+      starrocks/starrocks           1.8.0            3.1-latest   A Helm chart for StarRocks cluster
       ```
 
 2. Use the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart to deploy the StarRocks Operator and StarRocks cluster, or create a YAML file to customize your deployment configurations.
@@ -50,7 +50,7 @@ displayed_sidebar: "English"
    > If you do not have these resources available in your Kubernetes cluster then skip to the **Deployment with custom configurations** section and adjust the resources.
 
       ```Bash
-      $ helm install starrocks starrocks-community/kube-starrocks
+      $ helm install starrocks starrocks/kube-starrocks
       # If the following result is returned, the StarRocks Operator and StarRocks cluster are being deployed.
       NAME: starrocks
       LAST DEPLOYED: Tue Aug 15 15:12:00 2023
@@ -65,7 +65,7 @@ displayed_sidebar: "English"
       - Run the following command to deploy the StarRocks Operator and StarRocks cluster with the custom configurations in **my-values.yaml**.
 
         ```Bash
-        helm install -f my-values.yaml starrocks starrocks-community/kube-starrocks
+        helm install -f my-values.yaml starrocks starrocks/kube-starrocks
         ```
 
     Deployment takes a while. During this period, you can check the deployment status with:
