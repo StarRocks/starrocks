@@ -91,9 +91,7 @@ static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, cons
     }
 
     ranges.reset();
-    RETURN_IF_ERROR(
-            sort_and_tie_column(cancel, data_column.get(), sort_desc, permutation, tie, std::move(ranges), build_tie));
-    return Status::OK();
+    return sort_and_tie_column(cancel, data_column.get(), sort_desc, permutation, tie, std::move(ranges), build_tie);
 }
 
 // Sort a column by permtuation
@@ -117,16 +115,25 @@ public:
         }
 
         const NullData& null_data = column.immutable_null_column_data();
-        auto null_pred = [&](const SmallPermuteItem& item) -> bool {
-            if (_sort_desc.is_null_first()) {
-                return null_data[item.index_in_chunk] == 1;
-            } else {
-                return null_data[item.index_in_chunk] != 1;
-            }
+
+        auto process = [&]<bool NullFirst>() {
+            auto null_pred = [&](const SmallPermuteItem& item) -> bool {
+                if constexpr (NullFirst) {
+                    return null_data[item.index_in_chunk] == 1;
+                } else {
+                    return null_data[item.index_in_chunk] != 1;
+                }
+            };
+
+            return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _sort_desc,
+                                                _permutation, _tie, _range_or_ranges, _build_tie);
         };
 
-        return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _sort_desc, _permutation,
-                                            _tie, _range_or_ranges, _build_tie);
+        if (_sort_desc.is_null_first()) {
+            return process.template operator()<true>();
+        } else {
+            return process.template operator()<false>();
+        }
     }
 
     Status do_visit(const ConstColumn& column) {
