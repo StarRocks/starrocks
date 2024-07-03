@@ -1203,7 +1203,7 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view_metrics_collect = true;
 
     @ConfField(mutable = true, comment = "whether to enable text based rewrite by default, if true it will " +
-               "build ast tree in materialized view initialization")
+            "build ast tree in materialized view initialization")
     public static boolean enable_materialized_view_text_based_rewrite = true;
 
     /**
@@ -2331,6 +2331,20 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int heartbeat_retry_times = 3;
+
+    /**
+     * set this to enable Transparent Data Encryption(TDE)
+     * once set, should not be changed, or the data depending on this key cannot be read anymore
+     */
+    @ConfField(mutable = false)
+    public static String default_master_key = "";
+
+    /**
+     * Specifies KEK's rotation period. Default is 7 days.
+     * Do not set this value too small, because all keys rotated are stored in FE meta forever
+     */
+    @ConfField(mutable = true)
+    public static long key_rotation_days = 7;
 
     /**
      * shared_data: means run on cloud-native

@@ -118,6 +118,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.encryption.EncryptionKeyPBAdapter;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -163,6 +164,7 @@ import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
 import com.starrocks.privilege.WarehouseFCPEntryObject;
+import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
@@ -396,7 +398,6 @@ public class GsonUtils {
                     .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
                     .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
 
-
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -460,6 +461,7 @@ public class GsonUtils {
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
+            .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
             .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
