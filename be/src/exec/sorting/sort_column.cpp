@@ -116,24 +116,16 @@ public:
 
         const NullData& null_data = column.immutable_null_column_data();
 
-        auto process = [&]<bool NullFirst>() {
-            auto null_pred = [&](const SmallPermuteItem& item) -> bool {
-                if constexpr (NullFirst) {
-                    return null_data[item.index_in_chunk] == 1;
-                } else {
-                    return null_data[item.index_in_chunk] != 1;
-                }
-            };
-
-            return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _sort_desc,
-                                                _permutation, _tie, _range_or_ranges, _build_tie);
+        auto null_pred = [&](const SmallPermuteItem& item) -> bool {
+            if (_sort_desc.is_null_first()) {
+                return null_data[item.index_in_chunk] == 1;
+            } else {
+                return null_data[item.index_in_chunk] != 1;
+            }
         };
 
-        if (_sort_desc.is_null_first()) {
-            return process.template operator()<true>();
-        } else {
-            return process.template operator()<false>();
-        }
+        return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _sort_desc, _permutation,
+                                            _tie, _range_or_ranges, _build_tie);
     }
 
     Status do_visit(const ConstColumn& column) {
