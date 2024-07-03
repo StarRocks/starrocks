@@ -50,7 +50,9 @@ TEST_F(AddStructColumnTest, test_bad_json) {
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.get_value();
 
-    EXPECT_STATUS(Status::DataQualityError(""), add_struct_column(column.get(), type_desc, "root_key", &val));
+    EXPECT_OK(add_struct_column(column.get(), type_desc, "root_key", &val));
+
+    EXPECT_EQ("{key1:'foo',key2:'bar',key3:NULL}", column->debug_string());
 }
 
 TEST_F(AddStructColumnTest, test_field_not_found) {
