@@ -63,7 +63,7 @@ public class PartitionValue implements ParseNode {
      * @param type partition column type
      */
     public LiteralExpr getValue(Type type) throws AnalysisException {
-        if (value.equals(STARROCKS_DEFAULT_PARTITION_VALUE)) {
+        if (value != null && value.equalsIgnoreCase(STARROCKS_DEFAULT_PARTITION_VALUE)) {
             return NullLiteral.create(type);
         }
 

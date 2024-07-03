@@ -48,6 +48,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
     private static String T3;
     private static String T4;
     private static String T5;
+    private static String T6;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -109,6 +110,16 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                 "      age SMALLINT,\n" +
                 "      dt VARCHAR(10) not null,\n" +
                 "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY (province, dt) \n" +
+                "DISTRIBUTED BY RANDOM\n";
+        // table with partition expression whose partitions have multi columns(nullable partition columns)
+        T6 = "CREATE TABLE t6 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64)\n" +
                 ")\n" +
                 "DUPLICATE KEY(id)\n" +
                 "PARTITION BY (province, dt) \n" +
@@ -182,9 +193,13 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
         }
     }
 
+    private String toPartitionVal(String val) {
+        return val == null ?  "NULL" : String.format("'%s'", val);
+    }
+
     private void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN (('%s', '%s'))", tbl, pName, pVal1,
-                pVal2);
+        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN ((%s, %s))", tbl, pName,
+                toPartitionVal(pVal1), toPartitionVal(pVal2));
         StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
         try {
             new StmtExecutor(connectContext, stmt).execute();
@@ -883,6 +898,100 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                                     "     PREAGGREGATION: ON\n" +
                                     "     PREDICATES: 8: province = 'beijing'\n" +
                                     "     partitions=1/2");
+                            Collection<Partition> partitions = materializedView.getPartitions();
+                            Assert.assertEquals(3, partitions.size());
+                        }
+                    });
+        });
+    }
+
+    @Test
+    public void testRefreshMVWithMultiNulllalbeColumns() {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        starRocksAssert.withTable(T6, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                            "partition by province \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "properties ('partition_refresh_number' = '-1')" +
+                            "as select dt, province, sum(age) from t6 group by dt, province;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+                        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+                        {
+                            // no partition has changed, no need to refresh
+                            ExecPlan execPlan = getExecPlan(taskRun);
+                            Assert.assertTrue(execPlan == null);
+                        }
+
+                        {
+                            // add a new partition
+                            addListPartition("t6", "p1", "beijing", "2022-01-01");
+                            String insertSql = "insert into t6 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                            ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+
+                            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                            PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
+                                    "     PREAGGREGATION: ON\n" +
+                                    "     PREDICATES: 4: province = 'beijing'\n" +
+                                    "     partitions=1/2");
+
+                            Collection<Partition> partitions = materializedView.getPartitions();
+                            Assert.assertEquals(1, partitions.size());
+                            Assert.assertTrue(partitions.iterator().next().getName().equals("p1"));
+                            // refresh again, refreshed partitions should not be refreshed again.
+                            execPlan = getExecPlan(taskRun);
+                            Assert.assertTrue(execPlan == null);
+                        }
+
+                        {
+                            String insertSql = "insert into t6 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                            executeInsertSql(connectContext, insertSql);
+                            addListPartition("t6", "p2", "beijing", "2022-01-02");
+                            insertSql = "insert into t6 partition(p2) values(1, 1, '2021-12-02', 'beijing');";
+                            executeInsertSql(connectContext, insertSql);
+
+                            ExecPlan execPlan = getExecPlan(taskRun);
+                            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                            PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
+                                    "     PREAGGREGATION: ON\n" +
+                                    "     PREDICATES: 4: province = 'beijing'\n" +
+                                    "     partitions=2/3");
+
+                            Collection<Partition> partitions = materializedView.getPartitions();
+                            Assert.assertEquals(1, partitions.size());
+                            Assert.assertTrue(partitions.iterator().next().getName().equals("p1"));
+                            // refresh again, refreshed partitions should not be refreshed again.
+                            execPlan = getExecPlan(taskRun);
+                            Assert.assertTrue(execPlan == null);
+                        }
+
+                        {
+                            // add a new partition
+                            addListPartition("t6", "p5", "hangzhou", "2022-01-01");
+                            String insertSql = "INSERT INTO t6 partition(p5) values(1, 1, '2022-01-01', 'hangzhou')";
+                            ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                            PlanTestBase.assertContains(plan, "     TABLE: t6\n" +
+                                    "     PREAGGREGATION: ON\n" +
+                                    "     PREDICATES: 4: province = 'hangzhou'\n" +
+                                    "     partitions=1/4");
+                            Collection<Partition> partitions = materializedView.getPartitions();
+                            Assert.assertEquals(2, partitions.size());
+                        }
+
+                        {
+                            // add a null partition
+                            addListPartition("t6", "p6", null, null);
+                            String insertSql = "INSERT INTO t6 partition(p6) values(1, 1, NULL, NULL)";
+                            ExecPlan execPlan = getExecPlanAfterInsert(taskRun, insertSql);
+                            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+                            PlanTestBase.assertContains(plan, "    TABLE: t6\n" +
+                                    "     PREAGGREGATION: ON\n" +
+                                    "     partitions=1/5");
                             Collection<Partition> partitions = materializedView.getPartitions();
                             Assert.assertEquals(3, partitions.size());
                         }

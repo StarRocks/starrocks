@@ -981,7 +981,8 @@ public class MvUtils {
         if (values == null || values.isEmpty()) {
             return new BoolLiteral(true);
         }
-        return new InPredicate(slotRef, values, false);
+        // to avoid duplicate values
+        return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
     }
 
     /**

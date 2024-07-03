@@ -14,8 +14,6 @@
 
 #include "exec/tablet_info.h"
 
-#include <thrift/protocol/TDebugProtocol.h>
-
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "exprs/expr.h"
