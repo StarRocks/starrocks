@@ -55,6 +55,8 @@ public:
 
     std::pair<int, int> get() const { return {_offsets[_next_index - 1], _offsets[_next_index]}; }
 
+    void reset() { _next_index = 0; }
+
 private:
     const std::span<const uint32_t> _offsets;
     const uint8_t* _need_sort_per_range;
@@ -63,18 +65,6 @@ private:
 
 template <typename T>
 concept RangeOrRanges = std::is_same_v<T, std::pair<int, int>> || std::is_same_v<T, Ranges>;
-
-template <class NullPred>
-static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
-                                           const ColumnPtr& data_column, NullPred&& null_pred,
-                                           const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
-                                           Ranges ranges, bool build_tie) {
-    while (ranges.next()) {
-        RETURN_IF_ERROR(sort_and_tie_helper_nullable(cancel, column, data_column, null_pred, sort_desc, permutation,
-                                                     tie, ranges.get(), build_tie));
-    }
-    return Status::OK();
-}
 
 template <class DataComparator, class PermutationType>
 static Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column* column, bool is_asc_order,
@@ -87,6 +77,23 @@ static Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column*
     return Status::OK();
 }
 
+Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
+                           SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie);
+
+template <class NullPred>
+static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
+                                           const ColumnPtr& data_column, NullPred&& null_pred,
+                                           const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
+                                           Ranges ranges, bool build_tie) {
+    while (ranges.next()) {
+        RETURN_IF_ERROR(partition_null_and_nonnull(cancel, null_pred, sort_desc, permutation, tie, ranges.get()));
+    }
+
+    ranges.reset();
+    RETURN_IF_ERROR(
+            sort_and_tie_column(cancel, data_column.get(), sort_desc, permutation, tie, std::move(ranges), build_tie));
+    return Status::OK();
+}
 // Sort a column by permtuation
 template <RangeOrRanges Range>
 class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter<Range>> {
