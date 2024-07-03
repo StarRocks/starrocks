@@ -76,7 +76,7 @@ The Helm Chart contains the definitions of the StarRocks Operator and the custom
 1. Add the Helm Chart Repo.
 
     ```Bash
-    helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
+    helm repo add starrocks https://starrocks.github.io/starrocks-kubernetes-operator
     ```
 
 2. Update the Helm Chart Repo to the latest version.
@@ -88,15 +88,15 @@ The Helm Chart contains the definitions of the StarRocks Operator and the custom
 3. View the Helm Chart Repo that you added.
 
       ```Bash
-      helm search repo starrocks-community
+      helm search repo starrocks
       ```
 
       ```
       NAME                              	CHART VERSION	APP VERSION	DESCRIPTION
-      starrocks-community/kube-starrocks	1.9.7        	3.2-latest 	kube-starrocks includes two subcharts, operator...
-      starrocks-community/operator      	1.9.7        	1.9.7      	A Helm chart for StarRocks operator
-      starrocks-community/starrocks     	1.9.7        	3.2-latest 	A Helm chart for StarRocks cluster
-      starrocks-community/warehouse     	1.9.7        	3.2-latest 	Warehouse is currently a feature of the StarRoc...
+      starrocks/kube-starrocks	1.9.7        	3.2-latest 	kube-starrocks includes two subcharts, operator...
+      starrocks/operator      	1.9.7        	1.9.7      	A Helm chart for StarRocks operator
+      starrocks/starrocks     	1.9.7        	3.2-latest 	A Helm chart for StarRocks cluster
+      starrocks/warehouse     	1.9.7        	3.2-latest 	Warehouse is currently a feature of the StarRoc...
       ```
 
 ---
@@ -290,7 +290,7 @@ secret/starrocks-root-pass created
 ## Deploy the operator and StarRocks cluster
 
 ```bash
-helm install -f my-values.yaml starrocks starrocks-community/kube-starrocks
+helm install -f my-values.yaml starrocks starrocks/kube-starrocks
 ```
 
 ```
