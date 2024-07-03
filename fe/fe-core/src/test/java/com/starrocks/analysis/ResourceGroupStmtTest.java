@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -200,24 +201,24 @@ public class ResourceGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, " +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.475, user=rg1_user1, " +
                 "role=rg1_role1, query_type in " +
                 "(SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, " +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=3.475, user=rg1_user2, " +
                 "query_type in (SELECT), " +
                 "source_ip=192.168.3.1/24)\n" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=2.375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=3.459375, role=rg2_role1, " +
+                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=3.475, role=rg2_role1, " +
                 "query_type in (SELECT), " +
                 "source_ip=192.168.5.1/24)\n" +
-                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
+                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=2.375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
                 "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
-                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
+                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
+                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
                 "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
@@ -546,7 +547,7 @@ public class ResourceGroupStmtTest {
         String result = rowsToString(rows);
         String expect = "" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1," +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1," +
                 " query_type in " +
                 "(SELECT), source_ip=192.168.2.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))";
@@ -592,24 +593,24 @@ public class ResourceGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("SHOW RESOURCE GROUPS all");
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1," +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=4.475, user=rg1_user1, role=rg1_role1," +
                 " query_type in " +
                 "(SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=3.475, user=rg1_user2, query_type in" +
                 " (SELECT), " +
                 "source_ip=192.168.3.1/24)\n" +
-                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=2.375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
                 "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=3.459375, role=rg2_role1, query_type" +
+                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=3.475, role=rg2_role1, query_type" +
                 " in (SELECT), " +
                 "source_ip=192.168.5.1/24)\n" +
-                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
+                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=2.375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
                 "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
-                "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
+                "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.475, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
-                "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
+                "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.375, source_ip=192.168.7.1/24)\n" +
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
-                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
+                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.475, query_type in (INSERT), source_ip=192.168.6.1/24)\n" +
                 "rt_rg1|25|80.0%|0|0|0|10|SHORT_QUERY|(weight=1.0, user=rt_rg_user)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
@@ -750,5 +751,23 @@ public class ResourceGroupStmtTest {
         Assert.assertEquals("rt_rg1", wg.getName());
 
         dropResourceGroups();
+    }
+
+    @Test
+    public void testSourceIP() throws Exception {
+        String createSQL = "create resource group rg1\n" +
+                "to\n" +
+                "    (source_ip='192.168.2.1/32')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'max_cpu_cores' = '8',\n" +
+                "    'mem_limit' = '20%'\n" +
+                ");";
+        starRocksAssert.executeResourceGroupDdlSql(createSQL);
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
+        assertThat(rowsToString(rows)).isEqualTo(
+                "rg1|10|20.0%|8|0|0|0|null|100%|NORMAL|(weight=1.5, source_ip=192.168.2.1/32)");
+
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
 }
