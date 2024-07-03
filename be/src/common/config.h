@@ -526,6 +526,11 @@ CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
 
+// if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
+// the failed apply task will retry after `retry_apply_interval_second`
+CONF_mBool(enable_retry_apply, "true");
+CONF_mInt32(retry_apply_interval_second, "30");
+
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
 
@@ -628,6 +633,12 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
+// If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
+// it will cause rpc to report an error. We add configuration to ignore rpc overload.
+// This may cause process memory usage to rise.
+// In the future we need to count the memory on each channel of the rpc. To do application layer rpc flow limiting.
+CONF_mBool(brpc_query_ignore_overcrowded, "false");
+CONF_mBool(brpc_load_ignore_overcrowded, "true");
 
 // Max number of txns for every txn_partition_map in txn manager.
 // this is a self-protection to avoid too many txns saving in manager.

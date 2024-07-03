@@ -154,7 +154,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     _closure->ref();
     _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
-    _closure->cntl.ignore_eovercrowded();
+    SET_IGNORE_OVERCROWDED(_closure->cntl, load);
 
     if (segment != nullptr) {
         request.set_allocated_segment(segment);

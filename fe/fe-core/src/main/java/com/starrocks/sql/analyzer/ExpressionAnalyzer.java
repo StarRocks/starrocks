@@ -1750,9 +1750,7 @@ public class ExpressionAnalyzer {
             UserVariable userVariable = session.getUserVariable(node.getName());
             if (userVariable == null) {
                 node.setValue(NullLiteral.create(Type.STRING));
-                node.setType(Type.STRING);
             } else {
-                node.setType(userVariable.getEvaluatedExpression().getType());
                 node.setValue(userVariable.getEvaluatedExpression());
             }
             return null;
@@ -1982,8 +1980,8 @@ public class ExpressionAnalyzer {
                                             " but param give: " + Integer.toString(paramDictionaryKeysSize));
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dictionary.getDbName());
-            Table table = db.getTable(dictionary.getQueryableObject());
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                                    dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());
             }

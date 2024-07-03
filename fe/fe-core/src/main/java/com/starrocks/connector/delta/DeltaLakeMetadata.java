@@ -59,7 +59,6 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -71,13 +70,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     private final String catalogName;
     private final DeltaMetastoreOperations deltaOps;
     private final HdfsEnvironment hdfsEnvironment;
-    private final Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor;
-    private final Map<PredicateSearchKey, List<Row>> splitTasks = new ConcurrentHashMap<>();
+    private final DeltaLakeCacheUpdateProcessor cacheUpdateProcessor;
+    private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
     private final DeltaStatisticProvider statisticProvider = new DeltaStatisticProvider();
 
     public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
-                             Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor) {
+                             DeltaLakeCacheUpdateProcessor cacheUpdateProcessor) {
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
         this.deltaOps = deltaOps;
@@ -125,7 +124,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         triggerDeltaLakePlanFilesIfNeeded(key, table, operator);
 
-        List<Row> scanTasks = splitTasks.get(key);
+        List<FileScanTask> scanTasks = splitTasks.get(key);
         if (scanTasks == null) {
             throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
                     dbName, tableName, operator);
@@ -151,7 +150,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         triggerDeltaLakePlanFilesIfNeeded(key, deltaLakeTable, predicate);
 
-        List<Row> deltaLakeScanTasks = splitTasks.get(key);
+        List<FileScanTask> deltaLakeScanTasks = splitTasks.get(key);
         if (deltaLakeScanTasks == null) {
             throw new StarRocksConnectorException("Missing delta split task for table:[{}.{}]. predicate:[{}]",
                     dbName, table, predicate);
@@ -197,7 +196,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                         schema.get(column).getDataType().toString())
                         && !partitionColumns.contains(column)).collect(toImmutableList());
 
-        List<Row> files = Lists.newArrayList();
+        List<FileScanTask> files = Lists.newArrayList();
 
         try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(engine, true)) {
             while (scanFilesAsBatches.hasNext()) {
@@ -210,13 +209,19 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                             ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
                                     "Delta table feature [deletion vectors] is not supported");
                         }
-                        files.add(scanFileRow);
 
                         if (enableCollectColumnStatistics(connectContext)) {
+                            FileScanTask fileScanTask = ScanFileUtils.convertFromRowToFileScanTask(
+                                    true, scanFileRow);
+                            files.add(fileScanTask);
+
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
-                                statisticProvider.updateFileStats(deltaLakeTable, key, scanFileRow,
+                                statisticProvider.updateFileStats(deltaLakeTable, key, fileScanTask,
                                         nonPartitionPrimitiveColumns);
                             }
+                        } else {
+                            FileScanTask fileScanTask = ScanFileUtils.convertFromRowToFileScanTask(false, scanFileRow);
+                            files.add(fileScanTask);
                         }
                     }
                 }
@@ -268,7 +273,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
-        cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table, onlyCachedPartitions));
+        if (cacheUpdateProcessor != null) {
+            cacheUpdateProcessor.refreshTable(srDbName, table, onlyCachedPartitions);
+        }
     }
 
     @Override

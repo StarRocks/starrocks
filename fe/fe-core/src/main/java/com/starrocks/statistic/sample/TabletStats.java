@@ -12,26 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.delta;
+package com.starrocks.statistic.sample;
 
-import com.google.gson.annotations.SerializedName;
+public class TabletStats {
 
-import java.util.Map;
+    private final long tabletId;
+    private final long partitionId;
+    private final long rowCount;
 
-public class DeltaLakeStatsStruct {
-    @SerializedName(value = "numRecords")
-    public long numRecords;
+    public TabletStats(long tabletId, long partitionId, long rowCount) {
+        this.tabletId = tabletId;
+        this.partitionId = partitionId;
+        this.rowCount = rowCount;
+    }
 
-    @SerializedName(value = "minValues")
-    public Map<String, Object> minValues;
+    public long getTabletId() {
+        return tabletId;
+    }
 
-    @SerializedName(value = "maxValues")
-    public Map<String, Object> maxValues;
+    public long getPartitionId() {
+        return partitionId;
+    }
 
-    @SerializedName(value = "nullCount")
-    public Map<String, Object> nullCount;
-
-    public DeltaLakeStatsStruct(long numRecords) {
-        this.numRecords = numRecords;
+    public long getRowCount() {
+        return rowCount;
     }
 }

@@ -107,6 +107,7 @@ public class ColocateTableBalancerTest {
         starRocksAssert = new StarRocksAssert(ctx);
         GlobalStateMgr.getCurrentState().getHeartbeatMgr().setStop();
         GlobalStateMgr.getCurrentState().getTabletScheduler().setStop();
+        ColocateTableBalancer.getInstance().setStop();
     }
 
     @Before
@@ -1061,7 +1062,11 @@ public class ColocateTableBalancerTest {
         Assert.assertFalse(balancer.isSystemStable(infoService));
         // set stable last time to 1s, and sleep 1s, the system becomes to stable
         Config.tablet_sched_colocate_balance_wait_system_stable_time_s = 1;
-        Thread.sleep(1001L);
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
         Assert.assertTrue(balancer.isSystemStable(infoService));
         Assert.assertTrue(balancer.isSystemStable(infoService));
 
@@ -1069,7 +1074,11 @@ public class ColocateTableBalancerTest {
         backend1.setAlive(false);
         Assert.assertFalse(balancer.isSystemStable(infoService));
         Assert.assertFalse(balancer.isSystemStable(infoService));
-        Thread.sleep(1001L);
+        System.out.println("before sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
+        Thread.sleep(2000L);
+        System.out.println("after sleep, time: " + System.currentTimeMillis()
+                + "alive backend is: " + infoService.getBackendIds(true));
         Assert.assertTrue(balancer.isSystemStable(infoService));
     }
 }

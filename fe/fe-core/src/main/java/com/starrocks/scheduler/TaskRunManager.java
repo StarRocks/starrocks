@@ -114,6 +114,7 @@ public class TaskRunManager implements MemoryTrackable {
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();
+            boolean isTaskRunContainsToMergeProperties = executeOption.containsToMergeProperties();
             if (taskRuns != null && executeOption.isMergeRedundant()) {
                 for (TaskRun oldTaskRun : taskRuns) {
                     if (oldTaskRun == null) {
@@ -121,7 +122,8 @@ public class TaskRunManager implements MemoryTrackable {
                     }
                     // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
                     // hanging after removing it.
-                    if (!oldTaskRun.getExecuteOption().isMergeRedundant()) {
+                    ExecuteOption oldExecuteOption = oldTaskRun.getExecuteOption();
+                    if (!oldExecuteOption.isMergeRedundant()) {
                         continue;
                     }
                     // skip if old task run is not equal to the task run
@@ -136,6 +138,21 @@ public class TaskRunManager implements MemoryTrackable {
                         continue;
                     }
 
+                    // TODO: Here we always merge the older task run to the newer task run which it can
+                    // record the history of the task run. But we can also reject the newer task run directly to
+                    // avoid the merge operation later.
+                    boolean isOldTaskRunContainsToMergeProperties = oldExecuteOption.containsToMergeProperties();
+                    // this should not happen since one task only can one task run in the running queue
+                    if (isTaskRunContainsToMergeProperties && isOldTaskRunContainsToMergeProperties) {
+                        LOG.warn("failed to merge TaskRun, both TaskRun contains toMergeProperties, " +
+                                        "oldTaskRun: {}, taskRun: {}", oldTaskRun, taskRun);
+                        continue;
+                    }
+                    // merge the old execution option into the new task run
+                    if (isOldTaskRunContainsToMergeProperties && !isTaskRunContainsToMergeProperties) {
+                        executeOption.mergeProperties(oldExecuteOption);
+                    }
+
                     // prefer higher priority to be better scheduler
                     if (oldTaskRun.getStatus().getPriority() > taskRun.getStatus().getPriority()) {
                         taskRun.getStatus().setPriority(oldTaskRun.getStatus().getPriority());
@@ -145,12 +162,16 @@ public class TaskRunManager implements MemoryTrackable {
                     if (oldTaskRun.getStatus().getCreateTime() < taskRun.getStatus().getCreateTime()) {
                         taskRun.getStatus().setCreateTime(oldTaskRun.getStatus().getCreateTime());
                     }
+
                     LOG.info("Merge redundant task run, oldTaskRun: {}, taskRun: {}",
                             oldTaskRun, taskRun);
                     mergedTaskRuns.add(oldTaskRun);
                 }
             }
-            if (!taskRunScheduler.addPendingTaskRun(taskRun)) {
+
+            // recheck it again to avoid pending task run is too much
+            long validPendingCount = taskRunScheduler.getPendingQueueCount();
+            if (validPendingCount >= Config.task_runs_queue_length || !taskRunScheduler.addPendingTaskRun(taskRun)) {
                 LOG.warn("failed to offer task: {}", taskRun);
                 return false;
             }
@@ -158,7 +179,7 @@ public class TaskRunManager implements MemoryTrackable {
             // if it 's not replay, update the status of the old TaskRun to MERGED in FOLLOWER/LEADER.
             // if it is replay, no need to update the status of the old TaskRun because follower FE cannot
             // update edit log.
-            if (!isReplay && !mergedTaskRuns.isEmpty()) {
+            if (!isReplay) {
                 // TODO: support batch update to reduce the number of edit logs.
                 for (TaskRun oldTaskRun : mergedTaskRuns) {
                     oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
@@ -167,6 +188,14 @@ public class TaskRunManager implements MemoryTrackable {
                             oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
                     GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
                     // update the state of the old TaskRun to MERGED in LEADER
+                    oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
+                    taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
+                    taskRunHistory.addHistory(oldTaskRun.getStatus());
+                }
+            } else {
+                for (TaskRun oldTaskRun : mergedTaskRuns) {
+                    // update the state of the old TaskRun to MERGED in LEADER
+                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
                     oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
                     taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
                     taskRunHistory.addHistory(oldTaskRun.getStatus());
