@@ -56,19 +56,36 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpHeaders;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.RequestBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.util.EntityUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
+
 
 public class RestBaseAction extends BaseAction {
 
@@ -89,6 +106,12 @@ public class RestBaseAction extends BaseAction {
 
     protected static final String JSON_CONTENT_TYPE = "application/json; charset=UTF-8";
     protected static ObjectMapper mapper = new ObjectMapper();
+
+    private static final Set<String> SKIP_HEADERS = Set.of("content-length");
+    private static final RequestConfig REQUEST_CONFIG = RequestConfig.custom()
+            .setConnectTimeout(Config.stream_load_default_timeout_second)
+            .setSocketTimeout(Config.stream_load_default_timeout_second)
+            .build();
 
     public RestBaseAction(ActionController controller) {
         super(controller);
@@ -203,6 +226,12 @@ public class RestBaseAction extends BaseAction {
 
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
+        URI resultUriObj = getRedirectToUri(request, addr);
+        response.updateHeader(HttpHeaderNames.LOCATION.toString(), resultUriObj.toString());
+        writeResponse(request, response, HttpResponseStatus.TEMPORARY_REDIRECT);
+    }
+
+    private URI getRedirectToUri(BaseRequest request, TNetworkAddress addr) throws DdlException {
         String urlStr = request.getRequest().uri();
         URI urlObj;
         URI resultUriObj;
@@ -214,8 +243,84 @@ public class RestBaseAction extends BaseAction {
             LOG.warn(e.getMessage(), e);
             throw new DdlException(e.getMessage());
         }
-        response.updateHeader(HttpHeaderNames.LOCATION.toString(), resultUriObj.toASCIIString());
-        writeResponse(request, response, HttpResponseStatus.TEMPORARY_REDIRECT);
+        return resultUriObj;
+    }
+
+    private boolean shouldRetry(Throwable t) {
+        return t instanceof IOException || t.getCause() instanceof IOException;
+    }
+
+    private void handleHttp200(BaseRequest request, BaseResponse response, HttpResponse newResponse) throws IOException {
+        HttpEntity entity = newResponse.getEntity();
+        if (entity != null) {
+            response.appendContent(EntityUtils.toString(entity));
+        }
+        writeResponse(request, response, HttpResponseStatus.OK);
+    }
+
+    private void handleHttp307(BaseRequest request, BaseResponse response, HttpResponse newResponse) {
+        Header header = newResponse.getFirstHeader(HttpHeaders.LOCATION);
+        if (header != null) {
+            response.updateHeader(HttpHeaderNames.LOCATION.toString(), header.getValue());
+            writeResponse(request, response, HttpResponseStatus.TEMPORARY_REDIRECT);
+        } else {
+            throw new IllegalStateException("Receive Http 307 temporary redirect, but no any available new location.");
+        }
+    }
+
+    private HttpRequest generateNewHttpRequest(BaseRequest request, TNetworkAddress addr) throws DdlException {
+        HttpMethod method = request.getRequest().method();
+        URI newUri = getRedirectToUri(request, addr);
+        LOG.debug("Get new http request for redirect uri {}", newUri);
+        RequestBuilder builder = RequestBuilder.create(method.name())
+                .setUri(newUri);
+
+        for (Map.Entry<String, String> header : request.getRequest().headers().entries()) {
+            if (!SKIP_HEADERS.contains(header.getKey())) {
+                LOG.debug("Add header '{}:{}'", header.getKey(), header.getValue());
+                builder.addHeader(header.getKey(), header.getValue());
+            }
+        }
+
+        return builder.build();
+    }
+
+    // Internal Redirect to FE Leader. Only redirect to FE leader.
+    // That means if fe leader return a new location, we will return this location to the client. Because the FE doesn't
+    // have the capability to deal with large datasets. If we redirect data here, it might result in a significantly
+    // unexpected consequence.
+    private void internalRedirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr) throws DdlException {
+        String host = addr.getHostname();
+        int port = addr.getPort();
+
+        HttpHost newHost = new HttpHost(host, port);
+        HttpRequest newRequest = generateNewHttpRequest(request, addr);
+
+        Exception lastException = null;
+        for (int numTries = 0; numTries <= 3; ++numTries) {
+            try (CloseableHttpClient client = HttpClientBuilder.create().setDefaultRequestConfig(REQUEST_CONFIG).build()) {
+                HttpResponse newResponse = client.execute(newHost, newRequest);
+                if (newResponse != null && newResponse.getStatusLine() != null) {
+                    switch (newResponse.getStatusLine().getStatusCode()) {
+                        case HttpStatus.SC_OK:
+                            handleHttp200(request, response, newResponse);
+                            return;
+                        case HttpStatus.SC_TEMPORARY_REDIRECT:
+                            handleHttp307(request, response, newResponse);
+                            return;
+                        default:
+                            LOG.warn("Unhandled status code: {}", newResponse.getStatusLine().getStatusCode());
+                    }
+                }
+            } catch (Exception e) {
+                lastException = e;
+                if (!shouldRetry(e)) {
+                    break;
+                }
+                LOG.warn("Internal redirect request to leader failed, numTries: {}, reason: {}", numTries, e.getMessage());
+            }
+        }
+        LOG.error("Internal redirect request to leader failed.", lastException);
     }
 
     public boolean redirectToLeader(BaseRequest request, BaseResponse response) throws DdlException {
@@ -237,9 +342,11 @@ public class RestBaseAction extends BaseAction {
                 }
             }
         }
-
-        redirectTo(request, response,
-                new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
+        if (Config.emr_internal_redirect) {
+            internalRedirectTo(request, response, new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
+        } else {
+            redirectTo(request, response, new TNetworkAddress(redirectHost, leaderIpAndPort.second));
+        }
         return true;
     }
 
