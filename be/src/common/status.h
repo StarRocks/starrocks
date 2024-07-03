@@ -379,6 +379,9 @@ public:
 
     Status clone_and_append_context(const char* filename, int line, const char* expr) const;
 
+    Status(TStatusCode::type code, std::string_view msg) : Status(code, msg, {}) {}
+    Status(TStatusCode::type code, std::string_view msg, std::string_view ctx);
+
 private:
     static const char* copy_state(const char* state);
     static const char* copy_state_with_extra_ctx(const char* state, Slice ctx);
@@ -387,6 +390,7 @@ private:
     static bool is_moved_from(const char* state);
     static const char* moved_from_state();
 
+<<<<<<< HEAD
     Status(TStatusCode::type code, Slice msg) : Status(code, msg, {}) {}
     Status(TStatusCode::type code, Slice msg, Slice ctx);
 
@@ -396,6 +400,8 @@ private:
 #endif
     }
 
+=======
+>>>>>>> 419a6af34b ([Enhancement] Retry apply after apply failed. (#47144))
 private:
     // OK status has a nullptr _state.  Otherwise, _state is a new[] array
     // of the following form:
