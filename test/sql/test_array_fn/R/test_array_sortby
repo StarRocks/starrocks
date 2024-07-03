@@ -408,17 +408,17 @@ select array_sortby([1,2,3,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a'], cast(['2023-1
 -- !result
 select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a', 1], [11, 22, 32, 31, 21, 12]);
 -- result:
-E: (1064, "Input arrays' size are not equal in array_sortby_multi.")
+E: (1064, "Input arrays' size are not equal in array_sortby.")
 -- !result
 select array_sortby([1,2,null,4,5,6], ['a', 'b', 'c', 'c', 'b', 'a', 1], cast(null as array<int>), [11, 22, 32, 31, 21, 12]);
 -- result:
-E: (1064, "Input arrays' size are not equal in array_sortby_multi.")
+E: (1064, "Input arrays' size are not equal in array_sortby.")
 -- !result
 select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a', 1], [11, 22, 32, 31, 21, 12]);
 -- result:
-E: (1064, "Input arrays' size are not equal in array_sortby_multi.")
+E: (1064, "Input arrays' size are not equal in array_sortby.")
 -- !result
 select array_sortby([1,2,3,4,5,6], ['a', 'b', null, null, 'b', 'a'], [11, 22, 32, 31, null, null, 1]);
 -- result:
-E: (1064, "Input arrays' size are not equal in array_sortby_multi.")
+E: (1064, "Input arrays' size are not equal in array_sortby.")
 -- !result
