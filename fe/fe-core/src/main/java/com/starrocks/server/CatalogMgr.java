@@ -105,19 +105,14 @@ public class CatalogMgr {
             throws DdlException {
         CatalogConnector connector = null;
         Catalog catalog = null;
+        writeLock();
         try {
             if (Strings.isNullOrEmpty(type)) {
                 throw new DdlException("Missing properties 'type'");
             }
 
-            readLock();
-            try {
-                Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-            } finally {
-                readUnlock();
-            }
+            Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
 
-            writeLock();
             try {
                 Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
@@ -149,8 +144,6 @@ public class CatalogMgr {
             } catch (StarRocksConnectorException e) {
                 LOG.error("connector create failed. catalog [{}] ", catalogName, e);
                 throw new DdlException(String.format("connector create failed {%s}", e.getMessage()));
-            } finally {
-                writeUnLock();
             }
         } catch (Exception e) {
             if (connector != null && connectorMgr.connectorExists(catalogName)) {
@@ -162,6 +155,8 @@ public class CatalogMgr {
             }
 
             throw e;
+        } finally {
+            writeUnLock();
         }
     }
 
