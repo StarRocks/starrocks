@@ -103,6 +103,8 @@ public class CatalogMgr {
     // please keep connector and catalog create together, they need keep in consistent asap.
     public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
             throws DdlException {
+        CatalogConnector connector = null;
+        Catalog catalog = null;
         try {
             if (Strings.isNullOrEmpty(type)) {
                 throw new DdlException("Missing properties 'type'");
@@ -129,7 +131,7 @@ public class CatalogMgr {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
                 }
 
-                CatalogConnector connector = connectorMgr.createConnector(
+                connector = connectorMgr.createConnector(
                         new ConnectorContext(catalogName, type, properties), false);
                 if (null == connector) {
                     LOG.error("{} connector [{}] create failed", type, catalogName);
@@ -138,7 +140,7 @@ public class CatalogMgr {
                 long id = isResourceMappingCatalog(catalogName) ?
                         ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                         GlobalStateMgr.getCurrentState().getNextId();
-                Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
+                catalog = new ExternalCatalog(id, catalogName, comment, properties);
                 catalogs.put(catalogName, catalog);
 
                 if (!isResourceMappingCatalog(catalogName)) {
@@ -151,11 +153,14 @@ public class CatalogMgr {
                 writeUnLock();
             }
         } catch (Exception e) {
-            if (connectorMgr.connectorExists(catalogName)) {
+            if (connector != null && connectorMgr.connectorExists(catalogName)) {
                 connectorMgr.removeConnector(catalogName);
             }
 
-            catalogs.remove(catalogName);
+            if (catalog != null) {
+                catalogs.remove(catalogName);
+            }
+
             throw e;
         }
     }
@@ -257,6 +262,8 @@ public class CatalogMgr {
         String type = catalog.getType();
         String catalogName = catalog.getName();
         Map<String, String> config = catalog.getConfig();
+        CatalogConnector catalogConnector = null;
+
         try {
             if (Strings.isNullOrEmpty(type)) {
                 throw new DdlException("Missing properties 'type'");
@@ -288,7 +295,7 @@ public class CatalogMgr {
             }
 
             try {
-                CatalogConnector catalogConnector = connectorMgr.createConnector(
+                catalogConnector = connectorMgr.createConnector(
                         new ConnectorContext(catalogName, type, config), true);
                 if (catalogConnector == null) {
                     LOG.error("{} connector [{}] create failed.", type, catalogName);
@@ -306,7 +313,7 @@ public class CatalogMgr {
                 writeUnLock();
             }
         } catch (Exception e) {
-            if (connectorMgr.connectorExists(catalogName)) {
+            if (catalogConnector != null && connectorMgr.connectorExists(catalogName)) {
                 connectorMgr.removeConnector(catalogName);
             }
 
