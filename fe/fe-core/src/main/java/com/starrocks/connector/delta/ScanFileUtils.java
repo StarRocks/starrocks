@@ -45,13 +45,13 @@ public class ScanFileUtils {
         return records.numRecords;
     }
 
-    public static DeltaLakeStats getColumnStatistics(Row file) {
+    public static DeltaLakeAddFileStatsSerDe getColumnStatistics(Row file) {
         String stats = file.getString(ADD_FILE_STATS_ORDINAL);
         if (stats == null) {
             throw new IllegalArgumentException("There is no `stats` entry in the add file row");
         }
 
-        DeltaLakeStats statistics = GsonUtils.GSON.fromJson(stats, DeltaLakeStats.class);
+        DeltaLakeAddFileStatsSerDe statistics = GsonUtils.GSON.fromJson(stats, DeltaLakeAddFileStatsSerDe.class);
         if (statistics == null) {
             throw new IllegalArgumentException("There is no entry in the stats row");
         }
@@ -73,7 +73,7 @@ public class ScanFileUtils {
 
         FileScanTask fileScanTask;
         if (needStats) {
-            DeltaLakeStats stats = ScanFileUtils.getColumnStatistics(addFileRow);
+            DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(addFileRow);
             fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues, stats);
         } else {
             long records = ScanFileUtils.getFileRows(addFileRow);

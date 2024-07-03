@@ -24,14 +24,14 @@ public class FileScanTask {
     private final FileStatus fileStatus;
     private final long records;
     private final Map<String, String> partitionValues;
-    private final DeltaLakeStats stats;
+    private final DeltaLakeAddFileStatsSerDe stats;
 
     public FileScanTask(FileStatus fileStatus, long records, Map<String, String> partitionValues) {
         this(fileStatus, records, partitionValues, null);
     }
 
     public FileScanTask(FileStatus fileStatus, long records, Map<String, String> partitionValues,
-                        DeltaLakeStats stats) {
+                        DeltaLakeAddFileStatsSerDe stats) {
         this.fileStatus = fileStatus;
         this.records = records;
         this.partitionValues = partitionValues;
@@ -42,7 +42,7 @@ public class FileScanTask {
         return this.fileStatus;
     }
 
-    public DeltaLakeStats getStats() {
+    public DeltaLakeAddFileStatsSerDe getStats() {
         return this.stats;
     }
 
