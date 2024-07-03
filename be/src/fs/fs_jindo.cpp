@@ -92,6 +92,11 @@ bool JindoClientFactory::option_equals(const JdoOptions_t& left, const JdoOption
     std::string right_ak_id(jdo_getOption(right, OSS_ACCESS_KEY_ID, ""));
     std::string left_ak_secret(jdo_getOption(left, OSS_ACCESS_KEY_SECRET, ""));
     std::string right_ak_secret(jdo_getOption(right, OSS_ACCESS_KEY_SECRET, ""));
+    std::string left_bucket(jdo_getOption(left, OSS_HDFS_BUCKET, ""));
+    std::string right_bucket(jdo_getOption(right, OSS_HDFS_BUCKET, ""));
+    if (!left_bucket.empty() && !right_bucket.empty() && left_bucket != right_bucket) {
+        return false;
+    }
     return left_endpoint == right_endpoint && left_ak_id == right_ak_id && left_ak_secret == right_ak_secret;
 }
 
@@ -181,6 +186,7 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
         endpoint = uri.endpoint();
     }
 
+    std::string bucket = uri.bucket();
     if (!ak_id.empty()) {
         jdo_setOption(jdo_options, OSS_ACCESS_KEY_ID, ak_id.c_str());
     }
@@ -189,6 +195,9 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
     }
     if (!endpoint.empty()) {
         jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, endpoint.c_str());
+    }
+    if (!bucket.empty() && endpoint.find("oss-dls")) {
+        jdo_setOption(jdo_options, OSS_HDFS_BUCKET, bucket.c_str());
     }
     return jdo_options;
 }

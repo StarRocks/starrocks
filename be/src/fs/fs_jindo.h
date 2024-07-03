@@ -79,6 +79,7 @@ private:
     static constexpr const char* OSS_ACCESS_KEY_ID = "fs.oss.accessKeyId";
     static constexpr const char* OSS_ACCESS_KEY_SECRET = "fs.oss.accessKeySecret";
     static constexpr const char* OSS_ENDPOINT_KEY = "fs.oss.endpoint";
+    static constexpr const char* OSS_HDFS_BUCKET = "starrocks.internal.jindo.osshdfs.bucket";
     static constexpr int MAX_CLIENTS_ITEMS = 8;
 
     std::mutex _lock;
