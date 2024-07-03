@@ -23,6 +23,12 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.service.FrontendOptions;
+import inet.ipaddr.IPAddressString;
+import org.apache.commons.net.util.SubnetUtils;
+>>>>>>> 43c117440a ([BugFix] Fix match of source ip for resource group (#47732))
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.io.IOException;
@@ -99,4 +105,73 @@ public class NetUtils {
         }
         return accessible;
     }
+<<<<<<< HEAD
+=======
+
+    // assemble an accessible HostPort str, the addr maybe an ipv4/ipv6/FQDN
+    // if ip is ipv6 return: [$addr]:$port
+    // if ip is ipv4 or FQDN return: $addr:$port
+    public static String getHostPortInAccessibleFormat(String addr, int port) {
+        if (InetAddressValidator.getInstance().isValidInet6Address(addr)) {
+            return "[" + addr + "]:" + port;
+        }
+        return addr + ":" + port;
+    }
+
+    public static String[] resolveHostInfoFromHostPort(String hostPort) throws AnalysisException {
+        String[] pair;
+        if (hostPort.charAt(0) == '[') {
+            pair = hostPort.substring(1).split("]:");
+        } else {
+            int separatorIdx = hostPort.lastIndexOf(":");
+            if (separatorIdx == -1) {
+                throw new AnalysisException("invalid host port: " + hostPort);
+            }
+            pair = new String[2];
+            pair[0] = hostPort.substring(0, separatorIdx);
+            pair[1] = hostPort.substring(separatorIdx + 1);
+        }
+        if (pair.length != 2) {
+            throw new AnalysisException("invalid host port: " + hostPort);
+        }
+        return pair;
+    }
+
+    public static boolean isSameIP(String ip1, String ip2) {
+        if (ip1 == null || ip2 == null) {
+            return false;
+        }
+        if (ip1.equals(ip2)) {
+            return true;
+        }
+        IPAddressString addr1 = new IPAddressString(ip1);
+        IPAddressString addr2 = new IPAddressString(ip2);
+        return addr1.equals(addr2);
+
+    }
+
+    public static InetSocketAddress getSockAddrBasedOnCurrIpVersion(final int port) {
+        String anyLocalAddr = FrontendOptions.isBindIPV6() ? "::0" : "0.0.0.0";
+        return new InetSocketAddress(anyLocalAddr, port);
+    }
+
+    public static boolean isIPInSubnet(String ip, String subnetCidr) {
+        SubnetUtils subnetUtils = new SubnetUtils(subnetCidr);
+        subnetUtils.setInclusiveHostCount(true);
+        return subnetUtils.getInfo().isInRange(ip);
+    }
+
+    /**
+     * Get the prefix length of the CIDR, that is the `y` part of `xxx.xxx.xxx.xxx/y` in CIDR, e.g. 16 for `192.168.0.1/16`.
+     * @param cidr The CIDR format address.
+     * @return The length of the prefix. The range is within [0, 32].
+     */
+    public static int getCidrPrefixLength(String cidr) {
+        SubnetUtils subnetUtils = new SubnetUtils(cidr);
+        subnetUtils.setInclusiveHostCount(true);
+        // 2^(32 - prefixLength) = addressCount,
+        // so prefixLength = 32 - log2(addressCount) = 32 - (63 - leadingZeros(addressCount)) = leadingZeros(addressCount) - 31
+        return Long.numberOfLeadingZeros(subnetUtils.getInfo().getAddressCountLong()) - 31;
+    }
+>>>>>>> 43c117440a ([BugFix] Fix match of source ip for resource group (#47732))
 }
