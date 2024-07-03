@@ -1567,13 +1567,14 @@ static Status sort_multi_array_column(FunctionContext* ctx, const Column* src_co
         }
     }
 
-    const SortDescs sort_desc = SortDescs::asc_null_first(num_src_element_rows);
+    const SortDescs sort_desc = SortDescs::asc_null_first(num_key_columns);
     const std::atomic<bool>& cancel = ctx->state()->cancelled_ref();
     SmallPermutation permutation;
     RETURN_IF_ERROR(sort_and_tie_columns(cancel, elements_per_key_col, sort_desc, permutation,
                                          src_offsets_column->get_data(), offsets_per_key_col));
 
     std::vector<uint32_t> key_sort_index(num_src_element_rows);
+
     for (int i = 0; i < num_src_element_rows; i++) {
         key_sort_index[i] = permutation[i].index_in_chunk;
     }
