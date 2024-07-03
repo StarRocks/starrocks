@@ -11,7 +11,7 @@ JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执�
 
 此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力对 JDBC 数据源的数据实现转换和导入。
 
-目前 JDBC Catalog 支持 MySQL、PostgreSQL、Oracle 和 SQLServer。
+JDBC Catalog 自 3.0 版本开始支持 MySQL、PostgreSQL，自 3.2.9、3.3.1 版本开始支持 Oracle 和 SQLServer。
 
 ## 前提条件
 
