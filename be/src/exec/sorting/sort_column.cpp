@@ -467,6 +467,8 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& col
 
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+    // Nullable column need set all the null rows to default values,
+    // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
         ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
     }
@@ -476,6 +478,8 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
 
 static Status sort_and_tie_column(const std::atomic<bool>& cancel, Column* column, const SortDesc& sort_desc,
                                   SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie) {
+    // Nullable column need set all the null rows to default values,
+    // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
         down_cast<NullableColumn*>(column)->fill_null_with_default();
     }

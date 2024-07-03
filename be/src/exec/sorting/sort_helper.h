@@ -149,8 +149,18 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
     return Status::OK();
 }
 
-// 1. Partition null and notnull values
-// 2. Sort by not-null values
+/// Partition null and notnull values, and will update `permutation` and `tie`.
+///
+/// The sorting of nullable column is divided into two steps: at first partition the null elements and non-null element,
+/// then sort them individually.
+///
+/// A prerequisite for sorting null element is that the datum of null element should be the same. Because when sorting
+/// the next column, we need to ensure that the entire null part is still in the same `tie` range (that is, only the
+/// beginning or end is 0, and the rest are 1). If the datum values of these nulls are different, then the `tie` of the
+/// null part may have non-1 values, causing the next column to be sorted incorrectly.
+/// For example, given two columns `(null(3), null(2), null(1)), (1, 2, 3)`, if the datum values of null elements are
+/// not set to the same, the sorting result is `(null(1), null(2), null(3)), (3, 2, 1)`, but the expected result
+/// should be (null(3), null(2), null(1)), (1, 2, 3).
 template <class NullPred>
 static inline Status partition_null_and_nonnull_helper(const std::atomic<bool>& cancel, NullPred null_pred,
                                                        const SortDesc& sort_desc, SmallPermutation& permutation,
