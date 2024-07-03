@@ -34,17 +34,71 @@
 
 namespace starrocks {
 
+class Ranges {
+public:
+    Ranges(std::span<const uint32_t> offsets, const uint8_t* need_sort_per_range)
+            : _offsets(offsets), _need_sort_per_range(need_sort_per_range) {}
+
+    bool next() {
+        while (_next_index + 1 < _offsets.size()) {
+            const size_t i = _next_index++;
+            if (!_need_sort_per_range[i]) {
+                continue;
+            }
+            if (_offsets[i] == _offsets[i + 1]) {
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    std::pair<int, int> get() const { return {_offsets[_next_index - 1], _offsets[_next_index]}; }
+
+private:
+    const std::span<const uint32_t> _offsets;
+    const uint8_t* _need_sort_per_range;
+    size_t _next_index = 0;
+};
+
+template <typename T>
+concept RangeOrRanges = std::is_same_v<T, std::pair<int, int>> || std::is_same_v<T, Ranges>;
+
+template <class NullPred>
+static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
+                                           const ColumnPtr& data_column, NullPred&& null_pred,
+                                           const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
+                                           Ranges ranges, bool build_tie) {
+    while (ranges.next()) {
+        RETURN_IF_ERROR(sort_and_tie_helper_nullable(cancel, column, data_column, null_pred, sort_desc, permutation,
+                                                     tie, ranges.get(), build_tie));
+    }
+    return Status::OK();
+}
+
+template <class DataComparator, class PermutationType>
+static Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column* column, bool is_asc_order,
+                                  PermutationType& permutation, Tie& tie, DataComparator&& cmp, Ranges ranges,
+                                  bool build_tie, size_t limit = 0, size_t* limited = nullptr) {
+    while (ranges.next()) {
+        RETURN_IF_ERROR(sort_and_tie_helper(cancel, column, is_asc_order, permutation, tie, cmp, ranges.get(),
+                                            build_tie, limit, limited));
+    }
+    return Status::OK();
+}
+
 // Sort a column by permtuation
-class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter> {
+template <RangeOrRanges Range>
+class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter<Range>> {
 public:
     explicit ColumnSorter(const std::atomic<bool>& cancel, const SortDesc& sort_desc, SmallPermutation& permutation,
-                          Tie& tie, std::pair<int, int> range, bool build_tie)
-            : ColumnVisitorAdapter(this),
+                          Tie& tie, Range range_or_ranges, bool build_tie)
+            : ColumnVisitorAdapter<ColumnSorter<Range>>(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
               _permutation(permutation),
               _tie(tie),
-              _range(std::move(range)),
+              _range_or_ranges(std::move(range_or_ranges)),
               _build_tie(build_tie) {}
 
     Status do_visit(const NullableColumn& column) {
@@ -63,7 +117,7 @@ public:
         };
 
         return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _sort_desc, _permutation,
-                                            _tie, _range, _build_tie);
+                                            _tie, _range_or_ranges, _build_tie);
     }
 
     Status do_visit(const ConstColumn& column) {
@@ -76,7 +130,7 @@ public:
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
 
-        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range_or_ranges,
                                    _build_tie);
     }
 
@@ -85,7 +139,7 @@ public:
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
 
-        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range_or_ranges,
                                    _build_tie);
     }
 
@@ -94,7 +148,7 @@ public:
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
 
-        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range_or_ranges,
                                    _build_tie);
     }
 
@@ -107,8 +161,8 @@ public:
         };
 
         auto inlined = create_inline_permutation<Slice>(_permutation, column.get_proxy_data());
-        RETURN_IF_ERROR(
-                sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range, _build_tie));
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                            _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
 
         return Status::OK();
@@ -124,8 +178,8 @@ public:
         };
 
         auto inlined = create_inline_permutation<T>(_permutation, column.get_data());
-        RETURN_IF_ERROR(
-                sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range, _build_tie));
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                            _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
 
         return Status::OK();
@@ -143,7 +197,7 @@ public:
             return column.get_object(lhs.index_in_chunk)->compare(*column.get_object(rhs.index_in_chunk));
         };
 
-        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range_or_ranges,
                                    _build_tie);
     }
 
@@ -152,7 +206,7 @@ private:
     const SortDesc& _sort_desc;
     SmallPermutation& _permutation;
     Tie& _tie;
-    std::pair<int, int> _range;
+    Range _range_or_ranges;
     bool _build_tie;
 };
 
@@ -412,6 +466,12 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, c
     return column->accept(&column_sorter);
 }
 
+static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
+                                  SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie) {
+    ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, std::move(ranges), build_tie);
+    return column->accept(&column_sorter);
+}
+
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation) {
     if (columns.size() < 1) {
@@ -434,44 +494,63 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& colu
     return Status::OK();
 }
 
-Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
-                            Permutation* permutation, std::pair<int, int> range, size_t row,
-                            const std::vector<std::shared_ptr<UInt32Column>>& key_offsets_columns) {
-    DCHECK(!columns.empty());
-    if (columns.size() < 1) {
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<const Column*>& columns,
+                            const SortDescs& sort_desc, SmallPermutation& perm,
+                            const std::span<const uint32_t> src_offsets,
+                            const std::vector<std::span<const uint32_t>>& offsets_per_key) {
+    if (columns.size() < 1 || src_offsets.empty()) {
         return Status::OK();
     }
 
-    const auto [first, last] = range;
-    DCHECK(last >= first);
-    const int size = last - first;
+    const size_t num_rows = src_offsets.back();
+    const size_t num_ranges = src_offsets.size() - 1;
+    const size_t num_keys = offsets_per_key.size();
 
-    Tie tie(size, 1);
-    SmallPermutation small_perm = create_small_permutation(range);
-    int prev_first = first;
+    Tie tie(num_rows, 1);
+    perm = create_small_permutation(num_rows);
 
-    auto shift_small_perm = [&](const int new_first) {
-        if (new_first == prev_first) {
+    // The range of the i-th part is [offsets[i], offsets[i+1]), and the offsets of the src column and the key column
+    // may be different. See the comment of the declaration of this function for more details.
+    // Therefore, adjust values of permutation by the offsets of this column before sorting this column.
+    const uint32_t* prev_offsets = src_offsets.data();
+    auto shift_perm = [&perm, &prev_offsets, num_ranges](const uint32_t* new_offsets) {
+        if (prev_offsets == new_offsets) {
             return;
         }
-        const int offset = new_first - prev_first;
-        for (int i = 0; i < size; i++) {
-            small_perm[i].index_in_chunk += offset;
+
+        bool shifted = false;
+        for (int i = 0; i < num_ranges; i++) {
+            if (prev_offsets[i] == new_offsets[i]) {
+                continue;
+            }
+
+            shifted = true;
+
+            const uint32_t delta = new_offsets[i] - prev_offsets[i];
+            for (int j = prev_offsets[i]; j < prev_offsets[i + 1]; j++) {
+                perm[j].index_in_chunk += delta;
+            }
         }
-        prev_first = new_first;
+
+        if (shifted) {
+            prev_offsets = new_offsets;
+        }
     };
 
-    for (int col_index = 0; col_index < columns.size(); col_index++) {
-        ColumnPtr column = columns[col_index];
-        bool build_tie = (col_index != (columns.size() - 1));
-        shift_small_perm(key_offsets_columns[col_index]->get_data()[row]);
-        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), small_perm, tie,
-                                            {0, size}, build_tie));
+    std::vector<uint8_t> need_sort_per_range;
+    raw::stl_vector_resize_uninitialized(&need_sort_per_range, num_ranges);
+    for (size_t i = 0; i < num_ranges; i++) {
+        need_sort_per_range[i] = src_offsets[i] != src_offsets[i + 1];
     }
 
-    shift_small_perm(first);
-
-    restore_small_permutation(small_perm, *permutation);
+    for (int col_i = 0; col_i < num_keys; col_i++) {
+        const Column* column = columns[col_i];
+        const bool build_tie = (col_i != (columns.size() - 1));
+        shift_perm(offsets_per_key[col_i].data());
+        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_i), perm, tie,
+                                            Ranges(offsets_per_key[col_i], need_sort_per_range.data()), build_tie));
+    }
+    shift_perm(prev_offsets);
 
     return Status::OK();
 }
