@@ -1709,17 +1709,9 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
     }
 
     NullColumnPtr null_result = nullptr;
-    if (src_column->is_nullable()) {
-        const auto* nullable_src_column = down_cast<const NullableColumn*>(src_column.get());
-        null_result = NullColumn::create(*nullable_src_column->null_column());
-    }
     if (repeat_count_column->is_nullable()) {
         const auto* nullable_repeat_count_column = down_cast<const NullableColumn*>(repeat_count_column.get());
-        if (null_result) {
-            null_result =  FunctionHelper::union_null_column(null_result, nullable_repeat_count_column->null_column());
-        } else {
-            null_result = NullColumn::create(*nullable_repeat_count_column->null_column());
-        }
+        null_result = NullColumn::create(*nullable_repeat_count_column->null_column());
     }
 
     if (null_result) {
