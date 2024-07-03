@@ -178,7 +178,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         yield_ctx.need_yield = false;
 
         _spiller->update_spilled_task_status(yieldable_flush_task(yield_ctx, state, mem_table));
-        if (yield_ctx.need_yield) {
+        if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
             COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
             defer.cancel();
         }
@@ -240,7 +240,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 YieldableRestoreTask task(_stream);
                 res = task.do_read(yield_ctx, serd_ctx);
 
-                if (yield_ctx.need_yield) {
+                if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
                     COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);
                     defer.cancel();
                 }
@@ -340,7 +340,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         _spiller->update_spilled_task_status(
                 yieldable_flush_task(yield_ctx, splitting_partitions, spilling_partitions));
 
-        if (yield_ctx.need_yield) {
+        if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
             COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
             defer.cancel();
         }
