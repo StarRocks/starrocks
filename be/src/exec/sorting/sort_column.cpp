@@ -86,7 +86,8 @@ static Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, cons
                                            const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
                                            Ranges ranges, bool build_tie) {
     while (ranges.next()) {
-        RETURN_IF_ERROR(partition_null_and_nonnull(cancel, null_pred, sort_desc, permutation, tie, ranges.get()));
+        RETURN_IF_ERROR(
+                partition_null_and_nonnull_helper(cancel, null_pred, sort_desc, permutation, tie, ranges.get()));
     }
 
     ranges.reset();

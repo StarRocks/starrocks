@@ -152,9 +152,9 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
 template <class NullPred>
-static inline Status partition_null_and_nonnull(const std::atomic<bool>& cancel, NullPred null_pred,
-                                                const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
-                                                std::pair<int, int> range) {
+static inline Status partition_null_and_nonnull_helper(const std::atomic<bool>& cancel, NullPred null_pred,
+                                                       const SortDesc& sort_desc, SmallPermutation& permutation,
+                                                       Tie& tie, std::pair<int, int> range) {
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
         if (UNLIKELY(cancel.load(std::memory_order_acquire))) {
@@ -196,7 +196,7 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
                                                   const ColumnPtr& data_column, NullPred null_pred,
                                                   const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
-    RETURN_IF_ERROR(partition_null_and_nonnull(cancel, null_pred, sort_desc, permutation, tie, range));
+    RETURN_IF_ERROR(partition_null_and_nonnull_helper(cancel, null_pred, sort_desc, permutation, tie, range));
 
     // TODO(Murphy): avoid sort the null datums in the column, eliminate the extra overhead
     // Some benchmark numbers:
