@@ -615,4 +615,32 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
                 "  |  group by: 31: i_brand_id, 33: i_class_id, 35: i_category_id");
 
     }
+
+    @Test
+    public void testPartitionTopNStatistics() throws Exception {
+        String plan = getCostExplain("select * from (select i_category, i_brand,\n" +
+                "        cc_name,\n" +
+                "        d_year, d_moy,\n" +
+                "        rank() over\n" +
+                "          (partition by i_category order by d_year, d_moy) rn\n" +
+                " from item, catalog_sales, date_dim, call_center\n" +
+                " where cs_item_sk = i_item_sk and\n" +
+                "       cs_sold_date_sk = d_date_sk and\n" +
+                "       cc_call_center_sk= cs_call_center_sk and\n" +
+                "       (\n" +
+                "         d_year = 1999 or\n" +
+                "         ( d_year = 1999-1 and d_moy =12) or\n" +
+                "         ( d_year = 1999+1 and d_moy =1)\n" +
+                "       )\n" +
+                " group by i_category, i_brand,\n" +
+                "          cc_name , d_year, d_moy) x" +
+                " where rn <= 1");
+        assertContains(plan, "  16:PARTITION-TOP-N\n" +
+                "  |  type: RANK\n" +
+                "  |  partition by: [13: i_category, VARCHAR, true] \n" +
+                "  |  partition limit: 1\n" +
+                "  |  order by: [13, VARCHAR, true] ASC, [63, INT, true] ASC, [65, INT, true] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  cardinality: 10");
+    }
 }
