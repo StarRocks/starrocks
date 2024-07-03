@@ -1220,7 +1220,7 @@ createResourceGroupStatement
     ;
 
 dropResourceGroupStatement
-    : DROP RESOURCE GROUP identifier
+    : DROP RESOURCE GROUP (IF EXISTS)? identifier
     ;
 
 alterResourceGroupStatement
