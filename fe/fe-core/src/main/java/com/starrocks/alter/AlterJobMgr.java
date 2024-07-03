@@ -163,6 +163,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
@@ -1277,7 +1279,14 @@ public class AlterJobMgr {
                 GlobalStateMgr.getCurrentState().renamePartition(db, table, partitionRenameClause);
                 break;
             } else if (alterClause instanceof ColumnRenameClause) {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().renameColumn(db, table, (ColumnRenameClause) alterClause);
+=======
+                Set<String> modifiedColumns = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+                modifiedColumns.add(((ColumnRenameClause) alterClause).getColName());
+                schemaChangeHandler.checkModifiedColumWithMaterializedViews(table, modifiedColumns);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, (ColumnRenameClause) alterClause);
+>>>>>>> 96c0ec2120 ([BugFix] Reject rename col which is referenced in rollup (#47714))
                 break;
             } else {
                 Preconditions.checkState(false);
