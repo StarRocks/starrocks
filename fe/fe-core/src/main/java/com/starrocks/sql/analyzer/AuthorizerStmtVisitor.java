@@ -25,7 +25,6 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -39,6 +38,7 @@ import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.ColumnPrivilege;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
@@ -227,7 +227,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
         Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-        checkSelectTableAction(context, allTablesRelations);
+        checkSelectTableAction(context, statement, allTablesRelations);
         return null;
     }
 
@@ -263,12 +263,13 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         }
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         allTouchedTables.remove(statement.getTableName());
-        checkSelectTableAction(context, allTouchedTables);
+        checkSelectTableAction(context, statement.getQueryStatement(), allTouchedTables);
         return null;
     }
 
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+        Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         try {
             Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     statement.getTableName(), PrivilegeType.UPDATE);
@@ -277,15 +278,13 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
         }
-        Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         allTouchedTables.remove(statement.getTableName());
-        checkSelectTableAction(context, allTouchedTables);
+        checkSelectTableAction(context, statement.getQueryStatement(), allTouchedTables);
         return null;
     }
 
-    void checkSelectTableAction(ConnectContext context, Map<TableName, Relation> allTouchedTables) {
+    void checkSelectTableAction(ConnectContext context, QueryStatement statement, Map<TableName, Relation> allTouchedTables) {
         for (Map.Entry<TableName, Relation> tableToBeChecked : allTouchedTables.entrySet()) {
-            TableName tableName = tableToBeChecked.getKey();
             Table table;
             if (tableToBeChecked.getValue() instanceof TableRelation) {
                 table = ((TableRelation) tableToBeChecked.getValue()).getTable();
@@ -303,43 +302,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             } else {
-                if (table instanceof View) {
-                    try {
-                        // for privilege checking, treat hive view as table
-                        if (table.getType() == Table.TableType.HIVE_VIEW) {
-                            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                    tableName, PrivilegeType.SELECT);
-                        } else {
-                            Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                    tableName, PrivilegeType.SELECT);
-                        }
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
-                    }
-                } else if (table.isMaterializedView()) {
-                    try {
-                        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                tableName, PrivilegeType.SELECT);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.MATERIALIZED_VIEW.name(), tableName.getTbl());
-                    }
-                } else {
-                    try {
-                        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                tableName.getCatalog(), tableName.getDb(), table.getName(), PrivilegeType.SELECT);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(
-                                tableName.getCatalog(),
-                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
-                    }
-                }
+                ColumnPrivilege.check(context, statement);
             }
         }
     }

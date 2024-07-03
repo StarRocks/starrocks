@@ -128,7 +128,7 @@ public class StatementPlanner {
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
                 boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(queryStmt);
-                needWholePhaseLock =  isLockFree(isOnlyOlapTableQueries, session) ? false : true;
+                needWholePhaseLock = isLockFree(isOnlyOlapTableQueries, session) ? false : true;
                 ExecPlan plan;
                 if (needWholePhaseLock) {
                     plan = createQueryPlan(queryStmt, session, resultSinkType);
@@ -190,7 +190,7 @@ public class StatementPlanner {
     /**
      * Create a map from opt expression to parse node for the optimizer to use which only used in text match rewrite for mv.
      */
-    private static Map<Operator, ParseNode> makeOptToAstMap(SessionVariable sessionVariable) {
+    public static Map<Operator, ParseNode> makeOptToAstMap(SessionVariable sessionVariable) {
         if (sessionVariable.isEnableMaterializedViewTextMatchRewrite()) {
             return Maps.newHashMap();
         }
@@ -229,6 +229,7 @@ public class StatementPlanner {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
         }
+
         try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
             // 3. Build fragment exec plan
             /*
