@@ -1750,9 +1750,7 @@ public class ExpressionAnalyzer {
             UserVariable userVariable = session.getUserVariable(node.getName());
             if (userVariable == null) {
                 node.setValue(NullLiteral.create(Type.STRING));
-                node.setType(Type.STRING);
             } else {
-                node.setType(userVariable.getEvaluatedExpression().getType());
                 node.setValue(userVariable.getEvaluatedExpression());
             }
             return null;
