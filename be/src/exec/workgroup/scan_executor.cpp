@@ -80,11 +80,7 @@ void ScanExecutor::worker_thread() {
 
         // task
         if (!task.is_finished()) {
-            if (task.has_yield_function()) {
-                task.execute_yield_function();
-            } else {
-                _task_queue->force_put(std::move(task));
-            }
+            _task_queue->force_put(std::move(task));
         }
     }
 }
