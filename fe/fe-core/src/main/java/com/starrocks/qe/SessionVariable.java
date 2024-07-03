@@ -3898,6 +3898,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableStatsToOptimizeSkewJoin;
     }
 
+    public void setEnableStatsToOptimizeSkewJoin(boolean enableStatsToOptimizeSkewJoin) {
+        this.enableStatsToOptimizeSkewJoin = enableStatsToOptimizeSkewJoin;
+    }
+
     public int getSkewJoinOptimizeUseMCVCount() {
         return skewJoinOptimizeUseMCVCount;
     }
