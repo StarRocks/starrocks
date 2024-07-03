@@ -513,16 +513,21 @@ Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<C
                             const SortDescs& sort_desc, SmallPermutation& perm,
                             const std::span<const uint32_t> src_offsets,
                             const std::vector<std::span<const uint32_t>>& offsets_per_key) {
-    if (columns.size() < 1 || src_offsets.empty()) {
+    if (src_offsets.empty()) {
         return Status::OK();
     }
 
     const size_t num_rows = src_offsets.back();
     const size_t num_ranges = src_offsets.size() - 1;
     const size_t num_keys = offsets_per_key.size();
+    DCHECK_EQ(num_keys, columns.size());
+
+    perm = create_small_permutation(num_rows);
+    if (num_keys < 1) {
+        return Status::OK();
+    }
 
     Tie tie(num_rows, 1);
-    perm = create_small_permutation(num_rows);
 
     // The range of the i-th part is [offsets[i], offsets[i+1]), and the offsets of the src column and the key column
     // may be different. See the comment of the declaration of this function for more details.

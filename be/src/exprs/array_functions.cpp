@@ -1573,8 +1573,8 @@ static Status sort_multi_array_column(FunctionContext* ctx, const Column* src_co
     RETURN_IF_ERROR(sort_and_tie_columns(cancel, elements_per_key_col, sort_desc, permutation,
                                          src_offsets_column->get_data(), offsets_per_key_col));
 
-    std::vector<uint32_t> key_sort_index(num_src_element_rows);
-
+    std::vector<uint32_t> key_sort_index;
+    raw::stl_vector_resize_uninitialized(&key_sort_index, num_src_element_rows);
     for (int i = 0; i < num_src_element_rows; i++) {
         key_sort_index[i] = permutation[i].index_in_chunk;
     }
