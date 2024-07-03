@@ -1217,7 +1217,11 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public static double getConstFromExpr(Expr e) throws AnalysisException {
         Preconditions.checkState(e.isConstant());
-        double value = 0;
+        double value;
+        if (e instanceof UserVariableExpr) {
+            e = ((UserVariableExpr) e).getValue();
+        }
+
         if (e instanceof LiteralExpr) {
             LiteralExpr lit = (LiteralExpr) e;
             value = lit.getDoubleValue();
