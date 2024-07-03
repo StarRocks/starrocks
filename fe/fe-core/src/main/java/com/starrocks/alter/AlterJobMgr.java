@@ -144,6 +144,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 public class AlterJobMgr {
@@ -852,7 +854,15 @@ public class AlterJobMgr {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().renamePartition(db, table, partitionRenameClause);
                 break;
             } else if (alterClause instanceof ColumnRenameClause) {
+<<<<<<< HEAD
                 throw new DdlException("not supported");
+=======
+                Set<String> modifiedColumns = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+                modifiedColumns.add(((ColumnRenameClause) alterClause).getColName());
+                schemaChangeHandler.checkModifiedColumWithMaterializedViews(table, modifiedColumns);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, (ColumnRenameClause) alterClause);
+                break;
+>>>>>>> 96c0ec2120 ([BugFix] Reject rename col which is referenced in rollup (#47714))
             } else {
                 Preconditions.checkState(false);
             }
