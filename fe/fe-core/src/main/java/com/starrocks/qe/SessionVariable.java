@@ -470,6 +470,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_DATACACHE_ASYNC_POPULATE_MODE = "enable_datacache_async_populate_mode";
     public static final String ENABLE_DATACACHE_IO_ADAPTOR = "enable_datacache_io_adaptor";
     public static final String DATACACHE_EVICT_PROBABILITY = "datacache_evict_probability";
+    public static final String ENABLE_COLLECT_TABLE_ACCESS_STATISTICS = "enable_collect_table_access_statistic";
+    public static final String ENABLE_FULL_COLLECT_TABLE_ACCESS_STATISTICS = "enable_full_collect_table_access_statistics";
 
     // The following configurations will be deprecated, and we use the `datacache` suffix instead.
     // But it is temporarily necessary to keep them for a period of time to be compatible with
@@ -1613,6 +1615,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateDataCache = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_COLLECT_TABLE_ACCESS_STATISTICS, flag = VariableMgr.INVISIBLE)
+    private boolean enableCollectTableAccessStatistics = false;
+
+    // By default, we will ignore full (table/partition) scan
+    @VariableMgr.VarAttr(name = ENABLE_FULL_COLLECT_TABLE_ACCESS_STATISTICS, flag = VariableMgr.INVISIBLE)
+    private boolean enableFullCollectTableAccessStatistics = false;
+
     @VariableMgr.VarAttr(name = CATALOG, flag = VariableMgr.SESSION_ONLY)
     private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
@@ -2285,6 +2294,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDatacacheTTLSeconds(long datacacheTTLSeconds) {
         this.datacacheTTLSeconds = datacacheTTLSeconds;
+    }
+
+    public void setEnableCollectTableAccessStatistics(boolean enableCollectTableAccessStatistics) {
+        this.enableCollectTableAccessStatistics = enableCollectTableAccessStatistics;
+    }
+
+    public boolean isEnableCollectTableAccessStatistics() {
+        return this.enableCollectTableAccessStatistics;
+    }
+
+    public void setEnableFullCollectTableAccessStatistics(boolean enableFullCollectTableAccessStatistics) {
+        this.enableFullCollectTableAccessStatistics = enableFullCollectTableAccessStatistics;
+    }
+
+    public boolean isEnableFullCollectTableAccessStatistics() {
+        return this.enableFullCollectTableAccessStatistics;
     }
 
     public boolean isCboUseDBLock() {

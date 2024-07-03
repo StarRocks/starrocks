@@ -231,8 +231,8 @@ public class SkewJoinTest extends PlanTestBase {
         assertCContains(sqlPlan, "HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
-                "  |  equal join conjunct: 9: expr = 3: c1");
+                "  |  equal join conjunct: 12: rand_col = 19: rand_col\n" +
+                "  |  equal join conjunct: 11: expr = 5: c1");
     }
 
     @Test

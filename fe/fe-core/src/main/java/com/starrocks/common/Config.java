@@ -2993,4 +2993,29 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+
+    @ConfField(mutable = true)
+    public static long table_access_collector_repo_check_interval_sec = 60;
+
+    /*
+     * Maximum table access collector 's buffer, if buffer is large than this threshold, FE will flush buffer's statistics to BE
+     * */
+    @ConfField(mutable = true)
+    public static long table_access_collector_max_flight_bytes = 20 * 1024 * 1024; // 20MB
+
+    /*
+     * How often to flush the table access collector's buffer to BE
+     * */
+    @ConfField(mutable = true)
+    public static long table_access_collector_flush_sec = 60; // 60s
+
+    /*
+     * How long to clear stale table access statistics in BE,
+     * `table_access_statistics_keep_sec` determines how long ago the stats are stale
+     * */
+    @ConfField(mutable = true)
+    public static long table_access_collector_clean_sec = 60; // 60s
+
+    @ConfField(mutable = true)
+    public static long table_access_statistics_keep_sec = 30 * 24 * 60 * 60; // 30 day
 }

@@ -31,6 +31,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.datacache.collector.TableAccessCollector;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -225,6 +226,13 @@ public class StatementPlanner {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
         }
+        if (session.getSessionVariable().isEnableCollectTableAccessStatistics()) {
+            try (Timer ignored = Tracers.watchScope("CollectTableAccessStatistics")) {
+                TableAccessCollector.collectFromPhysicalPlan(optimizedPlan,
+                        session.getSessionVariable().isEnableFullCollectTableAccessStatistics());
+            }
+        }
+
         try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
             // 3. Build fragment exec plan
             /*

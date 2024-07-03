@@ -35,6 +35,7 @@ public class KuduScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalKuduScanOperator scan = (LogicalKuduScanOperator) input.getOp();
         PhysicalKuduScanOperator physicalKuduScan = new PhysicalKuduScanOperator(scan);
+        physicalKuduScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalKuduScan);
         return Lists.newArrayList(result);
     }
