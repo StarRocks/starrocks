@@ -261,6 +261,7 @@ public class StmtExecutor {
      * Leader and executing the statement forwarded by the Follower
      */
     private boolean isProxy;
+    // ensure proxy result buffer is not null if it's proxy
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;

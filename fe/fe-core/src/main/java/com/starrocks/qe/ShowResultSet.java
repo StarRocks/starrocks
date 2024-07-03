@@ -60,8 +60,25 @@ public class ShowResultSet {
     // now only support static result.
     public ShowResultSet(ShowResultSetMetaData metaData, List<List<String>> resultRows) {
         this.metaData = metaData;
-        this.resultRows = resultRows;
+        this.resultRows = rewriteRows(resultRows);
         rowIdx = -1;
+    }
+
+    /**
+     * Ensure input rows contain no null value, rewrite null into "" to avoid NPE later.
+     * @param rows input rows
+     * @return rows with no null value
+     */
+    private List<List<String>> rewriteRows(List<List<String>> rows) {
+        List<List<String>> result = Lists.newArrayList();
+        if (rows == null) {
+            return result;
+        }
+        for (List<String> row : rows) {
+            List<String> list = row.stream().map(x -> Objects.toString(x, "")).collect(Collectors.toList());
+            result.add(list);
+        }
+        return result;
     }
 
     public ShowResultSet(TShowResultSet resultSet) {
