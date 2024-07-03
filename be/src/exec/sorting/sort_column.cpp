@@ -77,7 +77,7 @@ static Status sort_and_tie_helper(const std::atomic<bool>& cancel, const Column*
     return Status::OK();
 }
 
-static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
+static Status sort_and_tie_column(const std::atomic<bool>& cancel, Column* column, const SortDesc& sort_desc,
                                   SmallPermutation& permutation, Tie& tie, Ranges&& ranges, bool build_tie);
 
 template <class NullPred>
