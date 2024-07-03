@@ -20,6 +20,7 @@ import com.starrocks.common.Config;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TGetTasksParams;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,10 +70,13 @@ public class TaskRunHistory {
 
     // Reserve historyTaskRunMap values to keep the last insert at the first.
     public List<TaskRunStatus> getAllHistory() {
-        List<TaskRunStatus> historyRunStatus =
-                new ArrayList<>(historyTaskRunMap.values());
+        List<TaskRunStatus> historyRunStatus = new ArrayList<>(historyTaskRunMap.values());
         Collections.reverse(historyRunStatus);
         return historyRunStatus;
+    }
+
+    public List<TaskRunStatus> lookupHistory(TGetTasksParams params) {
+        return historyTable.lookup(params);
     }
 
     // TODO: make it thread safe

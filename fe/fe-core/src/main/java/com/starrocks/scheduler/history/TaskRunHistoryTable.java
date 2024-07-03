@@ -14,17 +14,21 @@
 
 package com.starrocks.scheduler.history;
 
+import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.util.Strings;
 
 import java.nio.ByteBuffer;
@@ -86,6 +90,8 @@ public class TaskRunHistoryTable {
             "SELECT history_content_json FROM " + TABLE_FULL_NAME + " WHERE task_name = {0}";
     private static final String SELECT_ALL = "SELECT history_content_json FROM " + TABLE_FULL_NAME;
     private static final String COUNT_TASK_RUNS = "SELECT count(*) as cnt FROM " + TABLE_FULL_NAME;
+    private static final String LOOKUP =
+            "SELECT history_content_json " + "FROM " + TABLE_FULL_NAME + " WHERE ";
 
     private static final TableKeeper keeper = new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS);
 
@@ -114,8 +120,7 @@ public class TaskRunHistoryTable {
                 Strings.quote(status.getTaskName()),
                 createTime,
                 finishTime,
-                expireTime,
-                Strings.quote(status.toJSON())
+                expireTime, Strings.quote(status.toJSON())
         );
         final String sql = MessageFormat.format(INSERT_SQL_TEMPLATE, TABLE_FULL_NAME) + " " + value;
         RepoExecutor.getInstance().executeDML(sql);
@@ -148,6 +153,27 @@ public class TaskRunHistoryTable {
             String sql = insert + values;
             RepoExecutor.getInstance().executeDML(sql);
         }
+    }
+
+    public List<TaskRunStatus> lookup(TGetTasksParams params) {
+        String sql = LOOKUP;
+        List<String> predicates = Lists.newArrayList("TRUE");
+        if (StringUtils.isNotEmpty(params.getDb())) {
+            predicates.add(" db_name = " + Strings.quote(params.getDb()));
+        }
+        if (StringUtils.isNotEmpty(params.getTask_name())) {
+            predicates.add(" task_name = " + Strings.quote(params.getTask_name()));
+        }
+        if (StringUtils.isNotEmpty(params.getQuery_id())) {
+            predicates.add(" task_run_id = " + Strings.quote(params.getQuery_id()));
+        }
+        if (StringUtils.isNotEmpty(params.getState())) {
+            predicates.add(" state = " + Strings.quote(params.getState()));
+        }
+        sql += Joiner.on(" AND ").join(predicates);
+
+        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        return TaskRunStatus.fromResultBatch(batch);
     }
 
     public List<TaskRunStatus> getTaskByName(String taskName) {
