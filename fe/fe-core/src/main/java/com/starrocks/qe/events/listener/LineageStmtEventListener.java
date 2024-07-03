@@ -35,7 +35,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.events.StmtEvent;
 import com.starrocks.sql.analyzer.Field;
@@ -140,10 +139,6 @@ public class LineageStmtEventListener implements StmtEventListener {
 
     @Override
     public void onEvent(StmtEvent event) {
-        if (!Config.enable_lineage_log) {
-            LOG.debug("enable_lineage_log is false");
-            return;
-        }
         if (event == null || event.getStatementBase() == null) {
             return;
         }

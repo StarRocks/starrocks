@@ -938,8 +938,8 @@ public class StmtExecutor {
     }
 
     private void postStmtEvent(StatementBase statementBase) {
-        if (!Config.enable_stmt_event_listener) {
-            LOG.debug("enable_stmt_event_listener not enabled!");
+        if (!StmtEventProcessor.isStatementListenerEnabled()) {
+            LOG.debug("No statement listener was registered, skip processing this statement.");
             return;
         }
         StmtEvent stmtEvent = new StmtEvent()

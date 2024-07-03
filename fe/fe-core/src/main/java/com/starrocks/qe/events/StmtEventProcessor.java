@@ -18,15 +18,12 @@
 package com.starrocks.qe.events;
 
 import com.starrocks.common.Config;
-import com.starrocks.plugin.ExtendedPluginsClassLoader;
 import com.starrocks.qe.events.listener.StmtEventListener;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -43,10 +40,6 @@ import java.util.stream.Collectors;
 public class StmtEventProcessor {
     private static final Logger LOG = LogManager.getLogger(StmtEventProcessor.class);
 
-    private static final String DEFAULT_PACKAGE = "com.starrocks.qe.events.listener";
-
-    private static final String PACKAGE_PREFIX = "com.starrocks";
-
     private final BlockingQueue<StmtEvent> eventQueue = new ArrayBlockingQueue<>(Config.stmt_event_processor_queue_size);
 
     private final AtomicBoolean running = new AtomicBoolean();
@@ -54,6 +47,7 @@ public class StmtEventProcessor {
     private final List<StmtEventListener> listeners = new ArrayList<>();
 
     private final AtomicBoolean inited = new AtomicBoolean(false);
+
     private Thread workerThread;
 
     private static final StmtEventProcessor INSTANCE = new StmtEventProcessor();
@@ -62,6 +56,7 @@ public class StmtEventProcessor {
     }
 
     public static void startProcessor() {
+        LOG.info("Initializing StmtEventProcessor.");
         if (INSTANCE != null) {
             INSTANCE.start();
         }
@@ -93,11 +88,11 @@ public class StmtEventProcessor {
     }
 
     /**
-     * unregister listener from processor
+     * deregister listener from processor
      */
-    public static boolean unRegisterListener(StmtEventListener listener) {
+    public static boolean deregisterListener(StmtEventListener listener) {
         if (INSTANCE != null) {
-            return INSTANCE.unRegister(listener);
+            return INSTANCE.deregister(listener);
         }
         return true;
     }
@@ -112,73 +107,60 @@ public class StmtEventProcessor {
                 LOG.warn("stmt event queue is full, queryId {}", event.getQueryId());
             }
         } catch (Exception e) {
-            LOG.warn("encounter exception when handle stmt event, "
-                    + "queryId {}", event.getQueryId(), e);
+            LOG.warn("encounter exception when handle stmt event, queryId {}", event.getQueryId(), e);
         }
+    }
+
+    /**
+     * Check if any statement listener is registered
+     *
+     * @return true on any listener registered, false on none registered
+     */
+    public static boolean isStatementListenerEnabled() {
+        return !INSTANCE.listeners.isEmpty();
     }
 
     public boolean register(StmtEventListener listener) {
         //only register once
-        boolean isPresent = listeners.stream()
-                .filter(current ->
-                        current.getClass().getCanonicalName()
-                                .equals(listener.getClass().getCanonicalName()))
-                .findFirst().isPresent();
+        boolean isPresent = listeners.stream().anyMatch(current ->
+                current.getClass().getCanonicalName().equals(listener.getClass().getCanonicalName()));
         if (!isPresent) {
+            LOG.info("Registering listener of {}", listener.getClass().getCanonicalName());
             return listeners.add(listener);
         } else {
             return false;
         }
     }
 
-    /**
-     * load all listener implements and register to processor
-     */
-    private void loadListeners() {
-        List<String> packages = new ArrayList<>();
-        packages.add(DEFAULT_PACKAGE);
-        String extendedPackages = Config.event_listener_packages;
-        if (StringUtils.isNotEmpty(extendedPackages)) {
-            Arrays.stream(extendedPackages.split(","))
-                    .filter(s -> s.startsWith(PACKAGE_PREFIX))
-                    .forEach(packages::add);
-        }
-
-        for (String packagePath : packages) {
-            Set<Class> classes = findAllClassesByPackage(packagePath);
-            classes.stream().filter(clazz -> isInterfaceOf(clazz, StmtEventListener.class))
-                    .forEach(clazz -> {
-                        try {
-                            StmtEventListener listener = (StmtEventListener) clazz.newInstance();
-                            register(listener);
-                        } catch (Exception e) {
-                            LOG.error("instance class error, class {}", clazz.getCanonicalName(), e);
-                        }
-                    });
-        }
-    }
-
-    public boolean unRegister(StmtEventListener listener) {
+    public boolean deregister(StmtEventListener listener) {
         if (listeners.contains(listener)) {
             return listeners.remove(listener);
         }
         return true;
     }
 
-
     public void start() {
+        LOG.info("Starting StmtEventProcessor.");
         if (running.get()) {
             LOG.info("worker is running");
             return;
         }
         if (!inited.get()) {
-            loadListeners();
+            LOG.info("Try loading and registering statement listeners.");
+            loadAndRegisterListeners();
             inited.set(true);
+            LOG.info("Total {} listeners are registered, they are: {}", listeners.size(),
+                    listeners.stream().map(c -> c.getClass().getCanonicalName()).collect(Collectors.joining(",")));
+        }
+        if (listeners.isEmpty()) {
+            LOG.info("No statement listener was registered, skip starting event processing thread.");
+            return;
         }
         workerThread = new Thread(new Worker(), "StmtEventProcessor");
         workerThread.setDaemon(true);
         workerThread.start();
         running.set(true);
+        LOG.info("StmtEventProcessor with worker thread ({}) had been started.", workerThread.getName());
     }
 
     public void stop() {
@@ -193,33 +175,48 @@ public class StmtEventProcessor {
         }
     }
 
-    private Set<Class> findAllClassesByPackage(String packageName) {
-        ClassLoader parentLoader = ExtendedPluginsClassLoader
-                .create(getClass().getClassLoader(), Collections.EMPTY_LIST);
-        InputStream stream = parentLoader.getResourceAsStream(packageName.replaceAll("[.]", "/"));
-        BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
-        return reader.lines()
-                .filter(line -> line.endsWith(".class"))
-                .map(line -> getClass(line, packageName))
-                .filter(clazz -> clazz != null)
-                .collect(Collectors.toSet());
-    }
-
-    private Class getClass(String className, String packageName) {
-        try {
-            return Class.forName(packageName + "."
-                    + className.substring(0, className.lastIndexOf('.')));
-        } catch (ClassNotFoundException e) {
-            LOG.error("load class error, class {}, package {}", className, packageName, e);
+    /**
+     * load all listener implements and register to processor
+     */
+    private void loadAndRegisterListeners() {
+        Set<String> listenerNames = getListenerClassNames();
+        LOG.info("Being registered listeners are: {}", listenerNames);
+        for (String className : listenerNames) {
+            StmtEventListener listener = newStatementListenerInstance(className);
+            if (null == listener) {
+                continue;
+            }
+            register(listener);
         }
-        return null;
     }
 
-    private static boolean isInterfaceOf(Class origin, Class interfaceClass) {
+    @NotNull
+    protected static Set<String> getListenerClassNames() {
+        if (StringUtils.isBlank(Config.stmt_event_listeners)) {
+            return Collections.emptySet();
+        }
+        return Arrays.stream(StringUtils.split(Config.stmt_event_listeners, ','))
+                .map(StringUtils::trim).filter(StringUtils::isNotBlank).collect(Collectors.toSet());
+    }
+
+    protected static StmtEventListener newStatementListenerInstance(String listenerClassName) {
+        try {
+            Class<?> clazz = Class.forName(listenerClassName);
+            if (!isValidStmtListener(clazz)) {
+                LOG.warn("Listener class {} is NOT a sub class of {}", listenerClassName,
+                        StmtEventListener.class.getCanonicalName());
+                return null;
+            }
+            return (StmtEventListener) clazz.getDeclaredConstructor().newInstance();
+        } catch (Exception ex) {
+            LOG.error("Failed initializing statement listener: {}", listenerClassName, ex);
+            return null;
+        }
+    }
+
+    private static boolean isValidStmtListener(Class<?> origin) {
         return Arrays.stream(origin.getInterfaces())
-                .filter(i -> i.getCanonicalName().equals(interfaceClass.getCanonicalName()))
-                .findFirst()
-                .isPresent();
+                .anyMatch(i -> i.getCanonicalName().equals(StmtEventListener.class.getCanonicalName()));
     }
 
     public class Worker implements Runnable {
@@ -229,9 +226,6 @@ public class StmtEventProcessor {
                 StmtEvent stmtEvent = null;
                 try {
                     stmtEvent = eventQueue.take();
-                    if (stmtEvent == null) {
-                        continue;
-                    }
                     for (StmtEventListener listener : listeners) {
                         listener.onEvent(stmtEvent);
                     }
