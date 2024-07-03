@@ -20,6 +20,7 @@
 #include <unordered_set>
 
 #include "column/const_column.h"
+#include "column/map_column.h"
 #include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
@@ -5641,175 +5642,322 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
     }
 }
 
-TEST_F(ArrayFunctionsTest, array_repeat_int) {
-    auto src_column = Int32Column::create();
-    src_column->append(1);
-    src_column->append(2);
-    src_column->append(3);
-    src_column->append(4);
-    src_column->append(0);
-    src_column->append(6);
-    src_column->append(0);
-    src_column->append(-2);
+template <LogicalType Type>
+void array_repeat_test(Datum element_0, Datum element_1, Datum element_2,  Datum element_null) {
+    {
+        using CppType = RunTimeCppType<Type>;
 
-    auto repeat_count_column = Int32Column::create();
-    repeat_count_column->append(1);
-    repeat_count_column->append(2);
-    repeat_count_column->append(3);
-    repeat_count_column->append(1);
-    repeat_count_column->append(2);
-    repeat_count_column->append(0);
-    repeat_count_column->append(-1);
-    repeat_count_column->append(-2);
+        int32_t repeat_count_0 = (int32_t)1;
+        int32_t repeat_count_1 = (int32_t)-2;
+        int32_t repeat_count_2 = (int32_t)3;
+        Datum repeat_count_null;
 
-    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
-    ASSERT_EQ(dest_column->size(), 8);
-    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
-    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
-    ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
-    ASSERT_EQ(dest_column->get(3).get_array().size(), 1);
-    ASSERT_EQ(dest_column->get(4).get_array().size(), 2);
-    ASSERT_EQ(dest_column->get(5).get_array().size(), 0);
-    ASSERT_EQ(dest_column->get(6).get_array().size(), 0);
-    ASSERT_EQ(dest_column->get(7).get_array().size(), 0);
-    _check_array<int32_t>({(int32_t)1}, dest_column->get(0).get_array());
-    _check_array<int32_t>({(int32_t)2, (int32_t)2}, dest_column->get(1).get_array());
-    _check_array<int32_t>({(int32_t)3, (int32_t)3, (int32_t)3}, dest_column->get(2).get_array());
-    _check_array<int32_t>({(int32_t)4}, dest_column->get(3).get_array());
-    _check_array<int32_t>({(int32_t)0, (int32_t)0}, dest_column->get(4).get_array());
+        // The case for testing non-nullable
+        {
+            ColumnPtr src_column = ColumnHelper::create_column(TypeDescriptor(Type), false, false, 0);
+            src_column->append_datum(element_0);
+            src_column->append_datum(element_1);
+            src_column->append_datum(element_2);
+
+            auto repeat_count_column = Int32Column::create();
+            repeat_count_column->append(repeat_count_0);
+            repeat_count_column->append(repeat_count_1);
+            repeat_count_column->append(repeat_count_2);
+
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, repeat_count_column}).value();
+            ASSERT_EQ(dest_column->size(), 3);
+            ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
+            if (Type == TYPE_JSON) {
+                ASSERT_EQ(element_0.get_json()->get_slice(), dest_column->get(0).get_array()[0].get_json()->get_slice());
+                ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
+                ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+                ASSERT_EQ(element_2.get_json()->get_slice(), dest_column->get(2).get_array()[0].get_json()->get_slice());
+                ASSERT_EQ(element_2.get_json()->get_slice(), dest_column->get(2).get_array()[1].get_json()->get_slice());
+                ASSERT_EQ(element_2.get_json()->get_slice(), dest_column->get(2).get_array()[2].get_json()->get_slice());
+            } else {
+                ASSERT_EQ(element_0.get<CppType>(), dest_column->get(0).get_array()[0].get<CppType>());
+                ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
+                ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+                ASSERT_EQ(element_2.get<CppType>(), dest_column->get(2).get_array()[0].get<CppType>());
+                ASSERT_EQ(element_2.get<CppType>(), dest_column->get(2).get_array()[1].get<CppType>());
+                ASSERT_EQ(element_2.get<CppType>(), dest_column->get(2).get_array()[2].get<CppType>());
+            }
+        }
+
+        // The case for testing NullableColumn
+        {
+            ColumnPtr src_column = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
+            src_column->append_datum(element_0);
+            src_column->append_datum(element_1);
+            src_column->append_datum(element_null);
+
+            auto repeat_count_column = NullableColumn::create(
+                    Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            repeat_count_column->append_datum(repeat_count_null);
+            repeat_count_column->append_datum(Datum(repeat_count_1));
+            repeat_count_column->append_datum(Datum(repeat_count_2));
+
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, repeat_count_column}).value();
+            ASSERT_EQ(dest_column->size(), 3);
+            ASSERT_TRUE(dest_column->get(0).is_null());
+            ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
+            ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+            ASSERT_TRUE(dest_column->get(2).get_array()[0].is_null());
+            ASSERT_TRUE(dest_column->get(2).get_array()[1].is_null());
+            ASSERT_TRUE(dest_column->get(2).get_array()[2].is_null());
+        }
+
+        // The case for testing ConstColumn
+        {
+            size_t const_column_row_count = 2;
+
+            ColumnPtr src_column = ColumnHelper::create_column(TypeDescriptor(Type), false, true, 0);
+            for (int i = 0; i < const_column_row_count; i++) {
+                src_column->append_datum(element_0);
+            }
+
+            auto repeat_count_data_column = Int32Column::create();
+            repeat_count_data_column->append(repeat_count_0);
+            auto repeat_count_column = ConstColumn::create(
+                    std::move(repeat_count_data_column), const_column_row_count);
+
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, repeat_count_column}).value();
+            ASSERT_EQ(dest_column->size(), const_column_row_count);
+            if (Type == TYPE_JSON) {
+                ASSERT_EQ(element_0.get_json()->get_slice(), dest_column->get(0).get_array()[0].get_json()->get_slice());
+                ASSERT_EQ(element_0.get_json()->get_slice(), dest_column->get(1).get_array()[0].get_json()->get_slice());
+            } else {
+                ASSERT_EQ(element_0.get<CppType>(), dest_column->get(0).get_array()[0].get<CppType>());
+                ASSERT_EQ(element_0.get<CppType>(), dest_column->get(1).get_array()[0].get<CppType>());
+            }
+        }
+    }
 }
 
-TEST_F(ArrayFunctionsTest, array_repeat_float) {
-    auto src_column = FloatColumn::create();
-    src_column->append((float)0.1);
-    src_column->append((float)0);
-    src_column->append((float)0.2);
-
-    auto repeat_count_column = Int32Column::create();
-    repeat_count_column->append(1);
-    repeat_count_column->append(2);
-    repeat_count_column->append(0);
-
-    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
-    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
-    ASSERT_EQ(dest_column->get(2).get_array().size(), 0);
-    _check_array<float>({(float)0.1}, dest_column->get(0).get_array());
-    _check_array<float>({(float)0, (float)0}, dest_column->get(1).get_array());
+TEST_F(ArrayFunctionsTest, array_repeat) {
+    {
+        array_repeat_test<TYPE_INT>(Datum((int32_t)0), Datum((int32_t)1), Datum((int32_t)2), Datum());
+        array_repeat_test<TYPE_BIGINT>(Datum((int64_t)0), Datum((int64_t)1), Datum((int64_t)2), Datum());
+        array_repeat_test<TYPE_FLOAT>(Datum((float)0), Datum((float)0.1), Datum((float)0.2), Datum());
+        array_repeat_test<TYPE_DOUBLE>(Datum((double)0), Datum((double)0.1), Datum((double)0.2), Datum());
+        array_repeat_test<TYPE_DECIMALV2>(
+                Datum(DecimalV2Value(std::string("0.0000000000"))),
+                Datum(DecimalV2Value(std::string("1.0000000000"))),
+                Datum(DecimalV2Value(std::string("2.0000000000"))), Datum());
+        array_repeat_test<TYPE_BOOLEAN>(Datum(true), (false), Datum(false), Datum());
+        array_repeat_test<TYPE_DATE>(DateValue::create(2020, 0, 0), DateValue::create(2021, 1, 1),
+                                     DateValue::create(2022, 2, 2), Datum());
+        array_repeat_test<TYPE_DATETIME>(
+                TimestampValue::create(2020, 0, 0, 0, 0, 0),
+                TimestampValue::create(2021, 1, 1, 1, 1, 1),
+                TimestampValue::create(2022, 2, 2, 2, 2, 2), Datum());
+        array_repeat_test<TYPE_VARCHAR>(Datum(Slice("0")), Datum(Slice("1")), Datum(Slice("2")), Datum());
+        JsonValue json_element_0 = JsonValue::parse("{\"a\": 0}").value();
+        JsonValue json_element_1 = JsonValue::parse("{\"b\": 1}").value();
+        JsonValue json_element_2 = JsonValue::parse("{\"c\": 2}").value();
+        array_repeat_test<TYPE_JSON>(Datum(&json_element_0), Datum(&json_element_1), Datum(&json_element_2), Datum());
+    }
 }
 
-TEST_F(ArrayFunctionsTest, array_repeat_varchar) {
-    auto src_column = BinaryColumn::create();
-    src_column->append("1");
-    src_column->append("2");
-    src_column->append("3");
+TEST_F(ArrayFunctionsTest, array_repeat_array) {
+    {
+        Datum element_0 = DatumArray{(int32_t)0};
+        Datum element_1 = DatumArray{Datum()};
+        Datum element_2 = DatumArray{Datum(),(int32_t)2};
+        Datum element_null;
+        int32_t repeat_count_0 = (int32_t)1;
+        int32_t repeat_count_1 = (int32_t)-2;
+        int32_t repeat_count_2 = (int32_t)3;
+        Datum repeat_count_null;
 
-    auto repeat_count_column = Int32Column::create();
-    repeat_count_column->append(1);
-    repeat_count_column->append(2);
-    repeat_count_column->append(0);
+        // The case for testing non-nullable
+        {
+            auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+            src_column->append_datum(element_0);
+            src_column->append_datum(element_1);
+            src_column->append_datum(element_2);
 
-    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
-    ASSERT_EQ(dest_column->size(), 3);
-    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
-    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
-    ASSERT_EQ(dest_column->get(2).get_array().size(), 0);
-    _check_array<Slice>({"1"}, dest_column->get(0).get_array());
-    _check_array<Slice>({"2", "2"}, dest_column->get(1).get_array());
+            auto repeat_count_column = Int32Column::create();
+            repeat_count_column->append(repeat_count_0);
+            repeat_count_column->append(repeat_count_1);
+            repeat_count_column->append(repeat_count_2);
+
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, repeat_count_column}).value();
+            ASSERT_EQ(dest_column->size(), 3);
+            ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
+            _check_array<int32_t>({(int32_t)0}, dest_column->get(0).get_array()[0].get_array());
+            ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
+            _check_array<int32_t>({}, dest_column->get(1).get_array());
+            ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+            ASSERT_TRUE(dest_column->get(2).get_array()[0].get_array()[0].is_null());
+            ASSERT_EQ((int32_t)2, dest_column->get(2).get_array()[0].get_array()[1].get_int32());
+            ASSERT_TRUE(dest_column->get(2).get_array()[1].get_array()[0].is_null());
+            ASSERT_EQ((int32_t)2, dest_column->get(2).get_array()[1].get_array()[1].get_int32());
+            ASSERT_TRUE(dest_column->get(2).get_array()[2].get_array()[0].is_null());
+            ASSERT_EQ((int32_t)2, dest_column->get(2).get_array()[2].get_array()[1].get_int32());
+        }
+
+        // The case for testing NullableColumn
+        {
+            auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+            src_column->append_datum(element_0);
+            src_column->append_datum(element_1);
+            src_column->append_datum(element_null);
+
+            auto repeat_count_column = NullableColumn::create(
+                    Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            repeat_count_column->append_datum(repeat_count_null);
+            repeat_count_column->append_datum(Datum(repeat_count_1));
+            repeat_count_column->append_datum(Datum(repeat_count_2));
+
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, repeat_count_column}).value();
+            ASSERT_EQ(dest_column->size(), 3);
+            ASSERT_TRUE(dest_column->get(0).is_null());
+            ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
+            _check_array<int32_t>({}, dest_column->get(1).get_array());
+            ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+            ASSERT_TRUE(dest_column->get(2).get_array()[0].is_null());
+            ASSERT_TRUE(dest_column->get(2).get_array()[1].is_null());
+            ASSERT_TRUE(dest_column->get(2).get_array()[2].is_null());
+        }
+
+        // The case for testing ConstColumn
+        {
+            size_t const_column_row_count = 2;
+
+            auto src_data_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+            src_data_column->append_datum(element_0);
+            auto src_column = ConstColumn::create(
+                    std::move(src_data_column), const_column_row_count);
+
+            auto repeat_count_data_column = Int32Column::create();
+            repeat_count_data_column->append(repeat_count_0);
+            auto repeat_count_column = ConstColumn::create(
+                    std::move(repeat_count_data_column), const_column_row_count);
+
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, repeat_count_column}).value();
+            ASSERT_EQ(dest_column->size(), const_column_row_count);
+            _check_array<int32_t>({(int32_t)0}, dest_column->get(0).get_array()[0].get_array());
+        }
+    }
 }
 
-TEST_F(ArrayFunctionsTest, array_repeat_const) {
-    auto src_data_column = Int32Column::create();
-    src_data_column->append(3);
-    auto src_column = ConstColumn::create(std::move(src_data_column), 1);
+TEST_F(ArrayFunctionsTest, array_repeat_map) {
+    {
+        DatumMap element_0;
+        DatumMap element_1;
+        DatumMap element_2;
+        Datum element_null;
+        int32_t repeat_count_0 = (int32_t)1;
+        int32_t repeat_count_1 = (int32_t)-2;
+        int32_t repeat_count_2 = (int32_t)3;
+        Datum repeat_count_null;
+        element_0[(int32_t)0] = (int32_t)0;
+        element_0[(int32_t)1] = (int32_t)11;
+        element_0[(int32_t)2] = (int32_t)22;
+        element_1[(int32_t)3] = (int32_t)33;
+        element_1[(int32_t)4] = (int32_t)44;
+        element_1[(int32_t)5] = (int32_t)55;
+        element_2[(int32_t)6] = (int32_t)66;
+        element_2[(int32_t)7] = (int32_t)77;
+        element_2[(int32_t)8] = (int32_t)88;
 
-    auto repeat_count_data_column = Int32Column::create();
-    repeat_count_data_column->append(2);
-    auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), 1);
+        // The case for testing non-nullable
+        {
+            auto offsets = UInt32Column::create();
+            auto keys_data = Int32Column::create();
+            auto keys_null = NullColumn::create();
+            auto keys = NullableColumn::create(keys_data, keys_null);
+            auto values_data = Int32Column::create();
+            auto values_null = NullColumn::create();
+            auto values = NullableColumn::create(values_data, values_null);
+            auto src_column = MapColumn::create(keys, values, offsets);
+            src_column->append_datum(element_0);
+            src_column->append_datum(element_1);
+            src_column->append_datum(element_2);
 
-    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
-    ASSERT_EQ(dest_column->size(), 1);
-    _check_array<int32_t>({(int32_t)3, (int32_t)3}, dest_column->get(0).get_array());
-}
+            auto repeat_count_column = Int32Column::create();
+            repeat_count_column->append(repeat_count_0);
+            repeat_count_column->append(repeat_count_1);
+            repeat_count_column->append(repeat_count_2);
 
-TEST_F(ArrayFunctionsTest, array_repeat_int_array) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
-    src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
-    src_column->append_datum(DatumArray{(int32_t)2, (int32_t)3, (int32_t)7, (int32_t)8});
-    src_column->append_datum(DatumArray{(int32_t)4, (int32_t)3, (int32_t)2, (int32_t)1});
-    src_column->append_datum(Datum());
-    src_column->append_datum(DatumArray{(int32_t)4, Datum(), (int32_t)2, (int32_t)1});
-    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
-    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
-    src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, repeat_count_column}).value();
+            ASSERT_EQ(dest_column->size(), 3);
+            ASSERT_EQ(dest_column->get(0).get_array().size(), repeat_count_0);
+            ASSERT_EQ(element_0.find(2)->second.get_int32(), dest_column->get(0).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
+            ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
+            _check_array<int32_t>({}, dest_column->get(1).get_array());
+            ASSERT_EQ(dest_column->get(2).get_array().size(), repeat_count_2);
+            ASSERT_EQ(element_2.find(8)->second.get_int32(), dest_column->get(2).get_array()[2].get<DatumMap>().find(8)->second.get_int32());
+        }
 
-    auto repeat_count_column = Int32Column::create();
-    repeat_count_column->append(1);
-    repeat_count_column->append(2);
-    repeat_count_column->append(3);
-    repeat_count_column->append(1);
-    repeat_count_column->append(2);
-    repeat_count_column->append(0);
-    repeat_count_column->append(-1);
-    repeat_count_column->append(-2);
+        // The case for testing NullableColumn
+        {
+            auto offsets = UInt32Column::create();
+            auto keys_data = Int32Column::create();
+            auto keys_null = NullColumn::create();
+            auto keys = NullableColumn::create(keys_data, keys_null);
+            auto values_data = Int32Column::create();
+            auto values_null = NullColumn::create();
+            auto values = NullableColumn::create(values_data, values_null);
+            auto map_column = MapColumn::create(keys, values, offsets);
+            auto src_column = NullableColumn::create(
+                    std::move(map_column), NullColumn::create(0, DATUM_NULL));
+            src_column->append_datum(element_0);
+            src_column->append_datum(element_1);
+            src_column->append_datum(element_null);
 
-    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
-    ASSERT_EQ(dest_column->size(), 8);
-    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
-    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
-    ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
-    ASSERT_TRUE(dest_column->get(3).is_null());
-    ASSERT_EQ(dest_column->get(4).get_array().size(), 2);
-    ASSERT_EQ(dest_column->get(5).get_array().size(), 0);
-    ASSERT_EQ(dest_column->get(6).get_array().size(), 0);
-    ASSERT_EQ(dest_column->get(7).get_array().size(), 0);
-    _check_array<int32_t>({(int32_t)5, (int32_t)3, (int32_t)6}, dest_column->get(0).get_array()[0].get_array());
-    _check_array<int32_t>({(int32_t)2, (int32_t)3, (int32_t)7, (int32_t)8}, dest_column->get(1).get_array()[1].get_array());
-    _check_array<int32_t>({(int32_t)4, (int32_t)3, (int32_t)2, (int32_t)1}, dest_column->get(2).get_array()[2].get_array());
-    ASSERT_EQ(4,dest_column->get(4).get_array()[1].get_array()[0].get_int32());
-    ASSERT_TRUE(dest_column->get(4).get_array()[1].get_array()[1].is_null());
-    ASSERT_EQ(1,dest_column->get(4).get_array()[1].get_array()[3].get_int32());
-}
+            auto count_column = NullableColumn::create(
+                    Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            count_column->append_datum(repeat_count_null);
+            count_column->append_datum(Datum(repeat_count_1));
+            count_column->append_datum(Datum(repeat_count_2));
 
-TEST_F(ArrayFunctionsTest, array_repeat_varchar_array) {
-    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
-    src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
-    src_column->append_datum(DatumArray{Slice("2"), Slice("3"), Slice("7"), Slice("8")});
-    src_column->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
-    src_column->append_datum(Datum());
-    src_column->append_datum(DatumArray{Slice("4"), Slice("2"), Slice("2"), Slice("1")});
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, count_column}).value();
+            ASSERT_EQ(dest_column->size(), 3);
+            ASSERT_TRUE(dest_column->get(0).is_null());
+            ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
+            _check_array<int32_t>({}, dest_column->get(1).get_array());
+            ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
+            ASSERT_TRUE(dest_column->get(2).get_array()[0].is_null());
+            ASSERT_TRUE(dest_column->get(2).get_array()[1].is_null());
+            ASSERT_TRUE(dest_column->get(2).get_array()[2].is_null());
+        }
 
-    auto repeat_count_column = Int32Column::create();
-    repeat_count_column->append(1);
-    repeat_count_column->append(2);
-    repeat_count_column->append(3);
-    repeat_count_column->append(1);
-    repeat_count_column->append(0);
+        // The case for testing ConstColumn
+        {
+            size_t const_column_row_count = 2;
+            auto offsets = UInt32Column::create();
+            auto keys_data = Int32Column::create();
+            auto keys_null = NullColumn::create();
+            auto keys = NullableColumn::create(keys_data, keys_null);
+            auto values_data = Int32Column::create();
+            auto values_null = NullColumn::create();
+            auto values = NullableColumn::create(values_data, values_null);
+            auto map_column = MapColumn::create(keys, values, offsets);
+            map_column->append_datum(element_0);
+            auto src_column = ConstColumn::create(
+                    std::move(map_column), const_column_row_count);
 
-    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
-    ASSERT_EQ(dest_column->size(), 5);
-    ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
-    ASSERT_EQ(dest_column->get(1).get_array().size(), 2);
-    ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
-    ASSERT_TRUE(dest_column->get(3).is_null());
-    ASSERT_EQ(dest_column->get(4).get_array().size(), 0);
-    _check_array<Slice>({Slice("5"), Slice("3"), Slice("6")}, dest_column->get(0).get_array()[0].get_array());
-    _check_array<Slice>({Slice("4"), Slice("3"), Slice("2"), Slice("1")}, dest_column->get(2).get_array()[0].get_array());
-    _check_array<Slice>({Slice("4"), Slice("3"), Slice("2"), Slice("1")}, dest_column->get(2).get_array()[2].get_array());
-}
+            auto repeat_count_data_column = Int32Column::create();
+            repeat_count_data_column->append(repeat_count_0);
+            auto repeat_count_column = ConstColumn::create(
+                    std::move(repeat_count_data_column), const_column_row_count);
 
-TEST_F(ArrayFunctionsTest, array_repeat_array_const) {
-    auto src_data_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
-    src_data_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
-    auto src_column = ConstColumn::create(std::move(src_data_column), 1);
-
-    auto repeat_count_data_column = Int32Column::create();
-    repeat_count_data_column->append(2);
-    auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), 1);
-
-    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
-    ASSERT_EQ(dest_column->size(), 1);
-    _check_array<int32_t>({(int32_t)5, (int32_t)3, (int32_t)6}, dest_column->get(0).get_array()[0].get_array());
+            auto dest_column = ArrayFunctions::repeat(
+                    nullptr, {src_column, repeat_count_column}).value();
+            ASSERT_EQ(dest_column->size(), const_column_row_count);
+            ASSERT_EQ(element_0.find(2)->second.get_int32(), dest_column->get(0).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
+            ASSERT_EQ(element_0.find(2)->second.get_int32(), dest_column->get(1).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
+        }
+    }
 }
 } // namespace starrocks
