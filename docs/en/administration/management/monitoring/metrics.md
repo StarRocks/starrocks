@@ -513,6 +513,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Average
 - Description: Used disk capacity.
 
+### encryption_keys_created
+
+- Unit: Count
+- Type: Cumulative
+- Description: number of file encryption keys created for file encryption
+
+### encryption_keys_unwrapped
+
+- Unit: Count
+- Type: Cumulative
+- Description: number of encryption meta unwrapped for file decryption
+
+### encryption_keys_in_cache
+
+- Unit: Count
+- Type: Instantaneous
+- Description: number of encryption keys currently in key cache
+
 ### starrocks_fe_meta_log_count
 
 - Unit: Count

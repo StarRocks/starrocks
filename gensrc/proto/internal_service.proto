@@ -197,6 +197,7 @@ message PTabletWriterOpenRequest {
 
     // for multi olap table sink
     optional int64 sink_id = 36 [default = 0];
+    optional bytes encryption_meta = 37;
 };
 
 message PTabletWriterOpenResult {

@@ -81,6 +81,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
+import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.replication.ReplicationJob;
@@ -1472,6 +1473,10 @@ public class EditLog {
 
     public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
         logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
+    }
+
+    public void logAddKey(EncryptionKeyPB key) {
+        logJsonObject(OperationType.OP_ADD_KEY, key);
     }
 
     public void logTimestamp(Timestamp stamp) {
