@@ -1041,6 +1041,11 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
         try {
+            if (statement.getUserIdentity().equals(UserIdentity.ROOT)
+                    && !context.getCurrentUserIdentity().equals(UserIdentity.ROOT)) {
+                throw new SemanticException("Can not modify root user, except root itself");
+            }
+
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
