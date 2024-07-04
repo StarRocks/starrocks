@@ -619,9 +619,11 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
 
     int64_t mv_cpu_limit = config::default_mv_resource_group_cpu_limit;
     double mv_memory_limit = config::default_mv_resource_group_memory_limit;
-    auto default_mv_wg = std::make_shared<WorkGroup>("default_mv_wg", WorkGroup::DEFAULT_MV_WG_ID,
-                                                     WorkGroup::DEFAULT_MV_VERSION, mv_cpu_limit, mv_memory_limit, 0,
-                                                     spill_mem_limit_threshold, WorkGroupType::WG_MV);
+    double mv_concurrency_limit = config::default_mv_resource_group_concurrency_limit;
+    double mv_spill_mem_limit_threshold = config::default_mv_resource_group_spill_mem_limit_threshold;
+    auto default_mv_wg = std::make_shared<WorkGroup>(
+            "default_mv_wg", WorkGroup::DEFAULT_MV_WG_ID, WorkGroup::DEFAULT_MV_VERSION, mv_cpu_limit, mv_memory_limit,
+            mv_concurrency_limit, mv_spill_mem_limit_threshold, WorkGroupType::WG_MV);
     WorkGroupManager::instance()->add_workgroup(default_mv_wg);
 }
 
