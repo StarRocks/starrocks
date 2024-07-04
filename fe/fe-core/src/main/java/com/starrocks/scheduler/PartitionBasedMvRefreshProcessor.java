@@ -676,8 +676,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Set<String> basePartitions = baseTableCandidatePartitions.get(snapshotInfo);
             if (CollectionUtils.isNotEmpty(basePartitions)) {
                 // only refresh referenced partitions, to reduce metadata overhead
+                List<String> realPartitionNames = basePartitions.stream()
+                        .flatMap(name -> convertMVPartitionNameToRealPartitionName(table, name).stream())
+                        .collect(Collectors.toList());
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, Lists.newArrayList(basePartitions), false);
+                        baseTableInfo.getDbName(), table, realPartitionNames, false);
             } else {
                 // refresh the whole table, which may be costly in extreme case
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
