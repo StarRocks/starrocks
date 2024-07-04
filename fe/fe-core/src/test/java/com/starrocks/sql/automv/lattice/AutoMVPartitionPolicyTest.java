@@ -53,12 +53,20 @@ public class AutoMVPartitionPolicyTest {
 
         new MockUp<MvRefreshArbiter>() {
             /**
-             * {@link MvRefreshArbiter#getPartitionNamesToRefreshForMv(MaterializedView, boolean)}
+             * {@link MvRefreshArbiter#getMVTimelinessUpdateInfo(MaterializedView, boolean)}
              */
+            @Mock
+            public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                          boolean isQueryRewrite) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+            }
+
+            @Deprecated
             @Mock
             public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
                                                                 boolean isQueryRewrite) {
                 return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+
             }
         };
 
