@@ -141,7 +141,9 @@ public class PlanTestNoneDBBase {
         } else if (predicate.contains("PREDICATES: ") && predicate.contains(" IN ")) {
             // normalize in predicate values' order
             String[] splitArray = predicate.split(" IN ");
-            Preconditions.checkArgument(splitArray.length == 2);
+            if (splitArray.length != 2) {
+                return predicate;
+            }
             String first = splitArray[0];
             String second = splitArray[1];
             String predicates = second.substring(1, second.length() - 1);
