@@ -2862,6 +2862,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
 
+    @ConfField(mutable = true, comment = "Whether enable strict insert in mv refresh or not by default")
+    public static boolean enable_mv_refresh_insert_strict = false;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
