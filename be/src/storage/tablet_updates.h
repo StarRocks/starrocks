@@ -358,6 +358,24 @@ public:
 
     RowsetSharedPtr get_rowset(uint32_t rowset_id);
 
+    void check_for_apply() {
+        _apply_schedule.store(false);
+        _check_for_apply();
+    }
+
+    // just for ut
+    void reset_update_state() {
+        const EditVersionInfo* version_info_apply = nullptr;
+        {
+            std::lock_guard rl(_lock);
+            if (_edit_version_infos.empty()) {
+                return;
+            }
+            version_info_apply = _edit_version_infos[_apply_version_idx + 1].get();
+            _reset_apply_status(*version_info_apply);
+        }
+    }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -394,14 +412,14 @@ private:
 
     void _ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
-    void _apply_rowset_commit(const EditVersionInfo& version_info);
+    Status _apply_rowset_commit(const EditVersionInfo& version_info);
 
     // used for normal update or row-mode partial update
-    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
+    Status _apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
     // used for column-mode partial update
-    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
+    Status _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
 
-    void _apply_compaction_commit(const EditVersionInfo& version_info);
+    Status _apply_compaction_commit(const EditVersionInfo& version_info);
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
@@ -476,7 +494,7 @@ private:
         }
     }
 
-    void check_for_apply() { _check_for_apply(); }
+    bool compaction_running() { return _compaction_running; }
 
     std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
 
@@ -487,6 +505,10 @@ private:
     Status _light_apply_compaction_commit(const EditVersion& version, Rowset* output_rowset, PrimaryIndex* index,
                                           size_t* total_deletes, size_t* total_rows,
                                           vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
+
+    bool _is_tolerable(Status& status);
+
+    void _reset_apply_status(const EditVersionInfo& version_info_apply);
 
 private:
     Tablet& _tablet;
@@ -545,6 +567,8 @@ private:
     std::string _error_msg;
 
     std::atomic<double> _pk_index_write_amp_score{0.0};
+
+    std::atomic<bool> _apply_schedule{false};
 };
 
 } // namespace starrocks

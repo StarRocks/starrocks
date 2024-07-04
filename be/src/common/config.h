@@ -527,6 +527,11 @@ CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
 
+// if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
+// the failed apply task will retry after `retry_apply_interval_second`
+CONF_mBool(enable_retry_apply, "true");
+CONF_mInt32(retry_apply_interval_second, "30");
+
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
 
