@@ -81,16 +81,16 @@ displayed_sidebar: "Chinese"
 - `big_query_mem_limit`：0。
 - `spill_mem_limit_threshold`: 1。
 
-您可以通过 BE 配置项 `cpu_core_limit` 和 `mem_limit` 调整该资源组的 CPU 和内存上限。
-
 ##### default_mv_wg
 
 如果创建异步物化视图时没有通过 `resource_group` 属性置顶资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的资源配置如下：
 
 - `cpu_core_limit`：1。
 - `mem_limit`：80%。
+- `concurrency_limit`: 0。
+- `spill_mem_limit_threshold`: 80%。
 
-您可以通过 BE 配置项 `default_mv_resource_group_cpu_limit` 和 `default_mv_resource_group_memory_limit` 调整该资源组的 CPU 和内存上限。
+您可以通过 BE 配置项 `default_mv_resource_group_cpu_limit`、`default_mv_resource_group_memory_limit`、`default_mv_resource_group_concurrency_limit` 和 `default_mv_resource_group_spill_mem_limit_threshold` 调整该资源组的 CPU 上限、内存上限、并发上限和落盘阈值。
 
 ### 分类器
 

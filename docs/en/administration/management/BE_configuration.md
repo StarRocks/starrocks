@@ -4681,17 +4681,35 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: 0.8
 - Type: Double
 - Unit:
-- Is mutable: No
-- Description: The maximum memory proportion that can be used by the refresh tasks of materialized views in a resource group. The default value indicates 80% of the memory.
+- Is mutable: Yes
+- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
 - Introduced in: v3.1
 
 ##### default_mv_resource_group_cpu_limit
 
 - Default: 1
 - Type: Int
-- Unit:
-- Is mutable: No
-- Description: The maximum CPU core that can be used by the refresh tasks of materialized views in a resource group.
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_concurrency_limit
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_spill_mem_limit_threshold
+
+- Default: 0.8
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
 - Introduced in: v3.1
 
 <!--
