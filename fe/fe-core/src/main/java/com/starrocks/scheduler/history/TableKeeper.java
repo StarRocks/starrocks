@@ -25,6 +25,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Keeper:
@@ -43,12 +45,18 @@ public class TableKeeper {
     private boolean databaseExisted = false;
     private boolean tableExisted = false;
     private boolean tableCorrected = false;
+    private Supplier<Integer> ttlSupplier;
 
-    public TableKeeper(String database, String table, String createTable, int expectedReplicas) {
+    public TableKeeper(String database,
+                       String table,
+                       String createTable,
+                       int expectedReplicas,
+                       Supplier<Integer> ttlSupplier) {
         this.databaseName = database;
         this.tableName = table;
         this.createTableSql = createTable;
         this.tableReplicas = expectedReplicas;
+        this.ttlSupplier = ttlSupplier;
     }
 
     public synchronized void run() {
@@ -56,18 +64,21 @@ public class TableKeeper {
             if (!databaseExisted) {
                 databaseExisted = checkDatabaseExists();
                 if (!databaseExisted) {
-                    LOG.warn("database not exists: " + databaseName);
+                    LOG.warn("database not exists: {}", databaseName);
                     return;
                 }
             }
             if (!tableExisted) {
                 createTable();
-                LOG.info("table created: " + tableName);
+                LOG.info("table created: {}", tableName);
                 tableExisted = true;
             }
             if (!tableCorrected && correctTable()) {
-                LOG.info("table corrected: " + tableName);
+                LOG.info("table corrected: {}", tableName);
                 tableCorrected = true;
+            }
+            if (tableExisted) {
+                changeTTL();
             }
         } catch (Exception e) {
             LOG.error("error happens in Keeper: {}", e.getMessage(), e);
@@ -111,9 +122,41 @@ public class TableKeeper {
         return true;
     }
 
+    public void changeTTL() {
+        Optional<OlapTable> table = mayGetTable();
+        if (table.isEmpty()) {
+            return;
+        }
+        OlapTable olapTable = table.get();
+        int currentTTLNumber = olapTable.getTableProperty().getPartitionTTLNumber();
+        int expectedTTLDays = ttlSupplier.get();
+        if (currentTTLNumber == expectedTTLDays || expectedTTLDays == 0) {
+            return;
+        }
+        String sql = alterTableTTL(expectedTTLDays);
+        try {
+            RepoExecutor.getInstance().executeDDL(sql);
+            LOG.info("change table {}.{} TTL from {} to {}",
+                    databaseName, tableName, currentTTLNumber, expectedTTLDays);
+        } catch (Throwable e) {
+            LOG.warn("change table TTL failed", e);
+        }
+    }
+
+    private Optional<OlapTable> mayGetTable() {
+        return GlobalStateMgr.getCurrentState()
+                .mayGetDb(databaseName)
+                .flatMap(db -> db.mayGetTable(tableName))
+                .flatMap(x -> Optional.of((OlapTable) x));
+    }
+
     private String alterTableReplicas() {
         return String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
                 databaseName, tableName, tableReplicas);
+    }
+
+    private String alterTableTTL(int days) {
+        return String.format("ALTER TABLE %s.%s SET ('partition_live_number' = '%d') ", databaseName, tableName, days);
     }
 
     public String getDatabaseName() {

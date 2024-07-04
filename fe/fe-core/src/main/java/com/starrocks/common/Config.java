@@ -359,12 +359,13 @@ public class Config extends ConfigBase {
      * for task run set expire time
      */
     @ConfField(mutable = true)
-    public static int task_runs_ttl_second = 24 * 3600;     // 1 day
+    public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
 
     /**
      * max history task num kept
      */
     @ConfField(mutable = true)
+    @Deprecated
     public static int task_runs_max_history_number = 10000;
 
     @ConfField(mutable = true, comment = "Minimum schedule interval of a task")

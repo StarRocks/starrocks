@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
@@ -48,6 +49,7 @@ import java.util.stream.Collectors;
 public class TaskRunHistoryTable {
 
     public static final int INSERT_BATCH_SIZE = 128;
+    private static final int DEFAULT_RETENTION_DAYS = 7;
     public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
     public static final String TABLE_NAME = "task_run_history";
     public static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
@@ -58,7 +60,6 @@ public class TaskRunHistoryTable {
                     "task_id bigint NOT NULL, " +
                     "task_run_id string NOT NULL, " +
                     "create_time datetime NOT NULL, " +
-                    "db_name string NOT NULL, " +
                     "task_name string NOT NULL, " +
 
                     // times
@@ -71,15 +72,13 @@ public class TaskRunHistoryTable {
 
                     // properties
                     "PRIMARY KEY (task_id, task_run_id, create_time) " +
-                    "PARTITION BY RANGE(create_time)() " +
+                            "PARTITION BY date_trunc('DAY', create_time) " +
                     "DISTRIBUTED BY HASH(task_id) BUCKETS 8 " +
-                    "PROPERTIES(" +
-                    "'replication_num' = '1'," +
-                    "'dynamic_partition.time_unit' = 'DAY', " +
-                    "'dynamic_partition.start' = '-7', " +
-                    "'dynamic_partition.end' = '3', " +
-                    "'dynamic_partition.prefix' = 'p' " +
-                    ") ", TABLE_FULL_NAME);
+                            "PROPERTIES( " +
+                            "'replication_num' = '1', " +
+                            "'partition_live_number' = '" + DEFAULT_RETENTION_DAYS + "'" +
+                            ")",
+                    TABLE_FULL_NAME);
 
     private static final String CONTENT_COLUMN = "history_content_json";
     private static final String COLUMN_LIST = "task_id, task_run_id, task_name, " +
@@ -98,7 +97,9 @@ public class TaskRunHistoryTable {
     private static final String LOOKUP =
             "SELECT history_content_json " + "FROM " + TABLE_FULL_NAME + " WHERE ";
 
-    private static final TableKeeper KEEPER = new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS);
+    private static final TableKeeper KEEPER =
+            new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS,
+                    () -> Math.max(1, Config.task_runs_ttl_second / 3600 / 24));
 
     public static TableKeeper createKeeper() {
         return KEEPER;
