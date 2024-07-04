@@ -210,4 +210,10 @@ public class LakeTable extends OlapTable {
         }
         return TableType.OLAP.name();
     }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        setMaxColUniqueId(Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+    }
 }
