@@ -75,13 +75,13 @@ public class DeltaLakeFileStats {
             this.hasValidColumnMetrics = false;
         } else {
             this.minValues = fileStat.minValues.entrySet().stream()
-                    .filter(e -> !nonPartitionPrimitiveColumns.contains(e.getKey()))
+                    .filter(e -> nonPartitionPrimitiveColumns.contains(e.getKey()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             this.maxValues = fileStat.maxValues.entrySet().stream()
-                    .filter(e -> !nonPartitionPrimitiveColumns.contains(e.getKey()))
+                    .filter(e -> nonPartitionPrimitiveColumns.contains(e.getKey()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             this.nullCounts = fileStat.nullCount.entrySet().stream()
-                    .filter(e -> !nonPartitionPrimitiveColumns.contains(e.getKey()))
+                    .filter(e -> nonPartitionPrimitiveColumns.contains(e.getKey()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             this.corruptedStats = nonPartitionPrimitiveColumns.stream()
                     .filter(col -> !minValues.containsKey(col) &&
