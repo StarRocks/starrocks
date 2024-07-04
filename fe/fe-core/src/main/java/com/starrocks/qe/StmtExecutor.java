@@ -181,7 +181,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -222,6 +221,7 @@ public class StmtExecutor {
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     private boolean isProxy;
+    // ensure the proxy result buffer is not null
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
@@ -233,9 +233,8 @@ public class StmtExecutor {
         this.context = context;
         this.originStmt = originStmt;
         this.serializer = context.getSerializer();
-        this.isProxy = isProxy;
         if (isProxy) {
-            proxyResultBuffer = new ArrayList<>();
+            this.setProxy();
         }
     }
 
@@ -255,6 +254,7 @@ public class StmtExecutor {
 
     public void setProxy() {
         isProxy = true;
+        proxyResultBuffer = Lists.newArrayList();
     }
 
     public Coordinator getCoordinator() {
