@@ -480,7 +480,7 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
                                                              config::experimental_s3_min_upload_part_size);
     }
 
-    return wrap_encrypted(std::make_unique<OutputStreamAdapter>(std::move(ostream), fname), opts.encryption_info);
+    return wrap_encrypted(std::make_unique<OutputStreamAdapter>(std::move(output_stream), fname), opts.encryption_info);
 }
 
 Status S3FileSystem::rename_file(const std::string& src, const std::string& target) {
