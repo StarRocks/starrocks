@@ -1277,6 +1277,9 @@ public class UtFrameUtils {
         // task run will only refresh 1 partition and will produce wrong result.
         Config.default_mv_partition_refresh_number = -1;
 
+        // Enable mv refresh insert strict in test
+        Config.enable_mv_refresh_insert_strict = true;
+
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
 
