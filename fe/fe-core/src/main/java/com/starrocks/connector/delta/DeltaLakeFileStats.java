@@ -18,7 +18,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.BooleanType;
 import io.delta.kernel.types.ByteType;
 import io.delta.kernel.types.DataType;
@@ -38,8 +37,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -53,7 +50,7 @@ public class DeltaLakeFileStats {
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     private final StructType schema;
-    private final List<String> nonPartitionPrimitiveColumns;
+    private final Set<String> nonPartitionPrimitiveColumns;
     private long recordCount;
     private long size;
     private final Map<String, Object> minValues;
@@ -62,7 +59,7 @@ public class DeltaLakeFileStats {
     private final Set<String> corruptedStats;
     private boolean hasValidColumnMetrics;
 
-    public DeltaLakeFileStats(StructType schema, List<String> nonPartitionPrimitiveColumns,
+    public DeltaLakeFileStats(StructType schema, Set<String> nonPartitionPrimitiveColumns,
                               DeltaLakeAddFileStatsSerDe fileStat, long numRecords, long fileSize) {
         this.schema = schema;
         this.nonPartitionPrimitiveColumns = nonPartitionPrimitiveColumns;
@@ -77,9 +74,15 @@ public class DeltaLakeFileStats {
             this.corruptedStats = null;
             this.hasValidColumnMetrics = false;
         } else {
-            this.minValues = new HashMap<>(fileStat.minValues);
-            this.maxValues = new HashMap<>(fileStat.maxValues);
-            this.nullCounts = new HashMap<>(fileStat.nullCount);
+            this.minValues = fileStat.minValues.entrySet().stream()
+                    .filter(e -> !nonPartitionPrimitiveColumns.contains(e.getKey()))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            this.maxValues = fileStat.maxValues.entrySet().stream()
+                    .filter(e -> !nonPartitionPrimitiveColumns.contains(e.getKey()))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            this.nullCounts = fileStat.nullCount.entrySet().stream()
+                    .filter(e -> !nonPartitionPrimitiveColumns.contains(e.getKey()))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             this.corruptedStats = nonPartitionPrimitiveColumns.stream()
                     .filter(col -> !minValues.containsKey(col) &&
                             (!nullCounts.containsKey(col) || ((Double) nullCounts.get(col)).longValue() != recordCount))
@@ -122,26 +125,30 @@ public class DeltaLakeFileStats {
         if (field == null) {
             return builder.build();
         }
-        if (!nonPartitionPrimitiveColumns.contains(colName)) {
-            return builder.build();
+        if (nonPartitionPrimitiveColumns.contains(colName)) {
+            fillNonParititionValues(builder, colName, colType, field.getDataType());
         }
+        return builder.build();
+    }
 
+    private void fillNonParititionValues(ColumnStatistic.Builder builder, String colName, Type colType,
+                                        DataType deltaDataType) {
         if (minValues != null) {
-            if (col.getType().isStringType()) {
+            if (colType.isStringType()) {
                 String minString = minValues.get(colName).toString();
                 builder.setMinString(minString);
             } else {
-                Optional<Double> res = getBoundStatistic(colName, field.getDataType(), minValues);
+                Optional<Double> res = getBoundStatistic(colName, deltaDataType, minValues);
                 res.ifPresent(builder::setMinValue);
             }
         }
 
         if (maxValues != null) {
-            if (col.getType().isStringType()) {
+            if (colType.isStringType()) {
                 String maxString = maxValues.get(colName).toString();
                 builder.setMaxString(maxString);
             } else {
-                Optional<Double> res = getBoundStatistic(colName, field.getDataType(), maxValues);
+                Optional<Double> res = getBoundStatistic(colName, deltaDataType, maxValues);
                 res.ifPresent(builder::setMaxValue);
             }
         }
@@ -152,8 +159,6 @@ public class DeltaLakeFileStats {
                 builder.setNullsFraction(nullCount * 1.0 / Math.max(recordCount, 1));
             }
         }
-
-        return builder.build();
     }
 
     public void update(DeltaLakeAddFileStatsSerDe stat, long numRecords, long fileSize) {
@@ -174,7 +179,7 @@ public class DeltaLakeFileStats {
 
         updateStats(this.minValues, stat.minValues, stat.nullCount, stat.numRecords, i -> (i > 0));
         updateStats(this.maxValues, stat.maxValues, stat.nullCount, stat.numRecords, i -> (i < 0));
-        updateNullCount(stat.nullCount, this.nonPartitionPrimitiveColumns);
+        updateNullCount(stat.nullCount);
     }
 
     private static Object sumNullCount(Object left, Object value) {
@@ -220,12 +225,9 @@ public class DeltaLakeFileStats {
         }
     }
 
-    private void updateNullCount(Map<String, Object> nullCounts, List<String> nonPartitionPrimitiveColumns) {
+    private void updateNullCount(Map<String, Object> nullCounts) {
         for (String col : nonPartitionPrimitiveColumns) {
-            DataType type = schema.get(col).getDataType();
-            if (BasePrimitiveType.isPrimitiveType(type.toString())) {
-                this.nullCounts.merge(col, nullCounts.get(col), DeltaLakeFileStats::sumNullCount);
-            }
+            this.nullCounts.merge(col, nullCounts.get(col), DeltaLakeFileStats::sumNullCount);
         }
     }
 

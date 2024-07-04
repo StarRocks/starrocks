@@ -62,8 +62,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class DeltaLakeMetadata implements ConnectorMetadata {
@@ -195,10 +195,10 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder(engine);
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(engine, deltaLakePredicate).build();
 
-        List<String> nonPartitionPrimitiveColumns = schema.fieldNames().stream()
+        Set<String> nonPartitionPrimitiveColumns = schema.fieldNames().stream()
                 .filter(column -> BasePrimitiveType.isPrimitiveType(
                         schema.get(column).getDataType().toString())
-                        && !partitionColumns.contains(column)).collect(toImmutableList());
+                        && !partitionColumns.contains(column)).collect(Collectors.toSet());
 
         List<FileScanTask> files = Lists.newArrayList();
 
