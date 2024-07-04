@@ -19,7 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.epack.sql.analyzer.AlterTableClauseVisitorEPack;
+import com.starrocks.epack.sql.analyzer.AlterTableClauseAnalyzerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -88,7 +88,7 @@ public class ViewAnalyzer {
                 String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
                 alterViewClause.setInlineViewDef(viewSql);
             } else {
-                AlterTableClauseVisitorEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitorEPack(table);
+                AlterTableClauseAnalyzerEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerEPack(table);
                 alterTableClauseAnalyzerVisitor.analyze(context, alterClause);
             }
             return null;

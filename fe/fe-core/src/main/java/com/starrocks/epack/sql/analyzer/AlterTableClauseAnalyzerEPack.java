@@ -24,8 +24,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 
-public class AlterTableClauseVisitorEPack extends AlterTableClauseAnalyzer implements AstVisitorEPack<Void, ConnectContext> {
-    public AlterTableClauseVisitorEPack(Table table) {
+public class AlterTableClauseAnalyzerEPack extends AlterTableClauseAnalyzer implements AstVisitorEPack<Void, ConnectContext> {
+    public AlterTableClauseAnalyzerEPack(Table table) {
         super(table);
     }
 

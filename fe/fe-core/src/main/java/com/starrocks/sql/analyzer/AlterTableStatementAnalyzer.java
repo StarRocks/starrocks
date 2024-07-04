@@ -19,7 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.epack.sql.analyzer.AlterTableClauseVisitorEPack;
+import com.starrocks.epack.sql.analyzer.AlterTableClauseAnalyzerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -53,7 +53,7 @@ public class AlterTableStatementAnalyzer {
                 }
             }
         }
-        AlterTableClauseVisitorEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitorEPack(table);
+        AlterTableClauseAnalyzerEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerEPack(table);
         for (AlterClause alterClause : alterClauseList) {
             alterTableClauseAnalyzerVisitor.analyze(context, alterClause);
         }

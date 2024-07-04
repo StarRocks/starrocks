@@ -14,11 +14,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.epack.sql.analyzer.AlterTableClauseAnalyzerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 
-public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
-    public AlterMVClauseAnalyzerVisitor(Table table) {
+public class AlterMVClauseAnalyzer extends AlterTableClauseAnalyzerEPack {
+    public AlterMVClauseAnalyzer(Table table) {
         super(table);
     }
 
