@@ -134,15 +134,14 @@ public class DeltaLakeFileStats {
         if (field == null) {
             return builder.build();
         }
-        if (nonPartitionPrimitiveColumns.contains(colName)) {
-            fillNonParititionValues(builder, colName, field.getDataType());
-        } else if (partitionPrimitiveColumns != null && partitionPrimitiveColumns.contains(colName)) {
-            fillPartitionValues(builder, colName, field.getDataType());
+        if (nonPartitionPrimitiveColumns.contains(colName) ||
+                (partitionPrimitiveColumns != null && partitionPrimitiveColumns.contains(colName))) {
+            fillMinMaxValue(builder, colName, field.getDataType());
         }
         return builder.build();
     }
 
-    private void fillPartitionValues(ColumnStatistic.Builder builder, String colName, DataType colType) {
+    private void fillMinMaxValue(ColumnStatistic.Builder builder, String colName, DataType colType) {
         if (minValues != null) {
             Object v = minValues.get(colName);
             if (v != null) {
@@ -169,37 +168,6 @@ public class DeltaLakeFileStats {
             Double nullCount = nullCounts.get(colName);
             if (nullCount != null) {
                 builder.setNullsFraction(nullCount * 1.0 / Math.max(recordCount, 1));
-            }
-        }
-    }
-
-    private void fillNonParititionValues(ColumnStatistic.Builder builder, String colName, DataType colType) {
-        if (minValues != null) {
-            Object v = minValues.get(colName);
-            if (v != null) {
-                if (colType == StringType.STRING || colType == BinaryType.BINARY) {
-                    builder.setMinString(v.toString());
-                } else {
-                    builder.setMinValue((double) v);
-                }
-            }
-        }
-
-        if (maxValues != null) {
-            Object v = maxValues.get(colName);
-            if (v != null) {
-                if (colType == StringType.STRING || colType == BinaryType.BINARY) {
-                    builder.setMaxString(v.toString());
-                } else {
-                    builder.setMaxValue((double) v);
-                }
-            }
-        }
-
-        if (nullCounts != null) {
-            Double nullCount = nullCounts.get(colName);
-            if (nullCount != null) {
-                builder.setNullsFraction(nullCount / Math.max(recordCount, 1));
             }
         }
     }
