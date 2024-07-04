@@ -344,7 +344,7 @@ public class PCTRefreshListPartitionOlapTest extends MVRefreshTestBase {
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
                             PlanTestBase.assertContains(plan, "     TABLE: t1\n" +
                                     "     PREAGGREGATION: ON\n" +
-                                    "     PREDICATES: 4: province IN ('beijing', 'chongqing')\n" +
+                                    "     PREDICATES: 4: province IN ('chongqing', 'beijing')\n" +
                                     "     partitions=1/2");
 
                             Collection<Partition> partitions = materializedView.getPartitions();
