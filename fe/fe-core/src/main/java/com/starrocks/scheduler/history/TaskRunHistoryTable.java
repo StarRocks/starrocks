@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
@@ -37,6 +38,7 @@ import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -56,6 +58,7 @@ public class TaskRunHistoryTable {
                     "task_id bigint NOT NULL, " +
                     "task_run_id string NOT NULL, " +
                     "create_time datetime NOT NULL, " +
+                    "db_name string NOT NULL, " +
                     "task_name string NOT NULL, " +
 
                     // times
@@ -78,6 +81,7 @@ public class TaskRunHistoryTable {
                     "'dynamic_partition.prefix' = 'p' " +
                     ") ", TABLE_FULL_NAME);
 
+    private static final String CONTENT_COLUMN = "history_content_json";
     private static final String COLUMN_LIST = "task_id, task_run_id, task_name, " +
             "create_time, finish_time, expire_time, " +
             "history_content_json ";
@@ -144,7 +148,8 @@ public class TaskRunHistoryTable {
         String sql = LOOKUP;
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(params.getDb())) {
-            predicates.add(" db_name = " + Strings.quote(params.getDb()));
+            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
+                    + Strings.quote(ClusterNamespace.getFullName(params.getDb())));
         }
         if (StringUtils.isNotEmpty(params.getTask_name())) {
             predicates.add(" task_name = " + Strings.quote(params.getTask_name()));
@@ -157,6 +162,22 @@ public class TaskRunHistoryTable {
         }
         sql += Joiner.on(" AND ").join(predicates);
 
+        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        return TaskRunStatus.fromResultBatch(batch);
+    }
+
+    public List<TaskRunStatus> lookupByTaskNames(String dbName, Set<String> taskNames) {
+        List<String> predicates = Lists.newArrayList("TRUE");
+        if (StringUtils.isNotEmpty(dbName)) {
+            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
+                    + Strings.quote(ClusterNamespace.getFullName(dbName)));
+        }
+        if (CollectionUtils.isNotEmpty(taskNames)) {
+            String values = taskNames.stream().map(Strings::quote).collect(Collectors.joining(","));
+            predicates.add(" task_name IN (" + values + ")");
+        }
+
+        String sql = LOOKUP + Joiner.on(" AND ").join(predicates);
         List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
         return TaskRunStatus.fromResultBatch(batch);
     }

@@ -29,6 +29,7 @@ import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 
 import java.io.DataInput;
@@ -39,6 +40,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class TaskRunStatus implements Writable {
 
@@ -381,6 +383,16 @@ public class TaskRunStatus implements Writable {
         } else {
             return 0L;
         }
+    }
+
+    public boolean matchByTaskName(String dbName, Set<String> taskNames) {
+        if (dbName != null && !dbName.equals(getDbName())) {
+            return false;
+        }
+        if (CollectionUtils.isNotEmpty(taskNames) && !taskNames.contains(getTaskName())) {
+            return false;
+        }
+        return true;
     }
 
     public boolean match(TGetTasksParams params) {

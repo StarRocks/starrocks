@@ -23,7 +23,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTasksParams;
 import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,7 +79,11 @@ public class TaskRunHistory {
     }
 
     public List<TaskRunStatus> lookupHistoryByTaskNames(String dbName, Set<String> taskNames) {
-        throw new NotImplementedException("TOOD");
+        List<TaskRunStatus> inMemory = getInMemoryHistory().stream()
+                .filter(x -> x.matchByTaskName(dbName, taskNames))
+                .collect(Collectors.toList());
+
+        return ListUtils.union(inMemory, historyTable.lookupByTaskNames(dbName, taskNames));
     }
 
     public List<TaskRunStatus> lookupHistory(TGetTasksParams params) {
