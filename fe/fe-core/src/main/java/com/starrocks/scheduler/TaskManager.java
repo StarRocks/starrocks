@@ -668,9 +668,9 @@ public class TaskManager implements MemoryTrackable {
                 .forEach(task -> mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task));
 
         // Add a batch of task runs with the same job id
-        taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                .filter(u -> dbName == null || u.getDbName().equals(dbName))
-                .filter(task -> taskNames == null || taskNames.contains(task.getTaskName()))
+        // TODO: only lookup the first and last task in this job
+        taskRunManager.getTaskRunHistory().lookupHistoryByTaskNames(dbName, taskNames)
+                .stream()
                 .filter(task -> isSameTaskRunJob(task, mvNameRunStatusMap))
                 .forEach(task -> mvNameRunStatusMap
                         .computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList())

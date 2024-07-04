@@ -22,6 +22,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTasksParams;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,6 +31,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class TaskRunHistory {
@@ -73,6 +75,10 @@ public class TaskRunHistory {
         List<TaskRunStatus> historyRunStatus = new ArrayList<>(historyTaskRunMap.values());
         Collections.reverse(historyRunStatus);
         return historyRunStatus;
+    }
+
+    public List<TaskRunStatus> lookupHistoryByTaskNames(String dbName, Set<String> taskNames) {
+        throw new NotImplementedException("TOOD");
     }
 
     public List<TaskRunStatus> lookupHistory(TGetTasksParams params) {
