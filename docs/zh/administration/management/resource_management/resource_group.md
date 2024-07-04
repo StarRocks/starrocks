@@ -83,7 +83,7 @@ displayed_sidebar: "Chinese"
 
 ##### default_mv_wg
 
-如果创建异步物化视图时没有通过 `resource_group` 属性置顶资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的资源配置如下：
+如果创建异步物化视图时没有通过 `resource_group` 属性指定资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的资源配置如下：
 
 - `cpu_core_limit`：1。
 - `mem_limit`：80%。
