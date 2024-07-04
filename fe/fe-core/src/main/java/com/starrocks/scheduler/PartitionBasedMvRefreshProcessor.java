@@ -404,10 +404,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private RefreshJobStatus doRefreshMaterializedView(TaskRunContext context,
                                                        IMaterializedViewMetricsEntity mvEntity) throws Exception {
         // 0. Compute the base-table partitions to check for external table
-        syncPartitions();
-        Set<String> mvCandidatePartition = checkMvToRefreshedPartitions(context, true);
-        Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions =
-                getRefTableRefreshPartitions(mvCandidatePartition);
+        Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions = Maps.newHashMap();
+        if (Config.enable_materialized_view_external_table_precise_refresh) {
+            try (Timer ignored = Tracers.watchScope("MVRefreshComputeCandidatePartitions")) {
+                syncPartitions();
+                Set<String> mvCandidatePartition = checkMvToRefreshedPartitions(context, true);
+                baseTableCandidatePartitions = getRefTableRefreshPartitions(mvCandidatePartition);
+            }
+        }
 
         // 1. Refresh the partition information of these base-table partitions, and create mv partitions if needed
         try (Timer ignored = Tracers.watchScope("MVRefreshSyncAndCheckPartitions")) {

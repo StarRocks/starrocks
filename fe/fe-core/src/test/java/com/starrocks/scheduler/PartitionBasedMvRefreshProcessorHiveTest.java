@@ -1202,7 +1202,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
      * table instead of all of them
      */
     @Test
-    public void testRefreshExternalTable() throws Exception {
+    public void testRefreshExternalTablePrecise() throws Exception {
         starRocksAssert.withRefreshedMaterializedView("create materialized view test_mv_external\n" +
                 "PARTITION BY date_trunc('day', l_shipdate) \n" +
                 "distributed by hash(l_orderkey) buckets 3\n" +
@@ -1221,7 +1221,9 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
 
         starRocksAssert.refreshMvPartition("refresh materialized view test_mv_external partition " +
                 " start('1998-01-01') end('1998-01-03')");
-        Assert.assertEquals(Lists.newArrayList(Lists.newArrayList("p19980101"),
-                Lists.newArrayList("p19980102")), calls);
+        Assert.assertEquals(Lists.newArrayList(
+                        Lists.newArrayList("l_shipdate=1998-01-01"),
+                        Lists.newArrayList("l_shipdate=1998-01-02")),
+                calls);
     }
 }
