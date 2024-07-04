@@ -816,7 +816,13 @@ ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
 
         auto value = viewer.value(row);
         TimestampValue tv;
-        bool ret = value > 0 && tv.from_timestamp_literal_with_check(value);
+        bool ret;
+        if constexpr (lt_is_decimalv2<FromType>) {
+            ret = value.value() > 0;
+        } else {
+            ret = value > 0;
+        }
+        ret = tv.from_timestamp_literal_with_check(value) && ret;
         if constexpr (AllowThrowException) {
             if (!ret) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
@@ -842,6 +848,7 @@ CUSTOMIZE_FN_CAST(TYPE_BIGINT, TYPE_DATETIME, cast_to_timestamp_fn);
 CUSTOMIZE_FN_CAST(TYPE_LARGEINT, TYPE_DATETIME, cast_to_timestamp_fn);
 CUSTOMIZE_FN_CAST(TYPE_FLOAT, TYPE_DATETIME, cast_to_timestamp_fn);
 CUSTOMIZE_FN_CAST(TYPE_DOUBLE, TYPE_DATETIME, cast_to_timestamp_fn);
+CUSTOMIZE_FN_CAST(TYPE_DECIMALV2, TYPE_DATETIME, cast_to_timestamp_fn);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 // Time to datetime need rewrite CastExpr
 
