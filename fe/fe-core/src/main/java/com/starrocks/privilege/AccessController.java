@@ -74,7 +74,7 @@ public interface AccessController {
     }
 
     default void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                    Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
+                                    String column, PrivilegeType privilegeType) throws AccessDeniedException {
         throw new AccessDeniedException();
     }
 
