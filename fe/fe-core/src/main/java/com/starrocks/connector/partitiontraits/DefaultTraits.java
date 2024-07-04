@@ -44,10 +44,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public abstract class DefaultTraits extends ConnectorPartitionTraits  {
-    @Override
-    public boolean supportPartitionRefresh() {
-        return false;
-    }
 
     @Override
     public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {

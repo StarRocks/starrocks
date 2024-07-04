@@ -120,11 +120,6 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public boolean supportPartitionRefresh() {
-        return delegate.supportPartitionRefresh();
-    }
-
-    @Override
     public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
         return delegate.createPartitionKeyWithType(values, types);
     }

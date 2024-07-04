@@ -35,12 +35,6 @@ import java.util.Optional;
 public class IcebergPartitionTraits extends DefaultTraits {
 
     @Override
-    public boolean supportPartitionRefresh() {
-        // TODO: refine the check
-        return true;
-    }
-
-    @Override
     public String getDbName() {
         return ((IcebergTable) table).getRemoteDbName();
     }

@@ -271,7 +271,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                     materializedView.getPartitions().stream().map(Partition::getName).sorted()
                             .collect(Collectors.toList());
             Assert.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
-            Assert.assertTrue(partitionVersionMap.get("p202308_202309") <
+            Assert.assertEquals(partitionVersionMap.get("p202308_202309").longValue(),
                     materializedView.getPartition("p202308_202309").getVisibleVersion());
         }
 
