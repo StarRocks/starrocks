@@ -4349,28 +4349,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### default_mv_resource_group_memory_limit
-
-- 默认值：0.8
-- 类型：Double
-- 单位：
-- 是否动态：否
-- 描述：物化视图刷新所占用的资源组 Memory 上限，默认 80%。
-- 引入版本：v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- 默认值：1
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：物化视图刷新占用的资源组 CPU 比例，默认 1%。
-- 引入版本：-
--->
-
-<!--
 ##### primary_key_limit_size
 
 - 默认值：128
@@ -4639,6 +4617,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：否
 - 描述：UDF 存放的路径。
+- 引入版本：-
+
+##### default_mv_resource_group_memory_limit
+
+- 默认值：0.8
+- 类型：Double
+- 单位：
+- 是否动态：否
+- 描述：物化视图刷新所占用的资源组内存比例上限，默认 80%。
+- 引入版本：v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：物化视图刷新占用的资源组 CPU 核数。
 - 引入版本：-
 
 <!--

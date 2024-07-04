@@ -103,6 +103,8 @@ You can set the resource group `type` to `short_query`, or `normal`.
 
 There are two system-defined resource groups in each StarRocks instance: `default_wg` and `default_mv_wg`.
 
+##### default_wg
+
 `default_wg` will be assigned to regular queries that are under the management of resource groups but doesn't match any classifier. The resource limits of `default_wg` are as follows:
 
 - `cpu_core_limit`: 1 (for v2.3.7 or earlier) or the number of CPU cores of the BE (for versions later than v2.3.7).
@@ -113,10 +115,16 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 - `big_query_mem_limit`: 0.
 - `spill_mem_limit_threshold`: 1.
 
+You can configure the CPU and memory limit of `default_wg` by modifying the BE configuration items `cpu_core_limit` and `mem_limit`.
+
+##### default_mv_wg
+
 `default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The resource limits of `default_mv_wg` are as follows:
 
 - `cpu_core_limit`: 1.
 - `mem_limit`: 80%.
+
+You can configure the CPU and memory limit of `default_mv_wg` by modifying the BE configuration items `default_mv_resource_group_cpu_limit` and `default_mv_resource_group_memory_limit`.
 
 ### classifier
 

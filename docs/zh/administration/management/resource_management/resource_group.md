@@ -69,6 +69,8 @@ displayed_sidebar: "Chinese"
 
 每个 StarRocks 示例中有两个系统定义资源组：`default_wg` 和 `default_mv_wg`。
 
+##### default_wg
+
 如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的资源配置如下：
 
 - `cpu_core_limit`：1 (&le;2.3.7 版本) 或 BE 的 CPU 核数（&gt;2.3.7版本）。
@@ -79,10 +81,16 @@ displayed_sidebar: "Chinese"
 - `big_query_mem_limit`：0。
 - `spill_mem_limit_threshold`: 1。
 
+您可以通过 BE 配置项 `cpu_core_limit` 和 `mem_limit` 调整该资源组的 CPU 和内存上限。
+
+##### default_mv_wg
+
 如果创建异步物化视图时没有通过 `resource_group` 属性置顶资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的资源配置如下：
 
 - `cpu_core_limit`：1。
 - `mem_limit`：80%。
+
+您可以通过 BE 配置项 `default_mv_resource_group_cpu_limit` 和 `default_mv_resource_group_memory_limit` 调整该资源组的 CPU 和内存上限。
 
 ### 分类器
 

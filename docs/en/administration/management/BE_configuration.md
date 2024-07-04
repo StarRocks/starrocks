@@ -4406,28 +4406,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### default_mv_resource_group_memory_limit
-
-- Default: 0.8
-- Type: Double
-- Unit:
-- Is mutable: No
-- Description: The maximum memory percentage that can be used by the materialized view in a resource group.
-- Introduced in: v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- Default: 1
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### primary_key_limit_size
 
 - Default: 128
@@ -4697,6 +4675,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The directory used to store User-defined Functions (UDFs).
 - Introduced in: -
+
+##### default_mv_resource_group_memory_limit
+
+- Default: 0.8
+- Type: Double
+- Unit:
+- Is mutable: No
+- Description: The maximum memory proportion that can be used by the refresh tasks of materialized views in a resource group. The default value indicates 80% of the memory.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- Default: 1
+- Type: Int
+- Unit:
+- Is mutable: No
+- Description: The maximum CPU core that can be used by the refresh tasks of materialized views in a resource group.
+- Introduced in: v3.1
 
 <!--
 ##### pull_load_task_dir
