@@ -500,7 +500,7 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
-        Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getAllHistory().size());
+        Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
         Config.task_runs_max_history_number = 10000;
     }
 
@@ -515,7 +515,7 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
-        Assert.assertEquals(10, taskRunManager.getTaskRunHistory().getAllHistory().size());
+        Assert.assertEquals(10, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
         Config.task_runs_max_history_number = 10000;
     }
 

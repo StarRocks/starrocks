@@ -71,7 +71,7 @@ public class TaskRunHistory {
     }
 
     // Reserve historyTaskRunMap values to keep the last insert at the first.
-    public List<TaskRunStatus> getAllHistory() {
+    public List<TaskRunStatus> getInMemoryHistory() {
         List<TaskRunStatus> historyRunStatus = new ArrayList<>(historyTaskRunMap.values());
         Collections.reverse(historyRunStatus);
         return historyRunStatus;
@@ -82,17 +82,23 @@ public class TaskRunHistory {
     }
 
     public List<TaskRunStatus> lookupHistory(TGetTasksParams params) {
-        return historyTable.lookup(params);
+        if (params == null) {
+            return Lists.newArrayList();
+        }
+        List<TaskRunStatus> inMemory = getInMemoryHistory().stream()
+                .filter(x -> x.match(params))
+                .collect(Collectors.toList());
+        return ListUtils.union(inMemory, historyTable.lookup(params));
     }
 
     // TODO: make it thread safe
     /**
-     * Remove expired task runs
+     * Remove expired task runs, would be called in regular daemon thread, and also in checkpoint
      */
     public void vacuum() {
         long currentTimeMs = System.currentTimeMillis();
         List<String> historyToDelete = Lists.newArrayList();
-        List<TaskRunStatus> taskRunHistory = getAllHistory();
+        List<TaskRunStatus> taskRunHistory = getInMemoryHistory();
         // only SUCCESS and FAILED in taskRunHistory
         Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
         while (iterator.hasNext()) {
@@ -109,7 +115,9 @@ public class TaskRunHistory {
         forceGC();
 
         // archive histories
-        archiveHistory();
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            archiveHistory();
+        }
 
         LOG.info("remove run history:{}", historyToDelete);
     }
@@ -126,7 +134,7 @@ public class TaskRunHistory {
         }
 
         // TODO: reserve some of histories ?
-        List<TaskRunStatus> runs = getAllHistory();
+        List<TaskRunStatus> runs = getInMemoryHistory();
 
         try {
             // 1. Persist into table
@@ -150,7 +158,7 @@ public class TaskRunHistory {
      * Keep only limited task runs to save memory usage
      */
     public void forceGC() {
-        List<TaskRunStatus> allHistory = getAllHistory();
+        List<TaskRunStatus> allHistory = getInMemoryHistory();
         int beforeSize = allHistory.size();
         LOG.info("try to trigger force gc, size before GC:{}, task_runs_max_history_number:{}.", beforeSize,
                 Config.task_runs_max_history_number);

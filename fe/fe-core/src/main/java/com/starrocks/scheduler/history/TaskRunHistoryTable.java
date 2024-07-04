@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -100,30 +101,13 @@ public class TaskRunHistoryTable {
     }
 
     private void checkTableReady() {
-        if (!keeper.isReady()) {
+        if (!FeConstants.runningUnitTest && !keeper.isReady()) {
             throw new IllegalStateException("The table is not ready: " + TABLE_NAME);
         }
     }
 
     public void addHistory(TaskRunStatus status) {
-        checkTableReady();
-        String createTime =
-                Strings.quote(DateUtils.formatTimeStampInMill(status.getCreateTime(), ZoneId.systemDefault()));
-        String finishTime =
-                Strings.quote(DateUtils.formatTimeStampInMill(status.getFinishTime(), ZoneId.systemDefault()));
-        String expireTime =
-                Strings.quote(DateUtils.formatTimeStampInMill(status.getExpireTime(), ZoneId.systemDefault()));
-
-        String value = MessageFormat.format(INSERT_SQL_VALUE,
-                String.valueOf(status.getTaskId()),
-                Strings.quote(status.getStartTaskRunId()),
-                Strings.quote(status.getTaskName()),
-                createTime,
-                finishTime,
-                expireTime, Strings.quote(status.toJSON())
-        );
-        final String sql = MessageFormat.format(INSERT_SQL_TEMPLATE, TABLE_FULL_NAME) + " " + value;
-        RepoExecutor.getInstance().executeDML(sql);
+        addHistories(Lists.newArrayList(status));
     }
 
     public void addHistories(List<TaskRunStatus> histories) {
@@ -144,13 +128,14 @@ public class TaskRunHistoryTable {
                         String.valueOf(status.getTaskId()),
                         Strings.quote(status.getStartTaskRunId()),
                         Strings.quote(status.getTaskName()),
-                        status,
+                        createTime,
                         finishTime,
                         expireTime,
                         Strings.quote(status.toJSON()));
             }).collect(Collectors.joining(", "));
 
             String sql = insert + values;
+            System.err.println(sql);
             RepoExecutor.getInstance().executeDML(sql);
         }
     }

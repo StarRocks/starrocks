@@ -602,43 +602,20 @@ public class TaskManager implements MemoryTrackable {
         writer.close();
     }
 
-    private boolean isTaskRunStatusMatched(TaskRunStatus taskRunStatus, TGetTasksParams params) {
-        if (params == null) {
-            return true;
-        }
-        String dbName = params.db;
-        if (dbName != null && !dbName.equals(taskRunStatus.getDbName())) {
-            return false;
-        }
-        String taskName = params.task_name;
-        if (taskName != null && !taskName.equalsIgnoreCase(taskRunStatus.getTaskName())) {
-            return false;
-        }
-        String queryId = params.query_id;
-        if (queryId != null && !queryId.equalsIgnoreCase(taskRunStatus.getQueryId())) {
-            return false;
-        }
-        String state = params.state;
-        if (state != null && !state.equalsIgnoreCase(taskRunStatus.getState().name())) {
-            return false;
-        }
-        return true;
-    }
-
     public List<TaskRunStatus> getMatchedTaskRunStatus(TGetTasksParams params) {
         List<TaskRunStatus> taskRunList = Lists.newArrayList();
         // pending task runs
         List<TaskRun> pendingTaskRuns = taskRunScheduler.getCopiedPendingTaskRuns();
         pendingTaskRuns.stream()
                 .map(TaskRun::getStatus)
-                .filter(t -> isTaskRunStatusMatched(t, params))
+                .filter(t -> t.match(params))
                 .forEach(taskRunList::add);
 
         // running task runs
         Set<TaskRun> runningTaskRuns = taskRunScheduler.getCopiedRunningTaskRuns();
         runningTaskRuns.stream()
                 .map(TaskRun::getStatus)
-                .filter(t -> isTaskRunStatusMatched(t, params))
+                .filter(t -> t.match(params))
                 .forEach(taskRunList::add);
 
         // history task runs

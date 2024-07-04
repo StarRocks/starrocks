@@ -157,7 +157,9 @@ public class TableKeeper {
     }
 
     public static TableKeeperDaemon startDaemon() {
-        return new TableKeeperDaemon();
+        TableKeeperDaemon daemon = TableKeeperDaemon.getInstance();
+        daemon.start();
+        return daemon;
     }
 
     /**
@@ -165,6 +167,7 @@ public class TableKeeper {
      */
     public static class TableKeeperDaemon extends FrontendDaemon {
 
+        private static final TableKeeperDaemon INSTANCE = new TableKeeperDaemon();
         private final List<TableKeeper> keeperList = Lists.newArrayList();
 
         TableKeeperDaemon() {
@@ -173,6 +176,10 @@ public class TableKeeper {
             keeperList.add(TaskRunHistoryTable.createKeeper());
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
+        }
+
+        public static TableKeeperDaemon getInstance() {
+            return INSTANCE;
         }
 
         @Override
