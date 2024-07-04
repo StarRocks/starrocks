@@ -30,12 +30,12 @@ TEST(EncryptionKeyTest, ConstructorWithPB) {
 
     ASSERT_FALSE(is_decrypted(pb));
 
-    auto& key = *EncryptionKey::create_from_pb(pb).value();
-    EXPECT_EQ(key.get_id(), 123);
-    EXPECT_EQ(key.get_parent_id(), 456);
-    EXPECT_EQ(key.type(), EncryptionKeyTypePB::NORMAL_KEY);
-    EXPECT_EQ(key.algorithm(), EncryptionAlgorithmPB::AES_128);
-    EXPECT_TRUE(key.has_parent());
+    auto key = EncryptionKey::create_from_pb(pb).value();
+    EXPECT_EQ(key->get_id(), 123);
+    EXPECT_EQ(key->get_parent_id(), 456);
+    EXPECT_EQ(key->type(), EncryptionKeyTypePB::NORMAL_KEY);
+    EXPECT_EQ(key->algorithm(), EncryptionAlgorithmPB::AES_128);
+    EXPECT_TRUE(key->has_parent());
 }
 
 TEST(EncryptionKeyTest, GenerateAndDecrypt) {
