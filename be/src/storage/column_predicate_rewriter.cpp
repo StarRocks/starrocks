@@ -55,6 +55,9 @@ struct RewritePredicateTreeVisitor {
     StatusOr<RewriteStatus> operator()(PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) const {
         const auto* col_pred = node.col_pred();
         const auto cid = col_pred->column_id();
+        if (col_pred->is_index_filter_only()) {
+            return RewriteStatus::UNCHANGED;
+        }
 
         if (!_rewriter._need_rewrite[cid]) {
             return RewriteStatus::UNCHANGED;
