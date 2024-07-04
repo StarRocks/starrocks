@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <span>
+
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "column/nullable_column.h"
@@ -40,9 +42,21 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& col
 // Sort multiple columns using column-wise algorithm, output the order in permutation array
 Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
                             Permutation* permutation);
-Status sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
-                            Permutation* permutation, std::pair<int, int> range, size_t row,
-                            const std::vector<std::shared_ptr<UInt32Column>>& key_offsets_columns);
+
+/// Usually used to sort array columns.
+///
+/// Sort each part of key columns, and write the result to perm. perm corresponds to src_offsets. The range of the i-th
+/// part is [offsets[i], offsets[i+1]), where offsets represents src_offsets or offsets_per_key[col_i].
+/// Note that each part range of the src column and the key columns may be different.
+/// eg.
+///     src_column = (null, [1,2], [3,4], [5, 6]),
+///     key_column0 = ([1,1], [2,2], [3, 3], [4,4]),
+///     key_column1 = ([1,2], [3,4], null, [5,6])
+///     so, src_offsets = (0, 0, 2, 4, 6), offsets_per_key = ((0, 0, 2, 4, 6, 8), (0, 2, 4, 4, 6))
+Status sort_and_tie_columns(const std::atomic<bool>& cancel, const std::vector<Column*>& columns,
+                            const SortDescs& sort_desc, SmallPermutation& perm,
+                            const std::span<const uint32_t> src_offsets,
+                            const std::vector<std::span<const uint32_t>>& offsets_per_key);
 
 // Sort multiple columns, and stable
 Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Columns& columns, const SortDescs& sort_desc,
