@@ -1256,7 +1256,8 @@ public class StmtExecutor {
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         Preconditions.checkNotNull(profileElement, "query not exists");
-        if (coord.isShortCircuit()) {
+        // For short circuit query, 'ProfileElement#plan' is null
+        if (profileElement.plan == null) {
             throw new UserException(
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
