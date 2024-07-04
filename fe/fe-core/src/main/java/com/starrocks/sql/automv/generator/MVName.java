@@ -18,6 +18,7 @@ import com.starrocks.sql.automv.util.Util;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 public class MVName {
     private static final String MV_NAME_PREFIX = "_mv_";
@@ -52,6 +53,10 @@ public class MVName {
         } else {
             return Optional.empty();
         }
+    }
+
+    public static Pattern getPattern() {
+        return Pattern.compile("_mv_\\d{8}T\\d{6}_[a-f0-9]{40}");
     }
 
     public String getPrefix() {

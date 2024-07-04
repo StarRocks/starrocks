@@ -21,6 +21,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
@@ -31,6 +32,7 @@ import com.starrocks.sql.automv.generator.AggregateMVGenerator;
 import com.starrocks.sql.automv.generator.MVGenerateContext;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.generator.QueryGenerateResult;
+import com.starrocks.sql.automv.lifecycle.QueryAuditEntry;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pattern.PlanPiecePattern;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
@@ -51,12 +53,16 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+import org.mockito.internal.stubbing.answers.DoesNothing;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -64,6 +70,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class AutoMVUtil {
+    private static MockedStatic<Authorizer> authorizerMockedStatic;
+
     private static List<PlanPieceInfo> getPlanPlanInfosFromQueryList(ConnectContext ctx,
                                                                      List<Pair<String, String>> queryList) {
         return queryList.stream()
@@ -77,10 +85,19 @@ public class AutoMVUtil {
     }
 
     public static void mockUpCustomizedQueryExecutor(List<Pair<String, String>> queryList) {
+        mockUpCustomizedQueryExecutor(queryList, null, null);
+    }
+
+    public static void mockUpCustomizedQueryExecutor(List<Pair<String, String>> queryList, String catalog, String db) {
         new MockUp<CustomizedQueryExecutor>() {
             @Mock
             public <T> List<T> query(Class<T> klass, List<ColumnPlus> columns, ConnectContext context, String sql) {
                 if (PlanPieceInfo.class.equals(klass)) {
+                    if (catalog != null && db != null) {
+                        Result.wrap(() -> context.changeCatalogDb(catalog + "." + db));
+                    } else if (db != null) {
+                        Result.wrap(() -> context.changeCatalogDb(db));
+                    }
                     return (List<T>) getPlanPlanInfosFromQueryList(context, queryList);
                 } else if (MultiColumnCards.class.equals(klass)) {
                     QueryStatement stmt = (QueryStatement) RboOptimizer.parseAndAnalyze(context, sql);
@@ -95,11 +112,35 @@ public class AutoMVUtil {
                             .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
                     mcCards.setCards(cards);
                     return (List<T>) Collections.singletonList(mcCards);
+                } else if (QueryAuditEntry.class.equals(klass)) {
+                    return (List<T>) queryList.stream().map(q -> {
+                        QueryAuditEntry entry = new QueryAuditEntry();
+                        entry.setCatalog(Objects.requireNonNull(catalog));
+                        entry.setDb(Objects.requireNonNull(db));
+                        entry.setStmt(q.second);
+                        return entry;
+                    }).collect(Collectors.toList());
                 } else {
                     throw new InternalError("Error");
                 }
             }
         };
+    }
+
+    public static void mockUpTunespaceExecutor() {
+        new MockUp<TunespaceExecutor.TunespaceExecuteVisitor>() {
+            @Mock
+            public void exec(String sql, Class<?> klass, ConnectContext context) throws Exception {
+            }
+        };
+    }
+
+    public static synchronized void mockUpAuthorizer() {
+        if (authorizerMockedStatic == null) {
+            authorizerMockedStatic = Mockito.mockStatic(Authorizer.class);
+            authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(),
+                    Mockito.any())).then(DoesNothing.doesNothing());
+        }
     }
 
     public static void configDefaultAutoMV(SessionVariable sv) {

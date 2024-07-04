@@ -202,6 +202,7 @@ import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
+import com.starrocks.scheduler.MVLifeCycleAutoKeeper;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
@@ -468,6 +469,7 @@ public class GlobalStateMgr {
     private final PipeScheduler pipeScheduler;
     private final MVActiveChecker mvActiveChecker;
 
+    private final MVLifeCycleAutoKeeper mvLifeCycleAutoKeeper;
     private final ReplicationMgr replicationMgr;
 
     private LockManager lockManager;
@@ -725,6 +727,7 @@ public class GlobalStateMgr {
         this.pipeListener = new PipeListener(this.pipeManager);
         this.pipeScheduler = new PipeScheduler(this.pipeManager);
         this.mvActiveChecker = new MVActiveChecker();
+        this.mvLifeCycleAutoKeeper = new MVLifeCycleAutoKeeper();
 
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -1013,6 +1016,10 @@ public class GlobalStateMgr {
 
     public MVActiveChecker getMvActiveChecker() {
         return mvActiveChecker;
+    }
+    
+    public MVLifeCycleAutoKeeper getMvLifeCycleManager() {
+        return mvLifeCycleAutoKeeper;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -1400,6 +1407,7 @@ public class GlobalStateMgr {
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
+        mvLifeCycleAutoKeeper.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();

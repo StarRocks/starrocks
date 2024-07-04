@@ -14,14 +14,18 @@
 
 package com.starrocks.sql.automv.qe;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -52,6 +56,22 @@ public class CustomizedQueryExecutor {
         } else {
             return sqlResult.first;
         }
+    }
+
+    public void exec(ConnectContext context, String sql) throws Exception {
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        context.setExecutor(executor);
+        context.setQueryId(UUIDUtil.genUUID());
+        executor.execute();
+    }
+
+    public ShowResultSet show(ConnectContext context, String sql) {
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+        com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
+        Preconditions.checkArgument(parsedStmt instanceof ShowStmt);
+        ShowStmt showStmt = (ShowStmt) parsedStmt;
+        return GlobalStateMgr.getCurrentState().getShowExecutor().execute(showStmt, context);
     }
 
     private Function<ByteBuffer, TRowFormat> getDeserializer() {
