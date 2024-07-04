@@ -294,6 +294,9 @@ public enum ErrorCode {
     ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(5508, new byte[] {'4', '2', '0', '0', '0'},
             "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]"),
     ERR_BAD_FIELD_ERROR(5509, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
+    ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
+            "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
+                    "or increase frontend config max_bucket_number_per_partition."),
 
     /**
      * 5600 - 5699: DML operation failure

@@ -3052,4 +3052,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+
+    @ConfField(mutable = true)
+    public static long max_bucket_number_per_partition = 1024;
 }
