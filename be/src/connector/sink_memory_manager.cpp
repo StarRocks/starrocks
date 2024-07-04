@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "connector/sink_memory_manager.h"
+
 #include "runtime/exec_env.h"
 
 namespace starrocks::connector {
