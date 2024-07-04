@@ -1203,10 +1203,10 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
      */
     @Test
     public void testRefreshExternalTablePrecise() throws Exception {
-        starRocksAssert.withRefreshedMaterializedView("create materialized view test_mv_external\n" +
+        starRocksAssert.withMaterializedView("create materialized view test_mv_external\n" +
                 "PARTITION BY date_trunc('day', l_shipdate) \n" +
                 "distributed by hash(l_orderkey) buckets 3\n" +
-                "refresh manual\n" +
+                "refresh deferred manual\n" +
                 " properties ('partition_refresh_number'='1') \n" +
                 "as SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
 
@@ -1220,10 +1220,13 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
         };
 
         starRocksAssert.refreshMvPartition("refresh materialized view test_mv_external partition " +
-                " start('1998-01-01') end('1998-01-03')");
-        Assert.assertEquals(Lists.newArrayList(
+                " start('1998-01-01') end('1998-01-04')");
+        Assert.assertEquals(
+                Lists.newArrayList(
                         Lists.newArrayList("l_shipdate=1998-01-01"),
-                        Lists.newArrayList("l_shipdate=1998-01-02")),
+                        Lists.newArrayList("l_shipdate=1998-01-02"),
+                        Lists.newArrayList("l_shipdate=1998-01-03")
+                ),
                 calls);
     }
 }
