@@ -822,7 +822,7 @@ ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
         } else {
             ret = value > 0;
         }
-        ret = tv.from_timestamp_literal_with_check(value) && ret;
+        ret = ret && tv.from_timestamp_literal_with_check(value);
         if constexpr (AllowThrowException) {
             if (!ret) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
