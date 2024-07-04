@@ -121,6 +121,8 @@ public:
         }
     }
 
+    uint64_t max_rss_rowid() const override { return options_.max_rss_rowid; }
+
 private:
     void SaveError(const Status& s) {
         if (status_.ok() && !s.ok()) status_ = s;

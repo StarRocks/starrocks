@@ -89,6 +89,7 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     }
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
     // insert duplicate should return error
     // ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), 0).ok());
@@ -178,6 +179,7 @@ TEST_F(LakePersistentIndexTest, test_replace) {
 
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
 
     //replace
@@ -207,6 +209,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
     total_keys.reserve(M * N);
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
     int k = 0;
     for (int i = 0; i < M; ++i) {
         vector<Key> keys;
@@ -305,6 +308,7 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy) {
 TEST_F(LakePersistentIndexTest, test_insert_delete) {
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata->sstable_meta()));
 
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
