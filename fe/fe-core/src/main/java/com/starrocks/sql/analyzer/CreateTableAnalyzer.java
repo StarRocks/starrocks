@@ -188,6 +188,10 @@ public class CreateTableAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
 
+        if (columnDefs.size() > Config.max_column_number_per_table) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_COLUMNS, Config.max_column_number_per_table);
+        }
+
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             if (!columnSet.add(columnDef.getName())) {
