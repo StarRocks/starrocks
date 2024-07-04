@@ -74,10 +74,14 @@ void HeartbeatServer::init_cluster_id_or_die() {
 
 void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMasterInfo& master_info) {
     //print heartbeat in every minute
-    LOG_EVERY_N(INFO, 12) << "get heartbeat from FE."
-                          << "host:" << master_info.network_address.hostname
+    LOG_EVERY_N(INFO, 12) << "get heartbeat from FE. host:" << master_info.network_address.hostname
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
                           << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
+
+    if (master_info.encrypted != config::enable_transparent_data_encryption) {
+        LOG(FATAL) << "inconsistent encryption config, FE encrypted:" << master_info.encrypted
+                   << " BE/CN:" << config::enable_transparent_data_encryption;
+    }
 
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);

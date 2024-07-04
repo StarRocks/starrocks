@@ -189,6 +189,7 @@ message PersistentIndexSstablePB {
     optional int64 filesize = 3;
     // used for rebuild point of persistent index
     optional uint64 max_rss_rowid = 4;
+    optional bytes encryption_meta = 5;
 }
 
 message PersistentIndexSstableMetaPB {
