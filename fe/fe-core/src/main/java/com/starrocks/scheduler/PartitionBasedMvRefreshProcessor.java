@@ -540,7 +540,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // set enable_insert_strict by default
         if (!isMVPropertyContains(SessionVariable.ENABLE_INSERT_STRICT)) {
-            mvSessionVariable.setEnableInsertStrict(false);
+            mvSessionVariable.setEnableInsertStrict(Config.enable_mv_refresh_insert_strict);
         }
         // enable profile by default for mv refresh task
         if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {

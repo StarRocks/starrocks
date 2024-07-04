@@ -1855,9 +1855,6 @@ class StarrocksSQLApiLib(object):
             time.sleep(10)
             timeout -= 10
         else:
-<<<<<<< HEAD
-            tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
-=======
             tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
                
     def assert_table_partitions_num(self, table_name, expect_num):
@@ -1865,4 +1862,3 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(res["status"], "show schema change task error")
         ans = res["result"]
         tools.assert_true(len(ans) == expect_num, "The number of partitions is %s" % len(ans))
->>>>>>> 7ea0e0fa02 ([Feature] List Partition For AMV(Part 2): Support list partition for asynchronous materialized view with non-nullable partition columns (#46680))
