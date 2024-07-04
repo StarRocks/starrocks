@@ -274,7 +274,7 @@ public class CatalogUtils {
             Set<Long> partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(isTemp));
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
+                listPartitionInfo.setBatchLiteralExprValues(olapTable.getIdToColumn(), listPartitionInfo.getIdToValues());
                 List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
                 listPartitionInfo.getLiteralExprValues().forEach((k, v) -> {
                     if (partitionIds.contains(k)) {
@@ -291,8 +291,9 @@ public class CatalogUtils {
                     }
                 }
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
-                listPartitionInfo.setBatchMultiLiteralExprValues(listPartitionInfo.getIdToMultiValues());
-                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
+                listPartitionInfo.setBatchMultiLiteralExprValues(olapTable.getIdToColumn(),
+                        listPartitionInfo.getIdToMultiValues());
+                int partitionColSize = listPartitionInfo.getPartitionColumnsSize();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
                 checkItemValuesValid(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
                         multiItemListPartitionDesc);

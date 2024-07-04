@@ -16,12 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Range;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.DataCacheInfo;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 // only for RangePartition
 public class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
@@ -50,26 +45,5 @@ public class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
     @Override
     void recover(OlapTable table) throws DdlException {
         RecyclePartitionInfo.recoverRangePartition(table, this);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        partition.write(out);
-        RangeUtils.writeRange(out, range);
-        dataProperty.write(out);
-        out.writeShort(replicationNum);
-        out.writeBoolean(isInMemory);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        // dbId has been read in CatalogRecycleBin.readFields()
-        tableId = in.readLong();
-        partition = Partition.read(in);
-        range = RangeUtils.readRange(in);
-        dataProperty = DataProperty.read(in);
-        replicationNum = in.readShort();
-        isInMemory = in.readBoolean();
     }
 }

@@ -84,7 +84,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
 
     private static AddPartitionClause getAddPartitionClause(OlapTable table, Partition partition) {
         PartitionDesc partitionDesc = getPartitionDesc(table, partition);
-        DistributionDesc distributionDesc = partition.getDistributionInfo().toDistributionDesc();
+        DistributionDesc distributionDesc = partition.getDistributionInfo().toDistributionDesc(table.getIdToColumn());
         return new AddPartitionClause(partitionDesc, distributionDesc, null, false);
     }
 
@@ -112,7 +112,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
 
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
 
-        List<String> partitionColumnNames = rangePartitionInfo.getPartitionColumns().stream()
+        List<String> partitionColumnNames = rangePartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                 .map(Column::getName).collect(Collectors.toList());
 
         Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
@@ -146,9 +146,9 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
 
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
 
-        List<String> partitionColumnNames = listPartitionInfo.getPartitionColumns().stream()
+        List<String> partitionColumnNames = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                 .map(Column::getName).collect(Collectors.toList());
-        List<ColumnDef> partitionColumnDefs = listPartitionInfo.getPartitionColumns().stream()
+        List<ColumnDef> partitionColumnDefs = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                 .map(Column::toColumnDef).collect(Collectors.toList());
 
         List<String> partitionValues = listPartitionInfo.getIdToValues().get(partitionId);

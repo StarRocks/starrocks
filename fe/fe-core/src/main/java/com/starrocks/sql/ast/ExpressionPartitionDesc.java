@@ -37,6 +37,7 @@ import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.PartitionFunctionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -200,7 +201,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
 
         for (SingleRangePartitionDesc desc : getRangePartitionDesc().getSingleRangePartitionDescs()) {
             long partitionId = partitionNameToId.get(desc.getPartitionName());
-            partitionInfo.handleNewSinglePartitionDesc(desc, partitionId, isTemp);
+            partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), desc, partitionId, isTemp);
         }
 
         return partitionInfo;

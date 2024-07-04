@@ -93,7 +93,8 @@ public class OptExternalPartitionPruner {
 
             Collection<Long> partitionIds = null;
             try {
-                partitionIds = partitionPrune(esTablePartitions.getPartitionInfo(), operator.getColumnFilters());
+                partitionIds = partitionPrune(operator.getTable(),
+                        esTablePartitions.getPartitionInfo(), operator.getColumnFilters());
             } catch (AnalysisException e) {
                 LOG.warn("Es Table partition prune failed. ", e);
             }
@@ -475,7 +476,7 @@ public class OptExternalPartitionPruner {
      * @return
      * @throws AnalysisException
      */
-    private static Collection<Long> partitionPrune(PartitionInfo partitionInfo,
+    private static Collection<Long> partitionPrune(Table table, PartitionInfo partitionInfo,
             Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
         if (partitionInfo == null) {
             return null;
@@ -486,8 +487,10 @@ public class OptExternalPartitionPruner {
             case EXPR_RANGE: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
-                partitionPruner =
-                        new RangePartitionPruner(keyRangeById, rangePartitionInfo.getPartitionColumns(), columnFilters);
+                partitionPruner = new RangePartitionPruner(
+                        keyRangeById,
+                        rangePartitionInfo.getPartitionColumns(table.getIdToColumn()),
+                        columnFilters);
                 return partitionPruner.prune();
             }
             default: {

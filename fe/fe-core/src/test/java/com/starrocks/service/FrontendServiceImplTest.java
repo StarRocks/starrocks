@@ -1220,7 +1220,7 @@ public class FrontendServiceImplTest {
                         Lists.newArrayList("1990-04-25"), Maps.newHashMap()))));
 
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDescs.get(0),
-                defaultDistributionInfo.toDistributionDesc(), Maps.newHashMap(), false);
+                defaultDistributionInfo.toDistributionDesc(table.getIdToColumn()), Maps.newHashMap(), false);
 
         List<Partition> partitionList = Lists.newArrayList();
         partitionList.add(p19910425);

@@ -45,7 +45,7 @@ public class TableInfo {
         try {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
-                partitionColumns = olapTable.getPartitionInfo().getPartitionColumns();
+                partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
             } else {
                 partitionColumns = table.getPartitionColumns();
             }

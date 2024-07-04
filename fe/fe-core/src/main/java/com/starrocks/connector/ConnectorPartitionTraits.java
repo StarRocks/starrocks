@@ -405,7 +405,7 @@ public abstract class ConnectorPartitionTraits {
         }
 
         public List<Column> getPartitionColumns() {
-            return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
+            return ((OlapTable) table).getPartitionInfo().getPartitionColumns(table.getIdToColumn());
         }
     }
 

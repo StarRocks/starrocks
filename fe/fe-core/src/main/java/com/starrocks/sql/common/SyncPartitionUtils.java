@@ -40,7 +40,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
@@ -732,8 +731,8 @@ public class SyncPartitionUtils {
 
         if (hasPartitionRange) {
             Set<String> result = Sets.newHashSet();
-            Column partitionColumn =
-                    ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+            Column partitionColumn = materializedView.getPartitionInfo()
+                    .getPartitionColumns(materializedView.getIdToColumn()).get(0);
             Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
             Map<String, Range<PartitionKey>> rangeMap = materializedView.getValidRangePartitionMap(partitionTTLNumber);
             for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {

@@ -34,11 +34,9 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
+import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
@@ -48,8 +46,6 @@ import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -60,7 +56,7 @@ import javax.validation.constraints.NotNull;
 /*
  * Repository of a partition's related infos
  */
-public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, GsonPostProcessable {
+public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(PartitionInfo.class);
 
     @SerializedName(value = "type")
@@ -213,12 +209,6 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         }
     }
 
-    public static PartitionInfo read(DataInput in) throws IOException {
-        PartitionInfo partitionInfo = new PartitionInfo();
-        partitionInfo.readFields(in);
-        return partitionInfo;
-    }
-
     public boolean isMultiColumnPartition() {
         return isMultiColumnPartition;
     }
@@ -228,48 +218,12 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
     }
 
     @NotNull
-    public List<Column> getPartitionColumns() {
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
         return Collections.emptyList();
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
-
-        Preconditions.checkState(idToDataProperty.size() == idToReplicationNum.size());
-        Preconditions.checkState(idToInMemory.keySet().equals(idToReplicationNum.keySet()));
-        out.writeInt(idToDataProperty.size());
-        for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
-            out.writeLong(entry.getKey());
-            if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
-                out.writeBoolean(true);
-            } else {
-                out.writeBoolean(false);
-                entry.getValue().write(out);
-            }
-
-            out.writeShort(idToReplicationNum.get(entry.getKey()));
-            out.writeBoolean(idToInMemory.get(entry.getKey()));
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        type = PartitionType.valueOf(Text.readString(in));
-
-        int counter = in.readInt();
-        for (int i = 0; i < counter; i++) {
-            long partitionId = in.readLong();
-            boolean isDefaultHddDataProperty = in.readBoolean();
-            if (isDefaultHddDataProperty) {
-                idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
-            } else {
-                idToDataProperty.put(partitionId, DataProperty.read(in));
-            }
-
-            short replicationNum = in.readShort();
-            idToReplicationNum.put(partitionId, replicationNum);
-            idToInMemory.put(partitionId, in.readBoolean());
-        }
+    public int getPartitionColumnsSize() {
+        return 0;
     }
 
     @Override
@@ -300,7 +254,7 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return buff.toString();
     }
 
-    public void createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+    public void createAutomaticShadowPartition(List<Column> schema, long partitionId, String replicateNum) throws DdlException {
     }
 
     public boolean isAutomaticPartition() {

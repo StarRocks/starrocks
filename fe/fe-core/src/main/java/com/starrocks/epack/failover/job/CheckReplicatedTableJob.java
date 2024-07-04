@@ -216,11 +216,13 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             return false;
         }
 
-        if (!localDistributionInfo.getDistributionKey().equals(remoteDistributionInfo.getDistributionKey())) {
+        if (!localDistributionInfo.getDistributionKey(localTable.getIdToColumn())
+                .equals(remoteDistributionInfo.getDistributionKey(remoteTable.getIdToColumn()))) {
             LOG.warn(
                     "Local partition {}.{}.{} has different distribution key {} with remote partition distribution key {}",
                     localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
-                    localDistributionInfo.getDistributionKey(), remoteDistributionInfo.getDistributionKey());
+                    localDistributionInfo.getDistributionKey(localTable.getIdToColumn()),
+                    remoteDistributionInfo.getDistributionKey(remoteTable.getIdToColumn()));
             return false;
         }
 

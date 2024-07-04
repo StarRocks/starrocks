@@ -45,6 +45,7 @@ import com.starrocks.common.util.StringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -1254,7 +1255,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         if (distributionInfo instanceof HashDistributionInfo) {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+            List<Column> distributedColumns = MetaUtils.getColumnsByColumnIds(
+                    mv, hashDistributionInfo.getDistributionColumns());
             distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
         }
 
@@ -2060,8 +2062,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
             return Lists.newArrayList();
         }
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = partitionInfo.getPartitionColumns(mv.getIdToColumn());
         Preconditions.checkState(partitionColumns.size() == 1);
         List<ScalarOperator> partitionRelatedPredicates = conjuncts.stream()
                 .filter(p -> isRelatedPredicate(p, partitionColumns.get(0).getName()))
@@ -2078,8 +2079,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
             return queryCompensationPredicate;
         }
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+        List<Column> partitionColumns = partitionInfo.getPartitionColumns(mv.getIdToColumn());
         Preconditions.checkState(partitionColumns.size() == 1);
         ScalarOperator queryPredicate = rewriteContext.getQueryPredicateSplit().toScalarOperator();
         Set<ScalarOperator> queryPredicates = Utils.extractConjunctSet(queryPredicate);

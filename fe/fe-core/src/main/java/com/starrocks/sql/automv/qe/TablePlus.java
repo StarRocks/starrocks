@@ -78,7 +78,7 @@ public class TablePlus {
         printer.add(table.getKeysType().toSql()).add("(").addItems(", ", key).add(")").newLine();
 
         int numBuckets = table.getDefaultDistributionInfo().getBucketNum();
-        String bucketKey = table.getDefaultDistributionInfo().getDistributionKey();
+        String bucketKey = table.getDefaultDistributionInfo().getDistributionKey(table.getIdToColumn());
         printer.add("DISTRIBUTED BY HASH(").add(bucketKey).add(")").spaces(1)
                 .add("BUCKETS").spaces(1).add(numBuckets).newLine();
 

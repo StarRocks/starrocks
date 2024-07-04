@@ -41,6 +41,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.automv.pieces.FQTable;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -174,7 +175,7 @@ public class MaterializedViewPlus {
 
     public String getDistribution() {
         if (distribution == null) {
-            distribution = mv.getDefaultDistributionInfo().toSql();
+            distribution = mv.getDefaultDistributionInfo().toSql(mv.getIdToColumn());
         }
         return distribution;
     }
@@ -184,8 +185,8 @@ public class MaterializedViewPlus {
             DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
             if (distributionInfo instanceof HashDistributionInfo) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                distributionKey = hashDistributionInfo.getDistributionColumns().stream()
-                        .map(Column::getName).collect(ImmutableList.toImmutableList());
+                distributionKey = MetaUtils.getColumnsByColumnIds(mv, hashDistributionInfo.getDistributionColumns())
+                        .stream().map(Column::getName).collect(ImmutableList.toImmutableList());
                 bucketNum = hashDistributionInfo.getBucketNum();
             } else if (distributionInfo instanceof RandomDistributionInfo) {
                 RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;

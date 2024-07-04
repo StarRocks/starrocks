@@ -93,7 +93,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         String engine = table.getType() == Table.TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name();
         KeysDesc keysDesc = new KeysDesc(table.getKeysType(), keysColumnNames);
         PartitionDesc partitionDesc = getPartitionDesc(table);
-        DistributionDesc distributionDesc = table.getDefaultDistributionInfo().toDistributionDesc();
+        DistributionDesc distributionDesc = table.getDefaultDistributionInfo().toDistributionDesc(table.getIdToColumn());
         List<String> sortKeysColumnNames = null;
         MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
         if (baseIndexMeta.getSortKeyIdxes() != null) {
@@ -139,7 +139,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
     private static RangePartitionDesc getRangePartitionDesc(OlapTable table) {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
 
-        List<String> partitionColumnNames = rangePartitionInfo.getPartitionColumns().stream()
+        List<String> partitionColumnNames = rangePartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                 .map(Column::getName).collect(Collectors.toList());
 
         List<Map.Entry<Long, Range<PartitionKey>>> partitionEntries = rangePartitionInfo.getSortedRangeMap(false);
@@ -179,9 +179,9 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
     private static ListPartitionDesc getListPartitionDesc(OlapTable table) {
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
 
-        List<String> partitionColumnNames = listPartitionInfo.getPartitionColumns().stream()
+        List<String> partitionColumnNames = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                 .map(Column::getName).collect(Collectors.toList());
-        List<ColumnDef> partitionColumnDefs = listPartitionInfo.getPartitionColumns().stream()
+        List<ColumnDef> partitionColumnDefs = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                 .map(Column::toColumnDef).collect(Collectors.toList());
 
         Map<Long, List<String>> idToValues = listPartitionInfo.getIdToValues();

@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageType;
@@ -146,7 +147,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     replicateNum = stmt.getProperties().getOrDefault("replication_num",
                             String.valueOf(RunMode.defaultReplicationNum()));
                 }
-                partitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
+                partitionInfo.createAutomaticShadowPartition(baseSchema, partitionId, replicateNum);
                 partitionNameToId.put(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME, partitionId);
             }
 
@@ -450,7 +451,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                     }
                     if (partitionInfo instanceof RangePartitionInfo) {
                         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(
+                                MetaUtils.buildIdToColumn(baseSchema));
                         if (partitionColumns.size() > 1) {
                             throw new DdlException("Multi-column range partition table " +
                                     "does not support storage medium cool down currently.");

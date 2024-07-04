@@ -22,6 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
@@ -49,14 +50,14 @@ public class PartitionInfoView {
     /**
      * Create from {@link PartitionInfo}
      */
-    public static PartitionInfoView createFrom(PartitionInfo partitionInfo) {
+    public static PartitionInfoView createFrom(Table table, PartitionInfo partitionInfo) {
         PartitionInfoView pvo = new PartitionInfoView();
         pvo.setType(partitionInfo.getType().typeString);
         if (!partitionInfo.isPartitioned()) {
             return pvo;
         }
 
-        Optional.ofNullable(partitionInfo.getPartitionColumns())
+        Optional.of(partitionInfo.getPartitionColumns(table.getIdToColumn()))
                 .map(columns -> columns.stream()
                         .filter(Objects::nonNull)
                         .map(ColumnView::createFrom)

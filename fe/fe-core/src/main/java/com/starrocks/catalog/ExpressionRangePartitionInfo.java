@@ -14,19 +14,16 @@
 
 package com.starrocks.catalog;
 
-
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -35,21 +32,17 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
-import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toMap;
 
 /**
  * ExpressionRangePartitionInfo replace columns with expressions
@@ -95,10 +88,10 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                 partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
             }
         }
+        this.partitionExprs = partitionExprs;
+    }
 
-        // Analyze partition expr
-        Map<String, Column> partitionNameColumnMap = partitionColumns.stream()
-                .collect(toMap(x -> x.getName(), Function.identity(), (e1, e2) -> e1, CaseInsensitiveMap::new));
+    public void updateSlotRef(Map<String, Column> nameToColumn) {
         for (Expr expr : partitionExprs) {
             SlotRef slotRef = getPartitionExprSlotRef(expr);
             if (slotRef == null) {
@@ -108,14 +101,13 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             // FIXME: use the slot ref's column name to find the partition column which maybe not the same as the slot ref's
             //  column name.
             String slotRefName = slotRef.getColumnName();
-            if (!partitionNameColumnMap.containsKey(slotRefName)) {
+            if (!nameToColumn.containsKey(slotRefName)) {
                 continue;
             }
-            Column partitionColumn = partitionNameColumnMap.get(slotRefName);
+            Column partitionColumn = nameToColumn.get(slotRefName);
             // analyze partition expression
             analyzePartitionExpressionExpr(slotRef, partitionColumn, expr);
         }
-        this.partitionExprs = partitionExprs;
     }
 
     /**
@@ -182,6 +174,27 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         return partitionExprs;
     }
 
+    @Override
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
+        List<Column> columns = MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds);
+        for (int i = 0; i < columns.size(); i++) {
+            Expr expr = partitionExprs.get(i);
+            Column column = columns.get(i);
+            if (expr.getType().getPrimitiveType() != PrimitiveType.INVALID_TYPE
+                    && expr.getType().getPrimitiveType() != column.getType().getPrimitiveType()) {
+                Column newColumn = new Column(column);
+                newColumn.setType(expr.getType());
+                columns.set(i, newColumn);
+            }
+        }
+        return columns;
+    }
+
+    @Override
+    public int getPartitionColumnsSize() {
+        return partitionColumnIds.size();
+    }
+
     public void setPartitionExprs(List<Expr> partitionExprs) {
         this.partitionExprs = partitionExprs;
     }
@@ -215,58 +228,6 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         }
         sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
         return sb.toString();
-    }
-
-    public static PartitionInfo read(DataInput in) throws IOException {
-        ExpressionRangePartitionInfo info = new ExpressionRangePartitionInfo();
-        info.readFields(in);
-        String json = Text.readString(in);
-        List<GsonUtils.ExpressionSerializedObject> expressionSerializedObjects =
-                GsonUtils.GSON.fromJson(json, new TypeToken<List<GsonUtils.ExpressionSerializedObject>>() {
-                }.getType());
-        List<Expr> partitionExprs = Lists.newArrayList();
-        for (GsonUtils.ExpressionSerializedObject expressionSql : expressionSerializedObjects) {
-            if (expressionSql != null && expressionSql.expressionSql != null) {
-                partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
-            }
-        }
-
-        List<Column> partitionColumns = info.getPartitionColumns();
-        for (Expr expr : partitionExprs) {
-            if (expr instanceof FunctionCallExpr) {
-                SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
-                // TODO: Later, for automatically partitioned tables,
-                //  partitions of materialized views (also created automatically),
-                //  and partition by expr tables will use ExpressionRangePartitionInfoV2
-                for (Column partitionColumn : partitionColumns) {
-                    if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
-                        slotRef.setType(partitionColumn.getType());
-                        slotRef.setNullable(partitionColumn.isAllowNull());
-                        try {
-                            PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
-                        } catch (SemanticException ex) {
-                            LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
-                        }
-                    }
-                }
-            }
-        }
-        info.setPartitionExprs(partitionExprs);
-        return info;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        List<GsonUtils.ExpressionSerializedObject> serializedPartitionExprs = Lists.newArrayList();
-        for (Expr partitionExpr : partitionExprs) {
-            if (partitionExpr != null) {
-                serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
-            }
-        }
-        this.serializedPartitionExprs = serializedPartitionExprs;
-        Text.writeString(out, GsonUtils.GSON.toJson(serializedPartitionExprs));
     }
 
     /**
