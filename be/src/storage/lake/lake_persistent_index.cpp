@@ -35,7 +35,7 @@
 
 namespace starrocks::lake {
 
-Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
+Status KeyValueMerger::merge(const std::string& key, const std::string& value, uint64_t max_rss_rowid) {
     IndexValuesWithVerPB index_value_ver;
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
@@ -48,8 +48,17 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
     auto index_value = build_index_value(index_value_ver.values(0));
     if (_key == key) {
         if (_index_value_vers.empty()) {
+            _max_rss_rowid = max_rss_rowid;
             _index_value_vers.emplace_front(version, index_value);
-        } else if (version > _index_value_vers.front().first) {
+        } else if ((version > _index_value_vers.front().first) ||
+                   (version == _index_value_vers.front().first && max_rss_rowid > _max_rss_rowid)) {
+            // NOTICE: we need both version and max_rss_rowid here to decide the order of keys.
+            // Consider the following two scenarios:
+            // 1. Same keys are from two different Rowsets, and we can decide their order by version recorded
+            //    in Rowset.
+            // 2. Same keys are from same Rowset, and they have same version. Now we use `max_rss_rowid` in sst to
+            //    decide their order.
+            _max_rss_rowid = max_rss_rowid;
             std::list<std::pair<int64_t, IndexValue>> t;
             t.emplace_front(version, index_value);
             _index_value_vers.swap(t);
@@ -57,6 +66,7 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
     } else {
         flush();
         _key = key;
+        _max_rss_rowid = max_rss_rowid;
         _index_value_vers.emplace_front(version, index_value);
     }
     return Status::OK();
@@ -85,10 +95,7 @@ void KeyValueMerger::flush() {
 }
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
-        : PersistentIndex(""),
-          _memtable(std::make_unique<PersistentIndexMemtable>()),
-          _tablet_mgr(tablet_mgr),
-          _tablet_id(tablet_id) {}
+        : PersistentIndex(""), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
 LakePersistentIndex::~LakePersistentIndex() {
     _memtable->clear();
@@ -96,6 +103,7 @@ LakePersistentIndex::~LakePersistentIndex() {
 }
 
 Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
+    uint64_t max_rss_rowid = 0;
     for (auto& sstable_pb : sstable_meta.sstables()) {
         RandomAccessFileOptions opts;
         if (!sstable_pb.encryption_meta().empty()) {
@@ -111,7 +119,11 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
         auto sstable = std::make_unique<PersistentIndexSstable>();
         RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
         _sstables.emplace_back(std::move(sstable));
+        max_rss_rowid = std::max(max_rss_rowid, sstable_pb.max_rss_rowid());
     }
+    // create memtable with previous rebuild `max_rss_rowid`,
+    // to make sure we can generate sst order by `max_rss_rowid`.
+    _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
     return Status::OK();
 }
 
@@ -381,6 +393,8 @@ Status LakePersistentIndex::prepare_merging_iterator(
         auto merging_sstable = std::make_shared<PersistentIndexSstable>();
         RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, false /** no filter **/));
         merging_sstables->push_back(merging_sstable);
+        // Pass `max_rss_rowid` to iterator, will be used when compaction.
+        read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
         // add input sstable.
@@ -397,9 +411,11 @@ Status LakePersistentIndex::prepare_merging_iterator(
 
 Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder,
                                            bool base_level_merge) {
-    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), builder, base_level_merge);
+    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), builder,
+                                                   base_level_merge);
     while (iter_ptr->Valid()) {
-        RETURN_IF_ERROR(merger->merge(iter_ptr->key().to_string(), iter_ptr->value().to_string()));
+        RETURN_IF_ERROR(
+                merger->merge(iter_ptr->key().to_string(), iter_ptr->value().to_string(), iter_ptr->max_rss_rowid()));
         iter_ptr->Next();
     }
     RETURN_IF_ERROR(iter_ptr->status());

@@ -40,10 +40,14 @@ using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class KeyValueMerger {
 public:
-    explicit KeyValueMerger(const std::string& key, sstable::TableBuilder* builder, bool merge_base_level)
-            : _key(std::move(key)), _builder(builder), _merge_base_level(merge_base_level) {}
+    explicit KeyValueMerger(const std::string& key, uint64_t max_rss_rowid, sstable::TableBuilder* builder,
+                            bool merge_base_level)
+            : _key(std::move(key)),
+              _max_rss_rowid(max_rss_rowid),
+              _builder(builder),
+              _merge_base_level(merge_base_level) {}
 
-    Status merge(const std::string& key, const std::string& value);
+    Status merge(const std::string& key, const std::string& value, uint64_t max_rss_rowid);
 
     void finish() { flush(); }
 
@@ -52,6 +56,7 @@ private:
 
 private:
     std::string _key;
+    uint64_t _max_rss_rowid = 0;
     sstable::TableBuilder* _builder;
     std::list<IndexValueWithVer> _index_value_vers;
     // If do merge base level, that means we can delete NullIndexValue items safely.
