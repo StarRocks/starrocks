@@ -379,6 +379,9 @@ public:
 
     Status clone_and_append_context(const char* filename, int line, const char* expr) const;
 
+    Status(TStatusCode::type code, Slice msg) : Status(code, msg, {}) {}
+    Status(TStatusCode::type code, Slice msg, Slice ctx);
+
 private:
     static const char* copy_state(const char* state);
     static const char* copy_state_with_extra_ctx(const char* state, Slice ctx);
@@ -386,9 +389,6 @@ private:
     // Indicates whether this Status was the rhs of a move operation.
     static bool is_moved_from(const char* state);
     static const char* moved_from_state();
-
-    Status(TStatusCode::type code, Slice msg) : Status(code, msg, {}) {}
-    Status(TStatusCode::type code, Slice msg, Slice ctx);
 
     void mark_checked() const {
 #ifdef STARROCKS_ASSERT_STATUS_CHECKED
