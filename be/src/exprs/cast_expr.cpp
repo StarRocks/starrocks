@@ -72,10 +72,12 @@ struct CastFn {
 };
 
 // All cast implements
-#define SELF_CAST(FROM_TYPE)                                                    \
-    template <bool AllowThrowException>                                         \
-    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
-        static ColumnPtr cast_fn(ColumnPtr& column) { return column->clone(); } \
+#define SELF_CAST(FROM_TYPE)                                   \
+    template <bool AllowThrowException>                        \
+    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> { \
+        static ColumnPtr cast_fn(ColumnPtr& column) {          \
+            return column->clone();                            \
+        }                                                      \
     };
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
@@ -816,8 +818,7 @@ ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
 
         auto value = viewer.value(row);
         TimestampValue tv;
-
-        bool ret = tv.from_timestamp_literal_with_check((int64_t)value);
+        bool ret = value > 0 && tv.from_timestamp_literal_with_check(value);
         if constexpr (AllowThrowException) {
             if (!ret) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
@@ -843,7 +844,6 @@ CUSTOMIZE_FN_CAST(TYPE_BIGINT, TYPE_DATETIME, cast_to_timestamp_fn);
 CUSTOMIZE_FN_CAST(TYPE_LARGEINT, TYPE_DATETIME, cast_to_timestamp_fn);
 CUSTOMIZE_FN_CAST(TYPE_FLOAT, TYPE_DATETIME, cast_to_timestamp_fn);
 CUSTOMIZE_FN_CAST(TYPE_DOUBLE, TYPE_DATETIME, cast_to_timestamp_fn);
-CUSTOMIZE_FN_CAST(TYPE_DECIMALV2, TYPE_DATETIME, cast_to_timestamp_fn);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 // Time to datetime need rewrite CastExpr
 
@@ -1277,7 +1277,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
     template <>                                                                                             \
     template <>                                                                                             \
     inline ColumnPtr StringUnaryFunction<CastToString>::evaluate<FROM_TYPE, TO_TYPE>(const ColumnPtr& v1) { \
-        auto& r1 = ColumnHelper::cast_to_raw<FROM_TYPE>(v1)->get_data();                                    \
+        auto& r1 = ColumnHelper::cast_to_raw<FROM_TYPE>(v1) -> get_data();                                  \
         auto result = RunTimeColumnType<TO_TYPE>::create();                                                 \
         auto& offset = result->get_offset();                                                                \
         offset.resize(v1->size() + 1);                                                                      \
