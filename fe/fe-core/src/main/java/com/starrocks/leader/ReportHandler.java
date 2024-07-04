@@ -616,7 +616,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         LOG.debug("begin to handle resource usage report from backend {}", backendId);
         long start = System.currentTimeMillis();
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(
-                backendId, usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
+                backendId, usage.getNum_running_queries(), usage.getMem_used_bytes(),
                 usage.getCpu_used_permille(), usage.isSetGroup_usages() ? usage.getGroup_usages() : null);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
                 backendId, (System.currentTimeMillis() - start));

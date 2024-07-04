@@ -68,7 +68,6 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 
@@ -195,7 +194,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                     computeNodeInfo.add(String.valueOf(node.getVersion()));
 
                     computeNodeInfo.add(String.valueOf(node.getNumRunningQueries()));
-                    computeNodeInfo.add(String.valueOf(BackendCoreStat.getCoresOfBe(nodeId)));
+                    computeNodeInfo.add(String.valueOf(node.getCpuCores()));
                     double memUsedPct = node.getMemUsedPct();
                     computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
                     computeNodeInfo.add(String.format("%.1f", node.getCpuUsedPermille() / 10.0) + " %");
