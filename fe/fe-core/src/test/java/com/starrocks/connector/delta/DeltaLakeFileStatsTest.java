@@ -24,10 +24,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class DeltaLakeFileStatsTest {
     private StructType schema;
@@ -69,7 +69,7 @@ public class DeltaLakeFileStatsTest {
             }
         };
 
-        List<String> nonPartitionPrimitiveColumns = new ArrayList<>() {
+        Set<String> nonPartitionPrimitiveColumns = new HashSet<>() {
             {
                 add("c_int");
                 add("c_char");
@@ -145,8 +145,11 @@ public class DeltaLakeFileStatsTest {
             }
         };
 
-        List<String> nonPartitionPrimitiveColumns = new ArrayList<>();
-        nonPartitionPrimitiveColumns.add("c_string");
+        Set<String> nonPartitionPrimitiveColumns = new HashSet<>() {
+            {
+                add("c_string");
+            }
+        };
 
         DeltaLakeAddFileStatsSerDe stat1 = new DeltaLakeAddFileStatsSerDe(10, minValues1, maxValues1, nullCounts1);
         DeltaLakeFileStats stats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumns, stat1, 10, 4096);
