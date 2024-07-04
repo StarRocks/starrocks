@@ -23,8 +23,8 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import io.delta.kernel.types.StructType;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class DeltaStatisticProvider {
     private final Map<PredicateSearchKey, DeltaLakeFileStats> deltaLakeFileStatsMap = new HashMap<>();
@@ -50,7 +50,7 @@ public class DeltaStatisticProvider {
     }
 
     public void updateFileStats(DeltaLakeTable table, PredicateSearchKey key, FileScanTask file,
-                                DeltaLakeAddFileStatsSerDe fileStatsSerDe, List<String> nonPartitionPrimitiveColumn) {
+                                DeltaLakeAddFileStatsSerDe fileStatsSerDe, Set<String> nonPartitionPrimitiveColumn) {
         StructType schema = table.getDeltaMetadata().getSchema();
 
         DeltaLakeFileStats fileStats;
