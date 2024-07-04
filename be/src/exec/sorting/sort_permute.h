@@ -74,32 +74,12 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
     }
 }
 
-inline SmallPermutation create_small_permutation(std::pair<int, int> range) {
-    const auto [start, end] = range;
-    auto size = end - start;
-
-    SmallPermutation perm(size);
-    for (uint32_t i = 0; i < size; i++) {
-        perm[i].index_in_chunk = start + i;
-    }
-    return perm;
-}
-
 inline SmallPermutation create_small_permutation(uint32_t rows) {
     SmallPermutation perm(rows);
     for (uint32_t i = 0; i < rows; i++) {
         perm[i].index_in_chunk = i;
     }
     return perm;
-}
-
-inline void restore_small_permutation(const SmallPermutation& perm, Permutation& output, std::pair<int, int> range) {
-    const auto [start, end] = range;
-    const auto size = end - start;
-    output.resize(size);
-    for (int i = 0; i < size; ++i) {
-        output[i].index_in_chunk = perm[i].index_in_chunk;
-    }
 }
 
 inline void restore_small_permutation(const SmallPermutation& perm, Permutation& output) {
