@@ -112,6 +112,8 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.encryption.KeyMgr;
+import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -453,6 +455,9 @@ public class GlobalStateMgr {
 
     private final ReplicationMgr replicationMgr;
 
+    private final KeyMgr keyMgr;
+    private final KeyRotationDaemon keyRotationDaemon;
+
     private LockManager lockManager;
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
@@ -744,6 +749,10 @@ public class GlobalStateMgr {
         });
 
         this.replicationMgr = new ReplicationMgr();
+
+        this.keyMgr = new KeyMgr();
+        this.keyRotationDaemon = new KeyRotationDaemon(keyMgr);
+
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
@@ -952,6 +961,10 @@ public class GlobalStateMgr {
 
     public ReplicationMgr getReplicationMgr() {
         return replicationMgr;
+    }
+
+    public KeyMgr getKeyMgr() {
+        return keyMgr;
     }
 
     public LockManager getLockManager() {
@@ -1248,6 +1261,7 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+        keyMgr.initDefaultMasterKey();
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1273,6 +1287,8 @@ public class GlobalStateMgr {
 
         checkpointer.start();
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
+
+        keyRotationDaemon.start();
 
         // heartbeat mgr
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
@@ -1454,6 +1470,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                 .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1621,6 +1638,7 @@ public class GlobalStateMgr {
                 storageVolumeMgr.save(dos);
                 dictionaryMgr.save(dos);
                 replicationMgr.save(dos);
+                keyMgr.save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2330,7 +2348,7 @@ public class GlobalStateMgr {
             }
             if (!supportRefreshTableType(table)) {
                 throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
-                                "do not support refresh external table which type is %s", catalogName, dbName,
+                        "do not support refresh external table which type is %s", catalogName, dbName,
                         tblName, table.getType());
             }
         } finally {

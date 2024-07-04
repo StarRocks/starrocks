@@ -347,6 +347,7 @@ public class CompactionScheduler extends Daemon {
             request.version = currentVersion;
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
             request.allowPartialSuccess = allowPartialSuccess;
+            request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
@@ -524,7 +525,7 @@ public class CompactionScheduler extends Daemon {
                     newDisabledTables.add(l);
                 } catch (NumberFormatException e) {
                     LOG.warn("Bad format of disable tables string: {}, now is {}, should be like \"tableId1;tableId2\"",
-                              e, disableTablesStr);
+                            e, disableTablesStr);
                     return;
                 }
             }

@@ -63,13 +63,14 @@ public class DeltaLakeFileStats {
     private boolean hasValidColumnMetrics;
 
     public DeltaLakeFileStats(StructType schema, List<String> nonPartitionPrimitiveColumns,
-                              DeltaLakeAddFileStatsSerDe fileStat, long fileSize) {
+                              DeltaLakeAddFileStatsSerDe fileStat, long numRecords, long fileSize) {
         this.schema = schema;
         this.nonPartitionPrimitiveColumns = nonPartitionPrimitiveColumns;
-        this.recordCount = fileStat.numRecords;
+        this.recordCount = numRecords;
         this.size = fileSize;
 
-        if (fileStat.minValues == null || fileStat.maxValues == null || fileStat.nullCount == null) {
+        if (fileStat == null || fileStat.minValues == null || fileStat.maxValues == null
+                || fileStat.nullCount == null) {
             this.minValues = null;
             this.maxValues = null;
             this.nullCounts = null;
@@ -155,9 +156,13 @@ public class DeltaLakeFileStats {
         return builder.build();
     }
 
-    public void update(DeltaLakeAddFileStatsSerDe stat, long fileSize) {
-        this.recordCount += stat.numRecords;
+    public void update(DeltaLakeAddFileStatsSerDe stat, long numRecords, long fileSize) {
+        this.recordCount += numRecords;
         this.size += fileSize;
+
+        if (stat == null) {
+            return;
+        }
 
         if (!hasValidColumnMetrics) {
             return;

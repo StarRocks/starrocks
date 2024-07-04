@@ -18,6 +18,7 @@
 
 #include "column/chunk.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
@@ -54,6 +55,13 @@ Status HorizontalPkTabletWriter::write(const Chunk& data, const std::vector<uint
 
 Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     auto name = gen_del_filename(_txn_id);
+    WritableFileOptions wopts;
+    std::string encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        encryption_meta.swap(pair.encryption_meta);
+    }
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->del_location(_tablet_id, name)));
     size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
     std::vector<uint8_t> content(sz);
@@ -62,7 +70,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     }
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
-    _files.emplace_back(FileInfo{std::move(name), content.size()});
+    _files.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
     return Status::OK();
 }
 
@@ -78,12 +86,13 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         partial_rowset_footer->set_size(segment_size - footer_position);
         const std::string& segment_path = _seg_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
-        _files.emplace_back(FileInfo{segment_name, segment_size});
+        _files.emplace_back(FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()});
         _data_size += segment_size;
         if (segment) {
             segment->set_data_size(segment_size);
             segment->set_index_size(index_size);
             segment->set_path(segment_path);
+            segment->set_encryption_meta(_seg_writer->encryption_meta());
         }
         _seg_writer.reset();
     }
