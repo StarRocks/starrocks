@@ -108,7 +108,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     private List<Tablet> tablets;
 
     @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
 
     // If this is an index of LakeTable and the index state is SHADOW, all transactions
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
