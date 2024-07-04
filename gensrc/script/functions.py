@@ -1199,6 +1199,8 @@ vectorized_functions = [
     [150323, 'array_sortby', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ARRAY_JSON'],
      'ArrayFunctions::array_sortby<TYPE_JSON>'],
 
+    [150340, 'array_repeat', True, False, 'ANY_ARRAY', ['ANY_ELEMENT', 'INT'], 'ArrayFunctions::repeat'],
+
     [150330, 'array_generate', True, False, 'ARRAY_TINYINT', ['TINYINT', 'TINYINT', 'TINYINT'],
      "ArrayFunctions::array_generate<TYPE_TINYINT>"],
     [150331, 'array_generate', True, False, 'ARRAY_SMALLINT', ['SMALLINT', 'SMALLINT', 'SMALLINT'],
