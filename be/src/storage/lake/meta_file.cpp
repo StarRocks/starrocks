@@ -255,7 +255,11 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
     }
 
     // add output rowset
-    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().segments_size() > 0) {
+    if (op_compaction.has_output_rowset() &&
+        (op_compaction.output_rowset().segments_size() > 0 || !collect_del_files.empty())) {
+        // NOTICE: we need output rowset in two scenarios:
+        // 1. We have output segments after compactions.
+        // 2. We need del files to rebuild cloud native PK index.
         auto rowset = _tablet_meta->add_rowsets();
         rowset->CopyFrom(op_compaction.output_rowset());
         rowset->set_id(_tablet_meta->next_rowset_id());
@@ -264,7 +268,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         for (const auto& each : collect_del_files) {
             rowset->add_del_files()->CopyFrom(each);
         }
-        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
+        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     }
 
     VLOG(2) << fmt::format(

@@ -123,6 +123,11 @@ public:
         return status;
     }
 
+    uint64_t max_rss_rowid() const override {
+        assert(Valid());
+        return current_->max_rss_rowid();
+    }
+
 private:
     // Which direction is the iterator moving?
     enum Direction { kForward, kReverse };
