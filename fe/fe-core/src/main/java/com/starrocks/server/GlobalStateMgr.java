@@ -1675,6 +1675,7 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 doTaskBackgroundJob();
+                setInterval(Config.task_check_interval_second * 1000L);
             }
         };
     }

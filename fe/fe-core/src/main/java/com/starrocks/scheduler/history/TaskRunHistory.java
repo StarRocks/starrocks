@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler.history;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
@@ -32,6 +33,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class TaskRunHistory {
@@ -138,6 +140,7 @@ public class TaskRunHistory {
 
         try {
             // 1. Persist into table
+            Stopwatch watch = Stopwatch.createStarted();
             historyTable.addHistories(runs);
 
             // 2. Remove from memory
@@ -149,8 +152,10 @@ public class TaskRunHistory {
             List<String> queryIdList = runs.stream().map(TaskRunStatus::getQueryId).collect(Collectors.toList());
             ArchiveTaskRunsLog log = new ArchiveTaskRunsLog(queryIdList);
             GlobalStateMgr.getCurrentState().getEditLog().logArchiveTaskRuns(log);
+            LOG.info("archive task-run history, {} records took {}ms",
+                    runs.size(), watch.elapsed(TimeUnit.MILLISECONDS));
         } catch (Throwable e) {
-            LOG.warn("archive TaskRun history failed: ", e);
+            LOG.warn("archive task-run history failed: ", e);
         }
     }
 
