@@ -102,6 +102,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.BranchOptions;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -187,6 +188,7 @@ import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -474,8 +476,10 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -1313,6 +1317,58 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitCreateOrReplaceBranchClause(StarRocksParser.CreateOrReplaceBranchClauseContext context) {
+        String branchName = getIdentifierName(context.identifier());
+
+        BranchOptions branchOptions = BranchOptions.empty();
+        if (context.branchOptions() != null) {
+            StarRocksParser.BranchOptionsContext branchOptionsContext = context.branchOptions();
+            Optional<Long> snapshotId =  Optional.ofNullable(branchOptionsContext.snapshotId())
+                    .map(id -> safeParseLong("snapshotId", id.number().getText()));
+
+            Optional<Integer> minSnapshotsToKeep = Optional.empty();
+            Optional<Long> maxSnapshotAgeMs = Optional.empty();
+            StarRocksParser.SnapshotRetentionContext snapshotRetentionContext = branchOptionsContext.snapshotRetention();
+
+            if (snapshotRetentionContext != null) {
+                minSnapshotsToKeep = Optional.ofNullable(snapshotRetentionContext.minSnapshotsToKeep())
+                        .map(minSnapshots -> safeParseInteger("minSnapshotsToKeep", minSnapshots.number().getText()));
+
+                maxSnapshotAgeMs = Optional.ofNullable(snapshotRetentionContext.maxSnapshotAge())
+                        .map(retain -> TimeUnit.valueOf(retain.timeUnit().getText().toUpperCase(Locale.ROOT))
+                                .toMillis(safeParseInteger("maxSnapshotAgeMs", retain.number().getText())));
+            }
+
+            Optional<Long> branchRefAgeMs = Optional.ofNullable(branchOptionsContext.refRetain())
+                    .map(retain -> TimeUnit.valueOf(retain.timeUnit().getText().toUpperCase(Locale.ROOT))
+                            .toMillis(safeParseLong("branchRefAgeMs", retain.number().getText())));
+            branchOptions = new BranchOptions(snapshotId, minSnapshotsToKeep, maxSnapshotAgeMs, branchRefAgeMs);
+        }
+
+        boolean create = context.CREATE() != null;
+        boolean replace = context.REPLACE() != null;
+        boolean ifNotExists = context.EXISTS() != null;
+
+        return new CreateOrReplaceBranchClause(createPos(context), branchName, branchOptions, create, replace, ifNotExists);
+    }
+
+    private Long safeParseLong(String name, String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw new ParsingException("invalid %s value: %s. msg: %s", name, value, e.getMessage());
+        }
+    }
+
+    private Integer safeParseInteger(String name, String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new ParsingException("invalid %s value: %s. msg: %s", name, value, e.getMessage());
+        }
+    }
+
+    @Override
     public ParseNode visitCancelAlterTableStatement(StarRocksParser.CancelAlterTableStatementContext context) {
         ShowAlterStmt.AlterType alterType;
         if (context.ROLLUP() != null) {
@@ -1324,6 +1380,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             alterType = ShowAlterStmt.AlterType.COLUMN;
         }
+
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName dbTableName = qualifiedNameToTableName(qualifiedName);
 
