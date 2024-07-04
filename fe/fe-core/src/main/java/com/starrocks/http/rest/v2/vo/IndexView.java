@@ -15,6 +15,7 @@
 package com.starrocks.http.rest.v2.vo;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.sql.ast.IndexDef;
 
@@ -34,7 +35,7 @@ public class IndexView {
     private String indexType;
 
     @SerializedName("columns")
-    private List<String> columns;
+    private List<ColumnId> columns;
 
     @SerializedName("comment")
     private String comment;
@@ -85,11 +86,11 @@ public class IndexView {
         this.indexType = indexType;
     }
 
-    public List<String> getColumns() {
+    public List<ColumnId> getColumns() {
         return columns;
     }
 
-    public void setColumns(List<String> columns) {
+    public void setColumns(List<ColumnId> columns) {
         this.columns = columns;
     }
 

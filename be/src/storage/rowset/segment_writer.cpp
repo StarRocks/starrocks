@@ -87,6 +87,7 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // copy the contents of the slice `nullmap` into the slice `encoded values`, but the cost of copying is still not small.
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
     meta->set_compression(_tablet_schema->compression_type());
+    meta->set_compression_level(_tablet_schema->compression_level());
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column

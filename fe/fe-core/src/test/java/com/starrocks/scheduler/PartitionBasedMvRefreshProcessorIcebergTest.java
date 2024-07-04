@@ -19,9 +19,11 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
@@ -39,6 +41,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
@@ -336,5 +339,32 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVRefreshTestBa
                     .explainContains(mvName);
             starRocksAssert.dropMaterializedView(mvName);
         }
+    }
+
+    @Test
+    public void testRefreshWithCachePartitionTraits() {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
+                        "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;",
+                () -> {
+                    MaterializedView mv = getMv("test", "test_mv1");
+                    PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                    RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
+                    QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
+                    Assert.assertTrue(queryCacheStats != null);
+                    queryCacheStats.getCounter().forEach((key, value) -> {
+                        if (key.contains("cache_partitionNames")) {
+                            Assert.assertEquals(1L, value.longValue());
+                        } else if (key.contains("cache_getPartitionKeyRange")) {
+                            Assert.assertEquals(3L, value.longValue());
+                        } else {
+                            Assert.assertEquals(1L, value.longValue());
+                        }
+                    });
+                    Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
+                    Assert.assertTrue(partitionsToRefresh1.isEmpty());
+                });
     }
 }

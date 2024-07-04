@@ -944,7 +944,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setStorageType(indexMeta.getStorageType())
                     .setVersion(indexMeta.getSchemaVersion())
                     .addColumns(indexMeta.getSchema())
-                    .setBloomFilterColumnNames(olapTable.getCopiedBfColumns())
+                    .setBloomFilterColumnNames(olapTable.getBfColumnIds())
                     .setBloomFilterFpp(olapTable.getBfFpp())
                     .setIndexes(olapTable.getCopiedIndexes())
                     .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
@@ -964,6 +964,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
                     .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
                     .setCompressionType(olapTable.getCompressionType())
+                    .setCompressionLevel(olapTable.getCompressionLevel())
                     .setRecoverySource(RecoverySource.SCHEDULER)
                     .setTabletSchema(tabletSchema)
                     .build();

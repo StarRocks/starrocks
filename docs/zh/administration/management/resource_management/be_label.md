@@ -23,7 +23,7 @@ ALTER SYSTEM MODIFY BACKEND "172.xx.xx.51:9050" SET ("labels.location" = "rack:r
 
 添加标签后，可以执行 `SHOW BACKENDS;`，在返回结果的 `Location` 字段中查看 BE 节点的标签。
 
-如果需要修改  BE 节点的标签，可以执行  `ALTER SYSTEM MODIFY BACKEND ``"172.xx.xx.48:9050" SET ("labels.location" = "rack:xxx");`。
+如果需要修改  BE 节点的标签，可以执行  `ALTER SYSTEM MODIFY BACKEND "172.xx.xx.48:9050" SET ("labels.location" = "rack:xxx");`。
 
 ### 为表添加标签
 
@@ -57,7 +57,7 @@ PROPERTIES
 
 对于新建的表，表属性 `labels.location` 默认为 `*` ，表示副本在所有标签中均匀分布。
 
-如果新建的表的数据分布无需感知集群中服务器的地理位置信息，可以手动设置表属性 `"labels.location" ``= ``""`。
+如果新建的表的数据分布无需感知集群中服务器的地理位置信息，可以手动设置表属性 `"labels.location" = ""`。
 
 #### 建表后
 
@@ -74,6 +74,56 @@ ALTER TABLE example_table
 
 ```SQL
 ALTER TABLE example_table1
+    SET ("labels.location" = "rack:rack1,rack:rack2");
+```
+
+:::
+
+### 为异步物化视图添加标签
+
+如果您需要指定异步物化视图的数据分布的位置，比如分布在两个机架中 rack1 和 rack2，则您可以为物化视图添加标签。
+
+添加标签后，物化视图中相同 Tablet 的副本按 Round Robin 的方式选取所在的标签。并且同一标签中如果同一 Tablet 的副本存在多个，则这些同一 Tablet 的多个副本会尽可能均匀分布在该标签内的不同的 BE 节点上。
+
+:::note
+
+- 物化视图所在标签中的全部 BE 节点数必须大于副本数，否则会报错 `Table replication num should be less than of equal to the number of available BE nodes`.
+- 为物化视图添加的标签必须已经存在，否则会报错  `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx`.
+
+:::
+
+#### 建物化视图时
+
+建物化视图时指定物化视图的数据分布在 rack 1 和 rack 2，则可以执行如下语句：
+
+```SQL
+CREATE MATERIALIZED VIEW mv_example_mv
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"labels.location" = "rack:rack1,rack:rack2")
+as 
+select order_id, dt from example_table;
+```
+
+对于新建的物化视图，属性 `labels.location` 默认为 `*` ，表示副本在所有标签中均匀分布。
+
+如果新建的物化视图的数据分布无需感知集群中服务器的地理位置信息，可以手动设置物化视图属性 `"labels.location" = ""`。
+
+#### 建物化视图后
+
+建物化视图后如果需要修改物化视图的数据分布位置，例如修改为 rack 1、rack 2 和 rack 3，则可以执行如下语句：
+
+```SQL
+ALTER MATERIALIZED VIEW mv_example_mv
+    SET ("labels.location" = "rack:rack1,rack:rack2,rack:rack3");
+```
+
+:::note
+
+如果您升级 StarRocks 至 3.2.8 或者以后版本，对于升级前已经创建的物化视图，默认不使用标签分布数据。如果需要按照标签分布历史物化视图的数据，则可以执行如下语句，为物化视图添加标签：
+
+```SQL
+ALTER TABLE example_mv1
     SET ("labels.location" = "rack:rack1,rack:rack2");
 ```
 

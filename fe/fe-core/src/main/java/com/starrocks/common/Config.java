@@ -1215,7 +1215,7 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view_metrics_collect = true;
 
     @ConfField(mutable = true, comment = "whether to enable text based rewrite by default, if true it will " +
-               "build ast tree in materialized view initialization")
+            "build ast tree in materialized view initialization")
     public static boolean enable_materialized_view_text_based_rewrite = true;
 
     /**
@@ -2327,6 +2327,20 @@ public class Config extends ConfigBase {
     public static int heartbeat_retry_times = 3;
 
     /**
+     * set this to enable Transparent Data Encryption(TDE)
+     * once set, should not be changed, or the data depending on this key cannot be read anymore
+     */
+    @ConfField(mutable = false)
+    public static String default_master_key = "";
+
+    /**
+     * Specifies KEK's rotation period. Default is 7 days.
+     * Do not set this value too small, because all keys rotated are stored in FE meta forever
+     */
+    @ConfField(mutable = true)
+    public static long key_rotation_days = 7;
+
+    /**
      * shared_data: means run on cloud-native
      * shared_nothing: means run on local
      * hybrid: run on both, not production ready, should only be used in test environment now.
@@ -2523,10 +2537,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static int lake_compaction_history_size = 12;
-
-    @ConfField(mutable = true)
-    public static int lake_compaction_fail_history_size = 12;
+    public static int lake_compaction_history_size = 20;
 
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
@@ -2830,6 +2841,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
 
+    @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in sync mode mergeable or not")
+    public static boolean enable_mv_refresh_sync_refresh_mergeable = false;
+
+    @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
+            "occupying too much meta memory")
+    public static int max_mv_task_run_meta_message_values_length = 16;
+
     /**
      * The refresh partition number when refreshing materialized view at once by default.
      */
@@ -2840,6 +2858,9 @@ public class Config extends ConfigBase {
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
     public static boolean default_mv_refresh_immediate = true;
+
+    @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
+    public static boolean enable_mv_query_context_cache = true;
 
     /**
      * Whether analyze the mv after refresh in async mode.

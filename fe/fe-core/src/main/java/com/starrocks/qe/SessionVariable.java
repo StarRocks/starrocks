@@ -412,6 +412,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
 
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+    public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
     public static final String PLAN_MODE = "plan_mode";
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
@@ -2026,13 +2027,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
 
+    @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
+    private boolean enableDeltaLakeColumnStatistics = false;
+
     @VarAttr(name = PLAN_MODE)
     private String planMode = PlanMode.AUTO.modeName();
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
     @VarAttr(name = ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN)
-    private boolean enableStatsToOptimizeSkewJoin = true;
+    private boolean enableStatsToOptimizeSkewJoin = false;
 
     // mcv means most common value in histogram statistics
     @VarAttr(name = SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT, flag = VariableMgr.INVISIBLE)
@@ -2112,8 +2116,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableReadIcebergPuffinNdv = enableReadIcebergPuffinNdv;
     }
 
+    public boolean enableDeltaLakeColumnStatistics() {
+        return enableDeltaLakeColumnStatistics;
+    }
+
     public boolean enableIcebergColumnStatistics() {
         return enableIcebergColumnStatistics;
+    }
+
+    public void setEnableDeltaLakeColumnStatistics(boolean enableDeltaLakeColumnStatistics) {
+        this.enableDeltaLakeColumnStatistics = enableDeltaLakeColumnStatistics;
     }
 
     public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
@@ -3884,6 +3896,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableStatsToOptimizeSkewJoin() {
         return enableStatsToOptimizeSkewJoin;
+    }
+
+    public void setEnableStatsToOptimizeSkewJoin(boolean enableStatsToOptimizeSkewJoin) {
+        this.enableStatsToOptimizeSkewJoin = enableStatsToOptimizeSkewJoin;
     }
 
     public int getSkewJoinOptimizeUseMCVCount() {

@@ -34,8 +34,11 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
@@ -47,13 +50,18 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -108,6 +116,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1376,5 +1385,54 @@ public class MvUtils {
     public static boolean isStr2Date(Expr expr) {
         return expr instanceof FunctionCallExpr
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+    }
+
+    public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
+        Map<String, String> partitionProperties = new HashMap<>(4);
+        partitionProperties.put("replication_num",
+                String.valueOf(materializedView.getDefaultReplicationNum()));
+        partitionProperties.put("storage_medium", materializedView.getStorageMedium());
+        String storageCooldownTime =
+                materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
+        if (storageCooldownTime != null
+                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
+            // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
+            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
+            partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
+        }
+        return partitionProperties;
+    }
+
+    public static DistributionDesc getDistributionDesc(MaterializedView materializedView) {
+        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
+        if (distributionInfo instanceof HashDistributionInfo) {
+            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
+                    materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
+            return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
+        } else {
+            return new RandomDistributionDesc();
+        }
+    }
+
+    /**
+     * Trim the input set if its size is larger than maxLength.
+     * @return the trimmed set.
+     */
+    public static Set<String> shrinkToSize(Set<String> set, int maxLength) {
+        if (set != null && set.size() > maxLength) {
+            return set.stream().limit(maxLength).collect(Collectors.toSet());
+        }
+        return set;
+    }
+
+    /**
+     * Trim the input map if its size is larger than maxLength.
+     * @return the trimmed map.
+     */
+    public static Map<String, Set<String>> shrinkToSize(Map<String, Set<String>> map, int maxLength) {
+        if (map != null && map.size() > maxLength) {
+            return map.entrySet().stream().limit(maxLength).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+        return map;
     }
 }

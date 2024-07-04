@@ -95,6 +95,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     for (auto& file : writer->files()) {
         op_compaction->mutable_output_rowset()->add_segments(std::move(file.path));
         op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
+        op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
     }
 
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());

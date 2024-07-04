@@ -15,6 +15,7 @@
 #include "storage/lake/update_manager.h"
 
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -94,10 +95,14 @@ void PersistentIndexBlockCache::update_memory_usage() {
 void RssidFileInfoContainer::add_rssid_to_file(const TabletMetadata& metadata) {
     for (auto& rs : metadata.rowsets()) {
         bool has_segment_size = (rs.segments_size() == rs.segment_size_size());
+        bool has_encryption_meta = (rs.segments_size() == rs.segment_encryption_metas_size());
         for (int i = 0; i < rs.segments_size(); i++) {
             FileInfo segment_info{.path = rs.segments(i)};
             if (LIKELY(has_segment_size)) {
                 segment_info.size = rs.segment_size(i);
+            }
+            if (LIKELY(has_encryption_meta)) {
+                segment_info.encryption_meta = rs.segment_encryption_metas(i);
             }
             _rssid_to_file_info[rs.id() + i] = segment_info;
             _rssid_to_rowid[rs.id() + i] = rs.id();
@@ -114,9 +119,13 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
         _rssid_to_rowid[rowset_id + segment_id] = rowset_id;
     } else {
         bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
+        bool has_encryption_meta = (meta.segments_size() == meta.segment_encryption_metas_size());
         FileInfo segment_info{.path = meta.segments(segment_id)};
         if (LIKELY(has_segment_size)) {
             segment_info.size = meta.segment_size(segment_id);
+        }
+        if (LIKELY(has_encryption_meta)) {
+            segment_info.encryption_meta = meta.segment_encryption_metas(segment_id);
         }
         _rssid_to_file_info[rowset_id + segment_id] = segment_info;
         _rssid_to_rowid[rowset_id + segment_id] = rowset_id;
@@ -232,7 +241,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         }
         // 2.3 handle auto increment deletes
         if (state.auto_increment_deletes(segment_id) != nullptr) {
-            RETURN_IF_ERROR(index.erase(*state.auto_increment_deletes(segment_id), &new_deletes));
+            RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(segment_id), &new_deletes, rowset_id));
         }
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_segment(segment_id);
@@ -243,7 +252,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t del_id = 0; del_id < op_write.dels_size(); del_id++) {
         RETURN_IF_ERROR(state.load_delete(del_id, params));
         DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(*state.deletes(del_id), &new_deletes));
+        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, rowset_id));
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_delete(del_id);
     }
@@ -501,7 +510,8 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
     auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
                                          const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& rowids,
                                          const std::vector<uint32_t>& read_column_ids) -> Status {
-        FileInfo file_info{.path = params.tablet->segment_location(segment_info.path)};
+        FileInfo file_info{.path = params.tablet->segment_location(segment_info.path),
+                           .encryption_meta = segment_info.encryption_meta};
         if (segment_info.size.has_value()) {
             file_info.size = segment_info.size;
         }
@@ -515,10 +525,15 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
             return Status::OK();
         }
 
+        RandomAccessFileOptions opts;
+        if (!file_info.encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
+            opts.encryption_info = std::move(info);
+        }
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_info));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, file_info));
         iter_opts.read_file = read_file.get();
         for (auto i = 0; i < read_column_ids.size(); ++i) {
             const TabletColumn& col = tablet_schema->column(read_column_ids[i]);
@@ -552,9 +567,12 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
         uint32_t segment_id = auto_increment_state->segment_id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
         const std::vector<uint32_t> auto_increment_col_partial_id(1, auto_increment_state->id);
-
-        RETURN_IF_ERROR(fetch_values_from_segment(FileInfo{.path = params.op_write.rowset().segments(segment_id)},
-                                                  segment_id,
+        FileInfo info;
+        info.path = params.op_write.rowset().segments(segment_id);
+        if (segment_id < params.op_write.rowset().segment_encryption_metas_size()) {
+            info.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+        }
+        RETURN_IF_ERROR(fetch_values_from_segment(info, segment_id,
                                                   // use partial segment column offset id to get the column
                                                   auto_increment_state->schema, rowids, auto_increment_col_partial_id));
     }

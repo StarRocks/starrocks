@@ -25,6 +25,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -245,7 +246,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
             }
 
-            Column col = columnDef.toColumn();
+            Column col = columnDef.toColumn(null);
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -580,7 +581,7 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Generated Column can not be KEY");
                 }
 
-                Expr expr = column.generatedColumnExpr();
+                Expr expr = column.getGeneratedColumnExpr(columns);
 
                 List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
                 expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
@@ -649,12 +650,14 @@ public class CreateTableAnalyzer {
                 if (!statement.isOlapEngine()) {
                     throw new SemanticException("index only support in olap engine at current version", indexDef.getPos());
                 }
+                List<ColumnId> columnIds = new ArrayList<>(indexDef.getColumns().size());
                 for (String indexColName : indexDef.getColumns()) {
                     boolean found = false;
                     for (Column column : columns) {
                         if (column.getName().equalsIgnoreCase(indexColName)) {
                             indexDef.checkColumn(column, keysDesc.getKeysType());
                             found = true;
+                            columnIds.add(column.getColumnId());
                             break;
                         }
                     }
@@ -665,7 +668,7 @@ public class CreateTableAnalyzer {
                                 indexDef.getPos());
                     }
                 }
-                indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
+                indexes.add(new Index(indexDef.getIndexName(), columnIds, indexDef.getIndexType(),
                         indexDef.getComment(), indexDef.getProperties()));
 
                 distinct.add(indexDef.getIndexName());

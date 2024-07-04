@@ -2806,7 +2806,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The cloud-native meta service RPC port.
+- Description: FE cloud-native metadata server RPC listen port.
 - Introduced in: -
 
 <!--
@@ -2992,20 +2992,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_history_size
 
-- Default: 12
+- Default: 20
 - Type: Int
 - Unit: -
 - Is mutable: Yes
 - Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
-- Introduced in: v3.1.0
-
-##### lake_compaction_fail_history_size
-
-- Default: 12
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The number of recent failed Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
 
 ##### lake_publish_version_max_threads

@@ -25,7 +25,6 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
@@ -79,7 +78,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdateSchema updateSchema = this.transaction.updateSchema();
             ColumnPosition pos = clause.getColPos();
-            Column column = clause.getColumnDef().toColumn();
+            Column column = clause.getColumnDef().toColumn(null);
 
             // All non-partition columns must use NULL as the default value.
             if (!column.isAllowNull()) {
@@ -113,7 +112,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             List<Column> columns = clause
                     .getColumnDefs()
                     .stream()
-                    .map(ColumnDef::toColumn)
+                    .map(columnDef -> columnDef.toColumn(null))
                     .collect(Collectors.toList());
 
             for (Column column : columns) {
@@ -155,7 +154,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdateSchema updateSchema = this.transaction.updateSchema();
             ColumnPosition colPos = clause.getColPos();
-            Column column = clause.getColumnDef().toColumn();
+            Column column = clause.getColumnDef().toColumn(null);
             org.apache.iceberg.types.Type colType = toIcebergColumnType(column.getType());
 
             // UPDATE column type

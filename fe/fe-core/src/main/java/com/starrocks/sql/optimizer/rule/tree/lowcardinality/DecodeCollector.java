@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -67,6 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 
@@ -555,12 +557,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             // Condition 3: the varchar column has collected global dict
-            if (!IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
+            Column columnObj = table.getColumn(column.getName());
+            if (!IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                 LOG.debug("{} doesn't have global dict", column.getName());
                 continue;
             }
 
-            Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+            Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
             // cache reaches capacity limit, randomly eliminate some keys
             // then we will get an empty dictionary.
             if (dict.isEmpty()) {
@@ -717,10 +720,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             long variableExpr = collectors.stream().filter(VARIABLES::equals).count();
-            long dictCount = collectors.stream().filter(s -> !s.isConstant()).distinct().count();
+            List<ScalarOperator> dictColumns = collectors.stream().filter(s -> !s.isConstant()).distinct()
+                    .collect(Collectors.toList());
             // only one scalar operator, and it's a dict column
-            if (dictCount == 1 && variableExpr == 0) {
-                return collectors.stream().filter(s -> !s.isConstant()).findFirst().get();
+            if (dictColumns.size() == 1 && variableExpr == 0) {
+                return dictColumns.get(0);
             }
 
             for (int i = 0; i < collectors.size(); i++) {
@@ -815,6 +819,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitCastOperator(CastOperator operator, Void context) {
+            if (operator.getType().isArrayType()) {
+                return forbidden(visitChildren(operator, context), operator);
+            }
             return merge(visitChildren(operator, context), operator);
         }
 

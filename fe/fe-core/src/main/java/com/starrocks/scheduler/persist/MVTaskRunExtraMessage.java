@@ -19,10 +19,12 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
@@ -32,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class MVTaskRunExtraMessage implements Writable {
+
     @SerializedName("forceRefresh")
     private boolean forceRefresh;
     @SerializedName("partitionStart")
@@ -53,6 +56,11 @@ public class MVTaskRunExtraMessage implements Writable {
     private String nextPartitionStart;
     @SerializedName("nextPartitionEnd")
     private String nextPartitionEnd;
+
+    // task run starts to process time
+    // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
+    @SerializedName("processStartTime")
+    private long processStartTime = 0;
 
     @SerializedName("executeOption")
     private ExecuteOption executeOption = new ExecuteOption(true);
@@ -89,7 +97,8 @@ public class MVTaskRunExtraMessage implements Writable {
     }
 
     public void setMvPartitionsToRefresh(Set<String> mvPartitionsToRefresh) {
-        this.mvPartitionsToRefresh = mvPartitionsToRefresh;
+        this.mvPartitionsToRefresh = MvUtils.shrinkToSize(mvPartitionsToRefresh,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     public Map<String, Set<String>> getBasePartitionsToRefreshMap() {
@@ -100,9 +109,10 @@ public class MVTaskRunExtraMessage implements Writable {
         return refBasePartitionsToRefreshMap;
     }
 
-    public void setRefBasePartitionsToRefreshMap(
-            Map<String, Set<String>> refBasePartitionsToRefreshMap) {
-        this.refBasePartitionsToRefreshMap = refBasePartitionsToRefreshMap;
+
+    public void setRefBasePartitionsToRefreshMap(Map<String, Set<String>> refBasePartitionsToRefreshMap) {
+        this.refBasePartitionsToRefreshMap = MvUtils.shrinkToSize(refBasePartitionsToRefreshMap,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     public String getMvPartitionsToRefreshString() {
@@ -123,9 +133,9 @@ public class MVTaskRunExtraMessage implements Writable {
         }
     }
 
-    public void setBasePartitionsToRefreshMap(
-            Map<String, Set<String>> basePartitionsToRefreshMap) {
-        this.basePartitionsToRefreshMap = basePartitionsToRefreshMap;
+    public void setBasePartitionsToRefreshMap(Map<String, Set<String>> basePartitionsToRefreshMap) {
+        this.basePartitionsToRefreshMap = MvUtils.shrinkToSize(basePartitionsToRefreshMap,
+                Config.max_mv_task_run_meta_message_values_length);
     }
 
     public static MVTaskRunExtraMessage read(DataInput in) throws IOException {
@@ -155,6 +165,14 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public void setNextPartitionEnd(String nextPartitionEnd) {
         this.nextPartitionEnd = nextPartitionEnd;
+    }
+
+    public long getProcessStartTime() {
+        return processStartTime;
+    }
+
+    public void setProcessStartTime(long processStartTime) {
+        this.processStartTime = processStartTime;
     }
 
     @Override

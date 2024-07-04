@@ -9,3 +9,8 @@ fuzzywuzzy
 python-Levenshtein
 PyGithub
 mysql-connector
+trino
+pure-sasl
+thrift
+thrift-sasl
+PyHive

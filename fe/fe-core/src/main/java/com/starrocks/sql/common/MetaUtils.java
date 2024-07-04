@@ -285,20 +285,8 @@ public class MetaUtils {
         }
     }
 
-    public static List<Column> getColumnsByColumnIds(List<Column> schema, List<ColumnId> ids) {
-        return getColumnsByColumnIds(buildIdToColumn(schema), ids);
-    }
-
     public static List<Column> getColumnsByColumnIds(Table table, List<ColumnId> ids) {
-        List<Column> result = new ArrayList<>(ids.size());
-        for (ColumnId columnId : ids) {
-            Column column = table.getColumn(columnId);
-            if (column == null) {
-                throw new SemanticException(String.format("can not find column by column id: %s", columnId));
-            }
-            result.add(column);
-        }
-        return result;
+        return getColumnsByColumnIds(table.getIdToColumn(), ids);
     }
 
     public static List<Column> getColumnsByColumnIds(Map<ColumnId, Column> idToColumn, List<ColumnId> ids) {
@@ -321,6 +309,10 @@ public class MetaUtils {
         return result;
     }
 
+    public static List<String> getColumnNamesByColumnIds(Table table, List<ColumnId> columnIds) {
+        return getColumnNamesByColumnIds(table.getIdToColumn(), columnIds);
+    }
+
     public static List<String> getColumnNamesByColumnIds(Map<ColumnId, Column> idToColumn, List<ColumnId> columnIds) {
         List<String> names = new ArrayList<>(columnIds.size());
         for (ColumnId columnId : columnIds) {
@@ -340,5 +332,34 @@ public class MetaUtils {
             throw new SemanticException(String.format("can not find column by name: %s", columnName));
         }
         return column;
+    }
+
+    public static Map<String, Column> buildNameToColumn(List<Column> schema) {
+        Map<String, Column> result = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Column column : schema) {
+            result.put(column.getName(), column);
+        }
+        return result;
+    }
+
+    public static String getColumnNameByColumnId(long dbId, long tableId, ColumnId columnId) {
+        Table table = getTable(dbId, tableId);
+        Column column = table.getColumn(columnId);
+        if (column == null) {
+            throw new SemanticException(String.format("can not find column by column id: %s", columnId));
+        }
+        return column.getName();
+    }
+
+    public static List<ColumnId> getColumnIdsByColumnNames(Table table, List<String> names) {
+        List<ColumnId> columnIds = new ArrayList<>(names.size());
+        for (String name : names) {
+            Column column = table.getColumn(name);
+            if (column == null) {
+                throw new SemanticException(String.format("can not find column by name: %s", name));
+            }
+            columnIds.add(column.getColumnId());
+        }
+        return columnIds;
     }
 }

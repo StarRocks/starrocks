@@ -60,7 +60,7 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
             tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
             request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME,
             request.__isset.primary_index_cache_expire_sec ? request.primary_index_cache_expire_sec : 0,
-            request.tablet_schema.storage_type);
+            request.tablet_schema.storage_type, request.__isset.compression_level ? request.compression_level : -1);
 
     if (request.__isset.binlog_config) {
         BinlogConfig binlog_config;
@@ -97,7 +97,7 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                        const TabletUid& tablet_uid, TTabletType::type tabletType,
                        TCompressionType::type compression_type, int32_t primary_index_cache_expire_sec,
-                       TStorageType::type storage_type)
+                       TStorageType::type storage_type, int compression_level)
         : _tablet_uid(0, 0) {
     TabletMetaPB tablet_meta_pb;
     tablet_meta_pb.set_table_id(table_id);
@@ -121,6 +121,10 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
     auto st = convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema,
                                             compression_type);
+    // compression level is only used for zstd for now.
+    if (compression_type == TCompressionType::ZSTD && compression_level != -1) {
+        schema->set_compression_level(compression_level);
+    }
     CHECK(st.ok()) << st;
     init_from_pb(&tablet_meta_pb);
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
@@ -142,7 +146,7 @@ Status TabletMeta::create_from_file(const string& file_path) {
         LOG(WARNING) << "Fail to load tablet meta file: " << st;
         return st;
     }
-    init_from_pb(&tablet_meta_pb);
+    init_from_pb(&tablet_meta_pb, true); // use tablet schema map to share the tablet schemas with same schema id
     return Status::OK();
 }
 
@@ -153,7 +157,7 @@ Status TabletMeta::create_from_memory(std::string_view data) {
         LOG(WARNING) << "Fail to load tablet meta from memory: " << st;
         return st;
     }
-    init_from_pb(&tablet_meta_pb);
+    init_from_pb(&tablet_meta_pb, false); // not use tablet schema map to share the tablet schemas with same schema id
     return Status::OK();
 }
 
@@ -237,7 +241,7 @@ Status TabletMeta::deserialize(std::string_view data) {
     return Status::OK();
 }
 
-void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
+void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map) {
     auto& tablet_meta_pb = *ptablet_meta_pb;
     _table_id = tablet_meta_pb.table_id();
     _partition_id = tablet_meta_pb.partition_id();
@@ -288,7 +292,8 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     }
 
     // init _schema
-    if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
+    if (use_tablet_schema_map && tablet_meta_pb.schema().has_id() &&
+        tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
         // Does not collect the memory usage of |_schema|.
         _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
     } else {

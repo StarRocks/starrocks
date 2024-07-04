@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
@@ -50,6 +51,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -71,6 +73,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.SchemaVersionAndHash;
+import com.starrocks.common.Status;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -99,6 +102,7 @@ import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -118,6 +122,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
@@ -156,7 +161,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @SerializedName(value = "hasBfChange")
     private boolean hasBfChange;
     @SerializedName(value = "bfColumns")
-    private Set<String> bfColumns = null;
+    private Set<ColumnId> bfColumns = null;
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
@@ -178,6 +183,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
+
+    // runtime variable for synchronization between cancel and runPendingJob
+    private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
+    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
+    private AtomicBoolean isCancelling = new AtomicBoolean(false);
 
     public SchemaChangeJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
@@ -209,7 +219,27 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         indexSchemaMap.put(shadowIdxId, shadowIdxSchema);
     }
 
-    public void setBloomFilterInfo(boolean hasBfChange, Set<String> bfColumns, double bfFpp) {
+    @VisibleForTesting
+    public void setIsCancelling(boolean isCancelling) {
+        this.isCancelling.set(isCancelling);
+    }
+
+    @VisibleForTesting
+    public boolean isCancelling() {
+        return this.isCancelling.get();
+    }
+
+    @VisibleForTesting
+    public void setWaitingCreatingReplica(boolean waitingCreatingReplica) {
+        this.waitingCreatingReplica.set(waitingCreatingReplica);
+    }
+
+    @VisibleForTesting
+    public boolean waitingCreatingReplica() {
+        return this.waitingCreatingReplica.get();
+    }
+
+    public void setBloomFilterInfo(boolean hasBfChange, Set<ColumnId> bfColumns, double bfFpp) {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
@@ -281,6 +311,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
+        createReplicaLatch = countDownLatch;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
@@ -347,6 +378,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
                                     .setTabletType(tbl.getPartitionInfo().getTabletType(partition.getParentId()))
                                     .setCompressionType(tbl.getCompressionType())
+                                    .setCompressionLevel(tbl.getCompressionLevel())
                                     .setBaseTabletId(baseTabletId)
                                     .setTabletSchema(tabletSchema)
                                     .build();
@@ -367,10 +399,17 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     Config.max_create_table_timeout_second * 1000L);
             boolean ok = false;
             try {
+                waitingCreatingReplica.set(true);
+                if (isCancelling.get()) {
+                    AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                    return;
+                }
                 ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
                 ok = false;
+            } finally {
+                waitingCreatingReplica.set(false);
             }
 
             if (!ok) {
@@ -542,8 +581,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         }
 
                         for (Column generatedColumn : diffGeneratedColumnSchema) {
-                            Column column = generatedColumn;
-                            Expr expr = column.generatedColumnExpr();
+                            Expr expr = generatedColumn.getGeneratedColumnExpr(tbl.getIdToColumn());
                             List<Expr> outputExprs = Lists.newArrayList();
 
                             for (Column col : tbl.getBaseSchema()) {
@@ -594,11 +632,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             generatedColumnExpr = Expr.analyzeAndCastFold(generatedColumnExpr);
 
                             int columnIndex = -1;
-                            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
-                                String originName = Column.removeNamePrefix(column.getName());
+                            if (generatedColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                                String originName = Column.removeNamePrefix(generatedColumn.getName());
                                 columnIndex = tbl.getFullSchema().indexOf(tbl.getColumn(originName));
                             } else {
-                                columnIndex = tbl.getFullSchema().indexOf(column);
+                                columnIndex = tbl.getFullSchema().indexOf(generatedColumn);
                             }
 
                             mcExprs.put(columnIndex, generatedColumnExpr.treeToThrift());
@@ -810,7 +848,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // dictionary invalid after schema change.
         for (Column column : tbl.getColumns()) {
             if (column.getType().isVarchar()) {
-                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
+                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getColumnId());
             }
         }
         // replace the origin index with shadow index, set index state as NORMAL
@@ -894,6 +932,24 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         tbl.setState(OlapTableState.NORMAL);
         tbl.lastSchemaUpdateTime.set(System.nanoTime());
+    }
+
+    @Override
+    public final boolean cancel(String errMsg) {
+        isCancelling.set(true);
+        try {
+            // If waitingCreatingReplica == false, we will assume that
+            // cancel thread will get the object lock very quickly.
+            if (waitingCreatingReplica.get()) {
+                Preconditions.checkState(createReplicaLatch != null);
+                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+            }
+            synchronized (this) {
+                return cancelImpl(errMsg);
+            }
+        } finally {
+            isCancelling.set(false);
+        }
     }
 
     /*

@@ -32,6 +32,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
@@ -163,7 +164,8 @@ public class ExpressionPartitionDesc extends PartitionDesc {
             throws DdlException {
         // for materialized view express partition.
         if (rangePartitionDesc == null) {
-            return new ExpressionRangePartitionInfo(Collections.singletonList(expr), schema, PartitionType.RANGE);
+            return new ExpressionRangePartitionInfo(Collections.singletonList(ColumnIdExpr.create(schema, expr)),
+                    schema, PartitionType.RANGE);
         }
         List<Column> partitionColumns = Lists.newArrayList();
         // check and get partition column
@@ -189,12 +191,15 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         RangePartitionInfo partitionInfo;
         if (rangePartitionDesc.isAutoPartitionTable) {
             // for automatic partition table
-            partitionInfo = new ExpressionRangePartitionInfo(Collections.singletonList(expr), partitionColumns,
+            partitionInfo = new ExpressionRangePartitionInfo(
+                    Collections.singletonList(ColumnIdExpr.create(schema, expr)),
+                    partitionColumns,
                     PartitionType.EXPR_RANGE);
         } else {
             // for partition by range expr
             ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 =
-                    new ExpressionRangePartitionInfoV2(Collections.singletonList(expr), partitionColumns);
+                    new ExpressionRangePartitionInfoV2(Collections.singletonList(ColumnIdExpr.create(schema, expr)),
+                            partitionColumns);
             expressionRangePartitionInfoV2.setSourcePartitionTypes(Collections.singletonList(sourcePartitionColumn.getType()));
             partitionInfo = expressionRangePartitionInfoV2;
         }
