@@ -1342,6 +1342,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Optional<Long> branchRefAgeMs = Optional.ofNullable(branchOptionsContext.refRetain())
                     .map(retain -> TimeUnit.valueOf(retain.timeUnit().getText().toUpperCase(Locale.ROOT))
                             .toMillis(safeParseLong("branchRefAgeMs", retain.number().getText())));
+
             branchOptions = new BranchOptions(snapshotId, minSnapshotsToKeep, maxSnapshotAgeMs, branchRefAgeMs);
         }
 
