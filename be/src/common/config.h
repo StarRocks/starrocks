@@ -851,6 +851,8 @@ CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 CONF_Int32(orc_loading_buffer_size, "8388608");
 
 // orc writer
+// This is a workaround from SR side for a out-of-bound bug of hive orc reader.
+// Refer to https://issues.apache.org/jira/browse/ORC-125 for more detailed information.
 CONF_mInt32(orc_writer_version, "-1");
 
 // parquet reader
