@@ -94,14 +94,14 @@ public class TaskRunHistoryTable {
     private static final String LOOKUP =
             "SELECT history_content_json " + "FROM " + TABLE_FULL_NAME + " WHERE ";
 
-    private static final TableKeeper keeper = new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS);
+    private static final TableKeeper KEEPER = new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS);
 
     public static TableKeeper createKeeper() {
-        return keeper;
+        return KEEPER;
     }
 
     private void checkTableReady() {
-        if (!FeConstants.runningUnitTest && !keeper.isReady()) {
+        if (!FeConstants.runningUnitTest && !KEEPER.isReady()) {
             throw new IllegalStateException("The table is not ready: " + TABLE_NAME);
         }
     }

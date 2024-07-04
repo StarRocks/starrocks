@@ -450,6 +450,9 @@ public class TaskRunStatus implements Writable {
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
     }
 
+    /**
+     * Only used for deserialization of ResultBatch
+     */
     static class TaskRunStatusJSONRecord {
         /**
          * Only one item in the array, like:
