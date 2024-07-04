@@ -188,23 +188,8 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
-<<<<<<< HEAD
 
     public List<PartitionInfo> getPartitions(List<String> names) {
         throw new NotImplementedException("getPartitions is not implemented for this table type: " + table.getType());
     }
-
-    /**
-     * Check whether the base table's partition has changed or not.
-     * </p>
-     * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
-     * version and modified time.
-     */
-    public static boolean isBaseTableChanged(Partition partition,
-                                             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
-        return partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
-    }
-=======
->>>>>>> 245cb30fe1 ([UT] Add enable_mv_refresh_insert_strict config and fix mv unstable test cases (#47837))
 }
