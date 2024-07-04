@@ -417,8 +417,12 @@ public class InsertPlanner {
             // enable spill for connector sink
             if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
                     || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
-                session.setSessionVariable((SessionVariable) session.getSessionVariable().clone());
-                session.getSessionVariable().setEnableSpill(true);
+                SessionVariable sessionVariable = (SessionVariable) session.getSessionVariable().clone();
+                sessionVariable.setEnableSpill(true);
+                if (sessionVariable.getConnectorSinkSpillMemLimitThreshold() < sessionVariable.getSpillMemLimitThreshold()) {
+                    sessionVariable.setSpillMemLimitThreshold(sessionVariable.getConnectorSinkSpillMemLimitThreshold());
+                }
+                session.setSessionVariable(sessionVariable);
             }
 
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
