@@ -1688,4 +1688,5 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
         return dest_column;
     }
 }
+
 } // namespace starrocks

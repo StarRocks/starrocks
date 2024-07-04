@@ -5959,4 +5959,5 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
         }
     }
 }
+
 } // namespace starrocks

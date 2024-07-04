@@ -30,7 +30,6 @@ public:
 
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
-
     DEFINE_VECTORIZED_FN(repeat);
 
     template <LogicalType type>

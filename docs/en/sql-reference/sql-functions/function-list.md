@@ -105,6 +105,7 @@ You can find a built-in function based on the following categories:
 - [unnest](./array-functions/unnest.md)
 - [array_repeat](./array-functions/array_repeat.md)
 
+
 ## Binary functions
 
 - [to_binary](./binary-functions/to_binary.md)
