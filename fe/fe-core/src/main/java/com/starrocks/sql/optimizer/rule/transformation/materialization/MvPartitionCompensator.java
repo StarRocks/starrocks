@@ -729,8 +729,7 @@ public class MvPartitionCompensator {
         }
 
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
-            ExpressionRangePartitionInfo partitionInfo =
-                    (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
+            ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
             Expr partitionExpr = partitionInfo.getPartitionExprs(olapTable.getIdToColumn()).get(0);
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionExpr.collect(SlotRef.class, slotRefs);
