@@ -303,7 +303,8 @@ public class OlapTableSink extends DataSink {
             List<String> columns = Lists.newArrayList();
             List<TColumn> columnsDesc = Lists.newArrayList();
             List<Integer> columnSortKeyUids = Lists.newArrayList();
-            columns.addAll(indexMeta.getSchema().stream().map(Column::getPhysicalName).collect(Collectors.toList()));
+            columns.addAll(indexMeta.getSchema().stream().map(column -> column.getColumnId().getId())
+                    .collect(Collectors.toList()));
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, tColumn.column_name));
@@ -390,7 +391,7 @@ public class OlapTableSink extends DataSink {
             case HASH: {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distInfo;
                 for (Column column : hashDistributionInfo.getDistributionColumns()) {
-                    distColumns.add(column.getPhysicalName());
+                    distColumns.add(column.getColumnId().getId());
                 }
                 break;
             }
@@ -432,7 +433,7 @@ public class OlapTableSink extends DataSink {
             case EXPR_RANGE_V2: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
                 for (Column partCol : rangePartitionInfo.getPartitionColumns()) {
-                    partitionParam.addToPartition_columns(partCol.getPhysicalName());
+                    partitionParam.addToPartition_columns(partCol.getColumnId().getId());
                 }
                 DistributionInfo selectedDistInfo = null;
                 for (Long partitionId : partitionIds) {
@@ -506,7 +507,7 @@ public class OlapTableSink extends DataSink {
             case LIST:
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
                 for (Column partCol : listPartitionInfo.getPartitionColumns()) {
-                    partitionParam.addToPartition_columns(partCol.getPhysicalName());
+                    partitionParam.addToPartition_columns(partCol.getColumnId().getId());
                 }
                 DistributionInfo selectedDistInfo = null;
                 for (Long partitionId : partitionIds) {

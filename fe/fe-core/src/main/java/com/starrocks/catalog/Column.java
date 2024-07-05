@@ -82,13 +82,16 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "name")
     private String name;
 
-    // physicalName is the column name used in the storage engine and will never change.
-    // The name saved in the storage engine remains unchanged after the logical column name is changed.
-    // By default, this value is null, which expresses the same as name (logical name).
-    // If the column name is changed, the value of name (logical name) will be updated to the new column name
-    // and the value of physicalName will be set to the old column name.
-    @SerializedName(value = "physicalName")
-    private String physicalName;
+    // For OLAP Table and its sub classes:
+    // When column is created, columnId is same to name.
+    // If the column name is changed, the value of name will be updated to the new column name,
+    // and the value of columnId remains unchanged.
+    //
+    // For other tables: columnId is same to name.
+    //
+    // All references to Column should use columnId instead of name.
+    @SerializedName(value = "columnId")
+    private ColumnId columnId;
 
     @SerializedName(value = "type")
     private Type type;
@@ -131,6 +134,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public Column() {
         this.name = "";
+        this.columnId = ColumnId.create(this.name);
         this.type = Type.NULL;
         this.isAggregationTypeImplicit = false;
         this.isKey = false;
@@ -179,7 +183,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.name == null) {
             this.name = "";
         }
-
+        this.columnId = ColumnId.create(this.name);
         this.type = type;
         if (this.type == null) {
             this.type = Type.NULL;
@@ -210,6 +214,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public Column(Column column) {
         this.name = column.getName();
+        this.columnId = column.getColumnId();
         this.type = column.type;
         this.aggregationType = column.getAggregationType();
         this.isAggregationTypeImplicit = column.isAggregationTypeImplicit();
@@ -397,7 +402,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public TColumn toThrift() {
         TColumn tColumn = new TColumn();
-        tColumn.setColumn_name(this.getPhysicalName());
+        tColumn.setColumn_name(this.columnId.getId());
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
         tColumn.setType_desc(this.type.toThrift());
         if (null != this.aggregationType) {
@@ -704,7 +709,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     @Override
     public int hashCode() {
-        return Objects.hash(this.name.toLowerCase(), this.type);
+        return Objects.hash(this.columnId.getId().toLowerCase(), this.type);
     }
 
     @Override
@@ -790,6 +795,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             generatedColumnExpr = SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql,
                     SqlModeHelper.MODE_DEFAULT);
         }
+
+        if (columnId == null) {
+            columnId = ColumnId.create(name);
+        }
     }
 
     @Override
@@ -799,19 +808,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
     }
 
-    public String getPhysicalName() {
-        return physicalName != null ? physicalName : name;
-    }
-
-    public String getDirectPhysicalName() {
-        return physicalName != null ? physicalName : "";
-    }
-
-    public void renameColumn(String newName) {
-        if (physicalName == null) {
-            physicalName = name;
-        }
-        this.name = newName;
+    public ColumnId getColumnId() {
+        return columnId;
     }
 
     public void setUniqueId(int colUniqueId) {

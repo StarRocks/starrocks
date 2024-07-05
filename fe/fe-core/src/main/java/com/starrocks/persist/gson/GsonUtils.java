@@ -78,6 +78,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -429,6 +430,7 @@ public class GsonUtils {
             .enableComplexMapKeySerialization()
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
+            .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
             .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
             // For call constructor with selectedFields
             .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
@@ -663,6 +665,20 @@ public class GsonUtils {
                 map.putAll(entry.getKey(), entry.getValue());
             }
             return map;
+        }
+    }
+
+    private static class ColumnIdAdapter implements JsonSerializer<ColumnId>,
+            JsonDeserializer<ColumnId> {
+        @Override
+        public ColumnId deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+                throws JsonParseException {
+            return new ColumnId(json.getAsJsonPrimitive().getAsString());
+        }
+
+        @Override
+        public JsonElement serialize(ColumnId src, Type typeOfSrc, JsonSerializationContext context) {
+            return new JsonPrimitive(src.getId());
         }
     }
 

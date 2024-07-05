@@ -323,7 +323,12 @@ public class OlapTable extends Table {
         olapTable.name = this.name;
         olapTable.type = this.type;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
-        olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
+        Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        nameToColumn.putAll(this.nameToColumn);
+        olapTable.nameToColumn = nameToColumn;
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.putAll(this.idToColumn);
+        olapTable.idToColumn = idToColumn;
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
@@ -597,20 +602,21 @@ public class OlapTable extends Table {
     // the order of columns in fullSchema is meaningless
     public void rebuildFullSchema() {
         List<Column> newFullSchema = new CopyOnWriteArrayList<>();
-        nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Set<String> addedColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
             newFullSchema.add(baseColumn);
-            nameToColumn.put(baseColumn.getName(), baseColumn);
+            addedColumnNames.add(baseColumn.getName());
         }
         for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
             for (Column column : indexMeta.getSchema()) {
-                if (!nameToColumn.containsKey(column.getName())) {
+                if (!addedColumnNames.contains(column.getName())) {
                     newFullSchema.add(column);
-                    nameToColumn.put(column.getName(), column);
+                    addedColumnNames.add(column.getName());
                 }
             }
         }
         fullSchema = newFullSchema;
+        updateSchemaIndex();
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
@@ -683,6 +689,11 @@ public class OlapTable extends Table {
         return Lists.newArrayList();
     }
 
+    @Override
+    public Column getColumn(ColumnId id) {
+        return idToColumn.get(id);
+    }
+
     // this is only for schema change.
     public void renameIndexForSchemaChange(String name, String newName) {
         long idxId = indexNameToId.remove(name);
@@ -694,6 +705,13 @@ public class OlapTable extends Table {
         for (Column column : columns) {
             column.setName(Column.removeNamePrefix(column.getName()));
         }
+    }
+
+    public void renameColumn(String oldName, String newName) {
+        Column column = this.nameToColumn.remove(oldName);
+        Preconditions.checkState(column != null, "column of name: " + oldName + " does not exist");
+        column.setName(newName);
+        this.nameToColumn.put(newName, column);
     }
 
     public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum,
@@ -2199,6 +2217,24 @@ public class OlapTable extends Table {
     @Override
     public List<Column> getBaseSchema() {
         return getSchemaByIndexId(baseIndexId);
+    }
+
+    @Override
+    protected void updateSchemaIndex() {
+        Map<String, Column> newNameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<ColumnId, Column> newIdToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : this.fullSchema) {
+            newNameToColumn.put(column.getName(), column);
+            // For OlapTable: fullSchema contains columns from baseIndex
+            // and columns from shadow indexes (when doing schema changes).
+            // To avoid base columns being replaced by shadow columns,
+            // put the columns with the same ColumnId once.
+            if (!newIdToColumn.containsKey(column.getColumnId())) {
+                newIdToColumn.put(column.getColumnId(), column);
+            }
+        }
+        this.nameToColumn = newNameToColumn;
+        this.idToColumn = newIdToColumn;
     }
 
     public List<Column> getBaseSchemaWithoutGeneratedColumn() {
