@@ -107,3 +107,4 @@ alter table site_access add column site_id int;
 -- result:
 E: (1064, 'Can not add column which already exists in column id: site_id, you can remove `id` int(11) NULL DEFAULT "10" COMMENT "" and try again.')
 -- !result
+
