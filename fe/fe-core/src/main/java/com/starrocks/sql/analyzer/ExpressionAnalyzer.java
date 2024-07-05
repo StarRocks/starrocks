@@ -444,7 +444,7 @@ public class ExpressionAnalyzer {
 
             if (node.getType().isStructType()) {
                 // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
-                node.setCol(resolvedField.getField().getName());
+                node.setColumnName(resolvedField.getField().getName());
                 node.setLabel(resolvedField.getField().getName());
 
                 if (resolvedField.getField().getTmpUsedStructFieldPos().size() > 0) {

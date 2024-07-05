@@ -149,7 +149,7 @@ public class CreateReplicatedPartitionJob extends FailoverGroupJob {
         List<String> partitionColumnNames = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                 .map(Column::getName).collect(Collectors.toList());
         List<ColumnDef> partitionColumnDefs = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
-                .map(Column::toColumnDef).collect(Collectors.toList());
+                .map(column -> column.toColumnDef(table)).collect(Collectors.toList());
 
         List<String> partitionValues = listPartitionInfo.getIdToValues().get(partitionId);
         List<List<String>> partitionMultiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);

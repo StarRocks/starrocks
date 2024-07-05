@@ -766,7 +766,7 @@ public class DesensitizedSQLBuilder {
                     column.getPrimitiveType() != PrimitiveType.BITMAP) {
                 sb.append("DEFAULT \"").append(column.getDefaultValue()).append("\" ");
             } else if (column.isGeneratedColumn()) {
-                sb.append("AS ").append(visit(column.getGeneratedColumnExpr()));
+                sb.append("AS ").append(visit(column.getGeneratedColumnExpr(table.getIdToColumn())));
             }
             return sb.toString();
         }

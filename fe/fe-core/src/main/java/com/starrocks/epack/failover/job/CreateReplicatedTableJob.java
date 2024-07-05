@@ -87,7 +87,8 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         List<Column> columns = table.getBaseSchema();
         List<String> keysColumnNames = columns.stream().filter(Column::isKey).map(Column::getName)
                 .collect(Collectors.toList());
-        List<ColumnDef> columnDefs = columns.stream().map(Column::toColumnDef).collect(Collectors.toList());
+        List<ColumnDef> columnDefs = columns.stream().map(column -> column.toColumnDef(table))
+                .collect(Collectors.toList());
         List<Index> indexes = table.getIndexes();
         List<IndexDef> indexDefs = indexes.stream().map(index -> indexToIndexDef(index)).collect(Collectors.toList());
         String engine = table.getType() == Table.TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name();
@@ -182,7 +183,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         List<String> partitionColumnNames = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                 .map(Column::getName).collect(Collectors.toList());
         List<ColumnDef> partitionColumnDefs = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
-                .map(Column::toColumnDef).collect(Collectors.toList());
+                .map(column -> column.toColumnDef(table)).collect(Collectors.toList());
 
         Map<Long, List<String>> idToValues = listPartitionInfo.getIdToValues();
         Map<Long, List<List<String>>> idToMultiValues = listPartitionInfo.getIdToMultiValues();
@@ -240,9 +241,9 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) table.getPartitionInfo();
 
         ExpressionPartitionDesc expressionPartitionDesc = new ExpressionPartitionDesc(getRangePartitionDesc(table),
-                exprRangePartitionInfo.getPartitionExprs().get(0));
+                exprRangePartitionInfo.getPartitionExprs(table.getIdToColumn()).get(0));
 
-        List<ColumnDef> columnDefs = table.getBaseSchema().stream().map(Column::toColumnDef)
+        List<ColumnDef> columnDefs = table.getBaseSchema().stream().map(column -> column.toColumnDef(table))
                 .collect(Collectors.toList());
         try {
             expressionPartitionDesc.analyze(columnDefs, Collections.emptyMap());
@@ -259,9 +260,9 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
                 .getPartitionInfo();
 
         ExpressionPartitionDesc expressionPartitionDesc = new ExpressionPartitionDesc(getRangePartitionDesc(table),
-                exprRangeV2PartitionInfo.getPartitionExprs().get(0));
+                exprRangeV2PartitionInfo.getPartitionExprs(table.getIdToColumn()).get(0));
 
-        List<ColumnDef> columnDefs = table.getBaseSchema().stream().map(Column::toColumnDef)
+        List<ColumnDef> columnDefs = table.getBaseSchema().stream().map(column -> column.toColumnDef(table))
                 .collect(Collectors.toList());
         try {
             expressionPartitionDesc.analyze(columnDefs, Collections.emptyMap());

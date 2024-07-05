@@ -68,7 +68,7 @@ public class TablePlus {
         printer.add("CREATE TABLE IF NOT EXISTS").spaces(1).add(table.getName()).add("(").newLine();
         List<Column> columns = table.getFullSchema();
         List<String> columnDefinitions = columns.stream()
-                .map(Column::toSqlWithoutAggregateTypeName).collect(Collectors.toList());
+                .map(column -> column.toSqlWithoutAggregateTypeName(table.getIdToColumn())).collect(Collectors.toList());
         printer.indentEnclose(() -> {
             printer.addItemsWithDelNl(",", columnDefinitions);
         });

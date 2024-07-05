@@ -53,10 +53,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
@@ -524,11 +526,17 @@ public class ColumnDef implements ParseNode {
         return pos;
     }
 
-    public Column toColumn() {
+    public Column toColumn(Table table) {
         Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment,
                 Column.COLUMN_UNIQUE_ID_INIT_VALUE);
         col.setIsAutoIncrement(isAutoIncrement);
-        col.setGeneratedColumnExpr(generatedColumnExpr);
+        if (generatedColumnExpr != null) {
+            if (table != null) {
+                col.setGeneratedColumnExpr(ColumnIdExpr.create(table.getNameToColumn(), generatedColumnExpr));
+            } else {
+                col.setGeneratedColumnExpr(ColumnIdExpr.create(generatedColumnExpr));
+            }
+        }
         return col;
     }
 

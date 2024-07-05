@@ -383,7 +383,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         }
 
         List<Integer> sortKeyIdxes = Lists.newArrayList();
-        List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
+        List<ColumnDef> columnDefs = olapTable.getColumns()
+                .stream().map(column -> column.toColumnDef(olapTable)).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
             List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
 
@@ -547,7 +548,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(columnDef.toColumn());
+            clause.setColumn(columnDef.toColumn(table));
             return null;
         }
 
@@ -584,7 +585,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(columnDef.toColumn());
+        clause.setColumn(columnDef.toColumn(table));
         return null;
     }
 
@@ -687,7 +688,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        columnDefs.forEach(columnDef -> clause.addColumn(columnDef.toColumn()));
+        columnDefs.forEach(columnDef -> clause.addColumn(columnDef.toColumn(table)));
         return null;
     }
 
@@ -700,7 +701,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
         for (Column column : table.getFullSchema()) {
             if (column.isGeneratedColumn()) {
-                List<SlotRef> slots = column.getGeneratedColumnRef();
+                List<SlotRef> slots = column.getGeneratedColumnRef(table.getIdToColumn());
                 for (SlotRef slot : slots) {
                     if (slot.getColumnName().equals(clause.getColName())) {
                         throw new SemanticException("Column: " + clause.getColName() + " can not be dropped" +
@@ -828,7 +829,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(columnDef.toColumn());
+            clause.setColumn(columnDef.toColumn(table));
             return null;
         }
 
@@ -849,7 +850,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(columnDef.toColumn());
+        clause.setColumn(columnDef.toColumn(table));
         return null;
     }
 

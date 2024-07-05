@@ -245,7 +245,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
             }
 
-            Column col = columnDef.toColumn();
+            Column col = columnDef.toColumn(null);
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -580,7 +580,7 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Generated Column can not be KEY");
                 }
 
-                Expr expr = column.generatedColumnExpr();
+                Expr expr = column.getGeneratedColumnExpr(columns);
 
                 List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
                 expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
