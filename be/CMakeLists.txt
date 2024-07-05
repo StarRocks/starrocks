@@ -326,7 +326,7 @@ set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/l
 add_library(ryu STATIC IMPORTED)
 set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
 
-add_library(libz STATIC IMPORTED)
+add_library(libz STATIC IMPORTED GLOBAL)
 set_target_properties(libz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libz.a)
 
 add_library(libbz2 STATIC IMPORTED)
