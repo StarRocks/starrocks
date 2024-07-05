@@ -25,6 +25,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ShowExecutor;
@@ -377,7 +378,7 @@ public class MaterializedViewAnalyzerTest {
     private void checkQueryOutputIndices(List<Integer> inputs, String expect, boolean isChanged) {
         List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
         for (Integer i : inputs) {
-            mvColumnPairs.add(Pair.create(new Column(), i));
+            mvColumnPairs.add(Pair.create(new Column("k1", Type.INT), i));
         }
         List<Integer> queryOutputIndices = MaterializedViewAnalyzer.getQueryOutputIndices(mvColumnPairs);
         Assert.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());
