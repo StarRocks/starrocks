@@ -128,7 +128,7 @@ public abstract class MVPCTRefreshPartitioner {
      * Check whether the base table is supported partition refresh or not.
      */
     public static boolean isPartitionRefreshSupported(Table baseTable) {
-        return ConnectorPartitionTraits.isSupported(baseTable.getType());
+        return ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType());
     }
 
     /**

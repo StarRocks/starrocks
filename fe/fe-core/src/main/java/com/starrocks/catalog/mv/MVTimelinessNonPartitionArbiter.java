@@ -18,18 +18,20 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
+import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
@@ -66,7 +68,11 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
-            if (needsToRefreshTable(mv, table, true)) {
+            // once mv's base table has updated, refresh the materialized view totally.
+            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, isQueryRewrite);
+            // TODO: fixme if mvBaseTableUpdateInfo is null, should return full refresh?
+            if (mvBaseTableUpdateInfo != null &&
+                    CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
                 return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
             }

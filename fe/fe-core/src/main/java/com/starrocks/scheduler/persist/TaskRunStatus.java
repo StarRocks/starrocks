@@ -348,7 +348,7 @@ public class TaskRunStatus implements Writable {
         if (state.equals(Constants.TaskRunState.FAILED)) {
             return true;
         }
-        if (!state.equals(Constants.TaskRunState.SUCCESS)) {
+        if (!state.isFinishState()) {
             return false;
         }
         if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||
