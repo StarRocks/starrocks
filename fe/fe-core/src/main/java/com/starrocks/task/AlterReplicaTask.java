@@ -231,7 +231,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             Map<String, Expr> defineExprs = rollupJobV2Params.getDefineExprs();
             Expr whereExpr = rollupJobV2Params.getWhereExpr();
             DescriptorTable descTable = rollupJobV2Params.getDescTabl();
-            List<ColumnId> baseTableColNames = rollupJobV2Params.getBaseTableColIds();
+            List<ColumnId> baseTableColIds = rollupJobV2Params.getBaseTableColIds();
             if (defineExprs != null) {
                 for (Map.Entry<String, Expr> entry : defineExprs.entrySet()) {
                     List<SlotRef> slots = Lists.newArrayList();
@@ -258,9 +258,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (descTable != null) {
                 req.setDesc_tbl(descTable.toThrift());
             }
-            req.setBase_table_column_names(baseTableColNames
-                    .stream()
-                    .map(ColumnId::getId)
+            req.setBase_table_column_names(baseTableColIds.stream().map(ColumnId::getId)
                     .collect(Collectors.toList()));
         }
         req.setMaterialized_column_req(generatedColumnReq);

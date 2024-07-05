@@ -297,7 +297,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         .setShortKeyColumnCount(rollupShortKeyColumnCount)
                         .setSchemaHash(rollupSchemaHash)
                         .setStorageType(TStorageType.COLUMN)
-                        .setBloomFilterColumnNames(tbl.getCopiedBfColumns())
+                        .setBloomFilterColumnNames(tbl.getBfColumnIds())
                         .setBloomFilterFpp(tbl.getBfFpp())
                         .setIndexes(tbl.getCopiedIndexes())
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key

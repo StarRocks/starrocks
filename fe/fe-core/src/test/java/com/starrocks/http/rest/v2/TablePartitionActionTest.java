@@ -25,6 +25,7 @@ import com.staros.proto.ShardInfo;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -325,10 +326,10 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         DistributionInfo defaultDistributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c1));
 
         Index idx1 = new Index(
-                testIndexId, "idx1", Lists.newArrayList("c1"),
+                testIndexId, "idx1", Lists.newArrayList(ColumnId.create("c1")),
                 IndexDef.IndexType.BITMAP, "c_idx1", new HashMap<>());
         Index idx2 = new Index(
-                testIndexId + 1, "idx2", Lists.newArrayList("c2"),
+                testIndexId + 1, "idx2", Lists.newArrayList(ColumnId.create("c2")),
                 IndexDef.IndexType.NGRAMBF, "c_idx2", new HashMap<>());
         TableIndexes indexes = new TableIndexes(
                 Lists.newArrayList(idx1, idx2)

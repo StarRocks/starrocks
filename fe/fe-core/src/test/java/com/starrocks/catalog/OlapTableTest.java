@@ -102,7 +102,7 @@ public class OlapTableTest {
                 continue;
             }
             OlapTable tbl = (OlapTable) table;
-            tbl.setIndexes(Lists.newArrayList(new Index("index", Lists.newArrayList("col"),
+            tbl.setIndexes(Lists.newArrayList(new Index("index", Lists.newArrayList(ColumnId.create("col")),
                     IndexDef.IndexType.BITMAP, "xxxxxx")));
             System.out.println("orig table id: " + tbl.getId());
             MvId mvId1 = new MvId(db.getId(), 10L);

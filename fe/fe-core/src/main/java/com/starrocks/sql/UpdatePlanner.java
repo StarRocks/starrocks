@@ -123,8 +123,8 @@ public class UpdatePlanner {
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
                 if (column.getType().isVarchar() &&
-                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }

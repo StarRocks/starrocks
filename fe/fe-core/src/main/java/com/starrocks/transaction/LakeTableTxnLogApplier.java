@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
@@ -58,7 +59,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
-        List<String> validDictCacheColumns = Lists.newArrayList();
+        List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
         long maxPartitionVersionTime = -1;
@@ -88,7 +89,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
-                for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
                 }
             }
@@ -103,7 +104,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
-                String columnName = validDictCacheColumns.get(i);
+                ColumnId columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);

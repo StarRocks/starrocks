@@ -15,6 +15,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
@@ -179,7 +180,7 @@ public class StatisticExecutor {
     }
 
     // If you call this function, you must ensure that the db lock is added
-    public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column)
+    public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, ColumnId columnId)
             throws Exception {
         if (dbId == -1) {
             return Pair.create(Collections.emptyList(), Status.OK);
@@ -195,10 +196,11 @@ public class StatisticExecutor {
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
+        String columnName = MetaUtils.getColumnNameByColumnId(dbId, tableId, columnId);
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
-                "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                "dict_merge(" + StatisticUtils.quoting(columnName) + ") as _dict_merge_" + columnName +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         ConnectContext context = StatisticUtils.buildConnectContext();

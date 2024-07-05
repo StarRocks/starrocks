@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
@@ -36,6 +37,7 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -90,7 +92,8 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         List<ColumnDef> columnDefs = columns.stream().map(column -> column.toColumnDef(table))
                 .collect(Collectors.toList());
         List<Index> indexes = table.getIndexes();
-        List<IndexDef> indexDefs = indexes.stream().map(index -> indexToIndexDef(index)).collect(Collectors.toList());
+        List<IndexDef> indexDefs = indexes.stream().map(index -> indexToIndexDef(table.getIdToColumn(), index))
+                .collect(Collectors.toList());
         String engine = table.getType() == Table.TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name();
         KeysDesc keysDesc = new KeysDesc(table.getKeysType(), keysColumnNames);
         PartitionDesc partitionDesc = getPartitionDesc(table);
@@ -114,8 +117,9 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         return createTableStmt;
     }
 
-    private static IndexDef indexToIndexDef(Index index) {
-        return new IndexDef(index.getIndexName(), index.getColumns(), index.getIndexType(), index.getComment());
+    private static IndexDef indexToIndexDef(Map<ColumnId, Column> idColumnMap, Index index) {
+        return new IndexDef(index.getIndexName(), MetaUtils.getColumnNamesByColumnIds(idColumnMap, index.getColumns()),
+                index.getIndexType(), index.getComment());
     }
 
     private static PartitionDesc getPartitionDesc(OlapTable table) {

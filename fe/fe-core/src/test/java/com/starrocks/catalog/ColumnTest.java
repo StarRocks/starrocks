@@ -338,10 +338,10 @@ public class ColumnTest {
                 new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
 
         Index i0 = new Index("i0",
-                Collections.singletonList("f0"), IndexType.BITMAP, "");
+                Collections.singletonList(ColumnId.create("f0")), IndexType.BITMAP, "");
 
-        Set<String> bfColumns = new HashSet<>();
-        bfColumns.add("f0");
+        Set<ColumnId> bfColumns = new HashSet<>();
+        bfColumns.add(ColumnId.create("f0"));
         TColumn t0 = f0.toThrift();
         f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
 

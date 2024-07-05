@@ -51,6 +51,7 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ForeignKeyConstraint;
@@ -351,8 +352,13 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        Column droppedColumn = olapTable.getColumn(dropColName);
         // Remove all Index that contains a column with the name dropColName.
-        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(dropColName)));
+        if (droppedColumn != null) {
+            indexes.removeIf(index -> index.getColumns()
+                    .stream()
+                    .anyMatch(c -> c.equalsIgnoreCase(droppedColumn.getColumnId())));
+        }
 
         if (targetIndexName == null) {
             // if not specify rollup index, column should be dropped from both base and rollup indexes.
@@ -505,7 +511,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // Remove all Index that contains a column with the name modifyColumnName
-        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(modifyColumnName)));
+        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(col.get().getColumnId())));
         // Add new field into the pecified field. If no `fieldPos`, the new field will be added to the end.
         StructType oriFieldType = ((StructType) modifyFieldType);
         String fieldName = alterClause.getFieldName();
@@ -595,7 +601,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // Remove all Index that contains a column with the name modifyColumnName
-        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(modifyColumnName)));
+        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(col.get().getColumnId())));
         // remove the dropped field from fields and update StructFields
         ArrayList<StructField> fields = new ArrayList<>();
         for (StructField field : oriFieldType.getFields()) {
@@ -749,7 +755,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         for (Index index : olapTable.getIndexes()) {
             if (index.getIndexType() == IndexDef.IndexType.GIN) {
-                if (index.getColumns().contains(oriColumn.getName()) &&
+                if (index.getColumns().contains(oriColumn.getColumnId()) &&
                         !modColumn.getType().isStringType()) {
                     throw new DdlException("Cannot modify a column with GIN into non-string type");
                 }
@@ -1355,7 +1361,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // check bloom filter has change
         boolean hasBfChange = false;
-        Set<String> oriBfColumns = olapTable.getCopiedBfColumns();
+        Set<String> oriBfColumns = olapTable.getBfColumnNames();
         double oriBfFpp = olapTable.getBfFpp();
         if (bfColumns != null) {
             if (bfFpp == 0) {
@@ -1403,7 +1409,19 @@ public class SchemaChangeHandler extends AlterHandler {
             bfFpp = 0;
         }
 
-        BloomFilterIndexUtil.analyseBfWithNgramBf(newSet, bfColumns);
+        Set<ColumnId> bfColumnIds = null;
+        if (bfColumns != null) {
+            bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            for (String columnName : bfColumns) {
+                Column column = olapTable.getColumn(columnName);
+                if (column == null) {
+                    throw new DdlException("can not find column by name: " + columnName);
+                }
+                bfColumnIds.add(column.getColumnId());
+            }
+        }
+
+        BloomFilterIndexUtil.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
@@ -1414,7 +1432,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withTable(olapTable)
                 .withTimeoutInSeconds(timeoutSecond)
                 .withAlterIndexInfo(hasIndexChange, indexes)
-                .withBloomFilterColumns(bfColumns, bfFpp)
+                .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange);
 
         if (RunMode.isSharedDataMode()) {
@@ -2662,7 +2680,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("index `" + indexDef.getIndexName() + "` already exist.");
             }
             Set<String> existedIdxColSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-            existedIdxColSet.addAll(existedIdx.getColumns());
+            existedIdxColSet.addAll(MetaUtils.getColumnNamesByColumnIds(olapTable, existedIdx.getColumns()));
             if (newColset.equals(existedIdxColSet)) {
                 throw new DdlException(
                         "index for columns (" + String.join(",", indexDef.getColumns()) + " ) already exist.");

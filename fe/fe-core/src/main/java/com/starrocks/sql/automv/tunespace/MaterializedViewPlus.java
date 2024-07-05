@@ -141,8 +141,9 @@ public class MaterializedViewPlus {
     public List<String> getIndices() {
         if (indices == null) {
             List<Index> indexList = Optional.ofNullable(mv.getIndexes()).orElseGet(Collections::emptyList);
-            indices = indexList.stream().map(Index::toSql).collect(ImmutableList.toImmutableList());
-            indexColumns = indexList.stream().map(Index::getColumns).collect(ImmutableList.toImmutableList());
+            indices = indexList.stream().map(index -> index.toSql(mv)).collect(ImmutableList.toImmutableList());
+            indexColumns = indexList.stream().map(index -> MetaUtils.getColumnNamesByColumnIds(mv, index.getColumns()))
+                    .collect(ImmutableList.toImmutableList());
         }
         return indices;
     }
@@ -294,7 +295,7 @@ public class MaterializedViewPlus {
     }
 
     public Set<String> getBfColumns() {
-        return Optional.ofNullable(mv.getBfColumns()).orElseGet(Collections::emptySet);
+        return Optional.ofNullable(mv.getBfColumnNames()).orElseGet(Collections::emptySet);
     }
 
     public TieredMap<String, String> getColocateProperties() {

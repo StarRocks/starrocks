@@ -238,7 +238,7 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = partition;
 
-                table.getCopiedBfColumns();
+                table.getBfColumnNames();
                 minTimes = 0;
                 result = null;
 

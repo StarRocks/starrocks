@@ -93,7 +93,7 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test
     public void testCreateIndex() throws Exception {
-        String sql = "CREATE INDEX index1 ON `test`.`t0` (`col1`) USING BITMAP COMMENT 'balabala'";
+        String sql = "CREATE INDEX index1 ON `test`.`t0` (`v1`) USING BITMAP COMMENT 'balabala'";
         analyzeSuccess(sql);
 
         sql = "alter table t0 add index index1 (v2)";

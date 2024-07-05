@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
@@ -57,8 +58,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     private final OlapTable table;
 
     private Set<Long> dirtyPartitionSet;
-    private Set<String> invalidDictCacheColumns;
-    private Map<String, Long> validDictCacheColumns;
+    private Set<ColumnId> invalidDictCacheColumns;
+    private Map<ColumnId, Long> validDictCacheColumns;
     private final CompactionMgr compactionMgr;
 
     public LakeTableTxnStateListener(@NotNull DatabaseTransactionMgr dbTxnMgr, @NotNull OlapTable table) {
@@ -118,7 +119,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                     !finishedTablets.get(i).getValidDictCacheColumns().isEmpty()) {
                 TabletCommitInfo tabletCommitInfo = finishedTablets.get(i);
                 List<Long> validDictCollectedVersions = tabletCommitInfo.getValidDictCollectedVersions();
-                List<String> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
+                List<ColumnId> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
                 for (int j = 0; j < validDictCacheColumns.size(); j++) {
                     long version = 0;
                     // validDictCollectedVersions != validDictCacheColumns means be has not upgrade
@@ -174,7 +175,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             PartitionCommitInfo partitionCommitInfo;
             long version = -1;
             if (isFirstPartition) {
-                List<String> validDictCacheColumnNames = Lists.newArrayList();
+                List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
 
                 validDictCacheColumns.forEach((name, dictVersion) -> {
