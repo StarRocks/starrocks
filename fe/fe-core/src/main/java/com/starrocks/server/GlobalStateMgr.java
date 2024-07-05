@@ -135,6 +135,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
+import com.starrocks.listener.GlobalOperationListenerBus;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -464,6 +465,7 @@ public class GlobalStateMgr {
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
+    private final GlobalOperationListenerBus operationListenerBus = new GlobalOperationListenerBus();
 
     private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
     private final RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
@@ -2517,6 +2519,10 @@ public class GlobalStateMgr {
 
     public SlotProvider getLocalSlotProvider() {
         return localSlotProvider;
+    }
+
+    public GlobalOperationListenerBus getOperationListenerBus() {
+        return operationListenerBus;
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
