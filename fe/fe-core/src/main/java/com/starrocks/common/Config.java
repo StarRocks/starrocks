@@ -3262,6 +3262,12 @@ public class Config extends ConfigBase {
      * The safe mode checker thread work interval
      */
     @ConfField(mutable = true)
+    public static long safe_mode_check_disk_space = 107374182400L;
+
+    /**
+     * The safe mode checker thread work interval
+     */
+    @ConfField(mutable = true)
     public static long safe_mode_checker_interval_sec = 5;
 
     /**

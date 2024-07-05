@@ -52,7 +52,7 @@ public class SafeModeChecker extends FrontendDaemon {
             if (be.isAlive()) {
                 for (DiskInfo diskInfo : be.getDisks().values()) {
                     double safeModeCheckDiskCapacity = Math.min(
-                            0.1 * diskInfo.getTotalCapacityB(), 53687091200L);
+                            0.1 * diskInfo.getTotalCapacityB(), Config.safe_mode_check_disk_space);
                     if (diskInfo.getAvailableCapacityB() < safeModeCheckDiskCapacity) {
                         if (!GlobalStateMgr.getCurrentState().isSafeMode()) {
                             String warnMsg = String.format(
@@ -76,6 +76,11 @@ public class SafeModeChecker extends FrontendDaemon {
                         return true;
                     }
                 }
+            } else if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+                // If cluster is under safe mode and be is not alive
+                // we should not exit safe mode since be crash may be
+                // caused by disk full
+                return true;
             }
         }
 
