@@ -18,6 +18,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -79,21 +80,23 @@ public class TaskRunHistory {
     }
 
     public List<TaskRunStatus> lookupHistoryByTaskNames(String dbName, Set<String> taskNames) {
-        List<TaskRunStatus> inMemory = getInMemoryHistory().stream()
+        List<TaskRunStatus> result = getInMemoryHistory().stream()
                 .filter(x -> x.matchByTaskName(dbName, taskNames))
                 .collect(Collectors.toList());
-
-        return ListUtils.union(inMemory, historyTable.lookupByTaskNames(dbName, taskNames));
+        if (isEnableArchiveHistory()) {
+            result.addAll(historyTable.lookupByTaskNames(dbName, taskNames));
+        }
+        return result;
     }
 
     public List<TaskRunStatus> lookupHistory(TGetTasksParams params) {
-        if (params == null) {
-            return Lists.newArrayList();
-        }
-        List<TaskRunStatus> inMemory = getInMemoryHistory().stream()
+        List<TaskRunStatus> result = getInMemoryHistory().stream()
                 .filter(x -> x.match(params))
                 .collect(Collectors.toList());
-        return ListUtils.union(inMemory, historyTable.lookup(params));
+        if (isEnableArchiveHistory()) {
+            result.addAll(historyTable.lookup(params));
+        }
+        return result;
     }
 
     // TODO: make it thread safe
@@ -133,8 +136,12 @@ public class TaskRunHistory {
         }
     }
 
+    private boolean isEnableArchiveHistory() {
+        return Config.enable_task_archive && !FeConstants.runningUnitTest;
+    }
+
     private void archiveHistory() {
-        if (!Config.enable_task_archive) {
+        if (!isEnableArchiveHistory()) {
             return;
         }
 

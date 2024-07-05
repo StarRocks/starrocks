@@ -15,7 +15,6 @@
 package com.starrocks.scheduler.history;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.FeConstants;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatsConstants;
@@ -25,7 +24,6 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -36,11 +34,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskRunHistoryTest {
-
-    @BeforeAll
-    public static void beforeAll() {
-        FeConstants.runningUnitTest = true;
-    }
 
     @Test
     public void testTaskRunStatusSerialization() {
@@ -135,13 +128,13 @@ class TaskRunHistoryTest {
             {
                 repo.executeDDL(
                         "CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
-                                "task_run_id string NOT NULL, create_time datetime NOT NULL, task_name string NOT NULL, " +
-                                "finish_time datetime NOT NULL, expire_time datetime NOT NULL, " +
-                                "history_content_json JSON NOT NULL)PRIMARY KEY (task_id, task_run_id, create_time) " +
-                                "PARTITION BY RANGE(create_time)() DISTRIBUTED BY HASH(task_id) BUCKETS 8 " +
-                                "PROPERTIES('replication_num' = '1','dynamic_partition.time_unit' = 'DAY', " +
-                                "'dynamic_partition.start' = '-7', 'dynamic_partition.end' = '3', " +
-                                "'dynamic_partition.prefix' = 'p' ) ");
+                                "task_run_id string NOT NULL, create_time datetime NOT NULL, " +
+                                "task_name string NOT NULL, finish_time datetime NOT NULL, " +
+                                "expire_time datetime NOT NULL, history_content_json JSON NOT NULL)PRIMARY KEY " +
+                                "(task_id, task_run_id, create_time) PARTITION BY date_trunc('DAY', create_time) " +
+                                "DISTRIBUTED BY HASH(task_id) BUCKETS 8 PROPERTIES( 'replication_num' = '1', " +
+                                "'partition_live_number' = '7')"
+                );
             }
         };
         keeper.run();
