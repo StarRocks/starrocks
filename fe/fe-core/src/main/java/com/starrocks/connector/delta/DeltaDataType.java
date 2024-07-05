@@ -86,24 +86,28 @@ public enum DeltaDataType {
         return LOOKUP_MAP.getOrDefault(deltaDataType, OTHER);
     }
 
-    private static final Set<DataType> PRIMITIVE_TYPES = new HashSet<>() {
+    public static final Set<DeltaDataType> PRIMITIVE_TYPES = new HashSet<>() {
         {
-            add(BooleanType.BOOLEAN);
-            add(ByteType.BYTE);
-            add(ShortType.SHORT);
-            add(IntegerType.INTEGER);
-            add(LongType.LONG);
-            add(FloatType.FLOAT);
-            add(DoubleType.DOUBLE);
-            add(DateType.DATE);
-            add(TimestampType.TIMESTAMP);
-            add(TimestampNTZType.TIMESTAMP_NTZ);
-            add(BinaryType.BINARY);
-            add(StringType.STRING);
+            add(DeltaDataType.BOOLEAN);
+            add(DeltaDataType.BYTE);
+            add(DeltaDataType.SMALLINT);
+            add(DeltaDataType.INTEGER);
+            add(DeltaDataType.LONG);
+            add(DeltaDataType.FLOAT);
+            add(DeltaDataType.DOUBLE);
+            add(DeltaDataType.DATE);
+            add(DeltaDataType.TIMESTAMP);
+            add(DeltaDataType.TIMESTAMP_NTZ);
+            add(DeltaDataType.BINARY);
+            add(DeltaDataType.STRING);
         }
     };
 
     public static boolean isPrimitiveType(DataType type) {
-        return PRIMITIVE_TYPES.contains(type);
+        return PRIMITIVE_TYPES.contains(instanceFrom(type.getClass()));
+    }
+
+    public static boolean canUseStatsType(DataType type) {
+        return isPrimitiveType(type) || type instanceof DecimalType;
     }
 }

@@ -169,7 +169,7 @@ function: assert_explain_costs_contains('select col_string from delta_test_${uui
 -- result:
 None
 -- !result
-function: assert_explain_costs_contains('select col_decimal from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_decimal-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
+function: assert_explain_costs_contains('select col_decimal from delta_test_${uuid0}.delta_oss_db.delta_lake_data_type', 'col_decimal-->[123.45, 987.65, 0.0, 8.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result

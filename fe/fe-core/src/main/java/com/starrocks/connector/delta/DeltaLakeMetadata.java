@@ -210,19 +210,19 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         Set<String> partitionPrimitiveColumns;
         if (fieldNames != null) {
             nonPartitionPrimitiveColumns = fieldNames.stream()
-                    .filter(column -> DeltaDataType.isPrimitiveType(schema.get(column).getDataType())
+                    .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
                     && !partitionColumns.contains(column))
                     .collect(Collectors.toSet());
             partitionPrimitiveColumns = fieldNames.stream()
-                    .filter(column -> DeltaDataType.isPrimitiveType(schema.get(column).getDataType())
+                    .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
                     && partitionColumns.contains(column))
                     .collect(Collectors.toSet());
         } else {
             nonPartitionPrimitiveColumns = schema.fieldNames().stream()
-                    .filter(column -> DeltaDataType.isPrimitiveType(schema.get(column).getDataType())
+                    .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
                             && !partitionColumns.contains(column)).collect(Collectors.toSet());
             partitionPrimitiveColumns = partitionColumns.stream()
-                    .filter(column -> DeltaDataType.isPrimitiveType(schema.get(column).getDataType()))
+                    .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType()))
                     .collect(Collectors.toSet());
         }
 
