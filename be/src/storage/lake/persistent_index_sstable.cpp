@@ -66,10 +66,14 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
                                          IndexValue* values, KeyIndexSet* found_key_indexes) const {
     std::vector<std::string> index_value_with_vers(key_indexes.size());
     sstable::ReadOptions options;
+    sstable::ReadIOStat stat;
+    options.stat = &stat;
     auto start_ts = butil::gettimeofday_us();
     RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers));
     auto end_ts = butil::gettimeofday_us();
     TRACE_COUNTER_INCREMENT("multi_get", end_ts - start_ts);
+    TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
+    TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", stat.block_cnt_from_file);
     size_t i = 0;
     for (auto& key_index : key_indexes) {
         // Index_value_with_vers is empty means key is not found in sst.
