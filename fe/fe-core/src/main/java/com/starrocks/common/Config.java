@@ -346,33 +346,28 @@ public class Config extends ConfigBase {
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
-    @ConfField(mutable = true, comment = "Internal of task background jobs")
+    /////////////////////////////////////////////////    Task   ///////////////////////////////////////////////////
+    @ConfField(mutable = true, comment = "Interval of task background jobs")
     public static int task_check_interval_second = 60; // 1 minute
 
-    /**
-     * for task set expire time
-     */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "task ttl")
     public static int task_ttl_second = 24 * 3600;         // 1 day
 
-    /**
-     * for task run set expire time
-     */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "task run ttl")
     public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
 
-    /**
-     * max history task num kept
-     */
-    @ConfField(mutable = true)
     @Deprecated
+    @ConfField(mutable = true, comment = "[DEPRECATED as enable_task_history_archive] max number of task run history. ")
     public static int task_runs_max_history_number = 10000;
 
     @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
     public static int task_min_schedule_interval_s = 10;
 
-    @ConfField(mutable = true, comment = "Whether enable the task archive functionality")
-    public static boolean enable_task_archive = true;
+    @ConfField(mutable = true, comment = "Interval of TableKeeper daemon")
+    public static int table_keeper_interval_second = 30;
+
+    @ConfField(mutable = true, comment = "Whether enable the task history archive feature")
+    public static boolean enable_task_history_archive = true;
 
     /**
      * The max keep time of some kind of jobs.
@@ -380,9 +375,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int history_job_keep_max_second = 7 * 24 * 3600; // 7 days
-
-    @ConfField(mutable = true, comment = "Interval of TableKeeper daemon")
-    public static int table_keeper_interval_second = 30;
 
     /**
      * the transaction will be cleaned after transaction_clean_interval_second seconds if the transaction is visible or aborted

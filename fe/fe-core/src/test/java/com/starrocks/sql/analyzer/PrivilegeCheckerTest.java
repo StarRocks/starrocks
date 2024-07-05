@@ -180,7 +180,6 @@ public class PrivilegeCheckerTest {
         authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
-        //        FeConstants.runningUnitTest = true;
     }
 
     private static void createMvForTest(ConnectContext connectContext) throws Exception {

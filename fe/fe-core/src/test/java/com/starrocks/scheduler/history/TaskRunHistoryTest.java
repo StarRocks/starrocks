@@ -291,7 +291,7 @@ public class TaskRunHistoryTest {
 
     @Test
     public void testDisableArchiveHistory() {
-        Config.enable_task_archive = false;
+        Config.enable_task_history_archive = false;
         TaskRunHistory history = new TaskRunHistory();
 
         // prepare
@@ -314,6 +314,6 @@ public class TaskRunHistoryTest {
         history.vacuum();
         Assert.assertEquals(0, history.getInMemoryHistory().size());
 
-        Config.enable_task_archive = true;
+        Config.enable_task_history_archive = true;
     }
 }

@@ -125,7 +125,7 @@ public class TaskRunHistory {
     }
 
     private boolean isEnableArchiveHistory() {
-        return Config.enable_task_archive && !FeConstants.runningUnitTest;
+        return Config.enable_task_history_archive && !FeConstants.runningUnitTest;
     }
 
     /**
