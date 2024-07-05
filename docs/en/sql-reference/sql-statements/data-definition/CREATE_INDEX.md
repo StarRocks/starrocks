@@ -6,7 +6,11 @@ displayed_sidebar: "English"
 
 ## Description
 
+<<<<<<< HEAD
 This statement is used to create indexes.
+=======
+This statement is used to create indexes. You can use this statement to create only Bitmap indexes. For usage notes and scenarios of Bitmap indexes, see [Bitmap index](../../../table_design/indexes/Bitmap_index.md).
+>>>>>>> fda92b9cc9 ([Doc] Fix typo in Create Index Page (#47918))
 
 :::tip
 
