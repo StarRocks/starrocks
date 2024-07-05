@@ -15,6 +15,9 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
@@ -85,5 +88,15 @@ public class ConnectorPartitionTraitsTest {
             Assert.assertEquals(supportedTableTypes.contains(tableType),
                     ConnectorPartitionTraits.isSupportPCTRefresh(tableType));
         }
+    }
+
+    @Test
+    public void testHiveResourceTableName() {
+        HiveTable hiveTable = new HiveTable(0, "name", Lists.newArrayList(), "resource_name", "hive_catalog",
+                "hiveDb", "hiveTable", "location", "", 0,
+                Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null,
+                HiveTable.HiveTableType.MANAGED_TABLE);
+        ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hiveTable);
+        Assert.assertEquals(connectorPartitionTraits.getTableName(), "hiveTable");
     }
 }

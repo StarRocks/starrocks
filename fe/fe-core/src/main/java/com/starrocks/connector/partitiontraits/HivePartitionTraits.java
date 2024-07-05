@@ -37,6 +37,11 @@ public class HivePartitionTraits extends DefaultTraits {
     }
 
     @Override
+    public String getTableName() {
+        return ((HiveMetaStoreTable) table).getTableName();
+    }
+
+    @Override
     public PartitionKey createEmptyKey() {
         return new HivePartitionKey();
     }
