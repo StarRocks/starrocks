@@ -200,9 +200,24 @@ public:
 
 template <LogicalType LT, bool isSample, typename T = RunTimeCppType<LT>>
 class CorVarianceAggregateFunction final : public CorVarianceBaseAggregateFunction<LT, false> {
+public:
     using InputColumnType = RunTimeColumnType<LT>;
     using InputCppType = T;
     using ResultColumnType = RunTimeColumnType<TYPE_DOUBLE>;
+
+    struct AggNullPred {
+        bool operator()(const CovarianceCorelationAggregateState<false>& state) const {
+            if constexpr (isSample) {
+                return state.count <= 1;
+            } else {
+                // The non-sample case will return null only when `state.count` is 0, where
+                // `NullableAggregateFunctionState::is_null` also true.
+                // Therefore, we don't need to check `state.count` here.
+                return false;
+            }
+        }
+    };
+
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
 
@@ -257,6 +272,10 @@ public:
     using InputColumnType = RunTimeColumnType<LT>;
     using InputCppType = T;
     using ResultColumnType = RunTimeColumnType<TYPE_DOUBLE>;
+
+    struct AggNullPred {
+        bool operator()(const CovarianceCorelationAggregateState<true>& state) const { return state.count <= 1; }
+    };
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());

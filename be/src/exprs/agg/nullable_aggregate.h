@@ -67,20 +67,35 @@ struct NullableAggregateFunctionState
 
     ConstAggDataPtr nested_state() const { return reinterpret_cast<ConstAggDataPtr>(&_nested_state); }
 
+    const T& nested_state_with_type() const { return _nested_state; }
+
     bool is_null = true;
 
     T _nested_state;
+};
+
+template <typename F, typename State>
+concept IsAggNullPred = requires(F f, State arg) {
+    { f(arg) }
+    ->std::convertible_to<bool>;
+};
+
+template <typename State>
+struct AggNonNullPred {
+    constexpr bool operator()(const State&) const { return false; }
 };
 
 // This class wrap an aggregate function and handle NULL value.
 // If an aggregate function has at least one nullable argument, we should use this class.
 // If all row all are NULL, we will return NULL.
 // The State must be NullableAggregateFunctionState
-template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true>
+template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
 public:
-    explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_)
-            : nested_function(std::move(nested_function_)) {}
+    explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_,
+                                           AggNullPred null_pred = AggNullPred())
+            : nested_function(std::move(nested_function_)), null_pred(std::move(null_pred)) {}
     // as array_agg is not nullable, so it needn't create() here.
 
     std::string get_name() const override { return "nullable " + nested_function->get_name(); }
@@ -126,7 +141,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if (LIKELY(!this->data(state).is_null)) {
+        if (LIKELY(!this->data(state).is_null && !null_pred(this->data(state).nested_state_with_type()))) {
             if (to->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(to);
                 nested_function->finalize_to_column(ctx, this->data(state).nested_state(),
@@ -204,7 +219,8 @@ public:
         // binary column couldn't call resize method like Numeric Column
         // for non-slice type, null column data has been reset to zero in AnalyticNode
         // for slice type, we need to emplace back null data
-        if (IsNeverNullFunctionState<NestedState> || !this->data(state).is_null) {
+        if (IsNeverNullFunctionState<NestedState> ||
+            (!this->data(state).is_null && !null_pred(this->data(state).nested_state_with_type()))) {
             nested_function->get_values(ctx, this->data(state).nested_state(), nullable_column->mutable_data_column(),
                                         start, end);
             if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
@@ -254,15 +270,19 @@ public:
 
 protected:
     NestedAggregateFunctionPtr nested_function;
+    AggNullPred null_pred;
 };
 
-template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true>
+template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionUnary final
-        : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull> {
+        : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull,
+                                               AggNullPred> {
 public:
-    explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull>(
-                      nested_function) {}
+    explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function,
+                                            AggNullPred null_pred = AggNullPred())
+            : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull, AggNullPred>(
+                      nested_function, std::move(null_pred)) {}
 
     // NOTE: In stream MV, need handle input row by row, so need support single update.
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -746,12 +766,15 @@ public:
     }
 };
 
-template <typename State>
+template <typename State,
+          IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionVariadic final
-        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false> {
+        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred> {
 public:
-    NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false>(nested_function) {}
+    NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function,
+                                      AggNullPred null_pred = AggNullPred())
+            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false, true, AggNullPred>(
+                      nested_function, std::move(null_pred)) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
