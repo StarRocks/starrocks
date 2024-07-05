@@ -912,12 +912,13 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
      * @param mv: mv's definition
      * @return: ForeignKeyConstraint list associated with the child, empty list if no FK constraint.
      */
-    private List<ForeignKeyConstraint> getForeignKeyConstraint(TableScanDesc mvTableScanDesc,
+    private List<Pair<Table, ForeignKeyConstraint>> getForeignKeyConstraint(TableScanDesc mvTableScanDesc,
                                                                MaterializedView mv) {
-        List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
+        List<Pair<Table, ForeignKeyConstraint>> foreignKeyConstraints = Lists.newArrayList();
         Table mvChildTable = mvTableScanDesc.getTable();
         if (mvChildTable.getForeignKeyConstraints() != null) {
-            foreignKeyConstraints.addAll(mvChildTable.getForeignKeyConstraints());
+            foreignKeyConstraints.addAll(mvChildTable.getForeignKeyConstraints().stream()
+                    .map(fkc -> Pair.create(mvChildTable, fkc)).collect(Collectors.toList()));
         }
 
         if (mv.getForeignKeyConstraints() != null) {
@@ -928,7 +929,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 }
                 Table table = MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo());
                 return table.equals(mvChildTable);
-            }).forEach(foreignKeyConstraints::add);
+            }).forEach(fkc -> foreignKeyConstraints.add(Pair.create(mv, fkc)));
         }
         return foreignKeyConstraints;
     }
@@ -969,15 +970,18 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
 
         // add edges to directed graph by FK-UK
         for (TableScanDesc mvTableScanDesc : mvGraph.nodes()) {
-            List<ForeignKeyConstraint> foreignKeyConstraints = getForeignKeyConstraint(mvTableScanDesc, materializedView);
+            List<Pair<Table, ForeignKeyConstraint>> foreignKeyConstraints =
+                    getForeignKeyConstraint(mvTableScanDesc, materializedView);
 
-            for (ForeignKeyConstraint foreignKeyConstraint : foreignKeyConstraints) {
+            for (Pair<Table, ForeignKeyConstraint> tableFKCPair : foreignKeyConstraints) {
+                Table table = tableFKCPair.first;
+                ForeignKeyConstraint foreignKeyConstraint = tableFKCPair.second;
                 Collection<TableScanDesc> mvParentTableScanDescs =
                         mvNameToTable.get(foreignKeyConstraint.getParentTableInfo().getTableName());
                 if (mvParentTableScanDescs == null || mvParentTableScanDescs.isEmpty()) {
                     continue;
                 }
-                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnNameRefPairs(mvTableScanDesc.getTable());
+                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnNameRefPairs(table);
                 List<String> childKeys = columnPairs.stream().map(pair -> pair.first)
                         .map(String::toLowerCase).collect(Collectors.toList());
                 List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)

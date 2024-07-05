@@ -21,6 +21,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
@@ -220,7 +221,18 @@ public class ForeignKeyConstraint {
                     "BaseTableInfo table %s should be tableId for internal catalog", table);
             long dbId = Long.parseLong(db);
             long tableId = Long.parseLong(table);
-            baseTableInfo = new BaseTableInfo(dbId, null, null, tableId);
+            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (database == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo's db %s should not be null in the foreign key " +
+                        "constraint, please drop foreign key constraints and retry", dbId));
+            }
+            Table baseTable = database.getTable(tableId);
+            if (baseTable == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo' base table %s should not be null in the foreign kee" +
+                                " constraint, please drop foreign key constraints and retry",
+                        tableId));
+            }
+            baseTableInfo = new BaseTableInfo(dbId, database.getFullName(), baseTable.getName(), tableId);
         } else {
             baseTableInfo = new BaseTableInfo(catalogName, db, table, tableIdentifier);
         }
