@@ -64,7 +64,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -937,52 +936,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            long id = in.readLong();
-            RecycleDatabaseInfo dbInfo = new RecycleDatabaseInfo();
-            dbInfo.readFields(in);
-            idToDatabase.put(id, dbInfo);
-        }
-
-        count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            long id = in.readLong();
-            RecycleTableInfo tableInfo = new RecycleTableInfo();
-            tableInfo.readFields(in);
-            idToTableInfo.put(tableInfo.getDbId(), id, tableInfo);
-            nameToTableInfo.put(tableInfo.getDbId(), tableInfo.getTable().getName(), tableInfo);
-        }
-
-        count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            long id = in.readLong();
-            long dbId = in.readLong();
-            RecyclePartitionInfo partitionInfo;
-            // dbId is used to distinguish if it is lake table. We write a -1 in it.
-            // If this dbId < 0, then the table is a lake table, so use RecyclePartitionInfoV2 to read it
-            // else, it is an olap table, just read it as usual, but because dbId has been read, set it into partitionInfo
-            // and read the remain part
-            if (dbId < 0) {
-                partitionInfo = RecyclePartitionInfoV2.read(in);
-            } else {
-                RecyclePartitionInfoV1 v1 = new RecyclePartitionInfoV1();
-                v1.readFields(in);
-                v1.setDbId(dbId);
-                partitionInfo = v1;
-            }
-            idToPartition.put(id, partitionInfo);
-        }
-
-        count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            long id = in.readLong();
-            long time = in.readLong();
-            idToRecycleTime.put(id, time);
-        }
-    }
-
     public static class RecycleDatabaseInfo implements Writable {
         @SerializedName("d")
         private Database db;
@@ -1014,16 +967,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             out.writeInt(count);
             for (String tableName : tableNames) {
                 Text.writeString(out, tableName);
-            }
-        }
-
-        public void readFields(DataInput in) throws IOException {
-            db = Database.read(in);
-
-            int count = in.readInt();
-            for (int i = 0; i < count; i++) {
-                String tableName = Text.readString(in);
-                tableNames.add(tableName);
             }
         }
     }
@@ -1070,11 +1013,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         public void write(DataOutput out) throws IOException {
             out.writeLong(dbId);
             table.write(out);
-        }
-
-        public void readFields(DataInput in) throws IOException {
-            dbId = in.readLong();
-            table = Table.read(in);
         }
     }
 

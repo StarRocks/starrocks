@@ -173,12 +173,6 @@ public class EditLog {
                     }
                     break;
                 }
-                case OperationType.OP_CREATE_DB: {
-                    Database db = (Database) journal.getData();
-                    LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
-                    metastore.replayCreateDb(db);
-                    break;
-                }
                 case OperationType.OP_CREATE_DB_V2: {
                     CreateDbInfo db = (CreateDbInfo) journal.getData();
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
@@ -217,7 +211,6 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayRenameDatabase(dbName, dbInfo.getNewDbName());
                     break;
                 }
-                case OperationType.OP_CREATE_TABLE:
                 case OperationType.OP_CREATE_TABLE_V2: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
 
@@ -245,35 +238,12 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
-                case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
-                    CreateTableInfo info = (CreateTableInfo) journal.getData();
-                    LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
-                            + " create materialized view = " + info.getTable().getId()
-                            + " tableName = " + info.getTable().getName());
-                    globalStateMgr.getLocalMetastore().replayCreateTable(info);
-                    break;
-                }
                 case OperationType.OP_ADD_PARTITION_V2: {
                     PartitionPersistInfoV2 info = (PartitionPersistInfoV2) journal.getData();
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
                     globalStateMgr.getLocalMetastore().replayAddPartition(info);
-                    break;
-                }
-                case OperationType.OP_ADD_PARTITION: {
-                    PartitionPersistInfo info = (PartitionPersistInfo) journal.getData();
-                    LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
-                            + " table = " + info.getTableId()
-                            + " partitionName = " + info.getPartition().getName());
-                    globalStateMgr.getLocalMetastore().replayAddPartition(info);
-                    break;
-                }
-                case OperationType.OP_ADD_PARTITIONS: {
-                    AddPartitionsInfo infos = (AddPartitionsInfo) journal.getData();
-                    for (PartitionPersistInfo info : infos.getAddPartitionInfos()) {
-                        globalStateMgr.getLocalMetastore().replayAddPartition(info);
-                    }
                     break;
                 }
                 case OperationType.OP_ADD_PARTITIONS_V2: {

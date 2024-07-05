@@ -31,12 +31,12 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,6 +64,10 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
     @SerializedName(value = "sourcePartitionTypes")
     private List<Type> sourcePartitionTypes;
+
+    public ExpressionRangePartitionInfoV2() {
+        this.type = PartitionType.EXPR_RANGE_V2;
+    }
 
     public ExpressionRangePartitionInfoV2(List<Expr> partitionExprs, List<Column> columns) {
         super(columns);
@@ -116,11 +120,6 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
             }
         }
         serializedPartitionExprs = null;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override
@@ -249,6 +248,27 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
     public void setSerializedPartitionExprs(List<String> serializedPartitionExprs) {
         this.serializedPartitionExprs = serializedPartitionExprs;
+    }
+
+    @Override
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
+        List<Column> columns = MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds);
+        for (int i = 0; i < columns.size(); i++) {
+            Expr expr = partitionExprs.get(i);
+            Column column = columns.get(i);
+            if (expr.getType().getPrimitiveType() != PrimitiveType.INVALID_TYPE
+                    && expr.getType().getPrimitiveType() != column.getType().getPrimitiveType()) {
+                Column newColumn = new Column(column);
+                newColumn.setType(expr.getType());
+                columns.set(i, newColumn);
+            }
+        }
+        return columns;
+    }
+
+    @Override
+    public int getPartitionColumnsSize() {
+        return partitionColumnIds.size();
     }
 
     @Override

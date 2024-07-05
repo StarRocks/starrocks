@@ -38,7 +38,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -99,13 +98,6 @@ public class LakeMaterializedView extends MaterializedView {
         // type is already read in Table
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, LakeMaterializedView.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // write type first
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override

@@ -40,7 +40,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.thrift.TBrokerTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -48,9 +47,6 @@ import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.List;
@@ -232,43 +228,5 @@ public class BrokerTable extends Table {
                 fullSchema.size(), 0, getName(), "");
         tTableDescriptor.setBrokerTable(tBrokerTable);
         return tTableDescriptor;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        Text.writeString(out, brokerName);
-        out.writeInt(paths.size());
-        for (String path : paths) {
-            Text.writeString(out, path);
-        }
-        Text.writeString(out, columnSeparator);
-        Text.writeString(out, rowDelimiter);
-        out.writeInt(brokerProperties.size());
-        for (Map.Entry<String, String> prop : brokerProperties.entrySet()) {
-            Text.writeString(out, prop.getKey());
-            Text.writeString(out, prop.getValue());
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        brokerName = Text.readString(in);
-        int size = in.readInt();
-        paths = Lists.newArrayList();
-        for (int i = 0; i < size; i++) {
-            paths.add(Text.readString(in));
-        }
-        columnSeparator = Text.readString(in);
-        rowDelimiter = Text.readString(in);
-        brokerProperties = Maps.newHashMap();
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            String key = Text.readString(in);
-            String val = Text.readString(in);
-            brokerProperties.put(key, val);
-        }
     }
 }

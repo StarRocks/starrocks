@@ -97,6 +97,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
@@ -447,10 +448,9 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     && olapTable.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
                 HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
-                Set<String> orginalPartitionColumn = hashDistributionInfo.getDistributionColumns()
-                        .stream().map(Column::getName).collect(Collectors.toSet());
-                Set<String> newPartitionColumn = hashDistributionDesc.getDistributionColumnNames()
-                        .stream().collect(Collectors.toSet());
+                List<String> orginalPartitionColumn = MetaUtils.getColumnNamesByColumnIds(
+                        table.getIdToColumn(), hashDistributionInfo.getDistributionColumns());
+                List<String> newPartitionColumn = hashDistributionDesc.getDistributionColumnNames();
                 if (!orginalPartitionColumn.equals(newPartitionColumn)) {
                     throw new SemanticException("not support change distribution column when specify partitions");
                 }
@@ -1063,7 +1063,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                             olapTable.getTableProperty().getProperties(),
                             clause.isTempPartition(),
                             (MultiRangePartitionDesc) partitionDesc,
-                            partitionInfo.getPartitionColumns(),
+                            partitionInfo.getPartitionColumns(table.getIdToColumn()),
                             clause.getProperties());
             partitionDescList = singleRangePartitionDescs.stream()
                     .map(item -> (PartitionDesc) item).collect(Collectors.toList());
@@ -1114,14 +1114,14 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (partitionDesc instanceof SingleRangePartitionDesc) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 SingleRangePartitionDesc singleRangePartitionDesc = ((SingleRangePartitionDesc) partitionDesc);
-                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumns().size(), cloneProperties);
+                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
-                    rangePartitionInfo.checkAndCreateRange(singleRangePartitionDesc,
+                    rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
                 }
             } else if (partitionDesc instanceof SingleItemListPartitionDesc
                     || partitionDesc instanceof MultiItemListPartitionDesc) {
-                List<ColumnDef> columnDefList = partitionInfo.getPartitionColumns().stream()
+                List<ColumnDef> columnDefList = partitionInfo.getPartitionColumns(olapTable.getIdToColumn()).stream()
                         .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
                         .collect(Collectors.toList());
                 PartitionDescAnalyzer.analyze(partitionDesc);

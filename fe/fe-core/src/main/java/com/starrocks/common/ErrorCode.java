@@ -51,7 +51,6 @@ public enum ErrorCode {
     ERR_NON_UNIQ_ERROR(1052, new byte[] {'2', '3', '0', '0', '0'}, "Column '%s' in is ambiguous"),
     ERR_ILLEGAL_COLUMN_REFERENCE_ERROR(1053, new byte[] {'2', '3', '0', '0', '1'},
             "Illegal column/field reference '%s' of semi-/anti-join"),
-    ERR_BAD_FIELD_ERROR(1054, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
     ERR_BAD_FUNC_ERROR(1055, new byte[] {'4', '2', '0', '0', '0'}, "Unknown function '%s'"),
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
@@ -290,6 +289,7 @@ public enum ErrorCode {
                     "1. Create a storage volume. 2. Set the storage volume as default"),
     ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
             "Can not enable replicated storage when the table has GIN"),
+    ERR_BAD_FIELD_ERROR(5509, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
 
     /**
      * 5600 - 5699: DML operation failure
