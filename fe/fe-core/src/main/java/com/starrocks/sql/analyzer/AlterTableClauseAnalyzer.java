@@ -1168,38 +1168,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
-<<<<<<< HEAD
         clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
-=======
-        if (clause.getMultiRangePartitionDesc() != null) {
-            MultiRangePartitionDesc multiRangePartitionDesc = clause.getMultiRangePartitionDesc();
-            PartitionDescAnalyzer.analyze(multiRangePartitionDesc);
-
-            if (!(table instanceof OlapTable)) {
-                throw new SemanticException("Can't add multi-range partition to table type is not olap");
-            }
-            OlapTable olapTable = (OlapTable) table;
-            PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(multiRangePartitionDesc, olapTable);
-
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            List<SingleRangePartitionDesc> singleRangePartitionDescs =
-                    convertMultiRangePartitionDescToSingleRangePartitionDescs(
-                            partitionInfo.isAutomaticPartition(),
-                            olapTable.getTableProperty().getProperties(),
-                            clause.isTempPartition(),
-                            multiRangePartitionDesc,
-                            partitionInfo.getPartitionColumns(olapTable.getIdToColumn()),
-                            clause.getProperties());
-
-            clause.setResolvedPartitionNames(singleRangePartitionDescs.stream()
-                    .map(SinglePartitionDesc::getPartitionName).collect(Collectors.toList()));
-        } else if (clause.getPartitionName() != null) {
-            clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
-        } else if (clause.getPartitionNames() != null) {
-            clause.setResolvedPartitionNames(clause.getPartitionNames());
-        }
-
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
         return null;
     }
 }

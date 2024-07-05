@@ -34,15 +34,7 @@
 
 package com.starrocks.catalog;
 
-<<<<<<< HEAD
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.jmockit.Deencapsulation;
-=======
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.UserException;
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;

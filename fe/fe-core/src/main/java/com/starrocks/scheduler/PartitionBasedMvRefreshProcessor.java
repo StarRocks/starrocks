@@ -80,15 +80,8 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
-<<<<<<< HEAD
 import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
-=======
-import com.starrocks.sql.common.ListPartitionDiff;
-import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.common.MvPartitionDiffResult;
-import com.starrocks.sql.common.PartitionDiffer;
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -1376,141 +1369,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
-<<<<<<< HEAD
-=======
-    private Map<String, String> getPartitionProperties(MaterializedView materializedView) {
-        Map<String, String> partitionProperties = new HashMap<>(4);
-        partitionProperties.put("replication_num",
-                String.valueOf(materializedView.getDefaultReplicationNum()));
-        partitionProperties.put("storage_medium", materializedView.getStorageMedium());
-        String storageCooldownTime =
-                materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
-        if (storageCooldownTime != null
-                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
-            // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
-            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
-            partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
-        }
-        return partitionProperties;
-    }
-
-    private DistributionDesc getDistributionDesc(MaterializedView materializedView) {
-        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
-        if (distributionInfo instanceof HashDistributionInfo) {
-            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
-                    materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
-            return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
-        } else {
-            return new RandomDistributionDesc();
-        }
-    }
-
-    private void addRangePartitions(Database database, MaterializedView materializedView,
-                                    Map<String, Range<PartitionKey>> adds, Map<String, String> partitionProperties,
-                                    DistributionDesc distributionDesc) {
-        if (adds.isEmpty()) {
-            return;
-        }
-        List<PartitionDesc> partitionDescs = Lists.newArrayList();
-
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            Range<PartitionKey> partitionKeyRange = addEntry.getValue();
-
-            String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
-            String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
-            boolean isMaxValue = partitionKeyRange.upperEndpoint().isMaxValue();
-            PartitionValue upperPartitionValue;
-            if (isMaxValue) {
-                upperPartitionValue = PartitionValue.MAX_VALUE;
-            } else {
-                upperPartitionValue = new PartitionValue(upperBound);
-            }
-            PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
-                    Collections.singletonList(new PartitionValue(lowerBound)),
-                    Collections.singletonList(upperPartitionValue));
-            SingleRangePartitionDesc singleRangePartitionDesc =
-                    new SingleRangePartitionDesc(false, mvPartitionName, partitionKeyDesc, partitionProperties);
-            partitionDescs.add(singleRangePartitionDesc);
-        }
-
-        // create partitions in small batch, to avoid create too many partitions at once
-        for (List<PartitionDesc> batch : ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE)) {
-            RangePartitionDesc rangePartitionDesc =
-                    new RangePartitionDesc(materializedView.getPartitionColumnNames(), batch);
-            AddPartitionClause alterPartition = new AddPartitionClause(rangePartitionDesc, distributionDesc,
-                    partitionProperties, false);
-            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
-            analyzer.analyze(mvContext.getCtx(), alterPartition);
-            try {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
-                        database, materializedView.getName(), alterPartition);
-            } catch (Exception e) {
-                throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                        database.getFullName(), materializedView.getName());
-            }
-            Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    private void addListPartitions(Database database, MaterializedView materializedView,
-                                   Map<String, List<List<String>>> adds, Map<String, String> partitionProperties,
-                                   DistributionDesc distributionDesc) {
-        if (adds.isEmpty()) {
-            return;
-        }
-
-        for (Map.Entry<String, List<List<String>>> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            List<List<String>> partitionKeyList = addEntry.getValue();
-            MultiItemListPartitionDesc multiItemListPartitionDesc =
-                    new MultiItemListPartitionDesc(false, mvPartitionName, partitionKeyList, partitionProperties);
-            try {
-                AddPartitionClause addPartitionClause =
-                        new AddPartitionClause(multiItemListPartitionDesc, distributionDesc, partitionProperties, false);
-                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
-                analyzer.analyze(mvContext.getCtx(), addPartitionClause);
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
-                        database, materializedView.getName(), addPartitionClause);
-            } catch (Exception e) {
-                throw new DmlException("add list partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                        database.getFullName(), materializedView.getName());
-            }
-        }
-    }
-
-    private void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {
-        String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
-            throw new DmlException("drop partition failed. database:" + db.getFullName() + " not exist");
-        }
-        try {
-            // check
-            Table mv = db.getTable(materializedView.getId());
-            if (mv == null) {
-                throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
-            }
-            Partition mvPartition = mv.getPartition(dropPartitionName);
-            if (mvPartition == null) {
-                throw new DmlException("drop partition failed. partition:" + dropPartitionName + " not exist");
-            }
-
-            DropPartitionClause dropPartitionClause = new DropPartitionClause(false, dropPartitionName, false, true);
-            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
-            analyzer.analyze(new ConnectContext(), dropPartitionClause);
-
-            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, materializedView, dropPartitionClause);
-        } catch (Exception e) {
-            throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                    db.getFullName(), materializedView.getName());
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
-    }
-
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
     /**
      * For external table, the partition name is normalized which should convert it into original partition name.
      * <p>

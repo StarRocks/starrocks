@@ -96,11 +96,8 @@ import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
-<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
-=======
 import com.starrocks.sql.common.MetaUtils;
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.SystemInfoService;
@@ -1116,7 +1113,7 @@ public class OlapTable extends Table {
 
     @Override
     public List<Column> getPartitionColumns() {
-        return partitionInfo.getPartitionColumns();
+        return partitionInfo.getPartitionColumns(this.idToColumn);
     }
 
     @Override
@@ -1124,26 +1121,16 @@ public class OlapTable extends Table {
         List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo.isUnPartitioned()) {
             return partitionColumnNames;
-<<<<<<< HEAD
         } else if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-=======
-        } else if (partitionInfo instanceof RangePartitionInfo) {
-            List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(this.idToColumn);
             for (Column column : partitionColumns) {
                 partitionColumnNames.add(column.getName());
             }
             return partitionColumnNames;
-<<<<<<< HEAD
         } else if (partitionInfo.isListPartition()) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-            List<Column> partitionColumns = listPartitionInfo.getPartitionColumns();
-=======
-        } else if (partitionInfo instanceof ListPartitionInfo) {
-            List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
+            List<Column> partitionColumns = listPartitionInfo.getPartitionColumns(this.idToColumn);
             for (Column column : partitionColumns) {
                 partitionColumnNames.add(column.getName());
             }

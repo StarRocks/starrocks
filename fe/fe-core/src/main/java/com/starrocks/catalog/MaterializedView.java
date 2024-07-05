@@ -637,7 +637,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return the partition column of the materialized view
      */
     public Optional<Column> getPartitionColumn() {
-        List<Column> partitionCols = partitionInfo.getPartitionColumns();
+        List<Column> partitionCols = partitionInfo.getPartitionColumns(this.getIdToColumn());
         if (partitionCols == null || partitionCols.isEmpty()) {
             return Optional.empty();
         }
@@ -653,16 +653,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionRefTableExprs == null) {
             return null;
         }
-<<<<<<< HEAD
         Expr partitionExpr = partitionRefTableExprs.get(0);
         if (partitionExpr == null) {
             return null;
-=======
-        if (partitionRefTableExprs.get(0).getType() == Type.INVALID) {
-            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Type partitionColType = expressionRangePartitionInfo.getPartitionColumns(this.idToColumn).get(0).getType();
-            partitionRefTableExprs.get(0).setType(partitionColType);
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
         }
         if (partitionExpr.getType() == Type.INVALID) {
             Optional<Column> partitionColOpt = getPartitionColumn();
@@ -1642,14 +1635,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionColOpt.isEmpty()) {
             return;
         }
-<<<<<<< HEAD
         Column partitionCol = partitionColOpt.get();
-=======
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        // only one partition column is supported now.
-        Preconditions.checkState(expressionRangePartitionInfo.getPartitionColumnsSize() == 1);
-        Column partitionCol = expressionRangePartitionInfo.getPartitionColumns(this.idToColumn).get(0);
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
 
         // for single ref base table, recover from serializedPartitionRefTableExprs
         partitionRefTableExprs = new ArrayList<>();

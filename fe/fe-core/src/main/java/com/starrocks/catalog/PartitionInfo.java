@@ -236,49 +236,8 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         return Collections.emptyList();
     }
 
-<<<<<<< HEAD
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
-
-        Preconditions.checkState(idToDataProperty.size() == idToReplicationNum.size());
-        Preconditions.checkState(idToInMemory.keySet().equals(idToReplicationNum.keySet()));
-        out.writeInt(idToDataProperty.size());
-        for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
-            out.writeLong(entry.getKey());
-            if (DataProperty.DATA_PROPERTY_HDD.equals(entry.getValue())) {
-                out.writeBoolean(true);
-            } else {
-                out.writeBoolean(false);
-                entry.getValue().write(out);
-            }
-
-            out.writeShort(idToReplicationNum.get(entry.getKey()));
-            out.writeBoolean(idToInMemory.get(entry.getKey()));
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        type = PartitionType.valueOf(Text.readString(in));
-
-        int counter = in.readInt();
-        for (int i = 0; i < counter; i++) {
-            long partitionId = in.readLong();
-            boolean isDefaultHddDataProperty = in.readBoolean();
-            if (isDefaultHddDataProperty) {
-                idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
-            } else {
-                idToDataProperty.put(partitionId, DataProperty.read(in));
-            }
-
-            short replicationNum = in.readShort();
-            idToReplicationNum.put(partitionId, replicationNum);
-            idToInMemory.put(partitionId, in.readBoolean());
-        }
-=======
     public int getPartitionColumnsSize() {
         return 0;
->>>>>>> a3c0c7e342 ([Refactor] Introduce ColumnId to support Column renaming (part2) (#45215))
     }
 
     @Override
