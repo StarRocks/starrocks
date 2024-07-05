@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-This statement is used to create indexes. You can use this statement to create oly Bitmap indexes. For usage notes and scenarios of Bitmap indexes, see [Bitmap index](../../../table_design/indexes/Bitmap_index.md).
+This statement is used to create indexes. You can use this statement to create only Bitmap indexes. For usage notes and scenarios of Bitmap indexes, see [Bitmap index](../../../table_design/indexes/Bitmap_index.md).
 
 :::tip
 
