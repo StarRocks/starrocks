@@ -49,7 +49,8 @@
 #include "exec/hdfs_scanner_text.h"
 #include "exec/multi_olap_table_sink.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
-#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/olap_table_sink_operator.h"
@@ -68,6 +69,7 @@
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
 #include "gen_cpp/InternalService_types.h"
+#include "pipeline/exchange/multi_cast_local_exchange.h"
 #include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/dictionary_cache_sink.h"
@@ -310,12 +312,16 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
-        // @TODO mem limit
-        // @TODO should analyze sink, if two sinks have dependecy, should make sure one must can cusome, e.g. local rf
-        // 1. spill 2. allow build side always pull data(cant't limit memory)
         // === create exchange ===
-        // auto mcast_local_exchanger = std::make_shared<InMemoryMultiCastLocalExchanger>(runtime_state, sinks.size());
-        auto mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size());
+        // @TODO
+        std::shared_ptr<MultiCastLocalExchanger> mcast_local_exchanger;
+        if (runtime_state->enable_spill() && runtime_state->enable_multi_cast_local_exchange_spill()) {
+            mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size());
+        } else {
+            mcast_local_exchanger = std::make_shared<InMemoryMultiCastLocalExchanger>(runtime_state, sinks.size());
+        }
+
+        // auto mcast_local_exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(runtime_state, sinks.size());
 
         // === create sink op ====
         auto* upstream = prev_operators.back().get();

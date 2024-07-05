@@ -16,6 +16,7 @@
 #include <glog/logging.h>
 
 #include "util/logging.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
 
 namespace starrocks::pipeline {
 
@@ -228,72 +229,6 @@ void InMemoryMultiCastLocalExchanger::_update_progress(Cell* fast) {
     if (_head != nullptr) {
         _current_row_size = _current_accumulated_row_size - _head->accumulated_row_size;
     }
-}
-
-// ===== source op =====
-Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(SourceOperator::prepare(state));
-    _exchanger->open_source_operator(_mcast_consumer_index);
-    // attach exchange profile to this operator.(not work, can not be added multiple times)
-    // _runtime_profile->add_child(_exchanger->runtime_profile(), true, nullptr);
-    return Status::OK();
-}
-
-Status MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) {
-    if (!_is_finished) {
-        _is_finished = true;
-        _exchanger->close_source_operator(_mcast_consumer_index);
-    }
-    return Status::OK();
-}
-
-StatusOr<ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
-    auto ret = _exchanger->pull_chunk(state, _mcast_consumer_index);
-    if (ret.status().is_end_of_file()) {
-        (void)set_finishing(state);
-    }
-    return ret;
-}
-
-bool MultiCastLocalExchangeSourceOperator::has_output() const {
-    return _exchanger->can_pull_chunk(_mcast_consumer_index);
-}
-
-// ===== sink op =====
-
-Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::prepare(state));
-    _exchanger->open_sink_operator();
-    _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter(
-            "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    _peak_buffer_row_size_counter = _unique_metrics->AddHighWaterMarkCounter(
-            "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
-    return Status::OK();
-}
-
-bool MultiCastLocalExchangeSinkOperator::need_input() const {
-    return _exchanger->can_push_chunk();
-}
-
-Status MultiCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
-    if (!_is_finished) {
-        _is_finished = true;
-        _exchanger->close_sink_operator();
-    }
-    return Status::OK();
-}
-
-StatusOr<ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
-    return Status::InternalError("Should not pull_chunk in MultiCastLocalExchangeSinkOperator");
-}
-
-Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    return _exchanger->push_chunk(chunk, _driver_sequence, this);
-}
-
-void MultiCastLocalExchangeSinkOperator::update_counter(size_t memory_usage, size_t buffer_row_size) {
-    _peak_memory_usage_counter->set(memory_usage);
-    _peak_buffer_row_size_counter->set(buffer_row_size);
 }
 
 } // namespace starrocks::pipeline

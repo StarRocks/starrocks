@@ -1,0 +1,213 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+
+#include <queue>
+
+namespace starrocks::pipeline {
+
+class MemLimitedChunkQueue {
+private:
+    struct Cell {
+        ChunkPtr chunk;
+        size_t accumulated_rows = 0;
+        size_t accumulated_bytes = 0;
+        int32_t used_count = 0;
+    };
+    // won't be very large
+    struct Block {
+        // still need a link
+        std::vector<Cell> cells;
+        bool in_mem = true;
+        bool has_load_task = false;
+        bool has_flush_task = false;
+        // @TODO no need, use last - first
+        size_t memory_usage = 0;
+        // memory
+        Block* next = nullptr;
+        // spillable block, only used when spill happens
+        spill::BlockPtr block;
+        size_t flush_rows = 0;
+        size_t flush_bytes = 0;
+        // @TODO should record read ref??
+    };
+
+    struct Iterator {
+        Iterator() = default;
+        Iterator(Block* blk, size_t idx): block(blk), index(idx) {}
+        Block* block = nullptr;
+        // @TODO canot use index as internal iterator
+        size_t index = 0;
+
+        bool valid() const {
+            return block != nullptr && index < block->cells.size();
+        }
+
+        //@TODO how to diff empty and end
+        bool has_next() const {
+            if (block == nullptr) {
+                return false;
+            }
+            if (index + 1 == block->cells.size()) {
+                // current block is end, should check next
+                if (block->next != nullptr && !block->next->cells.empty()) {
+                    return true;
+                }
+                return false;
+            }
+            // still has un-consumed data in current block
+            return true;
+        }
+
+        // return an copy of next cell
+        Iterator next() const {
+            DCHECK(has_next());
+            Iterator iter(block, index);
+            iter.move_to_next();
+            return iter;
+        }
+        void move_to_next() {
+            DCHECK(has_next());
+            index++;
+            DCHECK_LE(index, block->cells.size());
+            if (index == block->cells.size()) {
+                block = block->next;
+                index = 0;
+            }
+        }
+
+        Cell* get_cell() {
+            DCHECK(block != nullptr);
+            DCHECK(index < block->cells.size()) << ", invalid index: " << index << ", size: " << block->cells.size();
+            return &(block->cells[index]);
+        }
+
+        Block* get_block() {
+            return block;
+        }
+    };
+public:
+    struct Options {
+        // use this to query
+        std::string name = "multi_cast_local_exchange";
+        int32_t plan_node_id = 0;
+
+        // memory block size
+        size_t block_size = 1024 * 1024 * 8;
+        size_t memory_limit = 1024 * 1024 * 16;
+        size_t max_unconsumed_bytes = 1024 * 1024 * 16;
+        CompressionTypePB compress_type = CompressionTypePB::LZ4;
+        spill::BlockManager* block_manager = nullptr;
+        workgroup::WorkGroupPtr wg;
+    };
+    // @TODO mem control strategy
+    // 1. for each consumer, only keep one Block in memory
+    // 2. for producer, keep on block in memory
+
+    // max memory (consumers + producers) * block memory
+
+    MemLimitedChunkQueue(RuntimeState* state, RuntimeProfile* profile, int32_t consumer_number, Options opts);
+    ~MemLimitedChunkQueue();
+
+    Status push(const ChunkPtr& chunk, MultiCastLocalExchangeSinkOperator* sink_operator);
+    bool can_push();
+
+    StatusOr<ChunkPtr> pop(int32_t consumer_index);
+    bool can_pop(int32_t consumer_index);
+
+    void open_consumer(int32_t consumer_index);
+    
+    void close_consumer(int32_t consumer_index);
+    
+    void open_producer();
+    
+    void close_producer();
+
+
+private:
+    void _update_progress(Iterator* iter = nullptr);
+    
+    void _close_consumer(int32_t consumer_index);
+
+    Status flush();
+    // trigger flush task
+    Status submit_flush_task();
+    // reload block from disk
+    Status load(Block* block);
+    Status submit_load_task(Block* block);
+
+    void evict_loaded_block();
+
+#ifdef BE_TEST
+public:
+#endif
+
+    RuntimeState* _state = nullptr;
+    std::mutex _mutex;
+    // an empty chunk, only keep meta
+    ChunkPtr _chunk_builder;
+    Block* _head = nullptr;
+    Block* _tail = nullptr;
+    Block* _next_flush_block = nullptr;
+
+
+    // an iterator point to head;
+    Iterator _iterator;
+
+    int32_t _consumer_number;
+    int32_t _opened_source_number = 0;
+    int32_t _opened_sink_number = 0;
+    std::vector<int32_t> _opened_source_opcount;
+    // record consume progress
+
+    std::vector<std::unique_ptr<Iterator>> _consumer_progress;
+
+    // all 
+    size_t _total_accumulated_rows = 0;
+    size_t _total_accumulated_bytes = 0;
+    // head
+    size_t _head_accumulated_rows = 0;
+    size_t _head_accumulated_bytes = 0;
+
+    // not flushed
+    size_t _flushed_accumulated_rows = 0;
+    size_t _flushed_accumulated_bytes = 0;
+
+    // consumer
+    size_t _fastest_accumulated_rows = 0;
+    size_t _fastest_accumulated_bytes = 0;
+
+    size_t _current_load_rows = 0;
+    size_t _current_load_bytes = 0;
+
+    // spill related
+    Options _opts;
+    Status _io_task_status;
+
+    std::atomic_bool _has_flush_io_task = false;
+    std::queue<Block*> _loaded_blocks;
+
+    RuntimeProfile::HighWaterMarkCounter* _peak_memory_bytes_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_memory_rows_counter = nullptr;
+
+    // io stats of load task
+    RuntimeProfile::Counter* _read_io_timer = nullptr;
+    RuntimeProfile::Counter* _read_io_count = nullptr;
+    RuntimeProfile::Counter* _read_io_bytes = nullptr;
+};
+
+}
