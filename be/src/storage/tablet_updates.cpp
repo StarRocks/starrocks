@@ -2165,6 +2165,7 @@ Status TabletUpdates::_light_apply_compaction_commit(const EditVersion& version,
 }
 
 Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+    CHECK_MEM_LIMIT("TabletUpdates::_apply_compaction_commit");
     const uint32_t rowset_id = version_info.compaction->output;
     Rowset* output_rowset = get_rowset(rowset_id).get();
     Status apply_st;
@@ -2368,6 +2369,12 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     }
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
+    // NOTE:
+    // If the apply fails at the following stages, an intolerable error must be returned right now.
+    // Because the metadata may have already been persisted.
+    // If you need to return a tolerable error, please make sure the following:
+    //   1. The latest meta should be roll back.
+    //   2. The del_vec cache maybe invalid, maybe clear cache is necessary.
     {
         std::lock_guard wl(_lock);
         if (_edit_version_infos.empty()) {

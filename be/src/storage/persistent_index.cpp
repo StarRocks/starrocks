@@ -3351,9 +3351,11 @@ Status PersistentIndex::_build_commit(TabletLoader* loader, PersistentIndexMetaP
 
 Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey_schema,
                                         std::unique_ptr<Column> pk_column) {
+    CHECK_MEM_LIMIT("PersistentIndex::_insert_rowsets");
     std::vector<uint32_t> rowids;
-    rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
+    ChunkUniquePtr chunk_shared_ptr;
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
     RETURN_IF_ERROR(loader->rowset_iterator(pkey_schema, [&](const std::vector<ChunkIteratorPtr>& itrs,
                                                              uint32_t rowset_id) {
@@ -3374,7 +3376,8 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                     Column* pkc = nullptr;
                     if (pk_column != nullptr) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        TRY_CATCH_BAD_ALLOC(
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
@@ -3392,7 +3395,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                         st = insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), values.data(), false);
                     } else {
                         std::vector<Slice> keys;
-                        keys.reserve(pkc->size());
+                        TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
                         const auto* fkeys = pkc->continuous_data();
                         for (size_t i = 0; i < pkc->size(); ++i) {
                             keys.emplace_back(fkeys, _key_size);
