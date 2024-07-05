@@ -324,7 +324,7 @@ AggregateFunctionPtr AggregateFactory::MakeAnyValueAggregateFunction() {
 }
 
 template <typename NestedState, bool IsWindowFunc, bool IgnoreNull, typename NestedFunctionPtr,
-          IsAggNullPred<NestedState> AggNullPred = AggNonNullPred<NestedState>>
+          IsAggNullPred<NestedState> AggNullPred>
 AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function,
                                                                           AggNullPred null_pred) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState, IsWindowFunc>;
@@ -333,7 +333,7 @@ AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(Nested
                                                                                      std::move(null_pred));
 }
 
-template <typename NestedState, IsAggNullPred<NestedState> AggNullPred = AggNonNullPred<NestedState>>
+template <typename NestedState, IsAggNullPred<NestedState> AggNullPred>
 AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function,
                                                                              AggNullPred null_pred) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState, false>;
