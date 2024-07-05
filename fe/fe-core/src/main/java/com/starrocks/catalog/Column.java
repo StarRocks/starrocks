@@ -57,11 +57,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
-<<<<<<< HEAD
-import com.starrocks.sql.parser.SqlParser;
-=======
-import com.starrocks.sql.ast.IndexDef;
->>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
 import com.starrocks.thrift.TColumn;
 
 import java.io.DataInput;
@@ -235,7 +230,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
-        this.generatedColumnExpr = column.generatedColumnExpr();
+        this.generatedColumnExpr = column.generatedColumnExpr;
     }
 
     public Column deepCopy() {
@@ -543,12 +538,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         return generatedColumnExpr.convertToColumnNameExpr(schema).clone();
     }
-<<<<<<< HEAD
-    public void setGeneratedColumnExpr(Expr expr) {
-=======
 
     public void setGeneratedColumnExpr(ColumnIdExpr expr) {
->>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
         generatedColumnExpr = expr;
     }
 

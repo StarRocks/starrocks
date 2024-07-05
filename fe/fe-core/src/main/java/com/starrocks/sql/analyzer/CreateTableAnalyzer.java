@@ -345,87 +345,8 @@ public class CreateTableAnalyzer {
                 hasReplace = true;
             }
 
-<<<<<<< HEAD
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
-=======
-            if (columnDef.getAggregateType() == AggregateType.HLL_UNION && keysDesc != null
-                    && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
-                throw new SemanticException("HLL_UNION must be used in AGG_KEYS", keysDesc.getPos());
-            }
-
-            if (columnDef.getAggregateType() == AggregateType.BITMAP_UNION && columnDef.getType().isBitmapType()
-                    && keysDesc != null && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
-                throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
-            }
-
-            Column col = columnDef.toColumn(null);
-            if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
-                    || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
-                    keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
-                if (!col.isKey()) {
-                    col.setAggregationTypeImplicit(true);
-                }
-            }
-            columns.add(col);
-        }
-
-        statement.setColumns(columns);
-    }
-
-    private static void analyzeKeysDesc(CreateTableStmt stmt) {
-        KeysDesc keysDesc = stmt.getKeysDesc();
-        if (!stmt.isOlapEngine()) {
-            // mysql, broker, iceberg, hudi and hive do not need key desc
-            if (keysDesc != null) {
-                throw new SemanticException("Create " + stmt.getEngineName() + " table should not contain keys desc",
-                        keysDesc.getPos());
-            }
-            return;
-        }
-
-        List<ColumnDef> columnDefs = stmt.getColumnDefs();
-
-        if (keysDesc == null) {
-            List<String> keysColumnNames = Lists.newArrayList();
-            if (columnDefs.stream().anyMatch(c -> c.getAggregateType() != null)) {
-                for (ColumnDef columnDef : columnDefs) {
-                    if (columnDef.getAggregateType() == null) {
-                        keysColumnNames.add(columnDef.getName());
-                    }
-                }
-                keysDesc = new KeysDesc(KeysType.AGG_KEYS, keysColumnNames);
-            } else {
-                int keyLength = 0;
-                for (ColumnDef columnDef : columnDefs) {
-                    keyLength += columnDef.getType().getIndexSize();
-                    if (keysColumnNames.size() >= FeConstants.SHORTKEY_MAX_COLUMN_COUNT
-                            || keyLength > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
-                        if (keysColumnNames.size() == 0
-                                && columnDef.getType().getPrimitiveType().isCharFamily()) {
-                            keysColumnNames.add(columnDef.getName());
-                        }
-                        break;
-                    }
-                    if (!columnDef.getType().canDistributedBy()) {
-                        break;
-                    }
-                    if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
-                        keysColumnNames.add(columnDef.getName());
-                        break;
-                    }
-                    keysColumnNames.add(columnDef.getName());
-                }
-                if (columnDefs.isEmpty()) {
-                    throw new SemanticException("Empty schema");
-                }
-                // The OLAP table must has at least one short key and the float and double should not be short key.
-                // So the float and double could not be the first column in OLAP table.
-                if (keysColumnNames.isEmpty()) {
-                    throw new SemanticException("Data type of first column cannot be %s", columnDefs.get(0).getType());
-                }
-                keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames);
->>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
             }
         }
 
@@ -520,7 +441,7 @@ public class CreateTableAnalyzer {
         List<Column> columns = statement.getColumns();
         List<Index> indexes = statement.getIndexes();
         for (ColumnDef columnDef : columnDefs) {
-            Column col = columnDef.toColumn();
+            Column col = columnDef.toColumn(null);
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -549,73 +470,8 @@ public class CreateTableAnalyzer {
         Map<String, Column> columnsMap = Maps.newHashMap();
         for (Column column : columns) {
             columnsMap.put(column.getName(), column);
-<<<<<<< HEAD
             if (column.isGeneratedColumn() && keysDesc.containsCol(column.getName())) {
                 throw new SemanticException("Generated Column can not be KEY");
-=======
-        }
-
-        boolean found = false;
-        for (Column column : columns) {
-            if (found && !column.isGeneratedColumn()) {
-                throw new SemanticException("All generated columns must be defined after ordinary columns");
-            }
-
-            if (column.isGeneratedColumn()) {
-                if (keysDesc.containsCol(column.getName())) {
-                    throw new SemanticException("Generated Column can not be KEY");
-                }
-
-                Expr expr = column.getGeneratedColumnExpr(columns);
-
-                List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
-                expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
-                if (dictionaryGetExprs.size() != 0) {
-                    for (DictionaryGetExpr dictionaryGetExpr : dictionaryGetExprs) {
-                        dictionaryGetExpr.setSkipStateCheck(true);
-                    }
-                }
-
-                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
-                        new RelationFields(columns.stream().map(col -> new Field(
-                                        col.getName(), col.getType(), tableNameObject, null))
-                                .collect(Collectors.toList()))), context);
-
-                // check if contain aggregation
-                List<FunctionCallExpr> funcs = Lists.newArrayList();
-                expr.collect(FunctionCallExpr.class, funcs);
-                for (FunctionCallExpr fn : funcs) {
-                    if (fn.isAggregateFunction()) {
-                        throw new SemanticException("Generated Column don't support aggregation function");
-                    }
-                }
-
-                // check if the expression refers to other Generated columns
-                List<SlotRef> slots = Lists.newArrayList();
-                expr.collect(SlotRef.class, slots);
-                if (slots.size() != 0) {
-                    for (SlotRef slot : slots) {
-                        Column refColumn = columnsMap.get(slot.getColumnName());
-                        if (refColumn == null) {
-                            throw new SemanticException("column:" + slot.getColumnName() + " does not exist");
-                        }
-                        if (refColumn.isGeneratedColumn()) {
-                            throw new SemanticException("Expression can not refers to other generated columns");
-                        }
-                        if (refColumn.isAutoIncrement()) {
-                            throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
-                        }
-                    }
-                }
-
-                if (!column.getType().matchesType(expr.getType())) {
-                    throw new SemanticException("Illegal expression type for Generated Column " +
-                            "Column Type: " + column.getType().toString() +
-                            ", Expression Type: " + expr.getType().toString());
-                }
-
-                found = true;
->>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
             }
         }
 
@@ -635,7 +491,7 @@ public class CreateTableAnalyzer {
                 }
 
                 if (column.isGeneratedColumn()) {
-                    Expr expr = column.generatedColumnExpr();
+                    Expr expr = column.getGeneratedColumnExpr(columns);
 
                     List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
                     expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);

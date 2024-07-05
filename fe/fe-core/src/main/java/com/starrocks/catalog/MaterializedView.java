@@ -654,16 +654,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionRefTableExprs == null) {
             return null;
         }
-<<<<<<< HEAD
         Expr partitionExpr = partitionRefTableExprs.get(0);
         if (partitionExpr == null) {
             return null;
-=======
-        if (partitionRefTableExprs.get(0).getType() == Type.INVALID) {
-            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            partitionRefTableExprs.get(0).setType(
-                    expressionRangePartitionInfo.getPartitionExprs(idToColumn).get(0).getType());
->>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
         }
         if (partitionExpr.getType() == Type.INVALID) {
             Optional<Column> partitionColOpt = getPartitionColumn();
@@ -684,13 +677,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
                 ((ExpressionRangePartitionInfo) materializedView.getPartitionInfo());
         // currently, mv only supports one expression
-<<<<<<< HEAD
-        Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-        return materializedView.getPartitionExpr();
-=======
         Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprsSize() == 1);
-        return materializedView.getFirstPartitionRefTableExpr();
->>>>>>> c47a4b6065 ([Refactor] Introduce ColumnId to support Column renaming (part4) (#45842))
+        return materializedView.getPartitionExpr();
     }
 
     /**
