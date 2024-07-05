@@ -1067,11 +1067,10 @@ public class PropertyAnalyzer {
                 TableName tableName = parseResult.first;
                 List<String> columnNames = parseResult.second;
                 if (table.isMaterializedView()) {
-                    Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getTbl(),
-                            tableName.getDb(), tableName.getTbl());
+                    Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
                     if (uniqueConstraintTable == null) {
-                        throw new SemanticException(
-                                String.format("table: %s does not exist", tableName));
+                        throw new SemanticException(String.format("table: %s does not exist", tableName));
                     }
                     List<ColumnId> columnIds = MetaUtils.getColumnIdsByColumnNames(uniqueConstraintTable, columnNames);
                     analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
