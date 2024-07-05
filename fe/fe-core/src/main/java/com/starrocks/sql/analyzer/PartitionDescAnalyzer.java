@@ -139,7 +139,7 @@ public class PartitionDescAnalyzer {
             long descStep = multiRangePartitionDesc.getStep();
 
             ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs().get(0);
+            Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             String functionName = functionCallExpr.getFnName().getFunction();
 
@@ -180,7 +180,7 @@ public class PartitionDescAnalyzer {
         LocalDateTime partitionBeginDateTime = DateUtils.parseStrictDateTime(partitionBegin);
         LocalDateTime partitionEndDateTime = DateUtils.parseStrictDateTime(partitionEnd);
 
-        Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs().get(0);
+        Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
         String functionName = functionCallExpr.getFnName().getFunction();
 

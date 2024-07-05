@@ -49,6 +49,7 @@ import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
+import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -406,7 +407,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     // record expression table column
     @SerializedName(value = "partitionRefTableExprs")
-    private List<GsonUtils.ExpressionSerializedObject> serializedPartitionRefTableExprs;
+    private List<ExpressionSerializedObject> serializedPartitionRefTableExprs;
     private List<Expr> partitionRefTableExprs;
 
     // Maintenance plan for this MV
@@ -423,7 +424,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private int maxMVRewriteStaleness = 0;
 
     @SerializedName(value = "partitionExprMaps")
-    private Map<GsonUtils.ExpressionSerializedObject, GsonUtils.ExpressionSerializedObject> serializedPartitionExprMaps;
+    private Map<ExpressionSerializedObject, ExpressionSerializedObject> serializedPartitionExprMaps;
     private Map<Expr, SlotRef> partitionExprMaps;
 
     // Materialized view's output columns may be different from defined query's output columns.
@@ -676,7 +677,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
                 ((ExpressionRangePartitionInfo) materializedView.getPartitionInfo());
         // currently, mv only supports one expression
-        Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+        Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprsSize() == 1);
         return materializedView.getPartitionExpr();
     }
 
@@ -1020,7 +1021,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // currently, mv only supports one expression
         if (partitionInfo.isExprRangePartitioned()) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
             // for Partition slot ref, the SlotDescriptor is not serialized, so should recover it here.
             // the SlotDescriptor is used by toThrift, which influences the execution process.
             List<SlotRef> slotRefs = Lists.newArrayList();
@@ -1265,7 +1266,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (bfColumnNames != null) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                     .append("\" = \"");
-            sb.append(Joiner.on(", ").join(getCopiedBfColumns())).append("\"");
+            sb.append(Joiner.on(", ").join(bfColumnNames)).append("\"");
         }
 
         // colocate_with
@@ -1610,7 +1611,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             for (Expr partitionExpr : partitionRefTableExprs) {
                 if (partitionExpr != null) {
                     serializedPartitionRefTableExprs.add(
-                            new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+                            new ExpressionSerializedObject(partitionExpr.toSql()));
                 }
             }
         }
@@ -1619,8 +1620,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             for (Map.Entry<Expr, SlotRef> entry : partitionExprMaps.entrySet()) {
                 if (entry.getKey() != null && entry.getValue() != null) {
                     serializedPartitionExprMaps.put(
-                            new GsonUtils.ExpressionSerializedObject(entry.getKey().toSql()),
-                            new GsonUtils.ExpressionSerializedObject(entry.getValue().toSql())
+                            new ExpressionSerializedObject(entry.getKey().toSql()),
+                            new ExpressionSerializedObject(entry.getValue().toSql())
                     );
                 }
             }
@@ -1641,10 +1642,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         partitionRefTableExprs = new ArrayList<>();
         partitionExprMaps = Maps.newHashMap();
         if (serializedPartitionRefTableExprs != null) {
-            for (GsonUtils.ExpressionSerializedObject serializedObject : serializedPartitionRefTableExprs) {
-                Expr partitionExpr = parsePartitionExpr(serializedObject.expressionSql, partitionCol);
+            for (ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
+                Expr partitionExpr = parsePartitionExpr(expressionSql.getExpressionSql(), partitionCol);
                 if (partitionExpr == null) {
-                    LOG.warn("parse partition expr failed, sql: {}", serializedObject.expressionSql);
+                    LOG.warn("parse partition expr failed, sql: {}", expressionSql.getExpressionSql());
                     continue;
                 }
                 partitionRefTableExprs.add(partitionExpr);
@@ -1656,12 +1657,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // for multi ref base tables, recover from serializedPartitionExprMaps
         if (serializedPartitionExprMaps != null) {
-            for (Map.Entry<GsonUtils.ExpressionSerializedObject, GsonUtils.ExpressionSerializedObject> entry :
+            for (Map.Entry<ExpressionSerializedObject, ExpressionSerializedObject> entry :
                     serializedPartitionExprMaps.entrySet()) {
                 if (entry.getKey() != null && entry.getValue() != null) {
-                    Expr partitionExpr = parsePartitionExpr(entry.getKey().expressionSql, partitionCol);
+                    Expr partitionExpr = parsePartitionExpr(entry.getKey().getExpressionSql(), partitionCol);
                     if (partitionExpr == null) {
-                        LOG.warn("parse partition expr failed, sql: {}", entry.getKey().expressionSql);
+                        LOG.warn("parse partition expr failed, sql: {}", entry.getKey().getExpressionSql());
                         continue;
                     }
                     SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
@@ -1812,7 +1813,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // change ExpressionRangePartitionInfo because mv's db may be changed.
         if (partitionInfo.isExprRangePartitioned()) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprsSize() == 1);
             expressionRangePartitionInfo.renameTableName(db.getFullName(), this.name);
         }
 

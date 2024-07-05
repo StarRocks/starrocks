@@ -728,38 +728,4 @@ public class GsonUtils {
             }
         }
     }
-
-    /*
-    * For historical reasons, there was a period of time when the code serialized Expr directly in GsonUtils,
-    * which would cause problems for the future expansion of Expr. This class is for code compatibility.
-    * Starting from version 3.2, this compatibility class can be deleted.
-    *
-    *
-    private static class ExpressionSerializer implements JsonSerializer<Expr> {
-        @Override
-        public JsonElement serialize(Expr expr, Type type, JsonSerializationContext context) {
-            JsonObject expressionJson = new JsonObject();
-            expressionJson.addProperty("expr", expr.toSql());
-            return expressionJson;
-        }
-    }
-
-    private static class ExpressionDeserializer implements JsonDeserializer<Expr> {
-        @Override
-        public Expr deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext context)
-                throws JsonParseException {
-            JsonObject expressionObject = jsonElement.getAsJsonObject();
-            String expressionSql = expressionObject.get("expr").getAsString();
-            return SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
-        }
-    }
-     */
-    public static class ExpressionSerializedObject {
-        public ExpressionSerializedObject(String expressionSql) {
-            this.expressionSql = expressionSql;
-        }
-
-        @SerializedName("expr")
-        public String expressionSql;
-    }
 }

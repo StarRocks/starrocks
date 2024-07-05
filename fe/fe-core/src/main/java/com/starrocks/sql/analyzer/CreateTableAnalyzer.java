@@ -441,7 +441,7 @@ public class CreateTableAnalyzer {
         List<Column> columns = statement.getColumns();
         List<Index> indexes = statement.getIndexes();
         for (ColumnDef columnDef : columnDefs) {
-            Column col = columnDef.toColumn();
+            Column col = columnDef.toColumn(null);
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -491,7 +491,7 @@ public class CreateTableAnalyzer {
                 }
 
                 if (column.isGeneratedColumn()) {
-                    Expr expr = column.generatedColumnExpr();
+                    Expr expr = column.getGeneratedColumnExpr(columns);
 
                     List<DictionaryGetExpr> dictionaryGetExprs = Lists.newArrayList();
                     expr.collect(DictionaryGetExpr.class, dictionaryGetExprs);
