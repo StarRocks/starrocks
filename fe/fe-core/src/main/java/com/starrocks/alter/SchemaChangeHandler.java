@@ -1782,6 +1782,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = ImmutableSet.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
+<<<<<<< HEAD
 
                 db.readLock();
                 int id = 0;
@@ -1790,6 +1791,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 } finally {
                     db.readUnlock();
                 }
+=======
+  
+                int id = colUniqueIdSupplier.getAsInt();
+>>>>>>> 1ba01ef8e6 ([Refactor] Change maxColUniqueId to atomic (#47721))
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
                 if (RunMode.isSharedDataMode()) {
