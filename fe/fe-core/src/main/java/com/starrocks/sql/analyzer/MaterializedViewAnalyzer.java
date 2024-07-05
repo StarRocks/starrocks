@@ -797,7 +797,7 @@ public class MaterializedViewAnalyzer {
                 partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
             } else if (partitionInfo.isListPartition()) {
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                Set<String> partitionColumns = listPartitionInfo.getPartitionColumns().stream()
+                Set<String> partitionColumns = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
                         .map(col -> col.getName())
                         .collect(Collectors.toSet());
                 // mv's partition columns should be subset of the base table's partition columns

@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -1401,10 +1402,8 @@ public class MvUtils {
     public static DistributionDesc getDistributionDesc(MaterializedView materializedView) {
         DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
         if (distributionInfo instanceof HashDistributionInfo) {
-            List<String> distColumnNames = new ArrayList<>();
-            for (Column distributionColumn : ((HashDistributionInfo) distributionInfo).getDistributionColumns()) {
-                distColumnNames.add(distributionColumn.getName());
-            }
+            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(materializedView.getIdToColumn(),
+                    distributionInfo.getDistributionColumns());
             return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
         } else {
             return new RandomDistributionDesc();
