@@ -117,13 +117,13 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
+    public void setupScanRangeLocations(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
-            setupScanRangeLocationsImpl(descTbl);
+            setupScanRangeLocationsImpl(descTbl, fieldNames);
         }
     }
 
-    public void setupScanRangeLocationsImpl(DescriptorTable descTbl) throws UserException {
+    public void setupScanRangeLocationsImpl(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), deltaMetadata);
@@ -136,7 +136,7 @@ public class DeltaLakeScanNode extends ScanNode {
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
         List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, deltaLakeTable, null, snapshotId, predicate, null, -1);
+                catalogName, deltaLakeTable, null, snapshotId, predicate, fieldNames, -1);
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after planFiles on {}.{} and predicate: [{}]", dbName, tableName, predicate);
             return;
