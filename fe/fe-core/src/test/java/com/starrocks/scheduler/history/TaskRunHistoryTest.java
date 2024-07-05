@@ -14,7 +14,6 @@
 
 package com.starrocks.scheduler.history;
 
-import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.Constants;
@@ -22,7 +21,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetTasksParams;
-import com.starrocks.thrift.TResultBatch;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -32,8 +30,6 @@ import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -74,11 +70,12 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDML("INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, " +
-                        "create_time, finish_time, expire_time, history_content_json) VALUES(0, 'aaa', 't1', " +
-                        "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
+                        "task_state, create_time, finish_time, expire_time, history_content_json) " +
+                        "VALUES(0, 'aaa', 't1', 'SUCCESS', '1970-01-01 08:00:00', " +
+                        "'1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
                         "'{\"startTaskRunId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
                         "\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false,\"source\":\"CTAS\"," +
-                        "\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\"," +
+                        "\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"SUCCESS\"," +
                         "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
                         "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{}," +
                         "\"processStartTime\":0,\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true," +
@@ -90,36 +87,8 @@ public class TaskRunHistoryTest {
         TaskRunStatus status = new TaskRunStatus();
         status.setStartTaskRunId("aaa");
         status.setTaskName("t1");
+        status.setState(Constants.TaskRunState.SUCCESS);
         history.addHistory(status);
-
-        // getTaskByName
-        new Expectations() {
-            {
-                repo.executeDQL("SELECT history_content_json " +
-                        "FROM _statistics_.task_run_history WHERE task_name = 't1'");
-            }
-        };
-        history.getTaskByName("t1");
-
-        // getAllHistory
-        new Expectations() {
-            {
-                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history");
-            }
-        };
-        history.getAllHistory();
-
-        // getTaskRunCount
-        TResultBatch batch = new TResultBatch();
-        batch.setRows(Lists.newArrayList(ByteBuffer.wrap("[123]".getBytes())));
-        List<TResultBatch> resultBatch = Lists.newArrayList(batch);
-        new Expectations() {
-            {
-                repo.executeDQL("SELECT count(*) as cnt FROM _statistics_.task_run_history");
-                result = resultBatch;
-            }
-        };
-        assertEquals(123, history.getTaskRunCount());
 
         // lookup by params
         TGetTasksParams params = new TGetTasksParams();
@@ -135,7 +104,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "state = 'SUCCESS'");
+                        "task_state = 'SUCCESS'");
             }
         };
         params.setDb(null);
@@ -203,7 +172,7 @@ public class TaskRunHistoryTest {
                 repo.executeDDL(
                         "CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
                                 "task_run_id string NOT NULL, create_time datetime NOT NULL, " +
-                                "task_name string NOT NULL, finish_time datetime NOT NULL, " +
+                                "task_name string NOT NULL, task_state STRING NOT NULL, finish_time datetime NOT NULL, " +
                                 "expire_time datetime NOT NULL, history_content_json JSON NOT NULL)PRIMARY KEY " +
                                 "(task_id, task_run_id, create_time) PARTITION BY date_trunc('DAY', create_time) " +
                                 "DISTRIBUTED BY HASH(task_id) BUCKETS 8 PROPERTIES( 'replication_num' = '1', " +
@@ -257,16 +226,8 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDML(
-                        "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, create_time, " +
-                                "finish_time, expire_time, history_content_json) VALUES(0, 'null', 't2', " +
-                                "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '2024-07-05 15:38:00', '{\"queryId\":\"q2\"," +
-                                "\"taskId\":0,\"taskName\":\"t2\",\"createTime\":0,\"expireTime\":1720165080904," +
-                                "\"priority\":0,\"mergeRedundant\":false,\"source\":\"CTAS\",\"errorCode\":0," +
-                                "\"finishTime\":0,\"processStartTime\":0,\"state\":\"SUCCESS\",\"progress\":0," +
-                                "\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
-                                "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{}," +
-                                "\"processStartTime\":0,\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true," +
-                                "\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}')");
+                        "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, task_state, create_time, finish_time, expire_time, history_content_json) VALUES(0, 'null', 't2', 'SUCCESS', '1970-01-01 08:00:00', '1970-01-01 08:00:00', '2024-07-05 15:38:00', '{\"queryId\":\"q2\",\"taskId\":0,\"taskName\":\"t2\",\"createTime\":0,\"expireTime\":1720165080904,\"priority\":0,\"mergeRedundant\":false,\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"SUCCESS\",\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[],\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"processStartTime\":0,\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true,\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}')");
+
             }
         };
         history.vacuum();

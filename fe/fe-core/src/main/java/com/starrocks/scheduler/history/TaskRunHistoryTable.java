@@ -16,8 +16,6 @@ package com.starrocks.scheduler.history;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonParser;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -27,15 +25,11 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.util.Strings;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.time.ZoneId;
 import java.util.List;
@@ -60,7 +54,10 @@ public class TaskRunHistoryTable {
                     "task_id bigint NOT NULL, " +
                     "task_run_id string NOT NULL, " +
                     "create_time datetime NOT NULL, " +
+
+                            // indexed columns
                     "task_name string NOT NULL, " +
+                            "task_state STRING NOT NULL, " +
 
                     // times
                     "finish_time datetime NOT NULL, " +
@@ -81,19 +78,12 @@ public class TaskRunHistoryTable {
                     TABLE_FULL_NAME);
 
     private static final String CONTENT_COLUMN = "history_content_json";
-    private static final String COLUMN_LIST = "task_id, task_run_id, task_name, " +
-            "create_time, finish_time, expire_time, " +
-            "history_content_json ";
     private static final String INSERT_SQL_TEMPLATE = "INSERT INTO {0} " +
-            "(task_id, task_run_id, task_name, " +
+            "(task_id, task_run_id, task_name, task_state, " +
             "create_time, finish_time, expire_time, " +
             "history_content_json) " +
             "VALUES";
-    private static final String INSERT_SQL_VALUE = "({0}, {1}, {2}, {3}, {4}, {5}, {6})";
-    private static final String SELECT_BY_TASK_NAME =
-            "SELECT history_content_json FROM " + TABLE_FULL_NAME + " WHERE task_name = {0}";
-    private static final String SELECT_ALL = "SELECT history_content_json FROM " + TABLE_FULL_NAME;
-    private static final String COUNT_TASK_RUNS = "SELECT count(*) as cnt FROM " + TABLE_FULL_NAME;
+    private static final String INSERT_SQL_VALUE = "({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})";
     private static final String LOOKUP =
             "SELECT history_content_json " + "FROM " + TABLE_FULL_NAME + " WHERE ";
 
@@ -133,6 +123,7 @@ public class TaskRunHistoryTable {
                         String.valueOf(status.getTaskId()),
                         Strings.quote(status.getStartTaskRunId()),
                         Strings.quote(status.getTaskName()),
+                        Strings.quote(status.getState().toString()),
                         createTime,
                         finishTime,
                         expireTime,
@@ -140,6 +131,7 @@ public class TaskRunHistoryTable {
             }).collect(Collectors.joining(", "));
 
             String sql = insert + values;
+            System.err.println(sql);
             RepoExecutor.getInstance().executeDML(sql);
         }
     }
@@ -161,7 +153,7 @@ public class TaskRunHistoryTable {
             predicates.add(" task_run_id = " + Strings.quote(params.getQuery_id()));
         }
         if (StringUtils.isNotEmpty(params.getState())) {
-            predicates.add(" state = " + Strings.quote(params.getState()));
+            predicates.add(" task_state = " + Strings.quote(params.getState()));
         }
         sql += Joiner.on(" AND ").join(predicates);
 
@@ -183,34 +175,6 @@ public class TaskRunHistoryTable {
         String sql = LOOKUP + Joiner.on(" AND ").join(predicates);
         List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
         return TaskRunStatus.fromResultBatch(batch);
-    }
-
-    public List<TaskRunStatus> getTaskByName(String taskName) {
-        final String sql = MessageFormat.format(SELECT_BY_TASK_NAME, Strings.quote(taskName));
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
-        return TaskRunStatus.fromResultBatch(batch);
-    }
-
-    // TODO: don't return all history, which is very expensive
-    public List<TaskRunStatus> getAllHistory() {
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(SELECT_ALL);
-        return TaskRunStatus.fromResultBatch(batch);
-    }
-
-    public long getTaskRunCount() {
-        List<TResultBatch> batches = RepoExecutor.getInstance().executeDQL(COUNT_TASK_RUNS);
-        if (CollectionUtils.isNotEmpty(batches)) {
-            try {
-                ByteBuffer buffer = batches.get(0).getRows().get(0);
-                ByteBuf copied = Unpooled.copiedBuffer(buffer);
-                String jsonString = copied.toString(Charset.defaultCharset());
-                JsonArray obj = (JsonArray) JsonParser.parseString(jsonString);
-                return obj.get(0).getAsInt();
-            } catch (Exception e) {
-                throw new IllegalStateException("failed to parse json result: " + batches);
-            }
-        }
-        return 0;
     }
 
 }
