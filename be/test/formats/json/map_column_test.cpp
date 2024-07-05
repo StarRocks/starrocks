@@ -47,7 +47,7 @@ TEST_F(AddMapColumnTest, test_bad_json) {
     auto column = ColumnHelper::create_column(type_desc, false);
 
     simdjson::ondemand::parser parser;
-    auto json = R"(  { "key1": "foo", "key2": "bar", "key3": "baz"   )"_padded;
+    auto json = R"(  { "key1": "foo", "key2": "bar" "key3": "baz"  } )"_padded;
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.get_value();
 
