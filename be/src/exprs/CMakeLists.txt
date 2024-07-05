@@ -86,6 +86,7 @@ set(EXPR_FILES
   runtime_filter_bank.cpp
   runtime_filter.cpp
   split.cpp
+  regexp_split.cpp
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
