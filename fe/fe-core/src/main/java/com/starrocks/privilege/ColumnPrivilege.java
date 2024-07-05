@@ -21,6 +21,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -48,14 +50,40 @@ import com.starrocks.sql.optimizer.transformer.TransformerContext;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class ColumnPrivilege {
-    public static void check(ConnectContext context, QueryStatement stmt) {
+    public static void check(ConnectContext context, QueryStatement stmt, List<TableName> excludeTables) {
+        if (stmt == null) {
+            return;
+        }
+
         Map<TableName, Table> tableNameTableObj = Maps.newHashMap();
         Map<Table, TableName> tableObjectToTableName = Maps.newHashMap();
         new TableNameCollector(tableNameTableObj, tableObjectToTableName).visit(stmt);
+
+        for (Map.Entry<TableName, Table> entry : tableNameTableObj.entrySet()) {
+            TableName tableName = entry.getKey();
+            Table table = entry.getValue();
+
+            if (excludeTables.contains(tableName) || table instanceof MetadataTable) {
+                continue;
+            }
+
+            if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
+                try {
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+                }
+            }
+        }
 
         Set<TableName> tableUsedExternalAccessController = new HashSet<>();
         for (TableName tableName : tableNameTableObj.keySet()) {
@@ -94,11 +122,15 @@ public class ColumnPrivilege {
         }
 
         for (TableName tableName : tableNameTableObj.keySet()) {
+            if (excludeTables.contains(tableName)) {
+                continue;
+            }
+
             if (tableUsedExternalAccessController.contains(tableName)) {
                 Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
                 for (String column : columns) {
                     try {
-                        Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkColumnAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                 tableName, column, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
