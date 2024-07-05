@@ -189,6 +189,7 @@ public class FunctionSet {
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String REGEXP_EXTRACT = "regexp_extract";
     public static final String REGEXP_REPLACE = "regexp_replace";
+    public static final String REGEXP_INSTR = "regexp_instr";
     public static final String REPEAT = "repeat";
     public static final String REPLACE = "replace";
     public static final String REVERSE = "reverse";
@@ -577,7 +578,8 @@ public class FunctionSet {
     // we could evaluate the function only with the dict content, not all string column data.
     public final ImmutableSet<String> couldApplyDictOptimizationFunctions =
             ImmutableSet.of(APPEND_TRAILING_CHAR_IF_ABSENT, CONCAT, CONCAT_WS, HEX, LEFT, LIKE, LOWER, LPAD, LTRIM,
-                    REGEXP_EXTRACT, REGEXP_REPLACE, REPEAT, REPLACE, REVERSE, RIGHT, RPAD, RTRIM, SPLIT_PART, SUBSTR,
+                    REGEXP_EXTRACT, REGEXP_REPLACE, REGEXP_INSTR,
+                    REPEAT, REPLACE, REVERSE, RIGHT, RPAD, RTRIM, SPLIT_PART, SUBSTR,
                     SUBSTRING, SUBSTRING_INDEX,
                     TRIM, UPPER, IF);
 

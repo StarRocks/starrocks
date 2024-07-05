@@ -415,6 +415,7 @@ You can find a built-in function based on the following categories:
 - [regexp_extract](./like-predicate-functions/regexp_extract.md)
 - [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md)
 - [regexp_replace](./like-predicate-functions/regexp_replace.md)
+- [regexp_instr](./like-predicate-functions/regexp_instr.md)
 
 ## Percentile functions
 
