@@ -105,7 +105,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 ##### default_wg
 
-`default_wg` will be assigned to regular queries that are under the management of resource groups but doesn't match any classifier. The resource limits of `default_wg` are as follows:
+`default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The resource limits of `default_wg` are as follows:
 
 - `cpu_core_limit`: 1 (for v2.3.7 or earlier) or the number of CPU cores of the BE (for versions later than v2.3.7).
 - `mem_limit`: 100%.
