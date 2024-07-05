@@ -163,8 +163,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfoForPartitions(Table table, List<String> partitionNames) {
-        return normal.getRemoteFileInfoForPartitions(table, partitionNames);
+    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+        return normal.getRemotePartitions(table, partitionNames);
     }
 
     @Override

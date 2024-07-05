@@ -272,7 +272,7 @@ public class HiveMetadataTest {
         Statistics statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, columns, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2),
                 null, -1);
-        Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
@@ -683,7 +683,9 @@ public class HiveMetadataTest {
     public void testCreateTableTimeout() throws Exception {
         AnalyzeTestUtil.init();
         String stmt = "create table hive_catalog.hive_db.hive_table (k1 int, k2 int)";
-        String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        String sql =
+                "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0" +
+                        ".1:9083\")";
         StarRocksAssert starRocksAssert = getStarRocksAssert();
         starRocksAssert.withCatalog(sql);
         new MockUp<HiveMetadata>() {
@@ -726,40 +728,27 @@ public class HiveMetadataTest {
     }
 
     @Test
-    public void testGetRemoteFileInfoForPartitions(
+    public void testGetRemotePartitions(
             @Mocked HiveTable table,
-            @Mocked HiveMetastoreOperations hmsOps,
-            @Mocked RemoteFileOperations fileOps) {
+            @Mocked HiveMetastoreOperations hmsOps) {
         List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103");
         Map<String, Partition> partitionMap = Maps.newHashMap();
-        List<FileStatus> fileStatusList = Lists.newArrayList();
-        long modificationTime = 1000;
         for (String name : partitionNames) {
             Map<String, String> parameters = Maps.newHashMap();
             TextFileFormatDesc formatDesc = new TextFileFormatDesc("a", "b", "c", "d");
             String fullPath = "hdfs://path_to_table/" + name;
             Partition partition = new Partition(parameters, RemoteFileInputFormat.PARQUET, formatDesc, fullPath, true);
             partitionMap.put(name, partition);
-
-            Path filePath = new Path(fullPath + "/00000_0");
-            FileStatus fileStatus = new FileStatus(100000, false, 1, 256, modificationTime++, filePath);
-            fileStatusList.add(fileStatus);
         }
-
-        FileStatus[] fileStatuses = fileStatusList.toArray(new FileStatus[0]);
         new Expectations() {
             {
                 hmsOps.getPartitionByNames((Table) any, (List<String>) any);
                 result = partitionMap;
                 minTimes = 1;
-
-                fileOps.getFileStatus((Path[]) any);
-                result = fileStatuses;
-                minTimes = 1;
             }
         };
 
-        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfoForPartitions(table, partitionNames);
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemotePartitions(table, partitionNames);
         Assert.assertEquals(3, remoteFileInfos.size());
     }
 
