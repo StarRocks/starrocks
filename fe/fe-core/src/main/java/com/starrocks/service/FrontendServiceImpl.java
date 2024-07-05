@@ -2665,6 +2665,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         result.setTrackingLoads(trackingLoadInfoList);
+        LOG.debug("get tracking load jobs size: {}", trackingLoadInfoList.size());
         return result;
     }
 
