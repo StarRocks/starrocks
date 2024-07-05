@@ -199,6 +199,10 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 .filter(column -> BasePrimitiveType.isPrimitiveType(
                         schema.get(column).getDataType().toString())
                         && !partitionColumns.contains(column)).collect(Collectors.toSet());
+        Set<String> partitionPrimitiveColumns = partitionColumns.stream()
+                .filter(column -> BasePrimitiveType.isPrimitiveType(
+                        schema.get(column).getDataType().toString()
+                )).collect(Collectors.toSet());
 
         List<FileScanTask> files = Lists.newArrayList();
 
@@ -221,7 +225,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
                                 statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
-                                        nonPartitionPrimitiveColumns);
+                                        nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
                             }
                         } else {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
@@ -230,7 +234,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeCardinality")) {
                                 statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
-                                        nonPartitionPrimitiveColumns);
+                                        nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
                             }
                         }
                     }

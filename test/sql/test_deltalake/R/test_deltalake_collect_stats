@@ -86,6 +86,46 @@ function: assert_explain_costs_contains('select col_timestamp_ntz from delta_tes
 -- result:
 None
 -- !result
+function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_int', 'c1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c2 from delta_test_${uuid0}.delta_oss_db.t_p_int', 'c2-->[-Infinity, Infinity, 0.0, 2.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c3 from delta_test_${uuid0}.delta_oss_db.t_p_int', 'c3-->[-Infinity, Infinity, 0.0, 4.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c4 from delta_test_${uuid0}.delta_oss_db.t_p_int', 'c4-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_string', 'c1-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c2 from delta_test_${uuid0}.delta_oss_db.t_p_string', 'c2-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_time', 'c1-->[-Infinity, Infinity, 0.0, 4.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c2 from delta_test_${uuid0}.delta_oss_db.t_p_time', 'c2-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c3 from delta_test_${uuid0}.delta_oss_db.t_p_time', 'c3-->[-Infinity, Infinity, 0.0, 8.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_bool', 'c1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
 set enable_delta_lake_column_statistics=true;
 -- result:
 -- !result
@@ -158,6 +198,46 @@ function: assert_explain_costs_contains('select col_struct from delta_test_${uui
 None
 -- !result
 function: assert_explain_costs_contains('select col_timestamp_ntz from delta_test_${uuid0}.delta_oss_db.t_timestamp_ntz', 'col_timestamp_ntz-->[1.704157323E9, 1.704427506E9, 0.2, 8.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_int', 'c1-->[1.0, 9.0, 0.0, 1.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c2 from delta_test_${uuid0}.delta_oss_db.t_p_int', 'c2-->[11.0, 55.0, 0.375, 2.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c3 from delta_test_${uuid0}.delta_oss_db.t_p_int', 'c3-->[111.0, 999.0, 0.0, 4.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c4 from delta_test_${uuid0}.delta_oss_db.t_p_int', 'c4-->[1111.0, 9999.0, 0.0, 8.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_string', 'c1-->[-Infinity, Infinity, 0.0, 16.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c2 from delta_test_${uuid0}.delta_oss_db.t_p_string', 'c2-->[-Infinity, Infinity, 0.375, 16.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_time', 'c1-->[1.7040672E9, 1.704672E9, 0.0, 4.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c2 from delta_test_${uuid0}.delta_oss_db.t_p_time', 'c2-->[1.704070923E9, 1.704675723E9, 0.25, 8.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c3 from delta_test_${uuid0}.delta_oss_db.t_p_time', 'c3-->[1.704168306E9, 1.704686706E9, 0.0, 8.0, 1.0] UNKNOWN')
+-- result:
+None
+-- !result
+function: assert_explain_costs_contains('select c1 from delta_test_${uuid0}.delta_oss_db.t_p_bool', 'c1-->[0.0, 1.0, 0.25, 1.0, 1.0] UNKNOWN')
 -- result:
 None
 -- !result
