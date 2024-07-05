@@ -127,23 +127,21 @@ public:
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
-        TRY_CATCH_BAD_ALLOC({
-            for (auto i = idx_begin; i < idx_end; i++) {
-                uint32_t prefetch_i = i + PREFETCHN;
-                if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
-                RowIdPack4 v(base + rowids[i]);
-                auto p = _map.insert({keys[i], v});
-                if (!p.second) {
-                    uint64_t old = p.first->second.value;
-                    std::string msg = strings::Substitute(
-                            "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
-                            "key=$4",
-                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i]);
-                    LOG(ERROR) << msg;
-                    return Status::AlreadyExist(msg);
-                }
+        for (auto i = idx_begin; i < idx_end; i++) {
+            uint32_t prefetch_i = i + PREFETCHN;
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
+            RowIdPack4 v(base + rowids[i]);
+            auto p = _map.insert({keys[i], v});
+            if (!p.second) {
+                uint64_t old = p.first->second.value;
+                std::string msg = strings::Substitute(
+                        "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
+                        "key=$4",
+                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i]);
+                LOG(ERROR) << msg;
+                return Status::AlreadyExist(msg);
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -152,16 +150,14 @@ public:
         CHECK_MEM_LIMIT("HashIndexImpl::insert");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
-                const uint32_t i = indexes[idx];
-                RowIdPack4 v(base + i);
-                auto p = _map.insert({keys[i], v});
-                if (!p.second) {
-                    p.first->second = v;
-                }
+        for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
+            const uint32_t i = indexes[idx];
+            RowIdPack4 v(base + i);
+            auto p = _map.insert({keys[i], v});
+            if (!p.second) {
+                p.first->second = v;
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -170,23 +166,21 @@ public:
         CHECK_MEM_LIMIT("HashIndexImpl::upsert");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                uint32_t prefetch_i = i + PREFETCHN;
-                if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
-                RowIdPack4 v(base + i);
-                auto p = _map.insert({keys[i], v});
-                if (!p.second) {
-                    uint64_t old = p.first->second.value;
-                    if ((old >> 32) == rssid) {
-                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i]
-                                   << " idx=" << i << " rowid=" << rowid_start + i;
-                    }
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    p.first->second = v;
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            uint32_t prefetch_i = i + PREFETCHN;
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
+            RowIdPack4 v(base + i);
+            auto p = _map.insert({keys[i], v});
+            if (!p.second) {
+                uint64_t old = p.first->second.value;
+                if ((old >> 32) == rssid) {
+                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i] << " idx=" << i
+                               << " rowid=" << rowid_start + i;
                 }
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                p.first->second = v;
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -196,20 +190,18 @@ public:
         CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                uint32_t prefetch_i = i + PREFETCHN;
-                if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
-                auto p = _map.find(keys[i]);
-                if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
-                    // matched, can replace
-                    p->second = RowIdPack4(base + i);
-                } else {
-                    // not match, mark failed
-                    failed->push_back(rowid_start + i);
-                }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            uint32_t prefetch_i = i + PREFETCHN;
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
+            auto p = _map.find(keys[i]);
+            if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
+                // matched, can replace
+                p->second = RowIdPack4(base + i);
+            } else {
+                // not match, mark failed
+                failed->push_back(rowid_start + i);
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -218,54 +210,48 @@ public:
         CHECK_MEM_LIMIT("HashIndexImpl::try_replace");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                uint32_t prefetch_i = i + PREFETCHN;
-                if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
-                auto p = _map.find(keys[i]);
-                if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
-                    p->second = RowIdPack4(base + i);
-                } else {
-                    failed->push_back(rowid_start + i);
-                }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            uint32_t prefetch_i = i + PREFETCHN;
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
+            auto p = _map.find(keys[i]);
+            if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
+                p->second = RowIdPack4(base + i);
+            } else {
+                failed->push_back(rowid_start + i);
             }
-        });
+        }
         return Status::OK();
     }
 
     Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
         CHECK_MEM_LIMIT("HashIndexImpl::erase");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        TRY_CATCH_BAD_ALLOC({
-            for (auto i = idx_begin; i < idx_end; i++) {
-                uint32_t prefetch_i = i + PREFETCHN;
-                if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
-                auto iter = _map.find(keys[i]);
-                if (iter != _map.end()) {
-                    uint64_t old = iter->second.value;
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    _map.erase(iter);
-                }
+        for (auto i = idx_begin; i < idx_end; i++) {
+            uint32_t prefetch_i = i + PREFETCHN;
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
+            auto iter = _map.find(keys[i]);
+            if (iter != _map.end()) {
+                uint64_t old = iter->second.value;
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                _map.erase(iter);
             }
-        });
+        }
         return Status::OK();
     }
 
     Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
         CHECK_MEM_LIMIT("HashIndexImpl::get");
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
-        TRY_CATCH_BAD_ALLOC({
-            for (auto i = idx_begin; i < idx_end; i++) {
-                uint32_t prefetch_i = i + PREFETCHN;
-                if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
-                auto iter = _map.find(keys[i]);
-                if (iter != _map.end()) {
-                    (*rowids)[i] = iter->second.value;
-                } else {
-                    (*rowids)[i] = -1;
-                }
+        for (auto i = idx_begin; i < idx_end; i++) {
+            uint32_t prefetch_i = i + PREFETCHN;
+            if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
+            auto iter = _map.find(keys[i]);
+            if (iter != _map.end()) {
+                (*rowids)[i] = iter->second.value;
+            } else {
+                (*rowids)[i] = -1;
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -334,46 +320,42 @@ public:
                 prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
                 _map.prefetch_hash(prefetch_hashes[i]);
             }
-            TRY_CATCH_BAD_ALLOC({
-                for (uint32_t i = idx_begin; i < idx_end; i++) {
-                    uint64_t v = base + rowids[i];
-                    uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                    auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
-                    if (!p.second) {
-                        uint64_t old = p.first->second.value;
-                        std::string msg = strings::Substitute(
-                                "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
-                                "key=$4 [$5]",
-                                rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK),
-                                keys[i].to_string(), hexdump(keys[i].data, keys[i].size));
-                        LOG(ERROR) << msg;
-                        return Status::AlreadyExist(msg);
-                    }
-                    uint32_t prefetch_i = i + PREFETCHN;
-                    if (LIKELY(prefetch_i < idx_end)) {
-                        prefetch_keys[pslot].assign(keys[prefetch_i]);
-                        prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                        _map.prefetch_hash(prefetch_hashes[pslot]);
-                    }
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint64_t v = base + rowids[i];
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
+                if (!p.second) {
+                    uint64_t old = p.first->second.value;
+                    std::string msg = strings::Substitute(
+                            "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
+                            "key=$4 [$5]",
+                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
+                            hexdump(keys[i].data, keys[i].size));
+                    LOG(ERROR) << msg;
+                    return Status::AlreadyExist(msg);
                 }
-            });
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
         } else {
-            TRY_CATCH_BAD_ALLOC({
-                for (uint32_t i = idx_begin; i < idx_end; i++) {
-                    uint64_t v = base + rowids[i];
-                    auto p = _map.emplace(FixSlice<S>(keys[i]), v);
-                    if (!p.second) {
-                        uint64_t old = p.first->second.value;
-                        std::string msg = strings::Substitute(
-                                "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
-                                "key=$4 [$5]",
-                                rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK),
-                                keys[i].to_string(), hexdump(keys[i].data, keys[i].size));
-                        LOG(ERROR) << msg;
-                        return Status::AlreadyExist(msg);
-                    }
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint64_t v = base + rowids[i];
+                auto p = _map.emplace(FixSlice<S>(keys[i]), v);
+                if (!p.second) {
+                    uint64_t old = p.first->second.value;
+                    std::string msg = strings::Substitute(
+                            "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
+                            "key=$4 [$5]",
+                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
+                            hexdump(keys[i].data, keys[i].size));
+                    LOG(ERROR) << msg;
+                    return Status::AlreadyExist(msg);
                 }
-            });
+            }
         }
         return Status::OK();
     }
@@ -383,15 +365,13 @@ public:
         CHECK_MEM_LIMIT("FixSliceHashIndex::replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
-                const uint32_t i = indexes[idx];
-                auto p = _map.emplace(FixSlice<S>(keys[i]), base + i);
-                if (!p.second) {
-                    p.first->second = base + i;
-                }
+        for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
+            const uint32_t i = indexes[idx];
+            auto p = _map.emplace(FixSlice<S>(keys[i]), base + i);
+            if (!p.second) {
+                p.first->second = base + i;
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -409,46 +389,40 @@ public:
                 prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
                 _map.prefetch_hash(prefetch_hashes[i]);
             }
-            TRY_CATCH_BAD_ALLOC({
-                for (uint32_t i = idx_begin; i < idx_end; i++) {
-                    uint64_t v = base + i;
-                    uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                    auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
-                    if (!p.second) {
-                        uint64_t old = p.first->second.value;
-                        if ((old >> 32) == rssid) {
-                            LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid
-                                       << " key=" << keys[i].to_string() << " [" << hexdump(keys[i].data, keys[i].size)
-                                       << "]";
-                        }
-                        (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                        p.first->second = v;
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint64_t v = base + i;
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
+                if (!p.second) {
+                    uint64_t old = p.first->second.value;
+                    if ((old >> 32) == rssid) {
+                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
+                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                     }
-                    uint32_t prefetch_i = i + PREFETCHN;
-                    if (LIKELY(prefetch_i < idx_end)) {
-                        prefetch_keys[pslot].assign(keys[prefetch_i]);
-                        prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                        _map.prefetch_hash(prefetch_hashes[pslot]);
-                    }
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    p.first->second = v;
                 }
-            });
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
         } else {
-            TRY_CATCH_BAD_ALLOC({
-                for (uint32_t i = idx_begin; i < idx_end; i++) {
-                    uint64_t v = base + i;
-                    auto p = _map.emplace(FixSlice<S>(keys[i]), v);
-                    if (!p.second) {
-                        uint64_t old = p.first->second.value;
-                        if ((old >> 32) == rssid) {
-                            LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid
-                                       << " key=" << keys[i].to_string() << " [" << hexdump(keys[i].data, keys[i].size)
-                                       << "]";
-                        }
-                        (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                        p.first->second = v;
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint64_t v = base + i;
+                auto p = _map.emplace(FixSlice<S>(keys[i]), v);
+                if (!p.second) {
+                    uint64_t old = p.first->second.value;
+                    if ((old >> 32) == rssid) {
+                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
+                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                     }
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    p.first->second = v;
                 }
-            });
+            }
         }
         return Status::OK();
     }
@@ -467,38 +441,34 @@ public:
                 prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
                 _map.prefetch_hash(prefetch_hashes[i]);
             }
-            TRY_CATCH_BAD_ALLOC({
-                for (uint32_t i = idx_begin; i < idx_end; i++) {
-                    uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                    auto p = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
-                    if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
-                        // matched, can replace
-                        p->second.value = base + i;
-                    } else {
-                        // not match, mark failed
-                        failed->push_back(rowid_start + i);
-                    }
-                    uint32_t prefetch_i = i + PREFETCHN;
-                    if (LIKELY(prefetch_i < idx_end)) {
-                        prefetch_keys[pslot].assign(keys[prefetch_i]);
-                        prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                        _map.prefetch_hash(prefetch_hashes[pslot]);
-                    }
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto p = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
+                if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
+                    // matched, can replace
+                    p->second.value = base + i;
+                } else {
+                    // not match, mark failed
+                    failed->push_back(rowid_start + i);
                 }
-            });
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
         } else {
-            TRY_CATCH_BAD_ALLOC({
-                for (uint32_t i = idx_begin; i < idx_end; i++) {
-                    auto p = _map.find(FixSlice<S>(keys[i]));
-                    if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
-                        // matched, can replace
-                        p->second.value = base + i;
-                    } else {
-                        // not match, mark failed
-                        failed->push_back(rowid_start + i);
-                    }
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                auto p = _map.find(FixSlice<S>(keys[i]));
+                if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
+                    // matched, can replace
+                    p->second.value = base + i;
+                } else {
+                    // not match, mark failed
+                    failed->push_back(rowid_start + i);
                 }
-            });
+            }
         }
         return Status::OK();
     }
@@ -517,38 +487,34 @@ public:
                 prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
                 _map.prefetch_hash(prefetch_hashes[i]);
             }
-            TRY_CATCH_BAD_ALLOC({
-                for (uint32_t i = idx_begin; i < idx_end; i++) {
-                    uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                    auto p = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
-                    if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
-                        // matched, can replace
-                        p->second.value = base + i;
-                    } else {
-                        // not match, mark failed
-                        failed->push_back(rowid_start + i);
-                    }
-                    uint32_t prefetch_i = i + PREFETCHN;
-                    if (LIKELY(prefetch_i < idx_end)) {
-                        prefetch_keys[pslot].assign(keys[prefetch_i]);
-                        prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                        _map.prefetch_hash(prefetch_hashes[pslot]);
-                    }
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto p = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
+                if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
+                    // matched, can replace
+                    p->second.value = base + i;
+                } else {
+                    // not match, mark failed
+                    failed->push_back(rowid_start + i);
                 }
-            });
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
         } else {
-            TRY_CATCH_BAD_ALLOC({
-                for (uint32_t i = idx_begin; i < idx_end; i++) {
-                    auto p = _map.find(FixSlice<S>(keys[i]));
-                    if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
-                        // matched, can replace
-                        p->second.value = base + i;
-                    } else {
-                        // not match, mark failed
-                        failed->push_back(rowid_start + i);
-                    }
+            for (uint32_t i = idx_begin; i < idx_end; i++) {
+                auto p = _map.find(FixSlice<S>(keys[i]));
+                if (p != _map.end() && (uint32_t)(p->second.value >> 32) <= max_src_rssid) {
+                    // matched, can replace
+                    p->second.value = base + i;
+                } else {
+                    // not match, mark failed
+                    failed->push_back(rowid_start + i);
                 }
-            });
+            }
         }
         return Status::OK();
     }
@@ -565,34 +531,30 @@ public:
                 prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
                 _map.prefetch_hash(prefetch_hashes[i]);
             }
-            TRY_CATCH_BAD_ALLOC({
-                for (auto i = idx_begin; i < idx_end; i++) {
-                    uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                    auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
-                    if (iter != _map.end()) {
-                        uint64_t old = iter->second.value;
-                        (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                        _map.erase(iter);
-                    }
-                    uint32_t prefetch_i = i + PREFETCHN;
-                    if (LIKELY(prefetch_i < idx_end)) {
-                        prefetch_keys[pslot].assign(keys[prefetch_i]);
-                        prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                        _map.prefetch_hash(prefetch_hashes[pslot]);
-                    }
+            for (auto i = idx_begin; i < idx_end; i++) {
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
+                if (iter != _map.end()) {
+                    uint64_t old = iter->second.value;
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    _map.erase(iter);
                 }
-            });
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
         } else {
-            TRY_CATCH_BAD_ALLOC({
-                for (auto i = idx_begin; i < idx_end; i++) {
-                    auto iter = _map.find(FixSlice<S>(keys[i]));
-                    if (iter != _map.end()) {
-                        uint64_t old = iter->second.value;
-                        (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                        _map.erase(iter);
-                    }
+            for (auto i = idx_begin; i < idx_end; i++) {
+                auto iter = _map.find(FixSlice<S>(keys[i]));
+                if (iter != _map.end()) {
+                    uint64_t old = iter->second.value;
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    _map.erase(iter);
                 }
-            });
+            }
         }
         return Status::OK();
     }
@@ -609,34 +571,30 @@ public:
                 prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
                 _map.prefetch_hash(prefetch_hashes[i]);
             }
-            TRY_CATCH_BAD_ALLOC({
-                for (auto i = idx_begin; i < idx_end; i++) {
-                    uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                    auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
-                    if (iter != _map.end()) {
-                        (*rowids)[i] = iter->second.value;
-                    } else {
-                        (*rowids)[i] = -1;
-                    }
-                    uint32_t prefetch_i = i + PREFETCHN;
-                    if (LIKELY(prefetch_i < idx_end)) {
-                        prefetch_keys[pslot].assign(keys[prefetch_i]);
-                        prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                        _map.prefetch_hash(prefetch_hashes[pslot]);
-                    }
+            for (auto i = idx_begin; i < idx_end; i++) {
+                uint32_t pslot = (i - idx_begin) % PREFETCHN;
+                auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
+                if (iter != _map.end()) {
+                    (*rowids)[i] = iter->second.value;
+                } else {
+                    (*rowids)[i] = -1;
                 }
-            });
+                uint32_t prefetch_i = i + PREFETCHN;
+                if (LIKELY(prefetch_i < idx_end)) {
+                    prefetch_keys[pslot].assign(keys[prefetch_i]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
+                }
+            }
         } else {
-            TRY_CATCH_BAD_ALLOC({
-                for (auto i = idx_begin; i < idx_end; i++) {
-                    auto iter = _map.find(FixSlice<S>(keys[i]));
-                    if (iter != _map.end()) {
-                        (*rowids)[i] = iter->second.value;
-                    } else {
-                        (*rowids)[i] = -1;
-                    }
+            for (auto i = idx_begin; i < idx_end; i++) {
+                auto iter = _map.find(FixSlice<S>(keys[i]));
+                if (iter != _map.end()) {
+                    (*rowids)[i] = iter->second.value;
+                } else {
+                    (*rowids)[i] = -1;
                 }
-            });
+            }
         }
         return Status::OK();
     }
@@ -681,23 +639,21 @@ public:
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                uint64_t v = base + rowids[i];
-                auto p = _map.insert({keys[i].to_string(), v});
-                if (!p.second) {
-                    uint64_t old = p.first->second;
-                    std::string msg = strings::Substitute(
-                            "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
-                            "key=$4 [$5]",
-                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
-                            hexdump(keys[i].data, keys[i].size));
-                    LOG(ERROR) << msg;
-                    return Status::AlreadyExist(msg);
-                }
-                _total_length += keys[i].size;
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            uint64_t v = base + rowids[i];
+            auto p = _map.insert({keys[i].to_string(), v});
+            if (!p.second) {
+                uint64_t old = p.first->second;
+                std::string msg = strings::Substitute(
+                        "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
+                        "key=$4 [$5]",
+                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
+                        hexdump(keys[i].data, keys[i].size));
+                LOG(ERROR) << msg;
+                return Status::AlreadyExist(msg);
             }
-        });
+            _total_length += keys[i].size;
+        }
         return Status::OK();
     }
 
@@ -706,23 +662,21 @@ public:
         CHECK_MEM_LIMIT("SliceHashIndex::upsert");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                uint64_t v = base + i;
-                auto p = _map.insert({keys[i].to_string(), v});
-                if (!p.second) {
-                    uint64_t old = p.first->second;
-                    if ((old >> 32) == rssid) {
-                        LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
-                                   << " [" << hexdump(keys[i].data, keys[i].size) << "]";
-                    }
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    p.first->second = v;
-                } else {
-                    _total_length += keys[i].size;
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            uint64_t v = base + i;
+            auto p = _map.insert({keys[i].to_string(), v});
+            if (!p.second) {
+                uint64_t old = p.first->second;
+                if ((old >> 32) == rssid) {
+                    LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
+                               << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                 }
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                p.first->second = v;
+            } else {
+                _total_length += keys[i].size;
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -731,17 +685,15 @@ public:
         CHECK_MEM_LIMIT("SliceHashIndex::replace");
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
-                const uint32_t i = indexes[idx];
-                auto p = _map.insert({keys[i].to_string(), base + i});
-                if (!p.second) {
-                    p.first->second = base + i;
-                } else {
-                    _total_length += keys[i].size;
-                }
+        for (uint32_t idx = idx_begin; idx < idx_end; idx++) {
+            const uint32_t i = indexes[idx];
+            auto p = _map.insert({keys[i].to_string(), base + i});
+            if (!p.second) {
+                p.first->second = base + i;
+            } else {
+                _total_length += keys[i].size;
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -751,18 +703,16 @@ public:
         CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                auto p = _map.find(keys[i].to_string());
-                if (p != _map.end() && (uint32_t)(p->second >> 32) == src_rssid[i]) {
-                    // matched, can replace
-                    p->second = base + i;
-                } else {
-                    // not match, mark failed
-                    failed->push_back(rowid_start + i);
-                }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            auto p = _map.find(keys[i].to_string());
+            if (p != _map.end() && (uint32_t)(p->second >> 32) == src_rssid[i]) {
+                // matched, can replace
+                p->second = base + i;
+            } else {
+                // not match, mark failed
+                failed->push_back(rowid_start + i);
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -771,51 +721,45 @@ public:
         CHECK_MEM_LIMIT("SliceHashIndex::try_replace");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                auto p = _map.find(keys[i].to_string());
-                if (p != _map.end() && (uint32_t)(p->second >> 32) <= max_src_rssid) {
-                    // matched, can replace
-                    p->second = base + i;
-                } else {
-                    // not match, mark failed
-                    failed->push_back(rowid_start + i);
-                }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            auto p = _map.find(keys[i].to_string());
+            if (p != _map.end() && (uint32_t)(p->second >> 32) <= max_src_rssid) {
+                // matched, can replace
+                p->second = base + i;
+            } else {
+                // not match, mark failed
+                failed->push_back(rowid_start + i);
             }
-        });
+        }
         return Status::OK();
     }
 
     Status erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
         CHECK_MEM_LIMIT("SliceHashIndex::erase");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                auto p = _map.find(keys[i].to_string());
-                if (p != _map.end()) {
-                    uint64_t old = p->second;
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    _map.erase(p);
-                    _total_length -= keys[i].size;
-                }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            auto p = _map.find(keys[i].to_string());
+            if (p != _map.end()) {
+                uint64_t old = p->second;
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                _map.erase(p);
+                _total_length -= keys[i].size;
             }
-        });
+        }
         return Status::OK();
     }
 
     Status get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
         CHECK_MEM_LIMIT("SliceHashIndex::get");
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        TRY_CATCH_BAD_ALLOC({
-            for (uint32_t i = idx_begin; i < idx_end; i++) {
-                auto p = _map.find(keys[i].to_string());
-                if (p != _map.end()) {
-                    (*rowids)[i] = p->second;
-                } else {
-                    (*rowids)[i] = -1;
-                }
+        for (uint32_t i = idx_begin; i < idx_end; i++) {
+            auto p = _map.find(keys[i].to_string());
+            if (p != _map.end()) {
+                (*rowids)[i] = p->second;
+            } else {
+                (*rowids)[i] = -1;
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -1323,7 +1267,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
-                    TRY_CATCH_BAD_ALLOC(st = insert(rowset->rowset_meta()->get_rowset_seg_id() + i, rowids, *pkc));
+                    st = insert(rowset->rowset_meta()->get_rowset_seg_id() + i, rowids, *pkc);
                     if (!st.ok()) {
                         LOG(ERROR) << "load index failed: tablet=" << tablet->tablet_id()
                                    << " rowsets:" << int_list_to_string(rowset_ids)

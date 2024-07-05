@@ -806,6 +806,7 @@ public:
 
     Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                const std::vector<size_t>& idxes) const override {
+        CHECK_MEM_LIMIT("FixedMutableIndex::get");
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -827,21 +828,19 @@ public:
                   size_t* num_found, const std::vector<size_t>& idxes) override {
         CHECK_MEM_LIMIT("FixedMutableIndex::upsert");
         size_t nfound = 0;
-        TRY_CATCH_BAD_ALLOC({
-            for (const auto idx : idxes) {
-                const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
-                const auto value = values[idx];
-                uint64_t hash = FixedKeyHash<KeySize>()(key);
-                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
-                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                } else {
-                    auto old_value = it->second;
-                    old_values[idx] = old_value;
-                    nfound += old_value.get_value() != NullIndexValue;
-                    it->second = value;
-                }
+        for (const auto idx : idxes) {
+            const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
+            const auto value = values[idx];
+            uint64_t hash = FixedKeyHash<KeySize>()(key);
+            if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
+                not_found->key_infos.emplace_back((uint32_t)idx, hash);
+            } else {
+                auto old_value = it->second;
+                old_values[idx] = old_value;
+                nfound += old_value.get_value() != NullIndexValue;
+                it->second = value;
             }
-        });
+        }
         *num_found = nfound;
         return Status::OK();
     }
@@ -850,51 +849,48 @@ public:
                   const std::vector<size_t>& idxes) override {
         CHECK_MEM_LIMIT("FixedMutableIndex::upsert");
         size_t nfound = 0;
-        TRY_CATCH_BAD_ALLOC({
-            for (const auto idx : idxes) {
-                const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
-                const auto value = values[idx];
-                uint64_t hash = FixedKeyHash<KeySize>()(key);
-                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
-                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                } else {
-                    auto old_value = it->second;
-                    nfound += old_value.get_value() != NullIndexValue;
-                    it->second = value;
-                }
+        for (const auto idx : idxes) {
+            const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
+            const auto value = values[idx];
+            uint64_t hash = FixedKeyHash<KeySize>()(key);
+            if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
+                not_found->key_infos.emplace_back((uint32_t)idx, hash);
+            } else {
+                auto old_value = it->second;
+                nfound += old_value.get_value() != NullIndexValue;
+                it->second = value;
             }
-        });
+        }
         *num_found = nfound;
         return Status::OK();
     }
 
     Status insert(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
         CHECK_MEM_LIMIT("FixedMutableIndex::insert");
-        TRY_CATCH_BAD_ALLOC({
-            for (const auto idx : idxes) {
-                const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
-                const auto value = values[idx];
-                uint64_t hash = FixedKeyHash<KeySize>()(key);
-                if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
-                    auto old = reinterpret_cast<uint64_t*>(&(it->second));
-                    auto old_rssid = (uint32_t)((*old) >> 32);
-                    auto old_rowid = (uint32_t)((*old) & ROWID_MASK);
-                    auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
-                    std::string msg = strings::Substitute(
-                            "FixedMutableIndex<$0> insert found duplicate key $1, new(rssid=$2 rowid=$3), old(rssid=$4 "
-                            "rowid=$5)",
-                            KeySize, hexdump((const char*)key.data, KeySize), (uint32_t)((*new_value) >> 32),
-                            (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
-                    LOG(WARNING) << msg;
-                    return Status::AlreadyExist(msg);
-                }
+        for (const auto idx : idxes) {
+            const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
+            const auto value = values[idx];
+            uint64_t hash = FixedKeyHash<KeySize>()(key);
+            if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
+                auto old = reinterpret_cast<uint64_t*>(&(it->second));
+                auto old_rssid = (uint32_t)((*old) >> 32);
+                auto old_rowid = (uint32_t)((*old) & ROWID_MASK);
+                auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
+                std::string msg = strings::Substitute(
+                        "FixedMutableIndex<$0> insert found duplicate key $1, new(rssid=$2 rowid=$3), old(rssid=$4 "
+                        "rowid=$5)",
+                        KeySize, hexdump((const char*)key.data, KeySize), (uint32_t)((*new_value) >> 32),
+                        (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
+                LOG(WARNING) << msg;
+                return Status::AlreadyExist(msg);
             }
-        });
+        }
         return Status::OK();
     }
 
     Status erase(const Slice* keys, IndexValue* old_values, KeysInfo* not_found, size_t* num_found,
                  const std::vector<size_t>& idxes) override {
+        CHECK_MEM_LIMIT("FixedMutableIndex::erase");
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -913,6 +909,7 @@ public:
     }
 
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) override {
+        CHECK_MEM_LIMIT("FixedMutableIndex::replace");
         for (unsigned long replace_idxe : replace_idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[replace_idxe].data);
             const auto value = values[replace_idxe];
@@ -927,7 +924,8 @@ public:
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
                       std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) override {
         faststring fixed_buf;
-        fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue)));
+        TRY_CATCH_BAD_ALLOC(
+                fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue))));
         put_fixed32_le(&fixed_buf, KeySize);
         put_fixed32_le(&fixed_buf, idxes.size());
         for (const auto idx : idxes) {
@@ -943,6 +941,7 @@ public:
     }
 
     Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
+        CHECK_MEM_LIMIT("FixedMutableIndex::load_wal");
         for (size_t i = 0; i < n; i++) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[i].data);
             const auto value = values[i];
@@ -959,7 +958,7 @@ public:
     Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) override {
         size_t kv_header_size = 8;
         std::string buff;
-        raw::stl_string_resize_uninitialized(&buff, kv_header_size);
+        TRY_CATCH_BAD_ALLOC(raw::stl_string_resize_uninitialized(&buff, kv_header_size));
         RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
         uint32_t key_size = UNALIGNED_LOAD32(buff.data());
         DCHECK(key_size == KeySize);
@@ -968,7 +967,7 @@ public:
         const size_t kv_pair_size = KeySize + sizeof(IndexValue);
         while (nums > 0) {
             const size_t batch_num = (nums > 4096) ? 4096 : nums;
-            raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size);
+            TRY_CATCH_BAD_ALLOC(raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size));
             RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
             std::vector<Slice> keys;
             keys.reserve(batch_num);
@@ -1108,6 +1107,7 @@ public:
 
     Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                const std::vector<size_t>& idxes) const override {
+        CHECK_MEM_LIMIT("SliceMutableIndex::get");
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1136,29 +1136,26 @@ public:
                   size_t* num_found, const std::vector<size_t>& idxes) override {
         CHECK_MEM_LIMIT("SliceMutableIndex::upsert");
         size_t nfound = 0;
-        TRY_CATCH_BAD_ALLOC({
-            for (const auto idx : idxes) {
-                std::string composite_key;
-                const auto& skey = keys[idx];
-                const auto value = values[idx];
-                composite_key.reserve(skey.size + kIndexValueSize);
-                composite_key.append(skey.data, skey.size);
-                put_fixed64_le(&composite_key, value.get_value());
-                uint64_t hash = StringHasher2()(composite_key);
-                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
-                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                    _total_kv_pairs_usage += composite_key.size();
-                } else {
-                    const auto& old_compose_key = *it;
-                    auto old_value =
-                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
-                    old_values[idx] = old_value;
-                    nfound += old_value != NullIndexValue;
-                    _set.erase(it);
-                    _set.emplace_with_hash(hash, composite_key);
-                }
+        for (const auto idx : idxes) {
+            std::string composite_key;
+            const auto& skey = keys[idx];
+            const auto value = values[idx];
+            composite_key.reserve(skey.size + kIndexValueSize);
+            composite_key.append(skey.data, skey.size);
+            put_fixed64_le(&composite_key, value.get_value());
+            uint64_t hash = StringHasher2()(composite_key);
+            if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                _total_kv_pairs_usage += composite_key.size();
+            } else {
+                const auto& old_compose_key = *it;
+                auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                old_values[idx] = old_value;
+                nfound += old_value != NullIndexValue;
+                _set.erase(it);
+                _set.emplace_with_hash(hash, composite_key);
             }
-        });
+        }
         *num_found = nfound;
         return Status::OK();
     }
@@ -1167,63 +1164,58 @@ public:
                   const std::vector<size_t>& idxes) override {
         CHECK_MEM_LIMIT("SliceMutableIndex::upsert");
         size_t nfound = 0;
-        TRY_CATCH_BAD_ALLOC({
-            for (const auto idx : idxes) {
-                std::string composite_key;
-                const auto& skey = keys[idx];
-                const auto value = values[idx];
-                composite_key.reserve(skey.size + kIndexValueSize);
-                composite_key.append(skey.data, skey.size);
-                put_fixed64_le(&composite_key, value.get_value());
-                uint64_t hash = StringHasher2()(composite_key);
-                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
-                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                    _total_kv_pairs_usage += composite_key.size();
-                } else {
-                    const auto& old_compose_key = *it;
-                    const auto old_value =
-                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
-                    nfound += old_value != NullIndexValue;
-                    // TODO: find a way to modify iterator directly, currently just erase then re-insert
-                    _set.erase(it);
-                    _set.emplace_with_hash(hash, composite_key);
-                }
+        for (const auto idx : idxes) {
+            std::string composite_key;
+            const auto& skey = keys[idx];
+            const auto value = values[idx];
+            composite_key.reserve(skey.size + kIndexValueSize);
+            composite_key.append(skey.data, skey.size);
+            put_fixed64_le(&composite_key, value.get_value());
+            uint64_t hash = StringHasher2()(composite_key);
+            if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                _total_kv_pairs_usage += composite_key.size();
+            } else {
+                const auto& old_compose_key = *it;
+                const auto old_value =
+                        UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                nfound += old_value != NullIndexValue;
+                // TODO: find a way to modify iterator directly, currently just erase then re-insert
+                _set.erase(it);
+                _set.emplace_with_hash(hash, composite_key);
             }
-        });
+        }
         *num_found = nfound;
         return Status::OK();
     }
 
     Status insert(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
         CHECK_MEM_LIMIT("SliceMutableIndex::insert");
-        TRY_CATCH_BAD_ALLOC({
-            for (const auto idx : idxes) {
-                std::string composite_key;
-                const auto& skey = keys[idx];
-                const auto value = values[idx];
-                composite_key.reserve(skey.size + kIndexValueSize);
-                composite_key.append(skey.data, skey.size);
-                put_fixed64_le(&composite_key, value.get_value());
-                uint64_t hash = StringHasher2()(composite_key);
-                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
-                    _total_kv_pairs_usage += composite_key.size();
-                } else {
-                    auto& old_compose_key = *it;
-                    auto old_value =
-                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
-                    auto old_rssid = (uint32_t)(old_value >> 32);
-                    auto old_rowid = (uint32_t)(old_value & ROWID_MASK);
-                    auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
-                    std::string msg = strings::Substitute(
-                            "SliceMutableIndex key_size=$0 insert found duplicate key $1, "
-                            "new(rssid=$2 rowid=$3), old(rssid=$4 rowid=$5)",
-                            skey.size, hexdump((const char*)skey.data, skey.size), (uint32_t)((*new_value) >> 32),
-                            (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
-                    LOG(WARNING) << msg;
-                    return Status::AlreadyExist(msg);
-                }
+        for (const auto idx : idxes) {
+            std::string composite_key;
+            const auto& skey = keys[idx];
+            const auto value = values[idx];
+            composite_key.reserve(skey.size + kIndexValueSize);
+            composite_key.append(skey.data, skey.size);
+            put_fixed64_le(&composite_key, value.get_value());
+            uint64_t hash = StringHasher2()(composite_key);
+            if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                _total_kv_pairs_usage += composite_key.size();
+            } else {
+                auto& old_compose_key = *it;
+                auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                auto old_rssid = (uint32_t)(old_value >> 32);
+                auto old_rowid = (uint32_t)(old_value & ROWID_MASK);
+                auto new_value = reinterpret_cast<uint64_t*>(const_cast<IndexValue*>(&value));
+                std::string msg = strings::Substitute(
+                        "SliceMutableIndex key_size=$0 insert found duplicate key $1, "
+                        "new(rssid=$2 rowid=$3), old(rssid=$4 rowid=$5)",
+                        skey.size, hexdump((const char*)skey.data, skey.size), (uint32_t)((*new_value) >> 32),
+                        (uint32_t)((*new_value) & ROWID_MASK), old_rssid, old_rowid);
+                LOG(WARNING) << msg;
+                return Status::AlreadyExist(msg);
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -1231,55 +1223,50 @@ public:
                  const std::vector<size_t>& idxes) override {
         CHECK_MEM_LIMIT("SliceMutableIndex::erase");
         size_t nfound = 0;
-        TRY_CATCH_BAD_ALLOC({
-            for (const auto idx : idxes) {
-                std::string composite_key;
-                const auto& skey = keys[idx];
-                const auto value = NullIndexValue;
-                composite_key.reserve(skey.size + kIndexValueSize);
-                composite_key.append(skey.data, skey.size);
-                put_fixed64_le(&composite_key, value);
-                uint64_t hash = StringHasher2()(composite_key);
-                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
-                    old_values[idx] = NullIndexValue;
-                    not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                    _total_kv_pairs_usage += composite_key.size();
-                } else {
-                    auto& old_compose_key = *it;
-                    auto old_value =
-                            UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
-                    old_values[idx] = old_value;
-                    nfound += old_value != NullIndexValue;
-                    // TODO: find a way to modify iterator directly, currently just erase then re-insert
-                    _set.erase(it);
-                    _set.emplace_with_hash(hash, composite_key);
-                }
+        for (const auto idx : idxes) {
+            std::string composite_key;
+            const auto& skey = keys[idx];
+            const auto value = NullIndexValue;
+            composite_key.reserve(skey.size + kIndexValueSize);
+            composite_key.append(skey.data, skey.size);
+            put_fixed64_le(&composite_key, value);
+            uint64_t hash = StringHasher2()(composite_key);
+            if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                old_values[idx] = NullIndexValue;
+                not_found->key_infos.emplace_back((uint32_t)idx, hash);
+                _total_kv_pairs_usage += composite_key.size();
+            } else {
+                auto& old_compose_key = *it;
+                auto old_value = UNALIGNED_LOAD64(old_compose_key.data() + old_compose_key.size() - kIndexValueSize);
+                old_values[idx] = old_value;
+                nfound += old_value != NullIndexValue;
+                // TODO: find a way to modify iterator directly, currently just erase then re-insert
+                _set.erase(it);
+                _set.emplace_with_hash(hash, composite_key);
             }
-        });
+        }
         *num_found = nfound;
         return Status::OK();
     }
 
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
         CHECK_MEM_LIMIT("SliceMutableIndex::replace");
-        TRY_CATCH_BAD_ALLOC({
-            for (const auto idx : idxes) {
-                std::string composite_key;
-                const auto& skey = keys[idx];
-                const auto value = values[idx];
-                composite_key.reserve(skey.size + kIndexValueSize);
-                composite_key.append(skey.data, skey.size);
-                put_fixed64_le(&composite_key, value.get_value());
-                uint64_t hash = StringHasher2()(composite_key);
-                if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
-                    _total_kv_pairs_usage += composite_key.size();
-                } else {
-                    // TODO: find a way to modify iterator directly, currently just erase then re-insert
-                    _set.erase(it);
-                    _set.emplace_with_hash(hash, composite_key);
-                }
+        for (const auto idx : idxes) {
+            std::string composite_key;
+            const auto& skey = keys[idx];
+            const auto value = values[idx];
+            composite_key.reserve(skey.size + kIndexValueSize);
+            composite_key.append(skey.data, skey.size);
+            put_fixed64_le(&composite_key, value.get_value());
+            uint64_t hash = StringHasher2()(composite_key);
+            if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                _total_kv_pairs_usage += composite_key.size();
+            } else {
+                // TODO: find a way to modify iterator directly, currently just erase then re-insert
+                _set.erase(it);
+                _set.emplace_with_hash(hash, composite_key);
             }
-        });
+        }
         return Status::OK();
     }
 
@@ -1291,7 +1278,7 @@ public:
         for (const auto idx : idxes) {
             keys_size += keys[idx].size;
         }
-        fixed_buf.reserve(keys_size + n * (kWALKVSize + kIndexValueSize));
+        TRY_CATCH_BAD_ALLOC(fixed_buf.reserve(keys_size + n * (kWALKVSize + kIndexValueSize)));
         put_fixed32_le(&fixed_buf, kKeySizeMagicNum);
         put_fixed32_le(&fixed_buf, idxes.size());
         for (const auto idx : idxes) {
@@ -1310,6 +1297,7 @@ public:
     }
 
     Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
+        CHECK_MEM_LIMIT("SliceMutableIndex::load_wals");
         for (size_t i = 0; i < n; i++) {
             std::string composite_key;
             const auto& skey = keys[i];
