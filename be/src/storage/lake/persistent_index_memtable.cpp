@@ -28,15 +28,16 @@ void PersistentIndexMemtable::update_index_value(std::list<IndexValueWithVer>* i
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                        KeyIndexSet* not_founds, size_t* num_found, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_mem_upsert_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
+        auto key = std::string_view(keys[i]);
         const auto value = values[i];
         std::list<IndexValueWithVer> index_value_vers;
         index_value_vers.emplace_front(version, value);
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
             not_founds->insert(i);
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_size += key.size() + sizeof(std::string);
         } else {
             auto& old_index_value_vers = it->second;
             auto old_value = old_index_value_vers.front().second;
@@ -51,15 +52,15 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
 }
 
 Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("persistent_index_memtable_insert_us");
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_mem_insert_us");
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
+        auto key = std::string_view(keys[i]);
         auto size = keys[i].get_size();
         const auto value = values[i];
         std::list<IndexValueWithVer> index_value_vers;
         index_value_vers.emplace_front(version, value);
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_size += key.size() + sizeof(std::string);
         } else {
             auto& old_index_value_vers = it->second;
             auto old_index_value = old_index_value_vers.front().second;
@@ -85,15 +86,16 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
 
 Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
                                       size_t* num_found, int64_t version, uint32_t rowset_id) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_mem_erase_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
-        auto key = keys[i].to_string();
+        auto key = std::string_view(keys[i]);
         std::list<IndexValueWithVer> index_value_vers;
         index_value_vers.emplace_front(version, IndexValue(NullIndexValue));
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
             old_values[i] = NullIndexValue;
             not_founds->insert(i);
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_size += key.size() + sizeof(std::string);
         } else {
             auto& old_index_value_vers = it->second;
             auto old_index_value = old_index_value_vers.front().second;
@@ -114,11 +116,11 @@ Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, c
             // skip
             continue;
         }
-        auto key = keys[i].to_string();
+        auto key = std::string_view(keys[i]);
         std::list<IndexValueWithVer> index_value_vers;
         index_value_vers.emplace_front(version, IndexValue(NullIndexValue));
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_size += key.size() + sizeof(std::string);
         } else {
             auto& old_index_value_vers = it->second;
             update_index_value(&old_index_value_vers, version, IndexValue(NullIndexValue));
@@ -130,15 +132,16 @@ Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, c
 
 Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* values,
                                         const std::vector<size_t>& replace_idxes, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_mem_replace_us");
     for (unsigned long idx : replace_idxes) {
-        auto key = keys[idx].to_string();
+        auto key = std::string_view(keys[idx]);
         const auto value = values[idx];
         std::list<IndexValueWithVer> index_value_vers;
         index_value_vers.emplace_front(version, value);
         if (auto [it, inserted] = _map.emplace(key, index_value_vers); !inserted) {
             update_index_value(&it->second, version, value);
         } else {
-            _keys_size += key.capacity() + sizeof(std::string);
+            _keys_size += key.size() + sizeof(std::string);
         }
         _max_rss_rowid = std::max(_max_rss_rowid, value.get_value());
     }
@@ -147,6 +150,7 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
 
 Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* not_founds,
                                     int64_t version) const {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_mem_get_us");
     for (size_t i = 0; i < n; ++i) {
         auto key = std::string_view(keys[i]);
         auto it = _map.find(key);
@@ -165,6 +169,7 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
 
 Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes,
                                     KeyIndexSet* found_key_indexes, int64_t version) const {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_mem_get_us");
     for (auto& key_index : key_indexes) {
         auto key = std::string_view(keys[key_index]);
         auto it = _map.find(key);
