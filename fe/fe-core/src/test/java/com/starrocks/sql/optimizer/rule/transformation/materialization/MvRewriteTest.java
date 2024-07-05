@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
@@ -1030,10 +1031,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     BaseTableInfo parentTable = foreignKeyConstraints.get(0).getParentTableInfo();
                     Assert.assertEquals(olapTable.getId(), parentTable.getTableId());
                     Assert.assertEquals(2, foreignKeyConstraints.get(0).getColumnRefPairs().size());
-                    Assert.assertEquals("k3", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).first);
-                    Assert.assertEquals("k1", foreignKeyConstraints.get(0).getColumnRefPairs().get(0).second);
-                    Assert.assertEquals("k4", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).first);
-                    Assert.assertEquals("k2", foreignKeyConstraints.get(0).getColumnRefPairs().get(1).second);
+                    Assert.assertEquals(ColumnId.create("k3"), foreignKeyConstraints.get(0).getColumnRefPairs().get(0).first);
+                    Assert.assertEquals(ColumnId.create("k1"), foreignKeyConstraints.get(0).getColumnRefPairs().get(0).second);
+                    Assert.assertEquals(ColumnId.create("k4"), foreignKeyConstraints.get(0).getColumnRefPairs().get(1).first);
+                    Assert.assertEquals(ColumnId.create("k2"), foreignKeyConstraints.get(0).getColumnRefPairs().get(1).second);
 
                     cluster.runSql("test", "alter table base_table1 set(" +
                             "\"foreign_key_constraints\"=\"(k3,k4) references parent_table1(k1, k2);" +
@@ -1045,10 +1046,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     OlapTable parentTable2 = (OlapTable) getTable("test", "parent_table2");
                     Assert.assertEquals(parentTable2.getId(), parentTableInfo2.getTableId());
                     Assert.assertEquals(2, foreignKeyConstraints2.get(1).getColumnRefPairs().size());
-                    Assert.assertEquals("k5", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).first);
-                    Assert.assertEquals("k1", foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).second);
-                    Assert.assertEquals("k6", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).first);
-                    Assert.assertEquals("k2", foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).second);
+                    Assert.assertEquals(ColumnId.create("k5"), foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).first);
+                    Assert.assertEquals(ColumnId.create("k1"), foreignKeyConstraints2.get(1).getColumnRefPairs().get(0).second);
+                    Assert.assertEquals(ColumnId.create("k6"), foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).first);
+                    Assert.assertEquals(ColumnId.create("k2"), foreignKeyConstraints2.get(1).getColumnRefPairs().get(1).second);
 
                     cluster.runSql("test", "show create table base_table1");
                     cluster.runSql("test", "alter table base_table1 set(" +
