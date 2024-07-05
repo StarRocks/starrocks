@@ -77,8 +77,8 @@ public class RangerHiveAccessController extends RangerAccessController {
     }
 
     @Override
-    public void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                   String column, PrivilegeType privilegeType) throws AccessDeniedException {
+    public void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                  String column, PrivilegeType privilegeType) throws AccessDeniedException {
         hasPermission(RangerHiveResource.builder()
                         .setDatabase(tableName.getDb())
                         .setTable(tableName.getTbl())
