@@ -17,6 +17,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.CatalogMgr;
 
@@ -48,7 +50,11 @@ public class BaseTableInfo {
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.dbId = dbId;
         this.tableId = tableId;
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(dbName),
+                String.format("BaseTableInfo's dbName %s should not null", dbName));
         this.dbName = dbName;
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(tableName),
+                String.format("BaseTableInfo's tableName %s should not null", tableName));
         this.tableName = tableName;
     }
 
