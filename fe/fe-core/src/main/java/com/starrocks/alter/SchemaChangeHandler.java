@@ -1877,15 +1877,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 AddFieldClause addFieldClause = (AddFieldClause) alterClause;
                 modifyFieldColumns = Set.of(addFieldClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifyFieldColumns);
-
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
-                int id = 0;
-                try {
-                    id = olapTable.incAndGetMaxColUniqueId();
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
-                }
+  
+                int id = colUniqueIdSupplier.getAsInt();
                 processAddField((AddFieldClause) alterClause, olapTable, indexSchemaMap, id, newIndexes);
             } else if (alterClause instanceof DropFieldClause) {
                 if (RunMode.isSharedDataMode()) {
