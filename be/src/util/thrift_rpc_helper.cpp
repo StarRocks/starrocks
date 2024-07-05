@@ -113,6 +113,11 @@ Status ThriftRpcHelper::rpc_impl(std::function<void(ClientConnection<TFileBroker
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms) {
+    if (UNLIKELY(_s_exec_env == nullptr)) {
+        return Status::ThriftRpcError(
+                "Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please retry "
+                "later");
+    }
     TNetworkAddress address = make_network_address(ip, port);
     Status status;
     ClientConnection<T> client(_s_exec_env->get_client_cache<T>(), address, timeout_ms, &status);
