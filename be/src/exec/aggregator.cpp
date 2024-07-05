@@ -370,7 +370,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
-        const auto agg_fn_type = _agg_fn_types[i];
+        const auto& agg_fn_type = _agg_fn_types[i];
         _is_merge_funcs[i] = aggregate_functions[i].nodes[0].agg_expr.is_merge_agg;
         // get function
         if (fn.name.function_name == "count") {
