@@ -138,7 +138,7 @@ public class TaskRunHistoryTable {
 
     public List<TaskRunStatus> lookup(TGetTasksParams params) {
         if (params == null) {
-            return null;
+            return Lists.newArrayList();
         }
         String sql = LOOKUP;
         List<String> predicates = Lists.newArrayList("TRUE");
