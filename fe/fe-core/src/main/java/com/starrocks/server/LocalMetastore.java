@@ -2741,6 +2741,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+<<<<<<< HEAD
         for (long tabletId : info.getTablets()) {
             TabletMeta meta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
             if (meta == null) {
@@ -2776,7 +2777,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 tablet.deleteReplicaByBackendId(info.getBackendId());
             } finally {
                 db.writeUnlock();
+=======
+        if (info.getReplicaInfoList() != null) {
+            for (ReplicaPersistInfo persistInfo : info.getReplicaInfoList()) {
+                replayDeleteReplica(persistInfo);
+>>>>>>> ed0ccd6755 ([BugFix] Fix replayBatchDeleteReplica failed when doing checkpoint (#47833))
             }
+        } else {
+            LOG.warn("invalid BatchDeleteReplicaInfo, replicaInfoList is null");
         }
     }
 

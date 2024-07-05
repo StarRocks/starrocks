@@ -24,15 +24,21 @@ public class BatchDeleteReplicaInfo extends JsonWriter {
     @SerializedName("bId")
     private long backendId;
 
+    // deprecated, reserved for rollback
+    @Deprecated
     @SerializedName("tablets")
     private List<Long> tablets;
+
+    @SerializedName("replicas")
+    private List<ReplicaPersistInfo> replicaInfoList;
 
     public BatchDeleteReplicaInfo() {
     }
 
-    public BatchDeleteReplicaInfo(long backendId, List<Long> tablets) {
+    public BatchDeleteReplicaInfo(long backendId, List<Long> tablets, List<ReplicaPersistInfo> replicaInfoList) {
         this.backendId = backendId;
         this.tablets = tablets;
+        this.replicaInfoList = replicaInfoList;
     }
 
     public long getBackendId() {
@@ -41,5 +47,9 @@ public class BatchDeleteReplicaInfo extends JsonWriter {
 
     public List<Long> getTablets() {
         return tablets;
+    }
+
+    public List<ReplicaPersistInfo> getReplicaInfoList() {
+        return replicaInfoList;
     }
 }
