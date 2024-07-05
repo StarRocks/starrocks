@@ -16,6 +16,7 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,14 +29,14 @@ public class ConnectorMgr {
     private final ConcurrentHashMap<String, CatalogConnector> connectors = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    public CatalogConnector createConnector(ConnectorContext context) {
+    public CatalogConnector createConnector(ConnectorContext context, boolean isReplay) throws StarRocksConnectorException {
         String catalogName = context.getCatalogName();
         CatalogConnector connector = null;
         readLock();
         try {
             Preconditions.checkState(!connectors.containsKey(catalogName),
                     "Connector of catalog '%s' already exists", catalogName);
-            connector = ConnectorFactory.createConnector(context);
+            connector = ConnectorFactory.createConnector(context, isReplay);
             if (connector == null) {
                 return null;
             }
