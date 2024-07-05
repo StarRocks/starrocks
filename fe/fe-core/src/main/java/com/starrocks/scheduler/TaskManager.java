@@ -803,7 +803,7 @@ public class TaskManager implements MemoryTrackable {
 
     public void replayDropTaskRuns(List<String> queryIdList) {
         for (String queryId : ListUtils.emptyIfNull(queryIdList)) {
-            taskRunManager.getTaskRunHistory().removeTask(queryId);
+            taskRunManager.getTaskRunHistory().removeTaskByQueryId(queryId);
         }
     }
 

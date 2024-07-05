@@ -15,25 +15,37 @@
 package com.starrocks.scheduler.history;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class TaskRunHistoryTest {
+public class TaskRunHistoryTest {
+
+    @BeforeAll
+    public static void beforeAll() {
+        UtFrameUtils.createMinStarRocksCluster();
+    }
 
     @Test
     public void testTaskRunStatusSerialization() {
@@ -53,6 +65,12 @@ class TaskRunHistoryTest {
 
     @Test
     public void testCRUD(@Mocked RepoExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
         new Expectations() {
             {
                 repo.executeDML("INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, " +
@@ -102,6 +120,62 @@ class TaskRunHistoryTest {
             }
         };
         assertEquals(123, history.getTaskRunCount());
+
+        // lookup by params
+        TGetTasksParams params = new TGetTasksParams();
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "get_json_string(history_content_json, 'dbName') = 'default_cluster:d1'");
+            }
+        };
+        params.setDb("d1");
+        history.lookup(params);
+
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "state = 'SUCCESS'");
+            }
+        };
+        params.setDb(null);
+        params.setState("SUCCESS");
+        history.lookup(params);
+
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_name = 't1'");
+            }
+        };
+        params.setDb(null);
+        params.setState(null);
+        params.setTask_name("t1");
+        history.lookup(params);
+
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_run_id = 'q1'");
+            }
+        };
+        params.setDb(null);
+        params.setState(null);
+        params.setTask_name(null);
+        params.setQuery_id("q1");
+        history.lookup(params);
+
+        // lookup by task names
+        String dbName = "";
+        Set<String> taskNames = Set.of("t1", "t2");
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_name IN ('t1','t2')");
+            }
+        };
+        history.lookupByTaskNames(dbName, taskNames);
+
     }
 
     @Test
@@ -152,4 +226,94 @@ class TaskRunHistoryTest {
         assertTrue(keeper.isTableCorrected());
     }
 
+    @Test
+    public void testHistoryVacuum(@Mocked RepoExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistory history = new TaskRunHistory();
+
+        // prepare
+        long currentTime = 1720165070904L;
+        TaskRunStatus run1 = new TaskRunStatus();
+        run1.setExpireTime(currentTime - 1);
+        run1.setQueryId("q1");
+        run1.setTaskName("t1");
+        run1.setState(Constants.TaskRunState.RUNNING);
+        history.addHistory(run1);
+        TaskRunStatus run2 = new TaskRunStatus();
+        run2.setExpireTime(currentTime + 10000);
+        run2.setQueryId("q2");
+        run2.setTaskName("t2");
+        run2.setState(Constants.TaskRunState.SUCCESS);
+        history.addHistory(run2);
+        assertEquals(2, history.getInMemoryHistory().size());
+
+        // run the normal vacuum
+        new Expectations() {
+            {
+                repo.executeDML(
+                        "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, create_time, " +
+                                "finish_time, expire_time, history_content_json) VALUES(0, 'null', 't2', " +
+                                "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '2024-07-05 15:38:00', '{\"queryId\":\"q2\"," +
+                                "\"taskId\":0,\"taskName\":\"t2\",\"createTime\":0,\"expireTime\":1720165080904," +
+                                "\"priority\":0,\"mergeRedundant\":false,\"source\":\"CTAS\",\"errorCode\":0," +
+                                "\"finishTime\":0,\"processStartTime\":0,\"state\":\"SUCCESS\",\"progress\":0," +
+                                "\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
+                                "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{}," +
+                                "\"processStartTime\":0,\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true," +
+                                "\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}')");
+            }
+        };
+        history.vacuum();
+        assertEquals(1, history.getInMemoryHistory().size());
+
+        // vacuum failed
+        new Expectations() {
+            {
+                repo.executeDML(anyString);
+                result = new RuntimeException("insert failed");
+            }
+        };
+        TaskRunStatus run3 = new TaskRunStatus();
+        run3.setExpireTime(System.currentTimeMillis() + 10000);
+        run3.setQueryId("q3");
+        run3.setTaskName("t3");
+        run3.setState(Constants.TaskRunState.SUCCESS);
+        history.addHistory(run3);
+        history.vacuum();
+        assertEquals(2, history.getInMemoryHistory().size());
+    }
+
+    @Test
+    public void testDisableArchiveHistory() {
+        Config.enable_task_archive = false;
+        TaskRunHistory history = new TaskRunHistory();
+
+        // prepare
+        long currentTime = 1720165070904L;
+        TaskRunStatus run1 = new TaskRunStatus();
+        run1.setExpireTime(currentTime - 1);
+        run1.setQueryId("q1");
+        run1.setTaskName("t1");
+        run1.setState(Constants.TaskRunState.RUNNING);
+        history.addHistory(run1);
+        TaskRunStatus run2 = new TaskRunStatus();
+        run2.setExpireTime(currentTime + 10000);
+        run2.setQueryId("q2");
+        run2.setTaskName("t2");
+        run2.setState(Constants.TaskRunState.SUCCESS);
+        history.addHistory(run2);
+        assertEquals(2, history.getInMemoryHistory().size());
+
+        // run, trigger the expiration
+        history.vacuum();
+        Assert.assertEquals(0, history.getInMemoryHistory().size());
+
+        Config.enable_task_archive = true;
+    }
 }

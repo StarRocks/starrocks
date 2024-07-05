@@ -140,7 +140,6 @@ public class TaskRunHistoryTable {
             }).collect(Collectors.joining(", "));
 
             String sql = insert + values;
-            System.err.println(sql);
             RepoExecutor.getInstance().executeDML(sql);
         }
     }
@@ -177,7 +176,7 @@ public class TaskRunHistoryTable {
                     + Strings.quote(ClusterNamespace.getFullName(dbName)));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
-            String values = taskNames.stream().map(Strings::quote).collect(Collectors.joining(","));
+            String values = taskNames.stream().sorted().map(Strings::quote).collect(Collectors.joining(","));
             predicates.add(" task_name IN (" + values + ")");
         }
 

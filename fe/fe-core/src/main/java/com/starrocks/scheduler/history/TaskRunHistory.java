@@ -23,6 +23,7 @@ import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTasksParams;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,10 +40,12 @@ import java.util.stream.Collectors;
 public class TaskRunHistory {
     private static final Logger LOG = LogManager.getLogger(TaskRunHistory.class);
 
-    // Thread-Safe history map: QueryId -> TaskRunStatus
+    // Thread-Safe history map:
+    // QueryId -> TaskRunStatus
     // The same task-id may contain multi history task run status, so use query_id instead.
     private final Map<String, TaskRunStatus> historyTaskRunMap =
             Collections.synchronizedMap(Maps.newLinkedHashMap());
+    // TaskName -> TaskRunStatus
     private final Map<String, TaskRunStatus> taskName2Status =
             Collections.synchronizedMap(Maps.newLinkedHashMap());
 
@@ -64,7 +67,7 @@ public class TaskRunHistory {
         return historyTaskRunMap.get(queryId);
     }
 
-    public void removeTask(String queryId) {
+    public void removeTaskByQueryId(String queryId) {
         if (queryId == null) {
             return;
         }
@@ -104,6 +107,35 @@ public class TaskRunHistory {
      * Remove expired task runs, would be called in regular daemon thread, and also in checkpoint
      */
     public void vacuum() {
+        removeExpiredRuns();
+
+        // trigger to force gc to avoid too many history task runs.
+        forceGC();
+
+        // archive histories
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            archiveHistory();
+        }
+    }
+
+    public void replay(ArchiveTaskRunsLog log) {
+        for (String queryId : ListUtils.emptyIfNull(log.getTaskRuns())) {
+            removeTaskByQueryId(queryId);
+        }
+    }
+
+    private boolean isEnableArchiveHistory() {
+        return Config.enable_task_archive && !FeConstants.runningUnitTest;
+    }
+
+    /**
+     * Remove expired history records, which is controlled by {@link Config.task_runs_ttl_second}
+     */
+    private void removeExpiredRuns() {
+        if (isEnableArchiveHistory()) {
+            return;
+        }
+
         long currentTimeMs = System.currentTimeMillis();
         List<String> historyToDelete = Lists.newArrayList();
         List<TaskRunStatus> taskRunHistory = getInMemoryHistory();
@@ -114,39 +146,23 @@ public class TaskRunHistory {
             long expireTime = taskRunStatus.getExpireTime();
             if (currentTimeMs > expireTime) {
                 historyToDelete.add(taskRunStatus.getQueryId());
-                removeTask(taskRunStatus.getQueryId());
+                removeTaskByQueryId(taskRunStatus.getQueryId());
                 iterator.remove();
             }
         }
-
-        // trigger to force gc to avoid too many history task runs.
-        forceGC();
-
-        // archive histories
-        if (!GlobalStateMgr.isCheckpointThread()) {
-            archiveHistory();
-        }
-
-        LOG.info("remove run history:{}", historyToDelete);
+        LOG.info("remove expired run history:{}", historyToDelete);
     }
 
-    public void replay(ArchiveTaskRunsLog log) {
-        for (String queryId : ListUtils.emptyIfNull(log.getTaskRuns())) {
-            removeTask(queryId);
-        }
-    }
-
-    private boolean isEnableArchiveHistory() {
-        return Config.enable_task_archive && !FeConstants.runningUnitTest;
-    }
-
-    private void archiveHistory() {
+    protected void archiveHistory() {
         if (!isEnableArchiveHistory()) {
             return;
         }
 
-        // TODO: reserve some of histories ?
         List<TaskRunStatus> runs = getInMemoryHistory();
+        runs.removeIf(x -> !x.getState().isFinishState());
+        if (CollectionUtils.isEmpty(runs)) {
+            return;
+        }
 
         try {
             // 1. Persist into table
@@ -155,7 +171,7 @@ public class TaskRunHistory {
 
             // 2. Remove from memory
             for (var run : runs) {
-                removeTask(run.getQueryId());
+                removeTaskByQueryId(run.getQueryId());
             }
 
             // 3. Write EditLog
@@ -173,6 +189,10 @@ public class TaskRunHistory {
      * Keep only limited task runs to save memory usage
      */
     public void forceGC() {
+        if (!isEnableArchiveHistory()) {
+            return;
+        }
+
         List<TaskRunStatus> allHistory = getInMemoryHistory();
         int beforeSize = allHistory.size();
         LOG.info("try to trigger force gc, size before GC:{}, task_runs_max_history_number:{}.", beforeSize,
@@ -188,7 +208,7 @@ public class TaskRunHistory {
                 .collect(Collectors.toList());
 
         // Now remove outside of iteration
-        idsToRemove.forEach(this::removeTask);
+        idsToRemove.forEach(this::removeTaskByQueryId);
         LOG.warn("Too much task metadata triggers forced task_run GC, " +
                 "size before GC:{}, size after GC:{}.", beforeSize, historyTaskRunMap.size());
     }
