@@ -25,6 +25,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.ConvertIntervalExpr;
 import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -1368,6 +1369,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitVariableExpr(VariableExpr node, C context) {
+        return visitExpression(node, context);
+    }
+  
+    default R visitConvertIntervalExpr(ConvertIntervalExpr node, C context) {
         return visitExpression(node, context);
     }
 

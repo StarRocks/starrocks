@@ -79,6 +79,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.BITMAP;
@@ -301,6 +302,16 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "milliseconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator millisecondsAdd(ConstantOperator date, ConstantOperator millisecond) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().plus(millisecond.getInt(), ChronoUnit.MILLIS));
+    }
+
+    @ConstantFunction(name = "convert_interval", argTypes = {INT, VARCHAR, VARCHAR}, returnType = BIGINT, isMonotonic = true)
+    public static ConstantOperator convertInterval(ConstantOperator n, ConstantOperator type, ConstantOperator toType) {
+        String typeTimeUnitName = type.getVarchar();
+        String toTypeTimeUnitName = toType.getVarchar();
+        int nInt = n.getInt();
+        TimeUnit typeTimeUnit = TimeUnit.valueOf(typeTimeUnitName + "S");
+        TimeUnit toTypeTimeUnit = TimeUnit.valueOf(toTypeTimeUnitName + "S");
+        return new ConstantOperator(toTypeTimeUnit.convert(nInt, typeTimeUnit), Type.BIGINT);
     }
 
     @ConstantFunction.List(list = {
