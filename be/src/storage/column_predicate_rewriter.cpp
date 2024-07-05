@@ -57,7 +57,7 @@ struct RewritePredicateTreeVisitor {
         const auto cid = col_pred->column_id();
         // index only filter only used for storage engine index filter
         // after index filter,it's useless and will be thrown away in SegmentIterator::_init_column_predicates
-        if (col_pred->is_index_filter_only()) {
+        if (col_pred->is_index_filter_only() && col_pred->is_expr_predicate()) {
             return RewriteStatus::UNCHANGED;
         }
 
