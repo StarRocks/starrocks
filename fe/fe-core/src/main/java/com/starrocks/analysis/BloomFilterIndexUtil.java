@@ -24,11 +24,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.IndexDef;
-import com.starrocks.sql.common.MetaUtils;
->>>>>>> 3ffbe92c15 ([Refactor] Introduce ColumnId to support Column renaming (part3) (#45757))
 
 import java.util.List;
 import java.util.Locale;

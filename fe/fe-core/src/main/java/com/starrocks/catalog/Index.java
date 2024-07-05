@@ -45,12 +45,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.gson.GsonUtils;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.IndexDef;
-import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.common.MetaUtils;
->>>>>>> 3ffbe92c15 ([Refactor] Introduce ColumnId to support Column renaming (part3) (#45757))
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 

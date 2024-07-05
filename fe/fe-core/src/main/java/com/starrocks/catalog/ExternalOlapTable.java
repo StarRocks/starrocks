@@ -31,11 +31,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.common.MetaUtils;
->>>>>>> 3ffbe92c15 ([Refactor] Introduce ColumnId to support Column renaming (part3) (#45757))
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;

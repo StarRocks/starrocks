@@ -23,16 +23,9 @@ import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
-<<<<<<< HEAD
 import com.starrocks.analysis.IndexDef.IndexType;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-=======
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.sql.ast.IndexDef.IndexType;
->>>>>>> 3ffbe92c15 ([Refactor] Introduce ColumnId to support Column renaming (part3) (#45757))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;

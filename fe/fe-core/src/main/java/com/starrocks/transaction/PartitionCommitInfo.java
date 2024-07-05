@@ -135,19 +135,7 @@ public class PartitionCommitInfo implements Writable {
         return versionTime;
     }
 
-<<<<<<< HEAD
-    public List<String> getInvalidDictCacheColumns() {
-=======
-    public void setIsDoubleWrite(boolean isDoubleWrite) {
-        this.isDoubleWrite = isDoubleWrite;
-    }
-
-    public boolean isDoubleWrite() {
-        return isDoubleWrite;
-    }
-
     public List<ColumnId> getInvalidDictCacheColumns() {
->>>>>>> 3ffbe92c15 ([Refactor] Introduce ColumnId to support Column renaming (part3) (#45757))
         return invalidDictCacheColumns;
     }
 
