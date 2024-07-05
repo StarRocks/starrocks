@@ -41,9 +41,11 @@ public class UniqueConstraint {
     private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
     private final List<ColumnId> uniqueColumns;
 
-    private final String catalogName;
-    private final String dbName;
-    private final String tableName;
+    private String catalogName;
+    private String dbName;
+    private String tableName;
+
+    private Table referencedTable;
 
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<ColumnId> uniqueColumns) {
         this.catalogName = catalogName;
@@ -52,11 +54,22 @@ public class UniqueConstraint {
         this.uniqueColumns = uniqueColumns;
     }
 
+    // Used for primaryKey/uniqueKey table to create default uniqueConstraints.
+    public UniqueConstraint(Table referencedTable, List<ColumnId> uniqueColumns) {
+        this.referencedTable = referencedTable;
+        this.uniqueColumns = uniqueColumns;
+    }
+
     public List<String> getUniqueColumnNames() {
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+        Table targetTable;
+        if (referencedTable != null) {
+            targetTable = referencedTable;
+        } else {
+            targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+        }
         List<String> result = new ArrayList<>(uniqueColumns.size());
         for (ColumnId columnId : uniqueColumns) {
-            Column column = table.getColumn(columnId);
+            Column column = targetTable.getColumn(columnId);
             if (column == null) {
                 LOG.warn("Can not find column by column id: {}, the column may have been dropped", columnId);
                 continue;

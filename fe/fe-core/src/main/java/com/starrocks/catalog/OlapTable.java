@@ -2711,7 +2711,7 @@ public class OlapTable extends Table {
         }
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             uniqueConstraints.add(
-                    new UniqueConstraint(null, null, null, getKeyColumns()
+                    new UniqueConstraint(this, getKeyColumns()
                             .stream().map(Column::getColumnId).collect(Collectors.toList())));
         }
         if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
@@ -3094,7 +3094,7 @@ public class OlapTable extends Table {
         String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
         if (!Strings.isNullOrEmpty(uniqueConstraint)) {
             properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT,
-                    UniqueConstraint.getShowCreateTableConstraintDesc(getUniqueConstraints()));
+                    UniqueConstraint.getShowCreateTableConstraintDesc(getTableProperty().getUniqueConstraints()));
         }
 
         // foreign key constraint
