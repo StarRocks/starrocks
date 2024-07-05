@@ -793,6 +793,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         List<Long> deleteTablets = new ArrayList<>();
+        List<ReplicaPersistInfo> replicaPersistInfoList = new ArrayList<>();
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
             Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
@@ -982,6 +983,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         // remove replica related tasks
                         AgentTaskQueue.removeReplicaRelatedTasks(backendId, tabletId);
                         deleteTablets.add(tabletId);
+                        replicaPersistInfoList.add(ReplicaPersistInfo
+                                .createForDelete(dbId, tableId, partitionId, indexId, tabletId, backendId));
                         LOG.warn("delete replica[{}] with state[{}] in tablet[{}] from meta. backend[{}]," +
                                         " report version: {}, current report version: {}",
                                 replica.getId(), replica.getState().name(), tabletId, backendId, backendReportVersion,
@@ -1003,7 +1006,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         if (deleteTablets.size() > 0) {
             // no need to be protected by db lock, if the related meta is dropped, the replay code will ignore that tablet
             GlobalStateMgr.getCurrentState().getEditLog()
-                    .logBatchDeleteReplica(new BatchDeleteReplicaInfo(backendId, deleteTablets));
+                    .logBatchDeleteReplica(new BatchDeleteReplicaInfo(backendId, deleteTablets, replicaPersistInfoList));
         }
 
         if (Config.recover_with_empty_tablet && createReplicaBatchTask.getTaskNum() > 0) {
