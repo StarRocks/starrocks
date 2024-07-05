@@ -144,10 +144,10 @@ public class Authorizer {
         getInstance().getAccessControlOrDefault(catalog).checkAnyActionOnTable(currentUser, roleIds, tableName);
     }
 
-    public static void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
-                                          TableName tableName, String column,
-                                          PrivilegeType privilegeType) throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkColumnsAction(currentUser, roleIds,
+    public static void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds,
+                                         TableName tableName, String column,
+                                         PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkColumnAction(currentUser, roleIds,
                 tableName, column, privilegeType);
     }
 
