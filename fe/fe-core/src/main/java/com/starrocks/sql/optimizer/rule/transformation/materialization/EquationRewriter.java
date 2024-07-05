@@ -70,6 +70,21 @@ public class EquationRewriter {
         this.underAggFunctionRewriteContext = underAggFunctionRewriteContext;
     }
 
+    public boolean isColWithOnlyGroupByKeys(ScalarOperator expr) {
+        if (expr.getChildren().isEmpty()) {
+            return expr.isConstant() || equationMap.containsKey(expr);
+        }
+        for (ScalarOperator e : expr.getChildren()) {
+            if (expr.isConstant() || equationMap.containsKey(e)) {
+                continue;
+            }
+            if (!isColWithOnlyGroupByKeys(e)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private final class EquivalentShuttle extends BaseScalarOperatorShuttle {
         private final EquivalentShuttleContext shuttleContext;
 

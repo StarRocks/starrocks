@@ -726,6 +726,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             return (CallOperator) targetColumn;
         } else {
             if (!targetColumn.isColumnRef()) {
+                if (targetColumn instanceof CallOperator
+                        && AggregateFunctionRollupUtils.isNonCumulativeFunction(aggCall)
+                        && equationRewriter.isColWithOnlyGroupByKeys(aggCall)) {
+                    return (CallOperator) targetColumn;
+                }
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                         "Rewrite aggregate rollup {} failed: only column-ref is supported after rewrite",
                         aggCall.toString());
