@@ -1010,7 +1010,7 @@ public class PrivilegeCheckerTest {
                     Mockito.any(), Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
             verify("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2 union all select k1,k2 from db2.tbl1",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
@@ -1046,7 +1046,7 @@ public class PrivilegeCheckerTest {
                     Mockito.any(), Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
             verify("update db3.tprimary set k2 = '2' where k2 = (select k2 from db2.tbl1 where k1='1')",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
@@ -3793,7 +3793,7 @@ public class PrivilegeCheckerTest {
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
                             Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
                             Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
             String sql = "select * from db_for_ranger.tbl1";
