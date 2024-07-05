@@ -182,18 +182,18 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         Set<String> mvListPartitionNames = getMVPartitionNamesWithTTL(mv, start, end, partitionTTLNumber, isAutoRefresh);
 
         // check non-ref base tables
-        if (needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
+        if (force || needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
             if (start == null && end == null) {
                 // if non-partition table changed, should refresh all partitions of materialized view
                 return mvListPartitionNames;
             } else {
                 // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                 // it should be refreshed according to the user-specified range, not all partitions.
-                return getMvPartitionNamesToRefresh(mvListPartitionNames, true);
+                return getMvPartitionNamesToRefresh(mvListPartitionNames);
             }
         } else {
             // check the ref base table
-            return getMvPartitionNamesToRefresh(mvListPartitionNames, force);
+            return getMvPartitionNamesToRefresh(mvListPartitionNames);
         }
     }
 
