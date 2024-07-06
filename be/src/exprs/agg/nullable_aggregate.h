@@ -86,12 +86,20 @@ struct AggNonNullPred {
 };
 
 // This class wrap an aggregate function and handle NULL value.
-// If an aggregate function has at least one nullable argument, we should use this class.
-// If all row all are NULL, we will return NULL.
+// If an aggregate function has at least one nullable argument or the output is nullable, we should use this class.
+// There are three possible combinations of nullable attributes for input and output:
+// 1. Input is nullable, output is nullable.
+// 2. Input is nullable, output is not nullable.
+// 3. Input is not nullable, output is nullable.
+//    For this case, the serialized output type is non-nullable, because only the state of input needs to be serialized.
+// If all the rows are NULL or `AggNullPred` returns true, we will return NULL.
 // The State must be NullableAggregateFunctionState
 template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true,
           IsAggNullPred<typename State::NestedState> AggNullPred = AggNonNullPred<typename State::NestedState>>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
+    using NestedState = typename State::NestedState;
+    static constexpr bool is_result_always_nullable = !std::is_same_v<AggNullPred, AggNonNullPred<NestedState>>;
+
 public:
     explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_,
                                            AggNullPred null_pred = AggNullPred())
@@ -129,6 +137,15 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        if constexpr (is_result_always_nullable) {
+            // For the case that input is non-nullable but output is nullable, the serialized output type
+            // is non-nullable, because only the state of input needs to be serialized.
+            if (!to->is_nullable()) {
+                nested_function->serialize_to_column(ctx, this->data(state).nested_state(), to);
+                return;
+            }
+        }
+
         DCHECK(to->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(to);
         if (LIKELY(!this->data(state).is_null)) {
@@ -171,6 +188,17 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
+        if constexpr (is_result_always_nullable) {
+            // For the case that input is non-nullable but output is nullable, the serialized output type
+            // is non-nullable, because only the state of input needs to be serialized.
+            if (!(*dst)->is_nullable()) {
+                DCHECK(!src[0]->is_nullable());
+                nested_function->convert_to_serialize_format(ctx, src, chunk_size, dst);
+                return;
+            }
+        }
+
+        DCHECK((*dst)->is_nullable());
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
@@ -209,8 +237,6 @@ public:
             nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
         }
     }
-
-    using NestedState = typename State::NestedState;
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {

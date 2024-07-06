@@ -47,20 +47,23 @@ bool AggFunctionTypes::is_result_nullable() const {
         // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
         return has_nullable_child;
     } else {
-        // The result `is_nullable` passed by FE is false only when the output is always non-nullable,
-        // otherwise it is true.
-        // Therefore, we need to decide whether the output is really nullable as follows:
-        // - Same as input: `has_nullable_child && is_nullable(true)`, that is `has_nullable_child`.
-        // - Always non-nullable: `has_nullable_child && is_nullable(false)`, that is `false`, such as count,
-        //   count distinct, and bitmap_union_int.
-        // - Always nullable : `is_always_nullable_result`.
+        // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
+        // Therefore, we need to decide whether the output is really nullable case by case:
+        // 1. Same as input: `has_nullable_child` = `has_nullable_child && is_nullable(true)`.
+        // 2. Always non-nullable: `false` = `has_nullable_child && is_nullable(false)`, eg. count, count distinct, and bitmap_union_int.
+        // 3. Always nullable: `is_always_nullable_result`.
         return (has_nullable_child && is_nullable) || is_always_nullable_result;
     }
 }
 
 bool AggFunctionTypes::use_nullable_fn(bool use_intermediate_as_output) const {
-    // Note that the non-nullable version function assumes that both the input and output are non-nullable,
-    // while the nullable version of the function will judge whether the input and output are nullable.
+    // The non-nullable version functions assume that both the input and output are non-nullable, while the nullable version
+    // functions support nullable input or nullable output, which will judge whether the input and output are nullable.
+    //
+    // NOTE that for the case of `is_always_nullable_result=true`, the function created with `use_intermediate_as_output=true`
+    // also needs to use `is_result_nullable<true>` when getting the finalize result.
+    // Because for the case of `is_always_nullable_result=true and has_nullable_child=false`, the function is the non-nullable version,
+    // which causes only non-nullable output can be created.
     if (use_intermediate_as_output) {
         return has_nullable_child || is_result_nullable<true>();
     } else {
