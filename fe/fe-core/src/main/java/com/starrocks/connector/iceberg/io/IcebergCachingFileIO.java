@@ -75,6 +75,7 @@ import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -89,7 +90,7 @@ import java.util.function.Function;
 /**
  * Implementation of FileIO that adds metadata content caching features.
  */
-public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
+public class IcebergCachingFileIO implements FileIO, HadoopConfigurable, Closeable {
     private static final Logger LOG = LogManager.getLogger(IcebergCachingFileIO.class);
     private static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
     private static final long CACHE_MAX_ENTRY_SIZE = Config.iceberg_metadata_cache_max_entry_size;
@@ -117,6 +118,20 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             this.fileContentCache = TwoLevelCacheHolder.INSTANCE;
         } else {
             this.fileContentCache = MemoryCacheHolder.INSTANCE;
+        }
+    }
+
+    @Override
+    public void close() {
+        try {
+            if (wrappedIO instanceof Closeable) {
+                ((Closeable) wrappedIO).close();
+            }
+            if (fileContentCache instanceof Closeable) {
+                ((Closeable) fileContentCache).close();
+            }
+        } catch (IOException e) {
+            LOG.error("Error closing resources", e);
         }
     }
 
