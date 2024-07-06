@@ -16,12 +16,14 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.EnhancedShowStmt;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
@@ -60,13 +62,13 @@ public class ShowAnalyzeJobStmt extends EnhancedShowStmt {
 
             if (!analyzeJob.isAnalyzeAllTable()) {
                 String tableName = analyzeJob.getTableName();
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getTable(context, analyzeJob.getCatalogName(), dbName, tableName);
+                BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                        context, analyzeJob.getCatalogName(), dbName, tableName);
 
                 if (table == null) {
-                    throw new MetaNotFoundException("No found table: " + tableName);
+                    throw new MetaNotFoundException("Table " + analyzeJob.getDbName() + "."
+                            + analyzeJob.getTableName() + " not found");
                 }
-
                 row.set(3, table.getName());
 
                 // In new privilege framework(RBAC), user needs any action on the table to show analysis job on it,
@@ -78,8 +80,7 @@ public class ShowAnalyzeJobStmt extends EnhancedShowStmt {
                     return null;
                 }
 
-                if (null != columns && !columns.isEmpty()
-                        && (columns.size() != table.getBaseSchema().size())) {
+                if (null != columns && !columns.isEmpty()) {
                     String str = String.join(",", columns);
                     if (str.length() > 100) {
                         row.set(4, str.substring(0, 100) + "...");
