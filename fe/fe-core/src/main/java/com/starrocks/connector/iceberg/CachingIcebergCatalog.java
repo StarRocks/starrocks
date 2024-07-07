@@ -144,7 +144,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
 
         if (tables.getIfPresent(icebergTableName) != null) {
-            return tables.getIfPresent(icebergTableName);
+            Table icebergTable = tables.getIfPresent(icebergTableName);
+            // prolong table cache
+            tables.put(icebergTableName, icebergTable);
+            return icebergTable;
         }
 
         Table icebergTable = delegate.getTable(dbName, tableName);
@@ -364,7 +367,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
                 // refresh tables with expired manifest time
                 // don't refresh tables that were not accessed by queries
-                if ((latestAccessTime != null) && (latestSnapshotTime == null ||
+                if ((latestAccessTime != null &&
+                        (System.currentTimeMillis() - latestAccessTime) / 1000 < tableCacheTtlSec) &&
+                        (latestSnapshotTime == null ||
                         (System.currentTimeMillis() - latestSnapshotTime) / 1000 > metaCacheTtlSec) &&
                         (latestRefreshTime == null ||
                         (System.currentTimeMillis() - latestRefreshTime) / 1000 > metaCacheTtlSec)) {
