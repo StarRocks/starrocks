@@ -605,9 +605,15 @@ When you enable enable_iceberg_metadata_cache, backig catalog will be polled eve
 
 This parameter controls when to update table's metadata. If you commit to iceberg table, starrocks will refresh table's metadata if cached commit timestamp is older than iceberg_meta_cache_ttl_sec on it's next refresh run.
 
+If tables metadata have not changed on refresh run, cache will be extended by this value.
+
+Default is 48 hours.
+
 ##### iceberg_table_cache_ttl_sec
 
 This parameter controls when to expire cache of table names and hence when to stop refreshing tables' metadata.
+
+Default is 30 minutes.
 
 ### Examples
 
