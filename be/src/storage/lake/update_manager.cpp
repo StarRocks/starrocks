@@ -219,6 +219,11 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         new_deletes[rowset_id + segment_id] = {};
     }
+    // Delete is always after upsert now, so use max segment id in this rowset as it's rssid.
+    // E.g. if rowset's id is 10, and there are two segments in this rowset,
+    //      so rssid of these segments is 10 an 11. And we choose 11 as delete's rebuild rssid
+    // TODO : support mix order of upsert and delete in one transaction.
+    const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
     // 2. Handle segment one by one to save memory usage.
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         RETURN_IF_ERROR(state.load_segment(segment_id, params, base_version, true /*reslove conflict*/,
@@ -241,7 +246,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         }
         // 2.3 handle auto increment deletes
         if (state.auto_increment_deletes(segment_id) != nullptr) {
-            RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(segment_id), &new_deletes, rowset_id));
+            RETURN_IF_ERROR(
+                    index.erase(metadata, *state.auto_increment_deletes(segment_id), &new_deletes, del_rebuild_rssid));
         }
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_segment(segment_id);
@@ -252,7 +258,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t del_id = 0; del_id < op_write.dels_size(); del_id++) {
         RETURN_IF_ERROR(state.load_delete(del_id, params));
         DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, rowset_id));
+        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_rebuild_rssid));
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_delete(del_id);
     }

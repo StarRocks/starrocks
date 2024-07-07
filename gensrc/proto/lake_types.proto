@@ -70,6 +70,11 @@ message DelfileWithRowsetId {
     optional string name = 1;
     // origin rowset that generate this del file.
     optional uint32 origin_rowset_id = 2;
+    // If there is a upsert and delete mix transaction, we use
+    // `op_offset` to identify the order of deletes.
+    // E.g. there are <upsert, upsert, upsert, delete> in a transaction,
+    //      so the `op_offset` of this delete is 2.
+    optional uint32 op_offset = 3;
 }
 
 message RowsetMetadataPB {
