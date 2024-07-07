@@ -16,42 +16,11 @@ package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArraySliceExpr;
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CloneExpr;
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DictQueryExpr;
-import com.starrocks.analysis.ExistsPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.MultiInPredicate;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.UserVariableExpr;
-import com.starrocks.analysis.VariableExpr;
+import com.starrocks.analysis.*;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -693,6 +662,28 @@ public final class SqlToScalarOperatorTranslator {
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
+            return callOperator;
+        }
+
+        @Override
+        public ScalarOperator visitSystemFunctionCall(SystemFunctionCallExpr node, Context context) {
+            // check privilege
+            GenericFunction genericFunc = Expr.getGenericFunction(node.getFn());
+            genericFunc.prepare(node, session);
+
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .collect(Collectors.toList());
+
+            CallOperator callOperator = new CallOperator(
+                    node.getFnName().getFunction(),
+                    node.getType(),
+                    arguments,
+                    node.getFn(),
+                    node.getParams().isDistinct());
+            callOperator.setHints(node.getHints());
+            callOperator.setIsSystemFunction(true);
             return callOperator;
         }
 

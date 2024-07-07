@@ -149,11 +149,13 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeExclusion;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeExclusion;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
@@ -881,6 +883,26 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_SWAP_TABLE: {
                 data = SwapTableOperationLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_ANALYZER_EXCLUSION: {
+                data = NativeAnalyzeExclusion.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_ANALYZER_EXCLUSION: {
+                data = NativeAnalyzeExclusion.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_EXTERNAL_ANALYZER_EXCLUSION: {
+                data = ExternalAnalyzeExclusion.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_ANALYZER_EXCLUSION: {
+                data = ExternalAnalyzeExclusion.read(in);
                 isRead = true;
                 break;
             }

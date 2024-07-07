@@ -99,14 +99,17 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.statistic.AnalyzeExclusion;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeExclusion;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeExclusion;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
@@ -894,6 +897,14 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().replaySwapTable(log);
                     break;
                 }
+                case OperationType.OP_ADD_ANALYZER_EXCLUSION: {
+                    NativeAnalyzeExclusion nativeAnalyzeExclusion = (NativeAnalyzeExclusion) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeExclusion(nativeAnalyzeExclusion);
+                }
+                case OperationType.OP_REMOVE_ANALYZER_EXCLUSION: {
+                    NativeAnalyzeExclusion nativeAnalyzeExclusion = (NativeAnalyzeExclusion) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeExclusion(nativeAnalyzeExclusion);
+                }
                 case OperationType.OP_ADD_ANALYZER_JOB: {
                     NativeAnalyzeJob nativeAnalyzeJob = (NativeAnalyzeJob) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayAddAnalyzeJob(nativeAnalyzeJob);
@@ -933,6 +944,14 @@ public class EditLog {
                     ExternalAnalyzeJob externalAnalyzeJob = (ExternalAnalyzeJob) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeJob(externalAnalyzeJob);
                     break;
+                }
+                case OperationType.OP_ADD_EXTERNAL_ANALYZER_EXCLUSION: {
+                    ExternalAnalyzeExclusion externalAnalyzeExclusion = (ExternalAnalyzeExclusion) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeExclusion(externalAnalyzeExclusion);
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_ANALYZER_EXCLUSION: {
+                    ExternalAnalyzeExclusion externalAnalyzeExclusion = (ExternalAnalyzeExclusion) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeExclusion(externalAnalyzeExclusion);
                 }
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
@@ -1749,6 +1768,22 @@ public class EditLog {
             logEdit(OperationType.OP_ADD_ANALYZER_JOB, (NativeAnalyzeJob) job);
         } else {
             logEdit(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB, (ExternalAnalyzeJob) job);
+        }
+    }
+
+    public void logAddAnalyzeExclusion(AnalyzeExclusion exclusion) {
+        if (exclusion.isNative()) {
+            logEdit(OperationType.OP_ADD_ANALYZER_EXCLUSION, (NativeAnalyzeExclusion) exclusion);
+        } else {
+            logEdit(OperationType.OP_ADD_EXTERNAL_ANALYZER_EXCLUSION, (ExternalAnalyzeExclusion) exclusion);
+        }
+    }
+
+    public void logRemoveAnalyzeExclusion(AnalyzeExclusion exclusion) {
+        if (exclusion.isNative()) {
+            logEdit(OperationType.OP_REMOVE_ANALYZER_EXCLUSION, (NativeAnalyzeExclusion) exclusion);
+        } else {
+            logEdit(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_EXCLUSION, (ExternalAnalyzeExclusion) exclusion);
         }
     }
 

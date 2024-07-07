@@ -58,6 +58,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
@@ -81,6 +82,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -1235,6 +1237,37 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
+            return null;
+        }
+
+        @Override
+        public Void visitSystemFunctionCall(SystemFunctionCallExpr node, Scope scope) {
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+
+            Function fn;
+            String fnName = node.getFnName().getFunction();
+            fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn == null) {
+                String msg = String.format("No matching system function with signature: %s(%s)",
+                        fnName,
+                        node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
+            }
+
+            GenericFunction genericFunc = Expr.getGenericFunction(fn);
+            if (genericFunc == null) {
+                String msg = String.format("No matching system function with signature: %s(%s)",
+                        fnName,
+                        node.getParams().isStar() ? "*" : Joiner.on(", ")
+                                .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
+            }
+            node.setFn(fn);
+            node.setType(fn.getReturnType());
+
+            //all check/analyze operations are unified into the init method
+            genericFunc.init(node, session);
             return null;
         }
 

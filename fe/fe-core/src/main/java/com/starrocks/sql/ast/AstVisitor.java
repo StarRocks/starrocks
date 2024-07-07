@@ -48,6 +48,7 @@ import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
@@ -1401,6 +1402,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitNamedArgument(NamedArgument node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitSystemFunctionCall(SystemFunctionCallExpr node, C context) {
         return visitExpression(node, context);
     }
 

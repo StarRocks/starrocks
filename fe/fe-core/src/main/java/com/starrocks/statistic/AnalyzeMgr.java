@@ -71,6 +71,7 @@ public class AnalyzeMgr implements Writable {
     private static final Pair<Long, Long> CHECK_ALL_TABLES =
             new Pair<>(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID);
 
+    private final Map<Long, AnalyzeExclusion> analyzeExclusionMap;
     private final Map<Long, AnalyzeJob> analyzeJobMap;
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
@@ -97,6 +98,42 @@ public class AnalyzeMgr implements Writable {
         externalBasicStatsMetaMap = Maps.newConcurrentMap();
         histogramStatsMetaMap = Maps.newConcurrentMap();
         externalHistogramStatsMetaMap = Maps.newConcurrentMap();
+        analyzeExclusionMap = Maps.newConcurrentMap();
+    }
+
+    public void addAnalyzeExclusion(AnalyzeExclusion exclusion) {
+        long id = GlobalStateMgr.getCurrentState().getNextId();
+        exclusion.setId(id);
+        analyzeExclusionMap.put(id, exclusion);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeExclusion(exclusion);
+    }
+
+    public void removeAnalyzeExclusion(long id) {
+        if (analyzeExclusionMap.containsKey(id)) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeExclusion(analyzeExclusionMap.remove(id));
+        }
+    }
+
+    public void replayAddAnalyzeExclusion(AnalyzeExclusion exclusion) {
+        analyzeExclusionMap.put(exclusion.getId(), exclusion);
+    }
+
+    public void replayRemoveAnalyzeExclusion(AnalyzeExclusion exclusion) {
+        analyzeExclusionMap.remove(exclusion.getId());
+    }
+
+    public List<NativeAnalyzeExclusion> getAllNativeAnalyzeExclusionList() {
+        return analyzeExclusionMap.values().stream().filter(AnalyzeExclusion::isNative).map(job -> (NativeAnalyzeExclusion) job).
+                collect(Collectors.toList());
+    }
+    public List<ExternalAnalyzeExclusion> getAllExternalAnalyzeExclusionList() {
+        return analyzeExclusionMap.values().stream().filter(exclusion ->
+                        !exclusion.isNative()).map(job -> (ExternalAnalyzeExclusion) job).
+                collect(Collectors.toList());
+    }
+
+    public List<AnalyzeExclusion> getAllAnalyzeExclusionList() {
+        return Lists.newLinkedList(analyzeExclusionMap.values());
     }
 
     public AnalyzeJob getAnalyzeJob(long id) {
@@ -718,6 +755,12 @@ public class AnalyzeMgr implements Writable {
         SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
 
         if (null != data) {
+            if (null != data.exclusions) {
+                for (NativeAnalyzeExclusion exclusion : data.exclusions) {
+                    replayAddAnalyzeExclusion(exclusion);
+                }
+            }
+
             if (null != data.jobs) {
                 for (NativeAnalyzeJob job : data.jobs) {
                     replayAddAnalyzeJob(job);
@@ -748,6 +791,7 @@ public class AnalyzeMgr implements Writable {
     public void write(DataOutput out) throws IOException {
         // save history
         SerializeData data = new SerializeData();
+        data.exclusions = getAllNativeAnalyzeExclusionList();
         data.jobs = getAllNativeAnalyzeJobList();
         data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
                 filter(AnalyzeStatus::isNative).
@@ -778,7 +822,8 @@ public class AnalyzeMgr implements Writable {
         List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream()
                 .distinct().collect(Collectors.toList());
 
-        int numJson = 1 + analyzeJobMap.size()
+        int numJson = 1 + analyzeExclusionMap.size()
+                + 1 + analyzeJobMap.size()
                 + 1 + analyzeStatuses.size()
                 + 1 + basicStatsMetaMap.size()
                 + 1 + histogramStatsMetaMap.size()
@@ -786,6 +831,11 @@ public class AnalyzeMgr implements Writable {
                 + 1 + externalHistogramStatsMetaMap.size();
 
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ANALYZE_MGR, numJson);
+
+        writer.writeJson(analyzeExclusionMap.size());
+        for (AnalyzeExclusion analyzeExclusion : analyzeExclusionMap.values()) {
+            writer.writeJson(analyzeExclusion);
+        }
 
         writer.writeJson(analyzeJobMap.size());
         for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
@@ -821,6 +871,12 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int analyzeExclusionSize = reader.readInt();
+        for (int i = 0; i < analyzeExclusionSize; ++i) {
+            AnalyzeExclusion analyzeExclusion = reader.readJson(AnalyzeExclusion.class);
+            replayAddAnalyzeExclusion(analyzeExclusion);
+        }
+
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
             AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
@@ -872,6 +928,9 @@ public class AnalyzeMgr implements Writable {
     }
 
     private static class SerializeData {
+        @SerializedName("analyzeExclusions")
+        public List<NativeAnalyzeExclusion> exclusions;
+
         @SerializedName("analyzeJobs")
         public List<NativeAnalyzeJob> jobs;
 

@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -27,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.sql.optimizer.rewrite.SystemOperatorEvaluator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,6 +51,14 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
+        if (call.isSystemFunction()) {
+            if (notAllConstant(call.getChildren())) {
+                throw new StarRocksPlannerException(ErrorType.USER_ERROR, "System Function's args does't match.");
+            } else {
+                SystemOperatorEvaluator.INSTANCE.evaluation(call);
+            }
+        }
+
         if (call.isAggregate() || notAllConstant(call.getChildren())) {
             return call;
         }

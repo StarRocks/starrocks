@@ -362,6 +362,10 @@ public class StmtExecutor {
         return isForwardToLeaderOpt.get();
     }
 
+    public void setIsForwardToLeaderOpt(boolean isForwardToLeader) {
+        isForwardToLeaderOpt = Optional.of(isForwardToLeader);
+    }
+
     private boolean initForwardToLeaderState() {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;

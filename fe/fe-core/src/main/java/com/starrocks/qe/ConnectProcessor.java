@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -341,10 +342,18 @@ public class ConnectProcessor {
                 ctx.setIsLastStmt(i == stmts.size() - 1);
 
                 //Build View SQL without Policy Rewrite
+                //System functions can only be executed by the leader
                 new AstTraverser<Void, Void>() {
                     @Override
                     public Void visitRelation(Relation relation, Void context) {
                         relation.setNeedRewrittenByPolicy(true);
+                        return null;
+                    }
+
+
+                    @Override
+                    public Void visitSystemFunctionCall(SystemFunctionCallExpr node, Void context) {
+                        executor.setIsForwardToLeaderOpt(true);
                         return null;
                     }
                 }.visit(parsedStmt);

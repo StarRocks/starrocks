@@ -73,6 +73,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SystemFunctionCallExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TaskName;
@@ -6304,6 +6305,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
         return SyntaxSugars.parse(functionCallExpr);
+    }
+
+    @Override
+    public ParseNode visitSystemFunctionCall(StarRocksParser.SystemFunctionCallContext context) {
+        String fullFunctionName = "system$" + context.identifier().getText();
+        NodePosition pos = createPos(context);
+
+        //system functions do not support the db.$system format
+        FunctionName fnName = new FunctionName(fullFunctionName);
+        SystemFunctionCallExpr systemFunctionCallExpr = new SystemFunctionCallExpr(fnName,
+                new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
+        return SyntaxSugars.parse(systemFunctionCallExpr);
     }
 
     @Override

@@ -70,10 +70,12 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.SystemFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.function.GenericFunction;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -2234,11 +2236,23 @@ public class GlobalStateMgr {
      * deterministic results.
      */
     public Function getFunction(Function desc, Function.CompareMode mode) {
-        return functionSet.getFunction(desc, mode);
+        if (desc.getFunctionName().getFunction().startsWith(SystemFunction.SYSTEM_FUNCTION_PREFIX)) {
+            return functionSet.getSystemFunction(desc, mode);
+        } else {
+            return functionSet.getFunction(desc, mode);
+        }
     }
 
     public List<Function> getBuiltinFunctions() {
         return functionSet.getBuiltinFunctions();
+    }
+
+    public GenericFunction getBuiltinGenericFunction(Function desc) {
+        return functionSet.getGenericFunction(desc);
+    }
+
+    public Map<Function, GenericFunction> getGenericFunctions() {
+        return functionSet.getGenericFunctions();
     }
 
     public boolean isNotAlwaysNullResultWithNullParamFunction(String funcName) {
