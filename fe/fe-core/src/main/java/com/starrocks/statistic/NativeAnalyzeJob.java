@@ -18,7 +18,6 @@ package com.starrocks.statistic;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
