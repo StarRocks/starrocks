@@ -219,10 +219,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
         new_deletes[rowset_id + segment_id] = {};
     }
-    // Delete is always after upsert now, so use max segment id in this rowset as it's rssid.
-    // E.g. if rowset's id is 10, and there are two segments in this rowset,
-    //      so rssid of these segments is 10 an 11. And we choose 11 as delete's rebuild rssid
-    // TODO : support mix order of upsert and delete in one transaction.
+    // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
+    // so we use max segment id as `op_offset`.
+    // TODO : support real order of mix upsert and delete in one transaction.
     const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
     // 2. Handle segment one by one to save memory usage.
     for (uint32_t segment_id = 0; segment_id < op_write.rowset().segments_size(); segment_id++) {
