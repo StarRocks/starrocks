@@ -461,6 +461,10 @@ public class Locker {
         unLockTablesWithIntensiveDbLock(database, ImmutableList.of(table.getId()), lockType);
     }
 
+    public void unLockDatabase(Database database, Long tableId, LockType lockType) {
+        unLockTablesWithIntensiveDbLock(database, ImmutableList.of(tableId), lockType);
+    }
+
     /**
      * Lock table with intensive db lock.
      * @param database db for intensive db lock
