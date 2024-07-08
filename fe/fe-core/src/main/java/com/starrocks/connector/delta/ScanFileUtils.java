@@ -15,7 +15,6 @@
 package com.starrocks.connector.delta;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import io.delta.kernel.data.Row;
