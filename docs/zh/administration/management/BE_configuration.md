@@ -491,6 +491,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
 
+##### primary_key_limit_size
+
+- 默认值：128
+- 类型：Int
+- 单位：Byte
+- 是否动态：是
+- 描述：主键表中单条主键值最大长度。
+- 引入版本：v2.5
+
 ##### drop_tablet_worker_count
 
 - 默认值：3
@@ -4042,17 +4051,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：
 - 是否动态：否
 - 描述：物化视图刷新占用的资源组 CPU 比例，默认 1%。
-- 引入版本：-
--->
-
-<!--
-##### primary_key_limit_size
-
-- 默认值：128
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
 - 引入版本：-
 -->
 

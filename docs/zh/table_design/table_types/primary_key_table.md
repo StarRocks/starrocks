@@ -80,6 +80,7 @@ PROPERTIES (
 
 - 例如，需要按地域、最近活跃时间实时分析用户情况，则可以将表示用户 ID 的 `user_id` 列作为主键，表示地域的 `address` 列和表示最近活跃时间的 `last_active` 列作为排序键。建表语句如下：
 
+<<<<<<< HEAD
 ```SQL
 create table users (
     user_id bigint NOT NULL,
@@ -101,6 +102,14 @@ PROPERTIES (
     "enable_persistent_index" = "true"
 );
 ```
+=======
+- 在建表语句中，主键列必须定义在其他列之前。
+- 主键必须包含分区列和分桶列。
+- 主键列支持以下数据类型：数值（包括整型和布尔）、日期和字符串。
+- 默认设置下，单条主键值编码后的最大长度为 128 字节。
+- 建表后不支持修改主键。
+- 主键列的值不能更新，避免破坏数据一致性。
+>>>>>>> 0ace34f1dd ([Doc] Add desc for BE config primary_key_limit_size (#47832))
 
 ## 使用说明
 

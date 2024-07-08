@@ -104,7 +104,16 @@ PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
 ```
 
+<<<<<<< HEAD
 ## Usage notes
+=======
+- In the CREATE TABLE statement, the primary key columns must be defined before other columns.
+- The primary key columns must include partitioning and bucketing columns.
+- The primary key columns support the following data types: numeric (including integers and BOOLEAN), string, and date (DATE and DATETIME).
+- By default, the maximum length of an encoded primary key value is 128 bytes.
+- The primary key cannot be modified after table creation.
+- For data consistency purposes, the primary key values cannot be updated.
+>>>>>>> 0ace34f1dd ([Doc] Add desc for BE config primary_key_limit_size (#47832))
 
 - Take note of the following points about the primary key of a table:
   - The primary key is defined by using the `PRIMARY KEY` keyword.
