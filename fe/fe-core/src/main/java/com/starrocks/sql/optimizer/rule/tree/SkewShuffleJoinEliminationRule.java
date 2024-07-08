@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
@@ -92,6 +93,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         @Override
         public OptExpression visitPhysicalHashJoin(OptExpression opt, Boolean parentRequireEmpty) {
             PhysicalHashJoinOperator originalShuffleJoinOperator = (PhysicalHashJoinOperator) opt.getOp();
+            Projection projectionOnJoin = originalShuffleJoinOperator.getProjection();
 
             boolean requireEmptyForChild = isBroadCastJoin(opt);
             // doesn't support cross join and right join
@@ -178,16 +180,17 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                             inSkewPredicateForRightTable,
                             DistributionSpec.createReplicatedDistributionSpec(), rightSplitOutputColumnRefMap);
 
+            // newShuffleJoinOpt and newBroadcastJoinOpt are the same as the originalShuffleJoinOperator, but project is moved to mergeOpeartor
             PhysicalHashJoinOperator newShuffleJoinOpt = new PhysicalHashJoinOperator(
                     originalShuffleJoinOperator.getJoinType(), originalShuffleJoinOperator.getOnPredicate(),
                     originalShuffleJoinOperator.getJoinHint(), originalShuffleJoinOperator.getLimit(),
-                    originalShuffleJoinOperator.getPredicate(), originalShuffleJoinOperator.getProjection(),
+                    originalShuffleJoinOperator.getPredicate(), null,
                     originalShuffleJoinOperator.getSkewColumn(), originalShuffleJoinOperator.getSkewValues());
 
             PhysicalHashJoinOperator newBroadcastJoinOpt = new PhysicalHashJoinOperator(
                     originalShuffleJoinOperator.getJoinType(), originalShuffleJoinOperator.getOnPredicate(),
                     originalShuffleJoinOperator.getJoinHint(), originalShuffleJoinOperator.getLimit(),
-                    originalShuffleJoinOperator.getPredicate(), originalShuffleJoinOperator.getProjection(),
+                    originalShuffleJoinOperator.getPredicate(), null,
                     originalShuffleJoinOperator.getSkewColumn(), originalShuffleJoinOperator.getSkewValues());
             // we have to let them know each other for runtimr filter
             newBroadcastJoinOpt.setSkewJoinFriend(newShuffleJoinOpt);
@@ -198,13 +201,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalMergeOperator mergeOperator =
                     buildMergeOperator(opt.getOutputColumns().getColumnRefOperators(columnRefFactory), 2,
                             localExchangerType, originalShuffleJoinOperator.getLimit());
+            // original shuffle join's projection is set on union
+            mergeOperator.setProjection(projectionOnJoin);
 
-            // we need add exchange node to make broadcast join's output can be same as shuffle join's output
-            //            if (!parentRequireEmpty) {
-            //
-            //                PhysicalDistributionOperator broadcastExchangeToMergeOp = new PhysicalDistributionOperator(DistributionSpec.createHashDistributionSpec(
-            //                        new HashDistributionDesc(List.of(), HashDistributionDesc.SourceType.SHUFFLE_ENFORCE));
-            //            }
 
             OptExpression leftSplitConsumerOptExpForShuffleJoin = OptExpression.builder()
                     .setOp(leftSplitConsumerOptForShuffleJoin)
@@ -255,8 +254,22 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setRequiredProperties(requiredPropertiesForBroadcastJoin)
                     .setCost(opt.getCost()).build();
 
+            OptExpression rightChildOfMerge = newBroadcastJoin;
+            // we need add exchange node to make broadcast join's output can be same as shuffle join's output
+            if (!parentRequireEmpty) {
+                OptExpression exchangeOptExpForBroadcastJoin =
+                        OptExpression.builder().setOp(rightExchangeOp)
+                                .setInputs(Collections.singletonList(newBroadcastJoin))
+                                .setLogicalProperty(newBroadcastJoin.getLogicalProperty())
+                                .setStatistics(newBroadcastJoin.getStatistics())
+                                .setCost(newBroadcastJoin.getCost()).build();
+                rightChildOfMerge = exchangeOptExpForBroadcastJoin;
+                //  PhysicalDistributionOperator broadcastExchangeToMergeOp = new PhysicalDistributionOperator(DistributionSpec.createHashDistributionSpec(
+                //  new HashDistributionDesc(List.of(), HashDistributionDesc.SourceType.SHUFFLE_ENFORCE));
+            }
+
             OptExpression mergeOptExp =
-                    OptExpression.builder().setOp(mergeOperator).setInputs(List.of(newShuffleJoin, newBroadcastJoin))
+                    OptExpression.builder().setOp(mergeOperator).setInputs(List.of(newShuffleJoin, rightChildOfMerge))
                             .setLogicalProperty(opt.getLogicalProperty())
                             .setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
