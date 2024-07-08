@@ -103,6 +103,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.BranchOptions;
+import com.starrocks.connector.TagOptions;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -189,6 +190,7 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
+import com.starrocks.sql.ast.CreateOrReplaceTagClause;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -1342,6 +1344,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Optional<Long> branchRefAgeMs = Optional.ofNullable(branchOptionsContext.refRetain())
                     .map(retain -> TimeUnit.valueOf(retain.timeUnit().getText().toUpperCase(Locale.ROOT))
                             .toMillis(safeParseLong("branchRefAgeMs", retain.number().getText())));
+
             branchOptions = new BranchOptions(snapshotId, minSnapshotsToKeep, maxSnapshotAgeMs, branchRefAgeMs);
         }
 
@@ -1366,6 +1369,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } catch (NumberFormatException e) {
             throw new ParsingException("invalid %s value: %s. msg: %s", name, value, e.getMessage());
         }
+    }
+
+    @Override
+    public ParseNode visitCreateOrReplaceTagClause(StarRocksParser.CreateOrReplaceTagClauseContext context) {
+        String tagName = getIdentifierName(context.identifier());
+
+        StarRocksParser.TagOptionsContext tagOptionsContext = context.tagOptions();
+        Optional<Long> snapshotId =  Optional.ofNullable(tagOptionsContext.snapshotId())
+                .map(id -> safeParseLong("snapshotId", id.number().getText()));
+
+        Optional<Long> tagRefAgeMs = Optional.ofNullable(tagOptionsContext.refRetain())
+                .map(retain -> TimeUnit.valueOf(retain.timeUnit().getText().toUpperCase(Locale.ROOT))
+                        .toMillis(safeParseLong("tagRefAgeMs", retain.number().getText())));
+        TagOptions tagOptions = new TagOptions(snapshotId, tagRefAgeMs);
+
+        boolean create = context.CREATE() != null;
+        boolean replace = context.REPLACE() != null;
+        boolean ifNotExists = context.EXISTS() != null;
+
+        return new CreateOrReplaceTagClause(createPos(context), tagName, tagOptions, create, replace, ifNotExists);
     }
 
     @Override

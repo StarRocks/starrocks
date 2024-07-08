@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.BranchOptions;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
+import com.starrocks.connector.TagOptions;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
@@ -28,6 +29,7 @@ import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
+import com.starrocks.sql.ast.CreateOrReplaceTagClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -285,7 +287,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     }
 
     @Override
-    public Void visitCreateReplaceBranchClause(CreateOrReplaceBranchClause clause, ConnectContext context) {
+    public Void visitCreateOrReplaceBranchClause(CreateOrReplaceBranchClause clause, ConnectContext context) {
         actions.add(() -> {
             String branchName = clause.getBranchName();
             BranchOptions branchOptions = clause.getBranchOptions();
@@ -329,6 +331,44 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
             if (branchOptions.getSnapshotRefRetain().isPresent()) {
                 manageSnapshots.setMaxRefAgeMs(branchName, branchOptions.getSnapshotRefRetain().get());
+            }
+
+            manageSnapshots.commit();
+        });
+        return null;
+    }
+
+    @Override
+    public Void visitCreateOrReplaceTagClause(CreateOrReplaceTagClause clause, ConnectContext context) {
+        actions.add(() -> {
+            String tagName = clause.getTagName();
+            TagOptions tagOptions = clause.getTagOptions();
+            boolean create = clause.isCreate();
+            boolean replace = clause.isReplace();
+            boolean ifNotExists = clause.isIfNotExists();
+
+            Long snapshotId = tagOptions.getSnapshotId().orElse(
+                    Optional.ofNullable(table.currentSnapshot()).map(Snapshot::snapshotId).orElse(null));
+
+            Preconditions.checkArgument(snapshotId != null,
+                    "Cannot complete create or replace tag operation on %s, main has no snapshot", table.name());
+            ManageSnapshots manageSnapshots = transaction.manageSnapshots();
+
+            boolean refExists = table.refs().get(tagName) != null;
+
+            if (create && replace && !refExists) {
+                manageSnapshots.createTag(tagName, snapshotId);
+            } else if (replace) {
+                manageSnapshots.replaceTag(tagName, snapshotId);
+            } else {
+                if (refExists && ifNotExists) {
+                    return;
+                }
+                manageSnapshots.createTag(tagName, snapshotId);
+            }
+
+            if (tagOptions.getSnapshotRefRetain().isPresent()) {
+                manageSnapshots.setMaxRefAgeMs(tagName, tagOptions.getSnapshotRefRetain().get());
             }
 
             manageSnapshots.commit();
