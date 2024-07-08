@@ -237,8 +237,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         Options catalogOptions = new Options();
         catalogOptions.set(CatalogOptions.WAREHOUSE, warehouse);
         CatalogContext catalogContext = CatalogContext.create(catalogOptions);
-        Catalog catalog = CatalogFactory.createCatalog(catalogContext);
-        return catalog;
+        return CatalogFactory.createCatalog(catalogContext);
     }
 
     private static void mockPaimonCatalogImpl(MockedMetadataMgr metadataMgr, String warehouse) throws Exception {
@@ -256,13 +255,6 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         PaimonMetadata paimonMetadata =
                 new PaimonMetadata(MOCK_PAIMON_CATALOG_NAME, new HdfsEnvironment(), paimonNativeCatalog);
         metadataMgr.registerMockedMetadata(MOCK_PAIMON_CATALOG_NAME, paimonMetadata);
-    }
-
-    public static void mockKuduCatalog(ConnectContext ctx) throws DdlException {
-        GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
-        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
-        gsmMgr.setMetadataMgr(metadataMgr);
-        mockKuduCatalogImpl(metadataMgr);
     }
 
     private static void mockKuduCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
@@ -291,7 +283,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 MOCK_TABLE_MAP = new CaseInsensitiveMap<>();
 
         public MockedDeltaLakeMetadata() {
-            super(null, null, null, Optional.empty());
+            super(null, null, null, null);
 
             long tableId = GlobalStateMgr.getCurrentState().getNextId();
             List<Column> columns = ImmutableList.<Column>builder()
@@ -319,7 +311,6 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
     private static void mockDeltaLakeCatalog(MockedMetadataMgr metadataMgr) throws Exception {
         final String catalogName = MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME;
-        final String dbName = MockedDeltaLakeMetadata.MOCKED_DB_NAME;
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
 
         // create catalog

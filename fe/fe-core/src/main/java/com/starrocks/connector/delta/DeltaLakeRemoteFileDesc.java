@@ -15,23 +15,22 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.connector.RemoteFileDesc;
-import io.delta.kernel.data.Row;
 
 import java.util.List;
 
 public class DeltaLakeRemoteFileDesc extends RemoteFileDesc {
-    private final List<Row> deltaLakeSplitsInfo;
+    private final List<FileScanTask> deltaLakeSplitsInfo;
 
-    private DeltaLakeRemoteFileDesc(List<Row> deltaLakeSplitsInfo) {
+    private DeltaLakeRemoteFileDesc(List<FileScanTask> deltaLakeSplitsInfo) {
         super(null, null, 0, 0, null);
         this.deltaLakeSplitsInfo = deltaLakeSplitsInfo;
     }
 
-    public static DeltaLakeRemoteFileDesc createDeltaLakeRemoteFileDesc(List<Row> deltaLakeSplitsInfo) {
+    public static DeltaLakeRemoteFileDesc createDeltaLakeRemoteFileDesc(List<FileScanTask> deltaLakeSplitsInfo) {
         return new DeltaLakeRemoteFileDesc(deltaLakeSplitsInfo);
     }
 
-    public List<Row> getDeltaLakeScanTasks() {
+    public List<FileScanTask> getDeltaLakeScanTasks() {
         return deltaLakeSplitsInfo;
     }
 

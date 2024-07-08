@@ -61,8 +61,7 @@ public class DeltaUnityMetadataTest {
         DeltaMetastoreOperations metastoreOperations = new DeltaMetastoreOperations(
                 CachingDeltaLakeMetastore.createQueryLevelInstance(unityBackedDeltaLakeMetastore, 10000),
                 false, MetastoreType.UNITY);
-        deltaLakeUnityMetadata = new DeltaLakeMetadata(hdfsEnvironment, "databricks0",
-                metastoreOperations, Optional.empty());
+        deltaLakeUnityMetadata = new DeltaLakeMetadata(hdfsEnvironment, "databricks0", metastoreOperations, null);
     }
 
     @Test

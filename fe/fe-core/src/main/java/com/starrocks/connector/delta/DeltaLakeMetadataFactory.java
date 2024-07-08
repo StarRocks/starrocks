@@ -57,7 +57,8 @@ public class DeltaLakeMetadataFactory {
                 metastore instanceof CachingDeltaLakeMetastore, metastoreType);
 
         Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
-        return new DeltaLakeMetadata(hdfsEnvironment, catalogName, metastoreOperations, cacheUpdateProcessor);
+        return new DeltaLakeMetadata(hdfsEnvironment, catalogName, metastoreOperations,
+                cacheUpdateProcessor.orElse(null));
     }
 
     public synchronized Optional<DeltaLakeCacheUpdateProcessor> getCacheUpdateProcessor() {

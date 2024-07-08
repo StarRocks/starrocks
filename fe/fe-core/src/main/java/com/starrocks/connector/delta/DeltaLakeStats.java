@@ -18,7 +18,7 @@ import com.google.gson.annotations.SerializedName;
 
 import java.util.Map;
 
-public class DeltaLakeStatsStruct {
+public class DeltaLakeStats {
     @SerializedName(value = "numRecords")
     public long numRecords;
 
@@ -31,7 +31,7 @@ public class DeltaLakeStatsStruct {
     @SerializedName(value = "nullCount")
     public Map<String, Object> nullCount;
 
-    public DeltaLakeStatsStruct(long numRecords) {
+    public DeltaLakeStats(long numRecords) {
         this.numRecords = numRecords;
     }
 }

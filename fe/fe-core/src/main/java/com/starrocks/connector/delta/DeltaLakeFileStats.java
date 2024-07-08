@@ -110,7 +110,7 @@ public class DeltaLakeFileStats {
             return;
         }
 
-        // TODO: Currently not set avg size, will be optimized laster.
+        // TODO: Currently not set avg size, will be optimized later.
         // builder.setAverageRowSize(xxx);
         builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
 

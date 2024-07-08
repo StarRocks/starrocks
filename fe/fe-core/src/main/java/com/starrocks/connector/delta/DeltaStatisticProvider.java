@@ -21,13 +21,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
-import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.types.StructType;
-import io.delta.kernel.utils.FileStatus;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,32 +31,26 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static io.delta.kernel.internal.InternalScanFileUtils.ADD_FILE_ORDINAL;
-
 public class DeltaStatisticProvider {
-    private static final Logger LOG = LogManager.getLogger(DeltaStatisticProvider.class);
     private final Map<PredicateSearchKey, DeltaLakeFileStats> deltaLakeFileStatsMap = new HashMap<>();
 
     public DeltaStatisticProvider() {}
 
     public Statistics getCardinalityStats(Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
-                                          List<Row> fileScanTasks) {
+                                          List<FileScanTask> fileScanTasks) {
         Statistics.Builder builder = Statistics.builder();
         long cardinality = 0;
         Set<String> currentFiles = new HashSet<>();
 
-        for (Row file : fileScanTasks) {
-            FileStatus status = InternalScanFileUtils.getAddFileStatus(file);
-            String path = status.getPath();
+        for (FileScanTask file : fileScanTasks) {
+            String path = file.getFileStatus().getPath();
 
             if (currentFiles.contains(path)) {
                 continue;
             }
             currentFiles.add(path);
 
-            Row addFileEntry = getAddFileEntry(file);
-            long rows = ScanFileUtils.getFileRows(addFileEntry);
-            cardinality += rows;
+            cardinality += file.getRecords();
         }
 
         return builder.setOutputRowCount(cardinality)
@@ -69,26 +58,23 @@ public class DeltaStatisticProvider {
                 .build();
     }
 
-    public void updateFileStats(DeltaLakeTable table, PredicateSearchKey key, Row file,
+    public void updateFileStats(DeltaLakeTable table, PredicateSearchKey key, FileScanTask file,
                                 List<String> nonPartitionPrimitiveColumn) {
         StructType schema = table.getDeltaMetadata().getSchema();
 
-        FileStatus status = InternalScanFileUtils.getAddFileStatus(file);
-
-        Row addFileEntry = getAddFileEntry(file);
-        DeltaLakeStatsStruct fileStat = ScanFileUtils.getColumnStatistics(addFileEntry);
+        DeltaLakeStats fileStat = file.getStats();
 
         DeltaLakeFileStats fileStats;
         if (deltaLakeFileStatsMap.containsKey(key)) {
             fileStats = deltaLakeFileStatsMap.get(key);
             fileStats.incrementRecordCount(fileStat.numRecords);
-            fileStats.incrementSize(status.getSize());
+            fileStats.incrementSize(file.getFileSize());
             updateSummaryMin(fileStats, fileStat.minValues, fileStat.nullCount, fileStat.numRecords);
             updateSummaryMax(fileStats, fileStat.maxValues, fileStat.nullCount, fileStat.numRecords);
             fileStats.updateNullCount(fileStat.nullCount, nonPartitionPrimitiveColumn);
         } else {
             fileStats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumn, fileStat.numRecords,
-                    status.getSize(), fileStat.minValues, fileStat.maxValues, fileStat.nullCount);
+                    file.getFileSize(), fileStat.minValues, fileStat.maxValues, fileStat.nullCount);
             deltaLakeFileStatsMap.put(key, fileStats);
         }
     }
@@ -130,14 +116,6 @@ public class DeltaStatisticProvider {
         builder.addColumnStatistics(buildColumnStatistics(schema, columnRefOperatorColumnMap, deltaLakeFileStats));
 
         return builder.build();
-    }
-
-    private static Row getAddFileEntry(Row file) {
-        if (file.isNullAt(ADD_FILE_ORDINAL)) {
-            throw new IllegalArgumentException("There is no `add` entry in the scan file row");
-        } else {
-            return file.getStruct(ADD_FILE_ORDINAL);
-        }
     }
 
     public Map<ColumnRefOperator, ColumnStatistic> buildUnknownColumnStatistics(Set<ColumnRefOperator> columns) {
