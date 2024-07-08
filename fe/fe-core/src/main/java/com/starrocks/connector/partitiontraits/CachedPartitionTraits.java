@@ -115,8 +115,8 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public boolean supportPartitionRefresh() {
-        return delegate.supportPartitionRefresh();
+    public boolean isSupportPCTRefresh() {
+        return delegate.isSupportPCTRefresh();
     }
 
     @Override

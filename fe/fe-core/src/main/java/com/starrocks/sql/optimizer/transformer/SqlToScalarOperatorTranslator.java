@@ -287,7 +287,7 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visit(ParseNode node, Context context) {
             Expr expr = (Expr) node;
-            if (expressionMapping.get(expr) != null && !(expr.isConstant())) {
+            if (expressionMapping.get(expr) != null && !expr.isConstant()) {
                 return expressionMapping.get(expr);
             }
 

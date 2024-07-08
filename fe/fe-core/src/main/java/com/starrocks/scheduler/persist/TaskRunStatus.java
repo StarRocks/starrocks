@@ -335,8 +335,7 @@ public class TaskRunStatus implements Writable {
 
     public Constants.TaskRunState getLastRefreshState() {
         if (isRefreshFinished()) {
-            Preconditions.checkArgument(Constants.isFinishState(state),
-                    String.format("state %s must be finish state", state));
+            Preconditions.checkArgument(state.isFinishState(), String.format("state %s must be finish state", state));
             return state;
         } else {
             // {@code processStartTime == 0} means taskRun have not been scheduled, its state should be pending.
@@ -349,7 +348,7 @@ public class TaskRunStatus implements Writable {
         if (state.equals(Constants.TaskRunState.FAILED)) {
             return true;
         }
-        if (!state.equals(Constants.TaskRunState.SUCCESS)) {
+        if (!state.isFinishState()) {
             return false;
         }
         if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||

@@ -86,6 +86,7 @@ message CompactRequest {
     optional int64 version = 3;
     optional int64 timeout_ms = 4;
     optional bool allow_partial_success = 5;
+    optional bytes encryption_meta = 6;
 }
 
 message CompactResponse {

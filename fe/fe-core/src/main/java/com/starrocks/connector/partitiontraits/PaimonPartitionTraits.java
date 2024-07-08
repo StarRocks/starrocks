@@ -26,14 +26,13 @@ import java.util.Optional;
 public class PaimonPartitionTraits extends DefaultTraits {
 
     @Override
-    public boolean supportPartitionRefresh() {
-        // TODO: refine the check
-        return true;
+    public String getDbName() {
+        return ((PaimonTable) table).getDbName();
     }
 
     @Override
-    public String getDbName() {
-        return ((PaimonTable) table).getDbName();
+    public boolean isSupportPCTRefresh() {
+        return true;
     }
 
     @Override

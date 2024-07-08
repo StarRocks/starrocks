@@ -97,7 +97,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Preconditions.checkState(partitionColumnOpt.isPresent());
         Column partitionColumn = partitionColumnOpt.get();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
-        RangePartitionDiffResult result = RangePartitionDiffer.computeRangePartitionDiff(mv, rangeToInclude);
+        RangePartitionDiffResult result = RangePartitionDiffer.computeRangePartitionDiff(mv, rangeToInclude, false);
         if (result == null) {
             // TODO: throw exception?
             LOG.warn("compute range partition diff failed: mv: {}", mv.getName());
@@ -117,10 +117,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
         Map<String, Range<PartitionKey>> adds = result.rangePartitionDiff.getAdds();
         addRangePartitions(db, mv, adds, partitionProperties, distributionDesc);
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            result.mvRangePartitionMap.put(mvPartitionName, addEntry.getValue());
-        }
+        adds.entrySet().stream().forEach(entry -> result.mvRangePartitionMap.put(entry.getKey(), entry.getValue()));
         LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
                 mv.getName(), adds);
 
@@ -189,18 +186,18 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                                 String start, String end, boolean force,
                                                 Set<String> mvPotentialPartitionNames) throws AnalysisException {
         // range partitioned materialized views
-        Expr partitionExpr = mv.getPartitionExpr();
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
         int partitionTTLNumber = mvContext.getPartitionTTLNumber();
+        boolean isRefreshMvBaseOnNonRefTables = needsRefreshBasedOnNonRefTables(snapshotBaseTables);
         Set<String> mvRangePartitionNames = getMVPartitionNamesWithTTL(mv, start, end, partitionTTLNumber, isAutoRefresh);
-        LOG.info("Get partition names by range with partition limit, start: {}, end: {}, partitionTTLNumber: {}," +
-                        " isAutoRefresh: {}, mvRangePartitionNames: {}",
-                start, end, partitionTTLNumber, isAutoRefresh, mvRangePartitionNames);
+        LOG.info("Get partition names by range with partition limit, start: {}, end: {}, force:{}, " +
+                        "partitionTTLNumber: {}, isAutoRefresh: {}, mvRangePartitionNames: {}, isRefreshMvBaseOnNonRefTables:{}",
+                start, end, force, partitionTTLNumber, isAutoRefresh, mvRangePartitionNames, isRefreshMvBaseOnNonRefTables);
 
-        // check non-ref base tables
-        if (needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
+        // check non-ref base tables or force refresh
+        if (force || isRefreshMvBaseOnNonRefTables) {
             if (start == null && end == null) {
-                // if non partition table changed, should refresh all partitions of materialized view
+                // if non-partition table changed, should refresh all partitions of materialized view
                 return mvRangePartitionNames;
             } else {
                 if (isAutoRefresh) {
@@ -221,18 +218,22 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 } else {
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.
-                    return getMvPartitionNamesToRefresh(mvRangePartitionNames, true);
+                    return getMvPartitionNamesToRefresh(mvRangePartitionNames);
                 }
             }
         }
 
-        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         // check related partition table
-        needRefreshMvPartitionNames.addAll(getMvPartitionNamesToRefresh(mvRangePartitionNames, force));
+        Set<String> needRefreshMvPartitionNames = getMvPartitionNamesToRefresh(mvRangePartitionNames);
+        if (needRefreshMvPartitionNames.isEmpty()) {
+            LOG.info("No need to refresh materialized view partitions, mv: {}", mv.getName());
+            return needRefreshMvPartitionNames;
+        }
 
-        Map<Table, Set<String>> baseChangedPartitionNames =
-                getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
+        Map<Table, Set<String>> baseChangedPartitionNames = getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
         if (baseChangedPartitionNames.isEmpty()) {
+            LOG.info("Cannot get associated base table change partitions from mv's refresh partitions {}, mv: {}",
+                    needRefreshMvPartitionNames, mv.getName());
             return needRefreshMvPartitionNames;
         }
 
@@ -303,7 +304,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                                Set<String> mvPotentialPartitionNames) {
         int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
-        if (partitionRefreshNumber >= mvRangePartitionMap.size()) {
+        if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= mvRangePartitionMap.size()) {
             return;
         }
         Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();

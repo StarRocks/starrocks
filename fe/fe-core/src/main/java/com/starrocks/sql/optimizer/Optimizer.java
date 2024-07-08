@@ -171,24 +171,26 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
-        // prepare for optimizer
-        prepare(connectContext, columnRefFactory, logicOperatorTree);
+        try {
+            // prepare for optimizer
+            prepare(connectContext, columnRefFactory, logicOperatorTree);
 
-        // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
-        logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
-                .transform(logicOperatorTree, context).get(0);
+            // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
+            logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
+                    .transform(logicOperatorTree, context).get(0);
 
-        // prepare for mv rewrite
-        prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
+            // prepare for mv rewrite
+            prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
-        OptExpression result = optimizerConfig.isRuleBased() ?
-                optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
-                optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
-
-        // clear caches in OptimizerContext
-        context.clear();
-
-        return result;
+            OptExpression result = optimizerConfig.isRuleBased() ?
+                    optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
+                    optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+            return result;
+        } finally {
+            // make sure clear caches in OptimizerContext
+            context.clear();
+            connectContext.setQueryMVContext(null);
+        }
     }
 
     public void setQueryTables(Set<OlapTable> queryTables) {
@@ -715,9 +717,11 @@ public class Optimizer {
 
     private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {
         SkewJoinOptimizeRule rule = new SkewJoinOptimizeRule();
-        // merge projects before calculate statistics
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new MergeTwoProjectRule());
-        Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+        if (context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
+            // merge projects before calculate statistics
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new MergeTwoProjectRule());
+            Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+        }
         if (ruleRewriteOnlyOnce(tree, rootTaskContext, rule)) {
             // skew join generate new join and on predicate, need to push down join on expression to child project again
             ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());

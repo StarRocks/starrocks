@@ -22,11 +22,11 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
 import com.starrocks.connector.partitiontraits.HivePartitionTraits;
@@ -82,6 +82,13 @@ public abstract class ConnectorPartitionTraits {
         return TRAITS_TABLE.containsKey(tableType);
     }
 
+    public static boolean isSupportPCTRefresh(Table.TableType tableType) {
+        if (!isSupported(tableType)) {
+            return false;
+        }
+        return TRAITS_TABLE.get(tableType).get().isSupportPCTRefresh();
+    }
+
     public static ConnectorPartitionTraits build(Table.TableType tableType) {
         return Preconditions.checkNotNull(TRAITS_TABLE.get(tableType),
                 "traits not supported: " + tableType).get();
@@ -95,7 +102,7 @@ public abstract class ConnectorPartitionTraits {
      */
     public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
         ConnectorPartitionTraits delegate = buildWithoutCache(table);
-        if (ctx != null && ctx.getQueryMVContext() != null) {
+        if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
             return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
@@ -129,16 +136,16 @@ public abstract class ConnectorPartitionTraits {
     }
 
     /**
+     * Whether this table support partition-granular refresh as ref-table
+     */
+    public abstract boolean isSupportPCTRefresh();
+
+    /**
      * Build a partition key for the table, some of them have specific representations for null values
      */
     public abstract PartitionKey createEmptyKey();
 
     public abstract String getDbName();
-
-    /**
-     * Whether this table support partition-granular refresh as ref-table
-     */
-    public abstract boolean supportPartitionRefresh();
 
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
@@ -187,16 +194,4 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
-
-    /**
-     * Check whether the base table's partition has changed or not.
-     * </p>
-     * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
-     * version and modified time.
-     */
-    public static boolean isBaseTableChanged(Partition partition,
-                                             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
-        return partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
-    }
 }

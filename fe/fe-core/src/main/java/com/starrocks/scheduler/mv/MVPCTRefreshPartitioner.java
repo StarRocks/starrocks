@@ -128,7 +128,7 @@ public abstract class MVPCTRefreshPartitioner {
      * Check whether the base table is supported partition refresh or not.
      */
     public static boolean isPartitionRefreshSupported(Table baseTable) {
-        return ConnectorPartitionTraits.build(baseTable).supportPartitionRefresh();
+        return ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType());
     }
 
     /**
@@ -142,13 +142,15 @@ public abstract class MVPCTRefreshPartitioner {
         Set<String> result = Sets.newHashSet();
         Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMaps = mvContext.getRefBaseTableMVIntersectedPartitions();
         if (refBaseTableMVPartitionMaps == null || !refBaseTableMVPartitionMaps.containsKey(refBaseTable)) {
+            LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
+                            "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
             return null;
         }
         Map<String, Set<String>> refBaseTableMVPartitionMap = refBaseTableMVPartitionMaps.get(refBaseTable);
         for (String basePartitionName : baseTablePartitionNames) {
             if (!refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
-                LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}",
-                        basePartitionName);
+                LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
+                                "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
                 return null;
             }
             result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
@@ -159,17 +161,15 @@ public abstract class MVPCTRefreshPartitioner {
     /**
      * Get mv partitions to refresh based on the ref base table partitions.
      * @param mvPartitionNames all mv partition names
-     * @param force whether it's force refresh or not
      * @return mv partitions to refresh based on the ref base table partitions
      */
-    protected Set<String> getMvPartitionNamesToRefresh(Set<String> mvPartitionNames,
-                                                       boolean force) {
+    protected Set<String> getMvPartitionNamesToRefresh(Set<String> mvPartitionNames) {
         Set<String> result = Sets.newHashSet();
         Map<Table, Column> refBaseTableAndColumns = mv.getRelatedPartitionTableAndColumn();
         for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
             Table baseTable = e.getKey();
             // refresh all mv partitions when the ref base table is not supported partition refresh
-            if (force || !isPartitionRefreshSupported(baseTable)) {
+            if (!isPartitionRefreshSupported(baseTable)) {
                 LOG.info("The ref base table {} is not supported partition refresh, refresh all " +
                         "partitions of mv {}: {}", baseTable.getName(), mv.getName(), mvPartitionNames);
                 return mvPartitionNames;
@@ -184,6 +184,8 @@ public abstract class MVPCTRefreshPartitioner {
             }
             Set<String> refBaseTablePartitionNames = mvBaseTableUpdateInfo.getToRefreshPartitionNames();
             if (refBaseTablePartitionNames.isEmpty()) {
+                LOG.info("The ref base table {} has no updated partitions, and no update related mv partitions: {}",
+                        baseTable.getName(), mvPartitionNames);
                 continue;
             }
 
@@ -191,7 +193,7 @@ public abstract class MVPCTRefreshPartitioner {
             Set<String> ans = getMvPartitionNamesToRefresh(baseTable, refBaseTablePartitionNames);
             if (ans == null) {
                 throw new DmlException(String.format("Find the corresponding mv partition names of ref base table %s failed," +
-                        "mv %s: ref partitions: %s", baseTable.getName(), mv.getName(), refBaseTablePartitionNames));
+                        " mv %s:, ref partitions: %s", baseTable.getName(), mv.getName(), refBaseTablePartitionNames));
             }
             ans.retainAll(mvPartitionNames);
             LOG.info("The ref base table {} has updated partitions: {}, the corresponding " +

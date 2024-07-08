@@ -49,8 +49,7 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public boolean supportPartitionRefresh() {
-        // TODO: check partition types
+    public boolean isSupportPCTRefresh() {
         return true;
     }
 
@@ -85,7 +84,7 @@ public class OlapPartitionTraits extends DefaultTraits {
             List<String> baseTablePartitionInfos = Lists.newArrayList();
             for (String p : baseTable.getVisiblePartitionNames()) {
                 Partition partition = baseTable.getPartition(p);
-                baseTablePartitionInfos.add(String.format("%s:%s:%s", p, partition.getVisibleVersion(),
+                baseTablePartitionInfos.add(String.format("%s:%s:%s:%s", p, partition.getId(), partition.getVisibleVersion(),
                         partition.getVisibleVersionTime()));
             }
             LOG.debug("baseTable: {}, baseTablePartitions:{}, mvBaseTableVisibleVersionMap: {}",
@@ -115,8 +114,7 @@ public class OlapPartitionTraits extends DefaultTraits {
                 result.add(basePartitionName);
             } else {
                 // Ignore partitions if mv's partition is the same with the basic table.
-                if (mvRefreshedPartitionInfo.getId() == basePartition.getId()
-                        && !isBaseTableChanged(basePartition, mvRefreshedPartitionInfo)) {
+                if (!isBaseTableChanged(basePartition, mvRefreshedPartitionInfo)) {
                     continue;
                 }
 
@@ -125,6 +123,19 @@ public class OlapPartitionTraits extends DefaultTraits {
             }
         }
         return result;
+    }
+
+    /**
+     * Check whether the base table's partition has changed or not.
+     * </p>
+     * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
+     * version and modified time.
+     */
+    public static boolean isBaseTableChanged(Partition partition,
+                                             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
+        return mvRefreshedPartitionInfo.getId() != partition.getId()
+                || partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
 
     public List<Column> getPartitionColumns() {

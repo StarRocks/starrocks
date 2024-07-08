@@ -69,6 +69,8 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.TableMetricsEntity;
+import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -996,6 +998,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     routineLoadTaskInfo.afterCommitted(txnState, txnOperated);
                 }
                 ++committedTaskNum;
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+                entity.counterRoutineLoadCommittedTasksTotal.increase(1L);
                 LOG.debug("routine load task committed. task id: {}, job id: {}", txnState.getLabel(), id);
             }
         } catch (Throwable e) {
@@ -1117,10 +1121,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 // step0: find task in job
                 Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
                         entity -> entity.getTxnId() == txnState.getTransactionId()).findFirst();
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
                 if (!routineLoadTaskInfoOptional.isPresent()) {
                     //  The task of the timed-out transaction will be detected by the transaction checker thread
                     //  and subsequently aborted. Here, we need to update the abortedTaskNum.
                     ++abortedTaskNum;
+                    entity.counterRoutineLoadAbortedTasksTotal.increase(1L);
                     // task will not be update when task has been aborted by fe
                     return;
                 }
@@ -1135,6 +1141,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 }
                 routineLoadTaskInfo.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
                 ++abortedTaskNum;
+                entity.counterRoutineLoadAbortedTasksTotal.increase(1L);
                 setOtherMsg(txnStatusChangeReasonString);
                 TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {

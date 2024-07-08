@@ -458,11 +458,6 @@ public class StmtExecutor {
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
 
-        // Only add the last running stmt for multi statement,
-        // because the audit log will only show the last stmt.
-        if (context.getIsLastStmt()) {
-            addRunningQueryDetail(parsedStmt);
-        }
 
         // if use http protocal, use httpResultSender to send result to netty channel
         if (context instanceof HttpConnectContext) {
@@ -1250,7 +1245,8 @@ public class StmtExecutor {
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         Preconditions.checkNotNull(profileElement, "query not exists");
-        if (coord.isShortCircuit()) {
+        // For short circuit query, 'ProfileElement#plan' is null
+        if (profileElement.plan == null) {
             throw new UserException(
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
@@ -2500,13 +2496,16 @@ public class StmtExecutor {
         }
     }
 
-    protected void addRunningQueryDetail(StatementBase parsedStmt) {
+    /**
+     * Record this sql into the query details, which would be collected by external query history system
+     */
+    public void addRunningQueryDetail(StatementBase parsedStmt) {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
         String sql;
         if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            sql = AstToSQLBuilder.toSQL(parsedStmt);
+            sql = AstToSQLBuilder.toSQLOrDefault(parsedStmt, parsedStmt.getOrigStmt().originStmt);
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
@@ -2529,4 +2528,46 @@ public class StmtExecutor {
         // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addQueryDetail(queryDetail.copy());
     }
+
+    /*
+     * Record this finished sql into the query details, which would be collected by external query history system
+     */
+    public void addFinishedQueryDetail() {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
+        ConnectContext ctx = context;
+        QueryDetail queryDetail = ctx.getQueryDetail();
+        if (queryDetail == null || !queryDetail.getQueryId().equals(DebugUtil.printId(ctx.getQueryId()))) {
+            return;
+        }
+
+        long endTime = System.currentTimeMillis();
+        long elapseMs = endTime - ctx.getStartTime();
+
+        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            queryDetail.setState(QueryDetail.QueryMemState.FAILED);
+            queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
+        } else {
+            queryDetail.setState(QueryDetail.QueryMemState.FINISHED);
+        }
+        queryDetail.setEndTime(endTime);
+        queryDetail.setLatency(elapseMs);
+        queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
+        // add execution statistics into queryDetail
+        queryDetail.setReturnRows(ctx.getReturnRows());
+        queryDetail.setDigest(ctx.getAuditEventBuilder().build().digest);
+        PQueryStatistics statistics = getQueryStatisticsForAuditLog();
+        if (statistics != null) {
+            queryDetail.setScanBytes(statistics.scanBytes);
+            queryDetail.setScanRows(statistics.scanRows);
+            queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
+            queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+        }
+        queryDetail.setCatalog(ctx.getCurrentCatalog());
+
+        QueryDetailQueue.addQueryDetail(queryDetail);
+    }
+
 }

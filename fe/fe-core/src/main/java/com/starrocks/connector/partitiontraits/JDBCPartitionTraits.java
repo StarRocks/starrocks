@@ -31,12 +31,6 @@ import java.util.Optional;
 public class JDBCPartitionTraits extends DefaultTraits {
 
     @Override
-    public boolean supportPartitionRefresh() {
-        // TODO: refine check
-        return true;
-    }
-
-    @Override
     public String getDbName() {
         return ((JDBCTable) table).getDbName();
     }
@@ -44,6 +38,11 @@ public class JDBCPartitionTraits extends DefaultTraits {
     @Override
     public String getTableName() {
         return ((JDBCTable) table).getJdbcTable();
+    }
+
+    @Override
+    public boolean isSupportPCTRefresh() {
+        return true;
     }
 
     @Override

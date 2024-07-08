@@ -87,6 +87,25 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
         return Status::OK();
     }
 
+    case simdjson::ondemand::number_type::big_integer: {
+        auto s = value->raw_json_token();
+        StringParser::ParseResult r;
+        auto in = StringParser::string_to_int<int128_t>(s.data(), s.size(), &r);
+        if (r != StringParser::PARSE_SUCCESS) {
+            auto err_msg = strings::Substitute("Fail to convert big integer. column=$0, value=$1", name, s);
+            return Status::InvalidArgument(err_msg);
+        }
+
+        T out{};
+        if (!checked_cast(in, &out)) {
+            column->append_numbers(&out, sizeof(out));
+        } else {
+            auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, in);
+            return Status::InvalidArgument(err_msg);
+        }
+        return Status::OK();
+    }
+
     case simdjson::ondemand::number_type::floating_point_number: {
         double in = value->get_double();
         T out{};

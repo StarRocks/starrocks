@@ -27,13 +27,18 @@ import java.util.Optional;
 public class HivePartitionTraits extends DefaultTraits {
 
     @Override
-    public boolean supportPartitionRefresh() {
+    public String getDbName() {
+        return ((HiveMetaStoreTable) table).getDbName();
+    }
+
+    @Override
+    public boolean isSupportPCTRefresh() {
         return true;
     }
 
     @Override
-    public String getDbName() {
-        return ((HiveMetaStoreTable) table).getDbName();
+    public String getTableName() {
+        return ((HiveMetaStoreTable) table).getTableName();
     }
 
     @Override

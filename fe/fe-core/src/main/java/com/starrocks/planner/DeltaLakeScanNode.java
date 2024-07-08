@@ -31,6 +31,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.delta.DeltaLakeRemoteFileDesc;
 import com.starrocks.connector.delta.DeltaUtils;
+import com.starrocks.connector.delta.FileScanTask;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -116,13 +117,13 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
+    public void setupScanRangeLocations(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getScanFiles")) {
-            setupScanRangeLocationsImpl(descTbl);
+            setupScanRangeLocationsImpl(descTbl, fieldNames);
         }
     }
 
-    public void setupScanRangeLocationsImpl(DescriptorTable descTbl) throws UserException {
+    public void setupScanRangeLocationsImpl(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), deltaMetadata);
@@ -135,7 +136,7 @@ public class DeltaLakeScanNode extends ScanNode {
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
         List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, deltaLakeTable, null, snapshotId, predicate, null, -1);
+                catalogName, deltaLakeTable, null, snapshotId, predicate, fieldNames, -1);
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after planFiles on {}.{} and predicate: [{}]", dbName, tableName, predicate);
             return;
@@ -147,15 +148,13 @@ public class DeltaLakeScanNode extends ScanNode {
             return;
         }
 
-        List<Row> splitsInfo = remoteFileDesc.getDeltaLakeScanTasks();
-        for (Row row : splitsInfo) {
-            FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(row);
-            Map<String, String> partitionValueMap = InternalScanFileUtils.getPartitionValues(row);
+        List<FileScanTask> splitsInfo = remoteFileDesc.getDeltaLakeScanTasks();
+        for (FileScanTask split : splitsInfo) {
             List<String> partitionValues = new ArrayList<>();
-            partitionValueMap.forEach((key, value) -> partitionValues.add(value));
+            split.getPartitionValues().forEach((key, value) -> partitionValues.add(value));
             PartitionKey partitionKey = PartitionUtil.createPartitionKey(partitionValues,
                     deltaLakeTable.getPartitionColumns(), deltaLakeTable);
-            addPartitionLocations(partitionKeys, partitionKey, descTbl, fileStatus, deltaMetadata);
+            addPartitionLocations(partitionKeys, partitionKey, descTbl, split.getFileStatus(), deltaMetadata);
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());

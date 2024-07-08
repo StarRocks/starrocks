@@ -31,6 +31,8 @@ set(EXEC_FILES
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
+        ./fs/encrypt_file_test.cpp
+        ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/es/es_query_builder_test.cpp
@@ -253,6 +255,7 @@ set(EXEC_FILES
         ./storage/lake/metacache_test.cpp
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
+        ./storage/lake/lake_primary_key_consistency_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -426,6 +429,7 @@ set(EXEC_FILES
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
         ./util/int96_test.cpp
+	./util/internal_service_recoverable_stub_test.cpp
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
