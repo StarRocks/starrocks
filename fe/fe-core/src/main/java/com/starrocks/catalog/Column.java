@@ -58,6 +58,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TColumn;
+import org.apache.commons.lang.StringEscapeUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -709,7 +710,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
         if (defaultValue != null && !type.isOnlyMetricType()) {
-            sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+            sb.append("DEFAULT \"").append(StringEscapeUtils.escapeJava(defaultValue)).append("\" ");
         }
         if (isGeneratedColumn()) {
             String generatedColumnSql;
