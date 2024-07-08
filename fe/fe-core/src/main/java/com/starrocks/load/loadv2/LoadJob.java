@@ -79,11 +79,6 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.BeginTransactionException;
-<<<<<<< HEAD
-import com.starrocks.transaction.TableCommitInfo;
-=======
-import com.starrocks.transaction.RunningTxnExceedException;
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;

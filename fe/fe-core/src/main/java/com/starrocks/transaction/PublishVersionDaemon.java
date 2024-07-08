@@ -703,14 +703,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
-<<<<<<< HEAD
-                    //
-                    for (TransactionState state : txnStateBatch.getTransactionStates()) {
-                        refreshMvIfNecessary(state);
-                    }
-
-=======
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch, dirtyPartitions);
                 } catch (UserException e) {
@@ -832,72 +824,4 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return false;
         }
     }
-<<<<<<< HEAD
-
-    /**
-     * Refresh the materialized view if it should be triggered after base table was loaded.
-     *
-     * @param transactionState
-     * @throws DdlException
-     * @throws MetaNotFoundException
-     */
-    private void refreshMvIfNecessary(TransactionState transactionState)
-            throws DdlException, MetaNotFoundException {
-        // Refresh materialized view when base table update transaction has been visible
-        long dbId = transactionState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (long tableId : transactionState.getTableIdList()) {
-            Table table;
-            db.readLock();
-            try {
-                table = db.getTable(tableId);
-            } finally {
-                db.readUnlock();
-            }
-            if (table == null) {
-                LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
-                return;
-            }
-            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            Iterator<MvId> mvIdIterator = relatedMvs.iterator();
-            while (mvIdIterator.hasNext()) {
-                MvId mvId = mvIdIterator.next();
-                Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                mvDb.readLock();
-                try {
-                    MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
-                    if (materializedView == null) {
-                        LOG.warn("materialized view {} does not exists.", mvId.getId());
-                        mvIdIterator.remove();
-                        continue;
-                    }
-                    if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
-                        List<PartitionCommitInfo> txnPartitionCommitInfos = getPartitionCommitInfos(transactionState, tableId);
-                        LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                                "db:{}, mv:{}, transaction state:{}", table.getName(), mvDb.getFullName(),
-                                materializedView.getName(), txnPartitionCommitInfos);
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
-                    }
-                } finally {
-                    mvDb.readUnlock();
-                }
-            }
-        }
-
-    }
-
-    private List<PartitionCommitInfo> getPartitionCommitInfos(TransactionState txnState, long tableId) {
-        TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(tableId);
-        if (tableCommitInfo == null) {
-            return Collections.emptyList();
-        }
-        if (tableCommitInfo.getIdToPartitionCommitInfo() == null) {
-            return Collections.emptyList();
-        }
-        return new ArrayList<>(tableCommitInfo.getIdToPartitionCommitInfo().values());
-    }
-=======
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
 }

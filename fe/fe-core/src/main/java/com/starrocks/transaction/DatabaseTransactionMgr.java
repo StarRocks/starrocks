@@ -1102,14 +1102,8 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
-<<<<<<< HEAD
-        collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
-
-=======
-        transactionState.notifyVisible();
         // do after transaction finish
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1864,34 +1858,6 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} batch successfully", stateBatch);
     }
 
-<<<<<<< HEAD
-    private void collectStatisticsForStreamLoadOnFirstLoad(TransactionState txnState, Database db) {
-        TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
-        if (!TransactionState.LoadJobSourceType.FRONTEND_STREAMING.equals(sourceType)
-                && !TransactionState.LoadJobSourceType.BACKEND_STREAMING.equals(sourceType)) {
-            return;
-        }
-        List<Table> tables = txnState.getIdToTableCommitInfos().values().stream()
-                .map(TableCommitInfo::getTableId)
-                .distinct()
-                .map(db::getTable)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        for (Table table : tables) {
-            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false);
-        }
-    }
-
-
-    private void collectStatisticsForStreamLoadOnFirstLoadBatch(TransactionStateBatch txnStateBatch, Database db) {
-        for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
-            collectStatisticsForStreamLoadOnFirstLoad(txnState, db);
-        }
-    }
-
-=======
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
     public String getTxnPublishTimeoutDebugInfo(long txnId) {
         TransactionState transactionState = getTransactionState(txnId);
         if (transactionState == null) {
