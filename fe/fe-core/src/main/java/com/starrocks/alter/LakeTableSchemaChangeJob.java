@@ -125,9 +125,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     @SerializedName(value = "indexes")
     private List<Index> indexes = null;
 
-    // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
-    @SerializedName(value = "watershedTxnId")
-    protected long watershedTxnId = -1;
     @SerializedName(value = "startTime")
     private long startTime;
 
