@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.internal.InternalScanFileUtils;
@@ -45,13 +46,13 @@ public class ScanFileUtils {
         return records.numRecords;
     }
 
-    public static DeltaLakeStats getColumnStatistics(Row file) {
+    public static DeltaLakeAddFileStatsSerDe getColumnStatistics(Row file) {
         String stats = file.getString(ADD_FILE_STATS_ORDINAL);
         if (stats == null) {
             throw new IllegalArgumentException("There is no `stats` entry in the add file row");
         }
 
-        DeltaLakeStats statistics = GsonUtils.GSON.fromJson(stats, DeltaLakeStats.class);
+        DeltaLakeAddFileStatsSerDe statistics = GsonUtils.GSON.fromJson(stats, DeltaLakeAddFileStatsSerDe.class);
         if (statistics == null) {
             throw new IllegalArgumentException("There is no entry in the stats row");
         }
@@ -66,19 +67,20 @@ public class ScanFileUtils {
         return scanFileInfo.getStruct(ADD_FILE_ORDINAL);
     }
 
-    public static FileScanTask convertFromRowToFileScanTask(boolean needStats, Row file) {
+    public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(boolean needStats, Row file) {
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
         Row addFileRow = getAddFileEntry(file);
 
         FileScanTask fileScanTask;
         if (needStats) {
-            DeltaLakeStats stats = ScanFileUtils.getColumnStatistics(addFileRow);
-            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues, stats);
+            DeltaLakeAddFileStatsSerDe stats = ScanFileUtils.getColumnStatistics(addFileRow);
+            fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues);
+            return new Pair<>(fileScanTask, stats);
         } else {
             long records = ScanFileUtils.getFileRows(addFileRow);
             fileScanTask = new FileScanTask(fileStatus, records, partitionValues);
+            return new Pair<>(fileScanTask, null);
         }
-        return fileScanTask;
     }
 }

@@ -83,7 +83,7 @@ public class DirectoryBasedUpdateArbitratorTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getRemoteFileInfoForPartitions((Table) any, (List<String>) any);
+                metadataMgr.getRemotePartitions((Table) any, (List<String>) any);
                 result = remoteFileInfos;
                 minTimes = 0;
             }
@@ -115,7 +115,7 @@ public class DirectoryBasedUpdateArbitratorTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getRemoteFileInfoForPartitions((Table) any, (List<String>) any);
+                metadataMgr.getRemotePartitions((Table) any, (List<String>) any);
                 result = remoteFileInfos;
                 minTimes = 0;
             }

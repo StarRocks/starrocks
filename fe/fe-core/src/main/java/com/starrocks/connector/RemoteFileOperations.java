@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.profile.Timer;
@@ -298,5 +299,32 @@ public class RemoteFileOperations {
             LOG.error("Failed to get file status for paths: {}", paths, e);
             throw new StarRocksConnectorException("Failed to get file status for paths: %s. msg: %s", paths, e.getMessage());
         }
+    }
+
+    public List<RemoteFileInfo> getRemotePartitions(List<Partition> partitions) {
+        List<Path> paths = Lists.newArrayList();
+        for (Partition partition : partitions) {
+            Path partitionPath = new Path(partition.getFullPath());
+            paths.add(partitionPath);
+        }
+        FileStatus[] fileStatuses = getFileStatus(paths.toArray(new Path[0]));
+        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+        for (int i = 0; i < partitions.size(); i++) {
+            Partition partition = partitions.get(i);
+            FileStatus fileStatus = fileStatuses[i];
+            String locateName = fileStatus.getPath().toUri().getPath();
+            String fileName = PartitionUtil.getSuffixName(paths.get(i).toUri().getPath(), locateName);
+            RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", fileStatus.getLen(),
+                    fileStatus.getModificationTime(), ImmutableList.of());
+            RemoteFileInfo.Builder builder = RemoteFileInfo.builder()
+                    .setFormat(partition.getInputFormat())
+                    .setFullPath(partition.getFullPath())
+                    .setFiles(List.of(fileDesc).stream()
+                            .map(desc -> desc.setTextFileFormatDesc(partition.getTextFileFormatDesc()))
+                            .map(desc -> desc.setSplittable(partition.isSplittable()))
+                            .collect(Collectors.toList()));
+            remoteFileInfos.add(builder.build());
+        }
+        return remoteFileInfos;
     }
 }

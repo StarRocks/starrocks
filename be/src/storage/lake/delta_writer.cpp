@@ -442,8 +442,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         if (is_segment(f.path)) {
             op_write->mutable_rowset()->add_segments(std::move(f.path));
             op_write->mutable_rowset()->add_segment_size(f.size.value());
+            op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
         } else if (is_del(f.path)) {
             op_write->add_dels(std::move(f.path));
+            op_write->add_del_encryption_metas(f.encryption_meta);
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }

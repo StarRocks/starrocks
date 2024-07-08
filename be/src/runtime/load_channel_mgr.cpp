@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "common/closure_guard.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
@@ -100,6 +101,15 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
+    if (!request.encryption_meta().empty()) {
+        Status st = KeyCache::instance().refresh_keys(request.encryption_meta());
+        if (!st.ok()) {
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(fmt::format(
+                    "refresh keys using encryption_meta in PTabletWriterOpenRequest failed {}", st.detailed_message()));
+            return;
+        }
+    }
     UniqueId load_id(request.id());
     int64_t txn_id = request.txn_id();
     std::shared_ptr<LoadChannel> channel;

@@ -77,6 +77,17 @@ public class RangerHiveAccessController extends RangerAccessController {
     }
 
     @Override
+    public void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+                                  String column, PrivilegeType privilegeType) throws AccessDeniedException {
+        hasPermission(RangerHiveResource.builder()
+                        .setDatabase(tableName.getDb())
+                        .setTable(tableName.getTbl())
+                        .setColumn(column)
+                        .build(),
+                currentUser, privilegeType);
+    }
+
+    @Override
     public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
         Map<String, Expr> maskingExprMap = Maps.newHashMap();
         for (Column column : columns) {

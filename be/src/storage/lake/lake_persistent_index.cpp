@@ -15,6 +15,7 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
@@ -34,7 +35,7 @@
 
 namespace starrocks::lake {
 
-Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
+Status KeyValueMerger::merge(const std::string& key, const std::string& value, uint64_t max_rss_rowid) {
     IndexValuesWithVerPB index_value_ver;
     if (!index_value_ver.ParseFromString(value)) {
         return Status::InternalError("Failed to parse index value ver");
@@ -47,8 +48,17 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
     auto index_value = build_index_value(index_value_ver.values(0));
     if (_key == key) {
         if (_index_value_vers.empty()) {
+            _max_rss_rowid = max_rss_rowid;
             _index_value_vers.emplace_front(version, index_value);
-        } else if (version > _index_value_vers.front().first) {
+        } else if ((version > _index_value_vers.front().first) ||
+                   (version == _index_value_vers.front().first && max_rss_rowid > _max_rss_rowid)) {
+            // NOTICE: we need both version and max_rss_rowid here to decide the order of keys.
+            // Consider the following two scenarios:
+            // 1. Same keys are from two different Rowsets, and we can decide their order by version recorded
+            //    in Rowset.
+            // 2. Same keys are from same Rowset, and they have same version. Now we use `max_rss_rowid` in sst to
+            //    decide their order.
+            _max_rss_rowid = max_rss_rowid;
             std::list<std::pair<int64_t, IndexValue>> t;
             t.emplace_front(version, index_value);
             _index_value_vers.swap(t);
@@ -56,6 +66,7 @@ Status KeyValueMerger::merge(const std::string& key, const std::string& value) {
     } else {
         flush();
         _key = key;
+        _max_rss_rowid = max_rss_rowid;
         _index_value_vers.emplace_front(version, index_value);
     }
     return Status::OK();
@@ -84,10 +95,7 @@ void KeyValueMerger::flush() {
 }
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
-        : PersistentIndex(""),
-          _memtable(std::make_unique<PersistentIndexMemtable>()),
-          _tablet_mgr(tablet_mgr),
-          _tablet_id(tablet_id) {}
+        : PersistentIndex(""), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
 LakePersistentIndex::~LakePersistentIndex() {
     _memtable->clear();
@@ -95,9 +103,15 @@ LakePersistentIndex::~LakePersistentIndex() {
 }
 
 Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
+    uint64_t max_rss_rowid = 0;
     for (auto& sstable_pb : sstable_meta.sstables()) {
-        ASSIGN_OR_RETURN(auto rf,
-                         fs::new_random_access_file(_tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+        RandomAccessFileOptions opts;
+        if (!sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
+                                          opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
         auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
         if (block_cache == nullptr) {
             return Status::InternalError("Block cache is null.");
@@ -105,7 +119,11 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
         auto sstable = std::make_unique<PersistentIndexSstable>();
         RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
         _sstables.emplace_back(std::move(sstable));
+        max_rss_rowid = std::max(max_rss_rowid, sstable_pb.max_rss_rowid());
     }
+    // create memtable with previous rebuild `max_rss_rowid`,
+    // to make sure we can generate sst order by `max_rss_rowid`.
+    _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
     return Status::OK();
 }
 
@@ -133,17 +151,29 @@ Status LakePersistentIndex::minor_compact() {
     TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
-    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(location));
+    WritableFileOptions wopts;
+    std::string encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        encryption_meta.swap(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
     uint64_t filesize = 0;
     RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesize));
     RETURN_IF_ERROR(wf->close());
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(location));
+    RandomAccessFileOptions opts;
+    if (!encryption_meta.empty()) {
+        opts.encryption_info = wopts.encryption_info;
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
     sstable_pb.set_max_rss_rowid(_immutable_memtable->max_rss_rowid());
+    sstable_pb.set_encryption_meta(encryption_meta);
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
@@ -353,11 +383,18 @@ Status LakePersistentIndex::prepare_merging_iterator(
     }
     for (const auto& sstable_pb : sstables_to_merge) {
         // build sstable from meta, instead of reuse `_sstables`, to keep it thread safe
-        ASSIGN_OR_RETURN(auto rf,
-                         fs::new_random_access_file(tablet_mgr->sst_location(metadata.id(), sstable_pb.filename())));
+        RandomAccessFileOptions opts;
+        if (!sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
+                                          opts, tablet_mgr->sst_location(metadata.id(), sstable_pb.filename())));
         auto merging_sstable = std::make_shared<PersistentIndexSstable>();
         RETURN_IF_ERROR(merging_sstable->init(std::move(rf), sstable_pb, nullptr, false /** no filter **/));
         merging_sstables->push_back(merging_sstable);
+        // Pass `max_rss_rowid` to iterator, will be used when compaction.
+        read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
         // add input sstable.
@@ -374,9 +411,11 @@ Status LakePersistentIndex::prepare_merging_iterator(
 
 Status LakePersistentIndex::merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder,
                                            bool base_level_merge) {
-    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), builder, base_level_merge);
+    auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(), builder,
+                                                   base_level_merge);
     while (iter_ptr->Valid()) {
-        RETURN_IF_ERROR(merger->merge(iter_ptr->key().to_string(), iter_ptr->value().to_string()));
+        RETURN_IF_ERROR(
+                merger->merge(iter_ptr->key().to_string(), iter_ptr->value().to_string(), iter_ptr->max_rss_rowid()));
         iter_ptr->Next();
     }
     RETURN_IF_ERROR(iter_ptr->status());
@@ -406,7 +445,14 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
 
     auto filename = gen_sst_filename();
     auto location = tablet_mgr->sst_location(metadata.id(), filename);
-    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(location));
+    WritableFileOptions wopts;
+    std::string encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        encryption_meta.swap(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
     sstable::Options options;
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
@@ -418,6 +464,7 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     // record output sstable pb
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(filename);
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesize(builder.FileSize());
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_encryption_meta(encryption_meta);
     return Status::OK();
 }
 

@@ -240,6 +240,7 @@ CONF_mInt32(disk_stat_monitor_interval, "5");
 CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
+CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
 // CONF_Int32(default_num_rows_per_data_block, "1024");
@@ -525,6 +526,11 @@ CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
+
+// if `enable_retry_apply`, it apply failed due to some tolerable error(e.g. memory exceed limit)
+// the failed apply task will retry after `retry_apply_interval_second`
+CONF_mBool(enable_retry_apply, "true");
+CONF_mInt32(retry_apply_interval_second, "30");
 
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
@@ -1237,8 +1243,10 @@ CONF_mInt64(load_tablet_timeout_seconds, "60");
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 // Used by default mv resource group
-CONF_Double(default_mv_resource_group_memory_limit, "0.8");
-CONF_Int32(default_mv_resource_group_cpu_limit, "1");
+CONF_mDouble(default_mv_resource_group_memory_limit, "0.8");
+CONF_mInt32(default_mv_resource_group_cpu_limit, "1");
+CONF_mInt32(default_mv_resource_group_concurrency_limit, "0");
+CONF_mDouble(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
