@@ -60,6 +60,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.ListComparator;
@@ -74,6 +75,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -85,6 +87,7 @@ import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -410,12 +413,18 @@ public class MaterializedViewHandler extends AlterHandler {
                     properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(mvIndexId));
 
                     List<Tablet> originTablets = partition.getIndex(baseIndexId).getTablets();
-                    // List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
+                    WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                    Optional<Long> workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    if (workerGroupId.isEmpty()) {
+                        Warehouse warehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                        ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+                    }
                     List<Long> shadowTabletIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                             originTablets.size(),
                             olapTable.getPartitionFilePathInfo(partitionId),
                             olapTable.getPartitionFileCacheInfo(partitionId),
-                            shardGroupId, shardProperties);
+                            shardGroupId, null, shardProperties, workerGroupId.get());
                     Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                     TabletMeta shadowTabletMeta =
