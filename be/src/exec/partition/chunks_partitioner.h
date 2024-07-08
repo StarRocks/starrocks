@@ -128,6 +128,7 @@ private:
     void _split_chunk_by_partition(HashMapWithKey& hash_map_with_key, const ChunkPtr& chunk,
                                    NewPartitionCallback&& new_partition_cb,
                                    PartitionChunkConsumer&& partition_chunk_consumer) {
+        LOG(ERROR) << "LXH: split_chunk_by_partition: " << (int)_is_passthrough;
         if (!_is_passthrough) {
             _is_passthrough = hash_map_with_key.template append_chunk<EnablePassthrough>(
                     chunk, _partition_columns, _mem_pool.get(), _obj_pool.get(),
