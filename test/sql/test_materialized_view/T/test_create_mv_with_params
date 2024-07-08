@@ -109,7 +109,6 @@ function: wait_async_materialized_view_finish("db_${uuid0}", "test_tbl_with_para
 select count(*) from information_schema.task_runs where `database`="db_${uuid0}" and `DEFINITION` like "%test_tbl_with_params%";
 select * from test_tbl_with_params_mv order by 1;
 
-drop materialized view test_iceberg_mv2_${uuid0};
+drop database default_catalog.db_${uuid0} force;
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
 drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
-drop database db_${uuid0};

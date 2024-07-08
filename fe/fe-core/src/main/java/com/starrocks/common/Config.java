@@ -2865,6 +2865,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether enable strict insert in mv refresh or not by default")
     public static boolean enable_mv_refresh_insert_strict = false;
 
+    @ConfField(mutable = true, comment = "The default timeout for planner optimize when refresh materialized view, 30s by " +
+            "default")
+    public static int mv_refresh_default_planner_optimize_timeout = 30000; // 30s
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
