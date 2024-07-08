@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -28,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 
@@ -59,6 +61,11 @@ public class AggregateFunctionRollupUtils {
             // Functions and rollup functions are not the same.
             .put(FunctionSet.BITMAP_AGG, FunctionSet.BITMAP_UNION)
             .put(FunctionSet.ARRAY_AGG_DISTINCT, FunctionSet.ARRAY_UNIQUE_AGG)
+            .build();
+
+    public static final Set<String> NON_CUMULATIVE_ROLLUP_FUNCTION_MAP = ImmutableSet.<String>builder()
+            .add(FunctionSet.MAX)
+            .add(FunctionSet.MIN)
             .build();
 
     public static final Map<String, String> REWRITE_ROLLUP_FUNCTION_MAP = ImmutableMap.<String, String>builder()
@@ -110,5 +117,15 @@ public class AggregateFunctionRollupUtils {
         } else {
             return oldColRef;
         }
+    }
+
+    public static boolean isNonCumulativeFunction(CallOperator aggCall) {
+        if (NON_CUMULATIVE_ROLLUP_FUNCTION_MAP.contains(aggCall.getFnName())) {
+            return true;
+        }
+        if (FunctionSet.COUNT.equals(aggCall.getFnName()) && aggCall.isDistinct()) {
+            return true;
+        }
+        return false;
     }
 }

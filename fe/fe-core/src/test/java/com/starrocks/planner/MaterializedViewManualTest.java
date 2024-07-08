@@ -390,6 +390,22 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 String query = "select t1a, sum(t1b + 1) as total from test.test_all_type group by t1a;";
                 sql(query).nonMatch("mv0");
             }
+            {
+                String query = "select t1a, max(t1b), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, max(concat(t1b,'.')), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, min(substr(t1b,1)), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, count(distinct t1b), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
         });
     }
 }
