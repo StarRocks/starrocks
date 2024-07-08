@@ -7005,11 +7005,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 createPos(context));
     }
 
+    public List<String> parseListPartitionValueList(StarRocksParser.ListPartitionValueListContext valueListContext) {
+        return valueListContext.listPartitionValue().stream().map(x -> {
+            if (x.NULL() != null) {
+                return PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE;
+            } else {
+                return ((StringLiteral) visit(x.string())).getStringValue();
+            }
+        }).collect(toList());
+    }
+
     @Override
     public ParseNode visitSingleItemListPartitionDesc(StarRocksParser.SingleItemListPartitionDescContext context) {
-        List<String> values =
-                context.stringList().string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue())
-                        .collect(toList());
+        List<String> values = parseListPartitionValueList(context.listPartitionValueList());
         boolean ifNotExists = context.IF() != null;
         Map<String, String> properties = null;
         if (context.propertyList() != null) {
@@ -7026,13 +7034,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitMultiItemListPartitionDesc(StarRocksParser.MultiItemListPartitionDescContext context) {
         boolean ifNotExists = context.IF() != null;
-        List<List<String>> multiValues = new ArrayList<>();
-        for (StarRocksParser.StringListContext stringListContext : context.stringList()) {
-            List<String> values =
-                    stringListContext.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue())
-                            .collect(toList());
-            multiValues.add(values);
-        }
+        List<List<String>> multiValues = context.listPartitionValueList().stream()
+                .map(l -> parseListPartitionValueList(l))
+                .collect(toList());
         Map<String, String> properties = null;
         if (context.propertyList() != null) {
             properties = new HashMap<>();
