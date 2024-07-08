@@ -776,6 +776,19 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column");
                 }
                 partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
+<<<<<<< HEAD
+=======
+            } else if (partitionInfo.isListPartition()) {
+                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                Set<String> partitionColumns = listPartitionInfo.getPartitionColumns(table.getIdToColumn()).stream()
+                        .map(col -> col.getName())
+                        .collect(Collectors.toSet());
+                // mv's partition columns should be subset of the base table's partition columns
+                if (!partitionColumns.contains(slotRef.getColumnName())) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+>>>>>>> 426454d128 ([Feature] List Partition For AMV(Part 3): Support nullable partition columns for list partition table/materialized view (#47797))
             } else {
                 throw new SemanticException("Materialized view related base table partition type: " +
                         partitionInfo.getType().name() + " not supports");

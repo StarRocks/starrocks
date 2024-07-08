@@ -23,10 +23,12 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
@@ -83,6 +85,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -953,13 +956,35 @@ public class MvUtils {
         return rangeParts;
     }
 
-    public static List<Expr> convertList(Expr slotRef, List<LiteralExpr> values) {
-        List<Expr> listPart = Lists.newArrayList();
-        for (LiteralExpr value : values) {
-            BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, slotRef, value);
-            listPart.add(predicate);
+    /**
+     * Convert partition range to IN predicate
+     * @param slotRef the comparison column
+     * @param values the target partition values
+     * @return in predicate
+     */
+    public static Expr convertToInPredicate(Expr slotRef, List<Expr> values) {
+        if (values == null || values.isEmpty()) {
+            return new BoolLiteral(true);
         }
-        return listPart;
+        // to avoid duplicate values
+        return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+    }
+
+    /**
+     * Convert partition range to IN predicate scalar operator
+     * @param col the comparison operator
+     * @param values the target scalar operators
+     * @return in predicate scalar operator
+     */
+    public static ScalarOperator convertToInPredicate(ScalarOperator col,
+                                                      List<ScalarOperator> values) {
+        if (values == null || values.isEmpty()) {
+            return ConstantOperator.TRUE;
+        }
+        List<ScalarOperator> inArgs = Lists.newArrayList();
+        inArgs.add(col);
+        inArgs.addAll(values);
+        return new InPredicateOperator(false, inArgs);
     }
 
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {

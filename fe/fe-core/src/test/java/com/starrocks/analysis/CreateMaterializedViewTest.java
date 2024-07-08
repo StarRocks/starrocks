@@ -3711,6 +3711,37 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("list_partition_tbl1");
     }
 
+
+    @Test
+    public void testCreateMaterializedViewOnListPartitionTables3() {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM;";
+        starRocksAssert.withTable(
+                createSQL,
+                () -> {
+                    String sql = "create materialized view list_partition_mv1 " +
+                            "partition by (province) " +
+                            "distributed by hash(dt, province) buckets 10 " +
+                            "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+                    try {
+                        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                    } catch (Exception e) {
+                        Assert.fail(e.getMessage());
+                    }
+                });
+    }
+
     @Test
     public void testCreateMaterializedViewWithTableAlias1() throws Exception {
         String sql = "create materialized view mv1 " +

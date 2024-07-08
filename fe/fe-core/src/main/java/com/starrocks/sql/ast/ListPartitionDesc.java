@@ -99,12 +99,6 @@ public class ListPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
-        for (ColumnDef columnDef : columnDefList) {
-            if (columnDef.isAllowNull()) {
-                throw new AnalysisException("The list partition column does not support allow null currently, column:["
-                        + columnDef.getName() + "] should be set to not null.");
-            }
-        }
         // analyze single list property
         this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
