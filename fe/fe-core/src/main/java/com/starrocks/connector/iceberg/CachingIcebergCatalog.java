@@ -385,6 +385,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return cacheBuilder;
     }
 
+    @Override
+    public void clear() throws IOException {
+        databases.invalidateAll();
+        tables.invalidateAll();
+        partitionNames.invalidateAll();
+        dataFileCache.invalidateAll();
+        deleteFileCache.invalidateAll();
+        delegate.clear();
+    }
+
     public static class IcebergTableName {
         private final String dbName;
         private final String tableName;

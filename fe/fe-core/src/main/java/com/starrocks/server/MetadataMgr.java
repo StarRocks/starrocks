@@ -131,7 +131,7 @@ public class MetadataMgr {
     private final LoadingCache<String, QueryMetadatas> metadataCacheByQueryId =
             CacheBuilder.newBuilder()
                     .maximumSize(Config.catalog_metadata_cache_size)
-                    .expireAfterAccess(300, TimeUnit.SECONDS)
+                    .expireAfterAccess(30, TimeUnit.SECONDS)
                     .removalListener(CACHE_REMOVAL_LISTENER)
                     .build(new CacheLoader<String, QueryMetadatas>() {
                         @NotNull
