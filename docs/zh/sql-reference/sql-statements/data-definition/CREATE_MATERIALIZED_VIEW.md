@@ -266,7 +266,7 @@ AS
   >
   > Unique Key 约束和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
 
-- `resource_group`: 为物化视图刷新任务设置资源组。更多关于资源组信息，请参考[资源隔离](../../../administration/management/resource_management/resource_group.md)。
+- `resource_group`: 为物化视图刷新任务设置资源组。默认值为 `default_mv_wg`，即一个系统定义的，专门用于物化视图刷新的资源组。该资源组的 `cpu_core_limit` 为 `1`，`mem_limit` 为 `0.8`。更多关于资源组信息，请参考[资源隔离](../../../administration/management/resource_management/resource_group.md)。
 - `query_rewrite_consistency`: 指定当前异步物化视图的查询改写规则。该属性自 v3.2 起支持。有效值：
   - `disable`：禁用基于该异步物化视图进行自动查询改写。
   - `checked`（默认值）：仅在物化视图满足时效性要求时启用自动查询改写，即：
