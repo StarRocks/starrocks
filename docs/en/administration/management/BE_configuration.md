@@ -491,6 +491,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
 
+##### primary_key_limit_size
+
+- Default: 128
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of a key column in Primary Key tables.
+- Introduced in: v2.5
+
 ##### drop_tablet_worker_count
 
 - Default: 3
@@ -3312,7 +3321,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
+- Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
 - Introduced in: v3.1
 
 <!--
@@ -3332,7 +3341,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster.
 - Introduced in: v3.1
 
 <!--
@@ -4209,42 +4218,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-<<<<<<< HEAD
-##### default_mv_resource_group_memory_limit
-
-- Default: 0.8
-- Type: Double
-- Unit:
-- Is mutable: No
-- Description: The maximum memory percentage that can be used by the materialized view in a resource group.
-- Introduced in: v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- Default: 1
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### primary_key_limit_size
-
-- Default: 128
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-=======
->>>>>>> f08863fe3d ([Doc] Add docs for MV Default Resource Group (#47695))
 ##### primary_key_batch_get_index_memory_limit
 
 - Default: 104857600

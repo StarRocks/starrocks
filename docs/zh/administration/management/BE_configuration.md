@@ -491,6 +491,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
 
+##### primary_key_limit_size
+
+- 默认值：128
+- 类型：Int
+- 单位：Byte
+- 是否动态：是
+- 描述：主键表中单条主键值最大长度。
+- 引入版本：v2.5
+
 ##### drop_tablet_worker_count
 
 - 默认值：3
@@ -3255,7 +3264,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
+- 描述：存算分离模式下是否使用 Data Cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
 - 引入版本：v3.1
 
 <!--
@@ -3275,7 +3284,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离模式下，block data cache 最多可使用的磁盘容量百分比。
+- 描述：存算分离模式下，Data Cache 最多可使用的磁盘容量百分比。
 - 引入版本：v3.1
 
 <!--
@@ -4152,42 +4161,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-<<<<<<< HEAD
-##### default_mv_resource_group_memory_limit
-
-- 默认值：0.8
-- 类型：Double
-- 单位：
-- 是否动态：否
-- 描述：物化视图刷新所占用的资源组 Memory 上限，默认 80%。
-- 引入版本：v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- 默认值：1
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：物化视图刷新占用的资源组 CPU 比例，默认 1%。
-- 引入版本：-
--->
-
-<!--
-##### primary_key_limit_size
-
-- 默认值：128
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-=======
->>>>>>> f08863fe3d ([Doc] Add docs for MV Default Resource Group (#47695))
 ##### primary_key_batch_get_index_memory_limit
 
 - 默认值：104857600
