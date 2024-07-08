@@ -36,6 +36,8 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.Assert;
@@ -142,11 +144,16 @@ public class LeaderOpExecutorTest {
 
     @Test
     public void testCreateTMasterOpRequest(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager warehouseManager) {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+
+        };
         new Expectations() {
             {
                 globalStateMgr.getServingState();
-                minTimes = 0;
-                globalStateMgr.isReady();
                 minTimes = 0;
 
                 globalStateMgr.getWarehouseMgr();
