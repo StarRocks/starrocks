@@ -65,6 +65,33 @@ displayed_sidebar: "Chinese"
 > - 您最多只能创建一个 `short_query` 资源组。
 > - StarRocks 不会硬限制 `short_query` 资源组的 CPU 资源。
 
+#### 系统定义资源组
+
+每个 StarRocks 示例中有两个系统定义资源组：`default_wg` 和 `default_mv_wg`。
+
+##### default_wg
+
+如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的资源配置如下：
+
+- `cpu_core_limit`：1 (&le;2.3.7 版本) 或 BE 的 CPU 核数（&gt;2.3.7版本）。
+- `mem_limit`：100%。
+- `concurrency_limit`：0。
+- `big_query_cpu_second_limit`：0。
+- `big_query_scan_rows_limit`：0。
+- `big_query_mem_limit`：0。
+- `spill_mem_limit_threshold`: 1。
+
+##### default_mv_wg
+
+如果创建异步物化视图时没有通过 `resource_group` 属性指定资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的资源配置如下：
+
+- `cpu_core_limit`：1。
+- `mem_limit`：80%。
+- `concurrency_limit`: 0。
+- `spill_mem_limit_threshold`: 80%。
+
+您可以通过 BE 配置项 `default_mv_resource_group_cpu_limit`、`default_mv_resource_group_memory_limit`、`default_mv_resource_group_concurrency_limit` 和 `default_mv_resource_group_spill_mem_limit_threshold` 调整该资源组的 CPU 上限、内存上限、并发上限和落盘阈值。
+
 ### 分类器
 
 您可以为每个资源组关联一个或多个分类器。系统将会根据所有分类器中设置的条件，为每个查询任务选择一个匹配度最高的分类器，并根据生效的分类器所属的资源组为该查询任务分配资源。
@@ -280,16 +307,6 @@ FE 节点 **fe.audit.log** 的 `ResourceGroup` 列和 `EXPLAIN VERBOSE <query>` 
 - 如果该查询不受资源组管理，那么该列值为空字符串 `""`。
 
 - 如果该查询受资源组管理，但是没有匹配到分类器，那么该列值为空字符串 `""`，表示使用默认资源组 `default_wg`。
-
-默认资源组 `default_wg` 的资源配置如下：
-
-- `cpu_core_limit`：1 (&le;2.3.7 版本) 或 BE 的 CPU 核数（&gt;2.3.7版本）。
-- `mem_limit`：100%。
-- `concurrency_limit`：0。
-- `big_query_cpu_second_limit`：0。
-- `big_query_scan_rows_limit`：0。
-- `big_query_mem_limit`：0。
-- `spill_mem_limit_threshold`: 1。
 
 ### 监控资源组
 
