@@ -127,10 +127,10 @@ If you choose AWS S3 as storage for your Paimon cluster, configure `StorageCrede
 The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
 | Parameter                   | Required | Description                                                                              |
-| --------------------------- | -------- |------------------------------------------------------------------------------------------|
-| aws.s3.endpoint             | Yes      | The endpoint in which your AWS S3 bucket resides. Example: `s3.us-west-2.amazonaws.com`. |
-| aws.s3.access_key           | No       | The access key of your IAM user.                                                         |
-| aws.s3.secret_key           | No       | The secret key of your IAM user.                                                         |
+| --------------------------- | ----- |------------------------------------------------------------------------------------------|
+| aws.s3.endpoint             | Yes   | The endpoint in which your AWS S3 bucket resides. Example: `s3.us-west-2.amazonaws.com`. |
+| aws.s3.access_key           | Yes   | The access key of your IAM user.                                                         |
+| aws.s3.secret_key           | Yes   | The secret key of your IAM user.                                                         |
 
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
