@@ -126,8 +126,12 @@ public class SlotManager {
     public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         resourceUsageMonitor.registerResourceAvailableListener(this::notifyResourceUsageAvailable);
 
-        this.slotSelectionStrategy = new DefaultSlotSelectionStrategy(
-                resourceUsageMonitor::isGlobalResourceOverloaded, resourceUsageMonitor::isGroupResourceOverloaded);
+        if (Config.enable_query_queue_v2) {
+            this.slotSelectionStrategy = new SlotSelectionStrategyV2();
+        } else {
+            this.slotSelectionStrategy = new DefaultSlotSelectionStrategy(
+                    resourceUsageMonitor::isGlobalResourceOverloaded, resourceUsageMonitor::isGroupResourceOverloaded);
+        }
 
         this.slotTracker = new SlotTracker(ImmutableList.of(slotSelectionStrategy, new SlotListenerForPipelineDriverAllocator()));
     }
