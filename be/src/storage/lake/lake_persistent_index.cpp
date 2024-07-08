@@ -160,7 +160,8 @@ Status LakePersistentIndex::minor_compact() {
     }
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
     uint64_t filesize = 0;
-    RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesize));
+    FirstLastKeys first_last_keys;
+    RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesize, &first_last_keys));
     RETURN_IF_ERROR(wf->close());
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
@@ -172,6 +173,8 @@ Status LakePersistentIndex::minor_compact() {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
+    sstable_pb.set_first_key(first_last_keys.first);
+    sstable_pb.set_last_key(first_last_keys.second);
     sstable_pb.set_max_rss_rowid(_immutable_memtable->max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
@@ -233,7 +236,7 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                    IOStat* stat) {
-    std::set<KeyIndex> not_founds;
+    KeyIndexSet not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number()));
     KeyIndexSet& key_indexes = not_founds;
@@ -461,9 +464,12 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     RETURN_IF_ERROR(merge_sstables(std::move(merging_iter_ptr), &builder, merge_base_level));
     RETURN_IF_ERROR(wf->close());
 
+    const auto first_last_keys = builder.FirstLastKeys();
     // record output sstable pb
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(filename);
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesize(builder.FileSize());
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_first_key(first_last_keys.first);
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_last_key(first_last_keys.second);
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_encryption_meta(encryption_meta);
     return Status::OK();
 }

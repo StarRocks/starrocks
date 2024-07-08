@@ -38,6 +38,7 @@ struct TableBuilder::Rep {
     Status status;
     BlockBuilder data_block;
     BlockBuilder index_block;
+    std::string first_key;
     std::string last_key;
     int64_t num_entries{0};
     bool closed{false}; // Either Finish() or Abandon() has been called.
@@ -68,6 +69,10 @@ TableBuilder::~TableBuilder() {
     assert(rep_->closed); // Catch errors where caller forgot to call Finish()
     delete rep_->filter_block;
     delete rep_;
+}
+
+std::pair<std::string, std::string> TableBuilder::FirstLastKeys() const {
+    return std::make_pair(rep_->first_key, rep_->last_key);
 }
 
 Status TableBuilder::ChangeOptions(const Options& options) {
@@ -105,6 +110,10 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
 
     if (r->filter_block != nullptr) {
         r->filter_block->AddKey(key);
+    }
+
+    if (r->first_key.empty()) {
+        r->first_key.assign(key.get_data(), key.get_size());
     }
 
     r->last_key.assign(key.get_data(), key.get_size());
