@@ -147,7 +147,7 @@ StatusOr<TFetchDataResultPtr> CustomizedResultWriter::_process_chunk(Chunk* chun
         row.__isset.null_bits = true;
         row.null_bits = std::move(null_bits);
         row.__isset.packed_data = true;
-        row.packed_data = std::move(packed_data.ToString());
+        row.packed_data = packed_data.ToString();
         packed_data.resize(0);
         std::string str_row;
         RETURN_IF_ERROR(compact_serializer.serialize(&row, &str_row));
