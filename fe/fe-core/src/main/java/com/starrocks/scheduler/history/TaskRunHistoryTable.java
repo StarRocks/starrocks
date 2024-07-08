@@ -55,7 +55,7 @@ public class TaskRunHistoryTable {
                     "task_run_id string NOT NULL, " +
                     "create_time datetime NOT NULL, " +
 
-                            // indexed columns
+                    // indexed columns
                     "task_name string NOT NULL, " +
                             "task_state STRING NOT NULL, " +
 
@@ -69,7 +69,7 @@ public class TaskRunHistoryTable {
 
                     // properties
                     "PRIMARY KEY (task_id, task_run_id, create_time) " +
-                            "PARTITION BY date_trunc('DAY', create_time) " +
+                    "PARTITION BY date_trunc('DAY', create_time) " +
                     "DISTRIBUTED BY HASH(task_id) BUCKETS 8 " +
                             "PROPERTIES( " +
                             "'replication_num' = '1', " +
