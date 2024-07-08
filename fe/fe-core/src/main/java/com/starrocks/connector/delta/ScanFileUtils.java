@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import io.delta.kernel.data.Row;
@@ -32,32 +33,25 @@ public class ScanFileUtils {
         public long numRecords;
     }
 
-    public static long getFileRows(Row file) {
+    public static long getFileRows(Row file, FileStatus fileStatus, long estimateRowSize) {
         String stats = file.getString(ADD_FILE_STATS_ORDINAL);
-        if (stats == null) {
-            throw new IllegalArgumentException("There is no `stats` entry in the add file row");
+        if (stats != null) {
+            Records records = GsonUtils.GSON.fromJson(stats, Records.class);
+            if (records != null) {
+                return records.numRecords;
+            }
         }
 
-        Records records = GsonUtils.GSON.fromJson(stats, Records.class);
-        if (records == null) {
-            throw new IllegalArgumentException("There is no `records` entry in the stats row");
-        }
-
-        return records.numRecords;
+        return fileStatus.getSize() / estimateRowSize;
     }
 
     public static DeltaLakeAddFileStatsSerDe getColumnStatistics(Row file) {
         String stats = file.getString(ADD_FILE_STATS_ORDINAL);
         if (stats == null) {
-            throw new IllegalArgumentException("There is no `stats` entry in the add file row");
+            return new DeltaLakeAddFileStatsSerDe(1, null, null, null);
         }
 
-        DeltaLakeAddFileStatsSerDe statistics = GsonUtils.GSON.fromJson(stats, DeltaLakeAddFileStatsSerDe.class);
-        if (statistics == null) {
-            throw new IllegalArgumentException("There is no entry in the stats row");
-        }
-
-        return statistics;
+        return GsonUtils.GSON.fromJson(stats, DeltaLakeAddFileStatsSerDe.class);
     }
 
     private static Row getAddFileEntry(Row scanFileInfo) {
@@ -67,7 +61,8 @@ public class ScanFileUtils {
         return scanFileInfo.getStruct(ADD_FILE_ORDINAL);
     }
 
-    public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(boolean needStats, Row file) {
+    public static Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> convertFromRowToFileScanTask(
+            boolean needStats, Row file, long estimizateRowSize) {
         FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(file);
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(file);
         Row addFileRow = getAddFileEntry(file);
@@ -78,7 +73,7 @@ public class ScanFileUtils {
             fileScanTask = new FileScanTask(fileStatus, stats.numRecords, partitionValues);
             return new Pair<>(fileScanTask, stats);
         } else {
-            long records = ScanFileUtils.getFileRows(addFileRow);
+            long records = ScanFileUtils.getFileRows(addFileRow, fileStatus, estimizateRowSize);
             fileScanTask = new FileScanTask(fileStatus, records, partitionValues);
             return new Pair<>(fileScanTask, null);
         }

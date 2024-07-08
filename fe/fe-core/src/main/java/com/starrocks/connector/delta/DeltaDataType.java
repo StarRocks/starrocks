@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.delta;
 
+import com.starrocks.catalog.Type;
 import io.delta.kernel.types.ArrayType;
 import io.delta.kernel.types.BinaryType;
 import io.delta.kernel.types.BooleanType;
@@ -109,5 +110,11 @@ public enum DeltaDataType {
 
     public static boolean canUseStatsType(DataType type) {
         return isPrimitiveType(type) || type instanceof DecimalType;
+    }
+
+    public static int getTypeSize(DataType type) {
+        switch (dataType) {
+            case
+        }
     }
 }
