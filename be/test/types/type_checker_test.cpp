@@ -433,10 +433,10 @@ TEST_F(TypeCheckerTest, NotSupportSqlServerDateTimeOffsetType) {
 
 // Define unit test for byte array, oracle.jdbc.OracleBlob, or [B
 TEST_F(TypeCheckerTest, SupporByteArrayType) {
-   // SlotDescriptor binary_type_slot(0, "binary_type_slot", TypeDescriptor(TYPE_BINARY));
-   // auto status_or_type = type_checker_manager_.checkType("byte[]", &binary_type_slot);
-   // ASSERT_TRUE(status_or_type.ok());
-   // ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARBINARY);
+    // SlotDescriptor binary_type_slot(0, "binary_type_slot", TypeDescriptor(TYPE_BINARY));
+    // auto status_or_type = type_checker_manager_.checkType("byte[]", &binary_type_slot);
+    // ASSERT_TRUE(status_or_type.ok());
+    // ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARBINARY);
 
     SlotDescriptor varbinary_type_slot(0, "varbinary_type_slot", TypeDescriptor(TYPE_VARBINARY));
     auto status_or_type = type_checker_manager_.checkType("byte[]", &varbinary_type_slot);
