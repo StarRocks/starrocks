@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import io.delta.kernel.types.BinaryType;
 import io.delta.kernel.types.BooleanType;
 import io.delta.kernel.types.ByteType;
 import io.delta.kernel.types.DataType;
@@ -27,6 +28,7 @@ import io.delta.kernel.types.FloatType;
 import io.delta.kernel.types.IntegerType;
 import io.delta.kernel.types.LongType;
 import io.delta.kernel.types.ShortType;
+import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.types.TimestampNTZType;
@@ -37,11 +39,11 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 public class DeltaLakeFileStats {
     private static final DateTimeFormatter TIMESTAMP_NTZ_FORMAT =
@@ -51,18 +53,23 @@ public class DeltaLakeFileStats {
 
     private final StructType schema;
     private final Set<String> nonPartitionPrimitiveColumns;
+    private final Set<String> partitionPrimitiveColumns;
     private long recordCount;
     private long size;
     private final Map<String, Object> minValues;
     private final Map<String, Object> maxValues;
-    private final Map<String, Object> nullCounts;
+    private final Map<String, Double> nullCounts;
     private final Set<String> corruptedStats;
     private boolean hasValidColumnMetrics;
 
     public DeltaLakeFileStats(StructType schema, Set<String> nonPartitionPrimitiveColumns,
-                              DeltaLakeAddFileStatsSerDe fileStat, long numRecords, long fileSize) {
+                              Set<String> partitionPrimitiveColumns,
+                              DeltaLakeAddFileStatsSerDe fileStat,
+                              Map<String, String> partitionValues,
+                              long numRecords, long fileSize) {
         this.schema = schema;
         this.nonPartitionPrimitiveColumns = nonPartitionPrimitiveColumns;
+        this.partitionPrimitiveColumns = partitionPrimitiveColumns;
         this.recordCount = numRecords;
         this.size = fileSize;
 
@@ -74,19 +81,20 @@ public class DeltaLakeFileStats {
             this.corruptedStats = null;
             this.hasValidColumnMetrics = false;
         } else {
-            this.minValues = fileStat.minValues.entrySet().stream()
-                    .filter(e -> nonPartitionPrimitiveColumns.contains(e.getKey()))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            this.maxValues = fileStat.maxValues.entrySet().stream()
-                    .filter(e -> nonPartitionPrimitiveColumns.contains(e.getKey()))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            this.nullCounts = fileStat.nullCount.entrySet().stream()
-                    .filter(e -> nonPartitionPrimitiveColumns.contains(e.getKey()))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            this.corruptedStats = nonPartitionPrimitiveColumns.stream()
-                    .filter(col -> !minValues.containsKey(col) &&
-                            (!nullCounts.containsKey(col) || ((Double) nullCounts.get(col)).longValue() != recordCount))
-                    .collect(Collectors.toSet());
+            this.minValues = new HashMap<>();
+            this.maxValues = new HashMap<>();
+            this.nullCounts = new HashMap<>();
+            this.corruptedStats = new HashSet<>();
+
+            this.updateStats(this.minValues, fileStat.minValues, fileStat.nullCount, numRecords, i -> (i > 0));
+            this.updateStats(this.maxValues, fileStat.maxValues, fileStat.nullCount, numRecords, i -> (i < 0));
+            this.updateNullCount(fileStat.nullCount);
+
+            if (this.partitionPrimitiveColumns != null && partitionValues != null) {
+                this.updatePartitionStats(this.minValues, partitionValues, i -> (i > 0));
+                this.updatePartitionStats(this.maxValues, partitionValues, i -> (i < 0));
+                this.updatePartitionNullCount(partitionValues, numRecords);
+            }
             this.hasValidColumnMetrics = true;
         }
     }
@@ -94,6 +102,7 @@ public class DeltaLakeFileStats {
     public DeltaLakeFileStats(long recordCount) {
         this.schema = null;
         this.nonPartitionPrimitiveColumns = null;
+        this.partitionPrimitiveColumns = null;
         this.recordCount = recordCount;
         this.size = 0;
         this.minValues = null;
@@ -125,43 +134,46 @@ public class DeltaLakeFileStats {
         if (field == null) {
             return builder.build();
         }
-        if (nonPartitionPrimitiveColumns.contains(colName)) {
-            fillNonParititionValues(builder, colName, colType, field.getDataType());
+        if (nonPartitionPrimitiveColumns.contains(colName) ||
+                (partitionPrimitiveColumns != null && partitionPrimitiveColumns.contains(colName))) {
+            fillMinMaxValue(builder, colName, field.getDataType());
         }
         return builder.build();
     }
 
-    private void fillNonParititionValues(ColumnStatistic.Builder builder, String colName, Type colType,
-                                        DataType deltaDataType) {
+    private void fillMinMaxValue(ColumnStatistic.Builder builder, String colName, DataType colType) {
         if (minValues != null) {
-            if (colType.isStringType()) {
-                String minString = minValues.get(colName).toString();
-                builder.setMinString(minString);
-            } else {
-                Optional<Double> res = getBoundStatistic(colName, deltaDataType, minValues);
-                res.ifPresent(builder::setMinValue);
+            Object v = minValues.get(colName);
+            if (v != null) {
+                if (colType == StringType.STRING || colType == BinaryType.BINARY) {
+                    builder.setMinString(v.toString());
+                } else {
+                    builder.setMinValue((double) v);
+                }
             }
         }
 
         if (maxValues != null) {
-            if (colType.isStringType()) {
-                String maxString = maxValues.get(colName).toString();
-                builder.setMaxString(maxString);
-            } else {
-                Optional<Double> res = getBoundStatistic(colName, deltaDataType, maxValues);
-                res.ifPresent(builder::setMaxValue);
+            Object v = maxValues.get(colName);
+            if (v != null) {
+                if (colType == StringType.STRING || colType == BinaryType.BINARY) {
+                    builder.setMaxString(v.toString());
+                } else {
+                    builder.setMaxValue((double) v);
+                }
             }
         }
 
         if (nullCounts != null) {
-            Long nullCount = getNullCount(colName);
+            Double nullCount = nullCounts.get(colName);
             if (nullCount != null) {
                 builder.setNullsFraction(nullCount * 1.0 / Math.max(recordCount, 1));
             }
         }
     }
 
-    public void update(DeltaLakeAddFileStatsSerDe stat, long numRecords, long fileSize) {
+    public void update(DeltaLakeAddFileStatsSerDe stat, Map<String, String> partitionValues,
+                       long numRecords, long fileSize) {
         this.recordCount += numRecords;
         this.size += fileSize;
 
@@ -180,18 +192,38 @@ public class DeltaLakeFileStats {
         updateStats(this.minValues, stat.minValues, stat.nullCount, stat.numRecords, i -> (i > 0));
         updateStats(this.maxValues, stat.maxValues, stat.nullCount, stat.numRecords, i -> (i < 0));
         updateNullCount(stat.nullCount);
-    }
 
-    private static Object sumNullCount(Object left, Object value) {
-        return (Double) left + (Double) value;
-    }
-
-    private Optional<Double> getBoundStatistic(String colName, DataType type, Map<String, Object> boundValues) {
-        Object value = boundValues.get(colName);
-        if (value == null) {
-            return Optional.empty();
+        if (partitionValues == null) {
+            return;
         }
-        return convertObjectToOptionalDouble(type, value);
+
+        updatePartitionStats(this.minValues, partitionValues, i -> (i > 0));
+        updatePartitionStats(this.maxValues, partitionValues, i -> (i < 0));
+        updatePartitionNullCount(partitionValues, numRecords);
+    }
+
+    private static Double sumNullCount(Double left, Double right) {
+        return left + right;
+    }
+
+    private void updatePartitionStats(Map<String, Object> curStat, Map<String, String> newStat,
+                                      Predicate<Integer> predicate) {
+        for (String col : partitionPrimitiveColumns) {
+            String newValue = newStat.get(col);
+            if (newValue == null) {
+                continue;
+            }
+
+            DataType type = schema.get(col).getDataType();
+            Object newParsedValue = parsePartitionValue(type, newValue);
+            Object oldValue = curStat.putIfAbsent(col, newParsedValue);
+            if (oldValue != null) {
+                Comparator<Object> comparator = DeltaLakeComparators.forType(type);
+                if (predicate.test(comparator.compare(oldValue, newParsedValue))) {
+                    curStat.put(col, newParsedValue);
+                }
+            }
+        }
     }
 
     private void updateStats(Map<String, Object> curStat,
@@ -215,11 +247,16 @@ public class DeltaLakeFileStats {
             }
 
             DataType type = schema.get(col).getDataType();
-            Object oldValue = curStat.putIfAbsent(col, newValue);
+            Object newParsedValue = parseMinMaxValue(type, newValue);
+            if (newParsedValue == null) {
+                continue;
+            }
+
+            Object oldValue = curStat.putIfAbsent(col, newParsedValue);
             if (oldValue != null) {
                 Comparator<Object> comparator = DeltaLakeComparators.forType(type);
-                if (predicate.test(comparator.compare(oldValue, newValue))) {
-                    curStat.put(col, newValue);
+                if (predicate.test(comparator.compare(oldValue, newParsedValue))) {
+                    curStat.put(col, newParsedValue);
                 }
             }
         }
@@ -227,7 +264,18 @@ public class DeltaLakeFileStats {
 
     private void updateNullCount(Map<String, Object> nullCounts) {
         for (String col : nonPartitionPrimitiveColumns) {
-            this.nullCounts.merge(col, nullCounts.get(col), DeltaLakeFileStats::sumNullCount);
+            Object v = nullCounts.get(col);
+            if (v != null) {
+                this.nullCounts.merge(col, (Double) v, DeltaLakeFileStats::sumNullCount);
+            }
+        }
+    }
+
+    private void updatePartitionNullCount(Map<String, String> partitionValues, long numRecords) {
+        for (String col : partitionPrimitiveColumns) {
+            if (partitionValues.containsKey(col) && partitionValues.get(col) == null) {
+                nullCounts.merge(col, (double) numRecords, DeltaLakeFileStats::sumNullCount);
+            }
         }
     }
 
@@ -246,42 +294,36 @@ public class DeltaLakeFileStats {
         return time.atZone(ZoneOffset.UTC).toEpochSecond();
     }
 
-    private static Optional<Double> convertObjectToOptionalDouble(DataType type, Object value) {
-        // TODO: Decimal
-        double result;
-
-        if (type instanceof BooleanType) {
-            result = (boolean) value ? 1 : 0;
-        } else if (type instanceof ByteType) {
-            result = (double) value;
-        } else if (type instanceof ShortType) {
-            result = (double) value;
-        } else if (type instanceof IntegerType) {
-            result = (double) value;
-        } else if (type instanceof LongType) {
-            result = (double) value;
-        } else if (type instanceof FloatType) {
-            result = (double) value;
-        } else if (type instanceof DoubleType) {
-            result = (double) value;
-        } else if (type instanceof TimestampNTZType) {
-            result = parseTimestampNTZ((String) value);
-        } else if (type instanceof TimestampType) {
-            result = parseTimestampWithAtZone((String) value);
-        } else if (type instanceof DateType) {
-            result = parseDate((String) value);
+    private static Object parseMinMaxValue(DataType type, Object value) {
+        if (type == BooleanType.BOOLEAN) {
+            return (boolean) value ? 1d : 0d;
+        } else if (type == ByteType.BYTE || type == ShortType.SHORT || type == IntegerType.INTEGER
+                || type == LongType.LONG || type == FloatType.FLOAT || type == DoubleType.DOUBLE
+                || type == StringType.STRING || type == BinaryType.BINARY) {
+            return value;
+        } else if (type == TimestampNTZType.TIMESTAMP_NTZ) {
+            return parseTimestampNTZ((String) value);
+        } else if (type == TimestampType.TIMESTAMP) {
+            return parseTimestampWithAtZone((String) value);
+        } else if (type == DateType.DATE) {
+            return parseDate((String) value);
         } else {
-            return Optional.empty();
-        }
-
-        return Optional.of(result);
-    }
-
-    private Long getNullCount(String col) {
-        Object v = nullCounts.get(col);
-        if (v == null) {
             return null;
         }
-        return ((Double) v).longValue();
+    }
+
+    private Object parsePartitionValue(DataType type, String value) {
+        if (type == BooleanType.BOOLEAN) {
+            return value.equalsIgnoreCase("false") ? 0d : 1d;
+        } else if (type == ByteType.BYTE || type == ShortType.SHORT || type == IntegerType.INTEGER
+                || type == LongType.LONG || type == FloatType.FLOAT || type == DoubleType.DOUBLE) {
+            return Double.parseDouble(value);
+        } else if (type == StringType.STRING || type == BinaryType.BINARY) {
+            return value;
+        } else if (type == DateType.DATE || type == TimestampType.TIMESTAMP || type == TimestampNTZType.TIMESTAMP_NTZ) {
+            return parseDate(value);
+        } else {
+            return null;
+        }
     }
 }

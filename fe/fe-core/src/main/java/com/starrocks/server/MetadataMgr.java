@@ -755,12 +755,12 @@ public class MetadataMgr {
         return ImmutableList.copyOf(files.build());
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfoForPartitions(Table table, List<String> partitionNames) {
+    public List<RemoteFileInfo> getRemotePartitions(Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfoForPartitions(table, partitionNames)
+                connectorMetadata.get().getRemotePartitions(table, partitionNames)
                         .forEach(files::add);
             } catch (Exception e) {
                 LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",

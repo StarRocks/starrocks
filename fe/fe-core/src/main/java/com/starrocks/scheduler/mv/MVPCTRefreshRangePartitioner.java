@@ -188,15 +188,16 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         // range partitioned materialized views
         boolean isAutoRefresh = mvContext.getTaskType().isAutoRefresh();
         int partitionTTLNumber = mvContext.getPartitionTTLNumber();
+        boolean isRefreshMvBaseOnNonRefTables = needsRefreshBasedOnNonRefTables(snapshotBaseTables);
         Set<String> mvRangePartitionNames = getMVPartitionNamesWithTTL(mv, start, end, partitionTTLNumber, isAutoRefresh);
-        LOG.info("Get partition names by range with partition limit, start: {}, end: {}, partitionTTLNumber: {}," +
-                        " isAutoRefresh: {}, mvRangePartitionNames: {}",
-                start, end, partitionTTLNumber, isAutoRefresh, mvRangePartitionNames);
+        LOG.info("Get partition names by range with partition limit, start: {}, end: {}, force:{}, " +
+                        "partitionTTLNumber: {}, isAutoRefresh: {}, mvRangePartitionNames: {}, isRefreshMvBaseOnNonRefTables:{}",
+                start, end, force, partitionTTLNumber, isAutoRefresh, mvRangePartitionNames, isRefreshMvBaseOnNonRefTables);
 
-        // check non-ref base tables
-        if (needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
+        // check non-ref base tables or force refresh
+        if (force || isRefreshMvBaseOnNonRefTables) {
             if (start == null && end == null) {
-                // if non partition table changed, should refresh all partitions of materialized view
+                // if non-partition table changed, should refresh all partitions of materialized view
                 return mvRangePartitionNames;
             } else {
                 if (isAutoRefresh) {
@@ -217,18 +218,22 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 } else {
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.
-                    return getMvPartitionNamesToRefresh(mvRangePartitionNames, true);
+                    return getMvPartitionNamesToRefresh(mvRangePartitionNames);
                 }
             }
         }
 
-        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         // check related partition table
-        needRefreshMvPartitionNames.addAll(getMvPartitionNamesToRefresh(mvRangePartitionNames, force));
+        Set<String> needRefreshMvPartitionNames = getMvPartitionNamesToRefresh(mvRangePartitionNames);
+        if (needRefreshMvPartitionNames.isEmpty()) {
+            LOG.info("No need to refresh materialized view partitions, mv: {}", mv.getName());
+            return needRefreshMvPartitionNames;
+        }
 
-        Map<Table, Set<String>> baseChangedPartitionNames =
-                getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
+        Map<Table, Set<String>> baseChangedPartitionNames = getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
         if (baseChangedPartitionNames.isEmpty()) {
+            LOG.info("Cannot get associated base table change partitions from mv's refresh partitions {}, mv: {}",
+                    needRefreshMvPartitionNames, mv.getName());
             return needRefreshMvPartitionNames;
         }
 
@@ -295,8 +300,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         return materializedView.getValidRangePartitionMap(lastPartitionNum).keySet();
     }
 
+    @Override
     public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames) {
+                                               Set<String> mvPotentialPartitionNames,
+                                               boolean tentative) {
         int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
         if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= mvRangePartitionMap.size()) {
@@ -355,12 +362,13 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         if (!Config.materialized_view_refresh_ascending) {
             partitionNameIter = sortedPartition.iterator();
         }
-        setNextPartitionStartAndEnd(mvPartitionsToRefresh, mappedPartitionsToRefresh, partitionNameIter);
+        setNextPartitionStartAndEnd(mvPartitionsToRefresh, mappedPartitionsToRefresh, partitionNameIter, tentative);
     }
 
     private void setNextPartitionStartAndEnd(Set<String> partitionsToRefresh,
                                              Map<String, Range<PartitionKey>> mappedPartitionsToRefresh,
-                                             Iterator<String> partitionNameIter) {
+                                             Iterator<String> partitionNameIter,
+                                             boolean tentative) {
         String nextPartitionStart = null;
         String endPartitionName = null;
         if (partitionNameIter.hasNext()) {
@@ -375,15 +383,17 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             partitionsToRefresh.remove(endPartitionName);
         }
 
-        mvContext.setNextPartitionStart(nextPartitionStart);
+        if (!tentative) {
+            mvContext.setNextPartitionStart(nextPartitionStart);
 
-        if (endPartitionName != null) {
-            PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
-            mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
-        } else {
-            // partitionNameIter has just been traversed, and endPartitionName is not updated
-            // will cause endPartitionName == null
-            mvContext.setNextPartitionEnd(null);
+            if (endPartitionName != null) {
+                PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
+                mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
+            } else {
+                // partitionNameIter has just been traversed, and endPartitionName is not updated
+                // will cause endPartitionName == null
+                mvContext.setNextPartitionEnd(null);
+            }
         }
     }
 

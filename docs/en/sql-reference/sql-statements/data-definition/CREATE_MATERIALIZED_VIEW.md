@@ -270,7 +270,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
   >
   > The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
 
-- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/management/resource_management/resource_group.md).
+- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. The default value of this property is `default_mv_wg`, which is a system-defined resource group specifically used for materialized view refresh. The `cpu_core_limit` of `default_mv_wg` is `1`, `mem_limit` is `0.8`. For more about resource groups, see [Resource group](../../../administration/management/resource_management/resource_group.md).
 - `query_rewrite_consistency`: The query rewrite rule for the asynchronous materialized views. This property is supported from v3.2. Valid values:
   - `disable`: Disable automatic query rewrite of the asynchronous materialized view.
   - `checked` (Default value): Enable automatic query rewrite only when the materialized view meets the timeliness requirement, which means:

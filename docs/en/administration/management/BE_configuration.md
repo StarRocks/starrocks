@@ -500,6 +500,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
 
+##### primary_key_limit_size
+
+- Default: 128
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of a key column in Primary Key tables.
+- Introduced in: v2.5
+
 ##### drop_tablet_worker_count
 
 - Default: 3
@@ -3380,7 +3389,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
+- Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
 - Introduced in: v3.1
 
 <!--
@@ -3400,7 +3409,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster.
 - Introduced in: v3.1
 
 <!--
@@ -4406,39 +4415,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 -->
 
 <!--
-##### default_mv_resource_group_memory_limit
-
-- Default: 0.8
-- Type: Double
-- Unit:
-- Is mutable: No
-- Description: The maximum memory percentage that can be used by the materialized view in a resource group.
-- Introduced in: v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- Default: 1
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### primary_key_limit_size
-
-- Default: 128
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### primary_key_batch_get_index_memory_limit
 
 - Default: 104857600
@@ -4697,6 +4673,42 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: The directory used to store User-defined Functions (UDFs).
 - Introduced in: -
+
+##### default_mv_resource_group_memory_limit
+
+- Default: 0.8
+- Type: Double
+- Unit:
+- Is mutable: Yes
+- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_concurrency_limit
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
+- Introduced in: v3.1
+
+##### default_mv_resource_group_spill_mem_limit_threshold
+
+- Default: 0.8
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
+- Introduced in: v3.1
 
 <!--
 ##### pull_load_task_dir

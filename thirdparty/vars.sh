@@ -63,7 +63,7 @@ export TP_JAR_DIR=$TP_INSTALL_DIR/lib/jar
 # Definitions for architecture-related thirdparty
 MACHINE_TYPE=$(uname -m)
 # handle mac m1 platform, change arm64 to aarch64
-if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then
     MACHINE_TYPE="aarch64"
 fi
 
@@ -163,10 +163,10 @@ RAPIDJSON_SOURCE=rapidjson-1.1.0
 RAPIDJSON_MD5SUM="badd12c511e081fec6c89c43a7027bce"
 
 # simdjson
-SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v2.2.0.tar.gz"
-SIMDJSON_NAME=simdjson-v2.2.0.tar.gz
-SIMDJSON_SOURCE=simdjson-2.2.0
-SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
+SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v3.9.4.tar.gz"
+SIMDJSON_NAME=simdjson-v3.9.4.tar.gz
+SIMDJSON_SOURCE=simdjson-3.9.4
+SIMDJSON_MD5SUM="bdc1dfcb2a89dc0c09e8370808a946f5"
 
 # curl
 CURL_DOWNLOAD="https://curl.se/download/curl-8.4.0.tar.gz"

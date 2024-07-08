@@ -138,7 +138,7 @@ Take note of the following considerations about the primary key:
 - In the CREATE TABLE statement, the primary key columns must be defined before other columns.
 - The primary key columns must include partitioning and bucketing columns.
 - The primary key columns support the following data types: numeric (including integers and BOOLEAN), string, and date (DATE and DATETIME).
-- The maximum length of a encoded primary key value is 128 bytes.
+- By default, the maximum length of an encoded primary key value is 128 bytes.
 - The primary key cannot be modified after table creation.
 - For data consistency purposes, the primary key values cannot be updated.
 

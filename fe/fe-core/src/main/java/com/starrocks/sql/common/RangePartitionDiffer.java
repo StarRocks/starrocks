@@ -292,14 +292,37 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         }
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         for (Map.Entry<Range<PartitionKey>, String> entry : addRanges.asMapOfRanges().entrySet()) {
-            if (entry.getValue().startsWith(INTERSECTED_PARTITION_PREFIX)) {
+            String partitionName = entry.getValue();
+            Range<PartitionKey> partitionRange = entry.getKey();
+            if (isNeedsRenamePartitionName(partitionName, partitionRange, result)) {
                 String mvPartitionName = SyncPartitionUtils.getMVPartitionName(mvPartitionExpr, entry.getKey());
-                result.put(mvPartitionName, entry.getKey());
+                result.put(mvPartitionName, partitionRange);
             } else {
-                result.put(entry.getValue(), entry.getKey());
+                result.put(partitionName, partitionRange);
             }
         }
         return result;
+    }
+
+    /**
+     * Check whether the partition name needs to be renamed.
+     * @param partitionName: mv temp partition name
+     * @param partitionRange: associated partition range
+     * @param partitionMap : the partition map to check
+     * @return true if needs to rename, else false
+     */
+    private static boolean isNeedsRenamePartitionName(String partitionName,
+                                                      Range<PartitionKey> partitionRange,
+                                                      Map<String, Range<PartitionKey>> partitionMap) {
+        // if the partition name is intersected with other partitions, rename it.
+        if (partitionName.startsWith(INTERSECTED_PARTITION_PREFIX)) {
+            return true;
+        }
+        // if the partition name is already in the partition map, and the partition range is different, rename it.
+        if (partitionMap.containsKey(partitionName) && !partitionRange.equals(partitionMap.get(partitionName))) {
+            return true;
+        }
+        return false;
     }
 
     /**

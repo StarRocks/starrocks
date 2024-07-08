@@ -1205,6 +1205,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean materialized_view_refresh_ascending = true;
 
+    @ConfField(mutable = true, comment = "An internal optimization for external table refresh, " +
+            "only refresh affected partitions of external table, instead of all of them ")
+    public static boolean enable_materialized_view_external_table_precise_refresh = true;
+
     /**
      * Control whether to enable spill for all materialized views in the refresh mv.
      */
@@ -2861,6 +2865,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
+
+    @ConfField(mutable = true, comment = "Whether enable strict insert in mv refresh or not by default")
+    public static boolean enable_mv_refresh_insert_strict = false;
 
     /**
      * Whether analyze the mv after refresh in async mode.

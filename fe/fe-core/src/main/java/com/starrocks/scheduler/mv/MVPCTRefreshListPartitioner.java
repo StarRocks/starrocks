@@ -182,18 +182,18 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         Set<String> mvListPartitionNames = getMVPartitionNamesWithTTL(mv, start, end, partitionTTLNumber, isAutoRefresh);
 
         // check non-ref base tables
-        if (needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
+        if (force || needsRefreshBasedOnNonRefTables(snapshotBaseTables)) {
             if (start == null && end == null) {
                 // if non-partition table changed, should refresh all partitions of materialized view
                 return mvListPartitionNames;
             } else {
                 // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                 // it should be refreshed according to the user-specified range, not all partitions.
-                return getMvPartitionNamesToRefresh(mvListPartitionNames, true);
+                return getMvPartitionNamesToRefresh(mvListPartitionNames);
             }
         } else {
             // check the ref base table
-            return getMvPartitionNamesToRefresh(mvListPartitionNames, force);
+            return getMvPartitionNamesToRefresh(mvListPartitionNames);
         }
     }
 
@@ -258,7 +258,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
-                                               Set<String> mvPotentialPartitionNames) {
+                                               Set<String> mvPotentialPartitionNames, boolean tentative) {
         Map<String, PListCell> mappedPartitionsToRefresh = Maps.newHashMap();
         Map<String, PListCell> listPartitionMap = mv.getListPartitionItems();
         for (String partitionName : mvPartitionsToRefresh) {
@@ -274,10 +274,12 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         if (result == null) {
             return;
         }
-        // partitionNameIter has just been traversed, and endPartitionName is not updated
-        // will cause endPartitionName == null
-        mvContext.setNextPartitionStart(result.first);
-        mvContext.setNextPartitionEnd(result.second);
+        if (!tentative) {
+            // partitionNameIter has just been traversed, and endPartitionName is not updated
+            // will cause endPartitionName == null
+            mvContext.setNextPartitionStart(result.first);
+            mvContext.setNextPartitionEnd(result.second);
+        }
     }
 
     private void addListPartitions(Database database, MaterializedView materializedView,

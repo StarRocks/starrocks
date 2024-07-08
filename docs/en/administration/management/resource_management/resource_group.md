@@ -99,6 +99,33 @@ You can set the resource group `type` to `short_query`, or `normal`.
 > - You can create at most ONE short query resource group in a StarRocks Cluster.
 > - StarRocks does not set set a hard upper limit of CPU resource for `short_query` resource group.
 
+#### System-defined resource groups
+
+There are two system-defined resource groups in each StarRocks instance: `default_wg` and `default_mv_wg`.
+
+##### default_wg
+
+`default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The resource limits of `default_wg` are as follows:
+
+- `cpu_core_limit`: 1 (for v2.3.7 or earlier) or the number of CPU cores of the BE (for versions later than v2.3.7).
+- `mem_limit`: 100%.
+- `concurrency_limit`: 0.
+- `big_query_cpu_second_limit`: 0.
+- `big_query_scan_rows_limit`: 0.
+- `big_query_mem_limit`: 0.
+- `spill_mem_limit_threshold`: 1.
+
+##### default_mv_wg
+
+`default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The resource limits of `default_mv_wg` are as follows:
+
+- `cpu_core_limit`: 1.
+- `mem_limit`: 80%.
+- `concurrency_limit`: 0.
+- `spill_mem_limit_threshold`: 80%.
+
+You can configure the CPU core limit, memory limit, concurrency limit, and spilling threshold of `default_mv_wg` by modifying the BE configuration items `default_mv_resource_group_cpu_limit`, `default_mv_resource_group_memory_limit`, `default_mv_resource_group_concurrency_limit`, `default_mv_resource_group_spill_mem_limit_threshold`.
+
 ### classifier
 
 Each classifier holds one or more conditions that can be matched to the properties of queries. StarRocks identifies the classifier that best matches each query based on the match conditions and assigns resources for running the query.
@@ -317,16 +344,6 @@ You can view the resource group that a query hits from the `ResourceGroup` colum
 
 - If the query is not under the management of resource groups, the column value is an empty string `""`.
 - If the query is under the management of resource groups but doesn't match any classifier, the column value is an empty string `""`. But this query is assigned to the default resource group `default_wg`.
-
-The resource limits of `default_wg` are as follows:
-
-- `cpu_core_limit`: 1 (for v2.3.7 or earlier) or the number of CPU cores of the BE (for versions later than v2.3.7).
-- `mem_limit`: 100%.
-- `concurrency_limit`: 0.
-- `big_query_cpu_second_limit`: 0.
-- `big_query_scan_rows_limit`: 0.
-- `big_query_mem_limit`: 0.
-- `spill_mem_limit_threshold`: 1.
 
 ### Monitoring resource groups
 

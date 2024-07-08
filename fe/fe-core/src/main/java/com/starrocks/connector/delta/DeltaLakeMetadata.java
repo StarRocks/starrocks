@@ -50,7 +50,6 @@ import io.delta.kernel.internal.ScanImpl;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
-import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import org.apache.logging.log4j.LogManager;
@@ -123,7 +122,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String tableName = deltaLakeTable.getTableName();
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, operator);
 
-        triggerDeltaLakePlanFilesIfNeeded(key, table, operator);
+        triggerDeltaLakePlanFilesIfNeeded(key, table, operator, fieldNames);
 
         List<FileScanTask> scanTasks = splitTasks.get(key);
         if (scanTasks == null) {
@@ -150,7 +149,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         DeltaUtils.checkTableFeatureSupported(snapshot.getProtocol(), snapshot.getMetadata());
 
-        triggerDeltaLakePlanFilesIfNeeded(key, deltaLakeTable, predicate);
+        triggerDeltaLakePlanFilesIfNeeded(key, deltaLakeTable, predicate, columns);
 
         List<FileScanTask> deltaLakeScanTasks = splitTasks.get(key);
         if (deltaLakeScanTasks == null) {
@@ -169,16 +168,28 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
     }
 
-    private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table, ScalarOperator operator) {
+    private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table,
+                                                   ScalarOperator operator, Map<ColumnRefOperator, Column> columns) {
         if (!scannedTables.contains(key)) {
             try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
-                collectDeltaLakePlanFiles(key, table, operator, ConnectContext.get());
+                List<String> fieldNames = columns.keySet().stream()
+                        .map(ColumnRefOperator::getName).collect(Collectors.toList());
+                collectDeltaLakePlanFiles(key, table, operator, ConnectContext.get(), fieldNames);
+            }
+        }
+    }
+
+    private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table,
+                                                   ScalarOperator operator, List<String> fieldNames) {
+        if (!scannedTables.contains(key)) {
+            try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
+                collectDeltaLakePlanFiles(key, table, operator, ConnectContext.get(), fieldNames);
             }
         }
     }
 
     private void collectDeltaLakePlanFiles(PredicateSearchKey key, Table table, ScalarOperator operator,
-                                           ConnectContext connectContext) {
+                                           ConnectContext connectContext, List<String> fieldNames) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
         Engine engine = deltaLakeTable.getDeltaEngine();
@@ -195,10 +206,25 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder(engine);
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(engine, deltaLakePredicate).build();
 
-        Set<String> nonPartitionPrimitiveColumns = schema.fieldNames().stream()
-                .filter(column -> BasePrimitiveType.isPrimitiveType(
-                        schema.get(column).getDataType().toString())
-                        && !partitionColumns.contains(column)).collect(Collectors.toSet());
+        Set<String> nonPartitionPrimitiveColumns;
+        Set<String> partitionPrimitiveColumns;
+        if (fieldNames != null) {
+            nonPartitionPrimitiveColumns = fieldNames.stream()
+                    .filter(column -> DeltaDataType.isPrimitiveType(schema.get(column).getDataType())
+                    && !partitionColumns.contains(column))
+                    .collect(Collectors.toSet());
+            partitionPrimitiveColumns = fieldNames.stream()
+                    .filter(column -> DeltaDataType.isPrimitiveType(schema.get(column).getDataType())
+                    && partitionColumns.contains(column))
+                    .collect(Collectors.toSet());
+        } else {
+            nonPartitionPrimitiveColumns = schema.fieldNames().stream()
+                    .filter(column -> DeltaDataType.isPrimitiveType(schema.get(column).getDataType())
+                            && !partitionColumns.contains(column)).collect(Collectors.toSet());
+            partitionPrimitiveColumns = partitionColumns.stream()
+                    .filter(column -> DeltaDataType.isPrimitiveType(schema.get(column).getDataType()))
+                    .collect(Collectors.toSet());
+        }
 
         List<FileScanTask> files = Lists.newArrayList();
 
@@ -221,7 +247,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeFileStats")) {
                                 statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
-                                        nonPartitionPrimitiveColumns);
+                                        nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
                             }
                         } else {
                             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
@@ -230,7 +256,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.updateDeltaLakeCardinality")) {
                                 statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
-                                        nonPartitionPrimitiveColumns);
+                                        nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
                             }
                         }
                     }

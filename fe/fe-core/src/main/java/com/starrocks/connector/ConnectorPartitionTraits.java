@@ -22,7 +22,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -136,6 +135,9 @@ public abstract class ConnectorPartitionTraits {
         return table.getName();
     }
 
+    /**
+     * Whether this table support partition-granular refresh as ref-table
+     */
     public abstract boolean isSupportPCTRefresh();
 
     /**
@@ -144,11 +146,6 @@ public abstract class ConnectorPartitionTraits {
     public abstract PartitionKey createEmptyKey();
 
     public abstract String getDbName();
-
-    /**
-     * Whether this table support partition-granular refresh as ref-table
-     */
-    public abstract boolean supportPartitionRefresh();
 
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
@@ -197,16 +194,4 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
-
-    /**
-     * Check whether the base table's partition has changed or not.
-     * </p>
-     * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
-     * version and modified time.
-     */
-    public static boolean isBaseTableChanged(Partition partition,
-                                             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
-        return partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
-    }
 }
