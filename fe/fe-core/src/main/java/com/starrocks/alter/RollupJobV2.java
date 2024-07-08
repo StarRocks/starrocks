@@ -476,6 +476,100 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return newExpr;
     }
 
+    // DB lock should be hold already
+    public static AlterReplicaTask.RollupJobV2Params analyzeAndCreateRollupJobV2Params(OlapTable tbl,
+                                                                                        List<Column> rollupSchema,
+                                                                                        Expr whereClause,
+                                                                                        String dbFullName)
+            throws AlterCancelException {
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
+        Map<String, SlotDescriptor> slotDescByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        List<Column> rollupColumns = new ArrayList<Column>();
+        Set<String> columnNames = new HashSet<String>();
+        Set<String> baseTableColumnNames = Sets.newHashSet();
+        for (Column column : tbl.getBaseSchema()) {
+            rollupColumns.add(column);
+            columnNames.add(column.getName());
+            baseTableColumnNames.add(column.getName());
+        }
+        Set<String> usedBaseTableColNames = Sets.newLinkedHashSet();
+        for (Column column : rollupSchema) {
+            if (!columnNames.contains(column.getName())) {
+                rollupColumns.add(column);
+            } else {
+                usedBaseTableColNames.add(column.getName());
+            }
+        }
+
+        /*
+         * The expression substitution is needed here, because all slotRefs in
+         * definedExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
+         * if it is init by SlotDescriptor. The slot information will be used by be to identify
+         * the column location in a chunk.
+         */
+        for (Column column : tbl.getBaseSchema()) {
+            SlotDescriptor destSlotDesc = descTable.addSlotDescriptor(tupleDesc);
+            destSlotDesc.setIsMaterialized(true);
+            destSlotDesc.setColumn(column);
+            destSlotDesc.setIsNullable(column.isAllowNull());
+
+            slotDescByName.put(column.getName(), destSlotDesc);
+        }
+
+        List<Expr> outputExprs = Lists.newArrayList();
+        for (Column col : tbl.getBaseSchema()) {
+            SlotDescriptor slotDesc = slotDescByName.get(col.getName());
+            if (slotDesc == null) {
+                throw new AlterCancelException("Expression for materialized view column can not find " +
+                        "the ref column");
+            }
+            SlotRef slotRef = new SlotRef(slotDesc);
+            slotRef.setColumnName(col.getName());
+            outputExprs.add(slotRef);
+        }
+
+        TableName tableName = new TableName(dbFullName, tbl.getName());
+        Map<String, Expr> defineExprs = Maps.newHashMap();
+        for (Column column : rollupColumns) {
+            if (column.getDefineExpr() == null) {
+                continue;
+            }
+
+            Expr definedExpr = analyzeExpr(column.getType(), column.getName(), column.getDefineExpr(),
+                    slotDescByName, outputExprs, tbl, tableName);
+
+            defineExprs.put(column.getName(), definedExpr);
+
+            List<SlotRef> slots = Lists.newArrayList();
+            definedExpr.collect(SlotRef.class, slots);
+            slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
+        }
+
+        Expr whereExpr = null;
+        if (whereClause != null) {
+            Type type = ScalarType.createType(PrimitiveType.BOOLEAN);
+            whereExpr = analyzeExpr(type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME, whereClause,
+                    slotDescByName, outputExprs, tbl, tableName);
+            List<SlotRef> slots = Lists.newArrayList();
+            whereExpr.collect(SlotRef.class, slots);
+            slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
+        }
+
+        for (String refColName : usedBaseTableColNames) {
+            if (!baseTableColumnNames.contains(refColName)) {
+                throw new AlterCancelException("Materialized view's ref column " + refColName + " is not " +
+                        "found in the base table.");
+            }
+        }
+
+        List<ColumnId> usedColIds = new ArrayList<>(usedBaseTableColNames.size());
+        for (String name : usedBaseTableColNames) {
+            usedColIds.add(tbl.getColumn(name).getColumnId());
+        }
+        return new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColIds);
+    }
+
     /**
      * runWaitingTxnJob():
      * 1. Wait the transactions before the watershedTxnId to be finished.
@@ -522,98 +616,13 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
+                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
+                            analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
+
+                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                     TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                     long baseIndexId = invertedIndex.getTabletMeta(baseTabletId).getIndexId();
                     List<Column> baseColumn = tbl.getIndexMetaByIndexId(baseIndexId).getSchema();
-
-                    DescriptorTable descTable = new DescriptorTable();
-                    TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
-                    Map<String, SlotDescriptor> slotDescByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-                    List<Column> rollupColumns = new ArrayList<Column>();
-                    Set<String> columnNames = new HashSet<String>();
-                    Set<String> baseTableColumnNames = Sets.newHashSet();
-                    for (Column column : tbl.getBaseSchema()) {
-                        rollupColumns.add(column);
-                        columnNames.add(column.getName());
-                        baseTableColumnNames.add(column.getName());
-                    }
-                    Set<String> usedBaseTableColNames = Sets.newLinkedHashSet();
-                    for (Column column : rollupSchema) {
-                        if (!columnNames.contains(column.getName())) {
-                            rollupColumns.add(column);
-                        } else {
-                            usedBaseTableColNames.add(column.getName());
-                        }
-                    }
-
-                    /*
-                     * The expression substitution is needed here, because all slotRefs in
-                     * definedExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                     * if it is init by SlotDescriptor. The slot information will be used by be to identify
-                     * the column location in a chunk.
-                     */
-                    for (Column column : tbl.getBaseSchema()) {
-                        SlotDescriptor destSlotDesc = descTable.addSlotDescriptor(tupleDesc);
-                        destSlotDesc.setIsMaterialized(true);
-                        destSlotDesc.setColumn(column);
-                        destSlotDesc.setIsNullable(column.isAllowNull());
-
-                        slotDescByName.put(column.getName(), destSlotDesc);
-                    }
-
-                    List<Expr> outputExprs = Lists.newArrayList();
-                    for (Column col : tbl.getBaseSchema()) {
-                        SlotDescriptor slotDesc = slotDescByName.get(col.getName());
-                        if (slotDesc == null) {
-                            throw new AlterCancelException("Expression for materialized view column can not find " +
-                                    "the ref column");
-                        }
-                        SlotRef slotRef = new SlotRef(slotDesc);
-                        slotRef.setColumnName(col.getName());
-                        outputExprs.add(slotRef);
-                    }
-
-                    TableName tableName = new TableName(db.getFullName(), tbl.getName());
-                    Map<String, Expr> defineExprs = Maps.newHashMap();
-                    for (Column column : rollupColumns) {
-                        if (column.getDefineExpr() == null) {
-                            continue;
-                        }
-
-                        Expr definedExpr = analyzeExpr(column.getType(), column.getName(), column.getDefineExpr(),
-                                slotDescByName, outputExprs, tbl, tableName);
-
-                        defineExprs.put(column.getName(), definedExpr);
-
-                        List<SlotRef> slots = Lists.newArrayList();
-                        definedExpr.collect(SlotRef.class, slots);
-                        slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
-                    }
-
-                    Expr whereExpr = null;
-                    if (whereClause != null) {
-                        Type type = ScalarType.createType(PrimitiveType.BOOLEAN);
-                        whereExpr = analyzeExpr(type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME, whereClause,
-                                slotDescByName, outputExprs, tbl, tableName);
-                        List<SlotRef> slots = Lists.newArrayList();
-                        whereExpr.collect(SlotRef.class, slots);
-                        slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
-                    }
-
-                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
-                    for (String refColName : usedBaseTableColNames) {
-                        if (!baseTableColumnNames.contains(refColName)) {
-                            throw new AlterCancelException("Materialized view's ref column " + refColName + " is not " +
-                                    "found in the base table.");
-                        }
-                    }
-
-                    List<ColumnId> usedColIds = new ArrayList<>(usedBaseTableColNames.size());
-                    for (String name : usedBaseTableColNames) {
-                        usedColIds.add(tbl.getColumn(name).getColumnId());
-                    }
-                    AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColIds);
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,

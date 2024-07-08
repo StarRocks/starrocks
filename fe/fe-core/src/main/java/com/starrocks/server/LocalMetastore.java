@@ -1719,7 +1719,6 @@ public class LocalMetastore implements ConnectorMetadata {
             indexMap.put(indexId, rollup);
         }
 
-
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()),
                         distributionInfo);
@@ -1730,21 +1729,19 @@ public class LocalMetastore implements ConnectorMetadata {
 
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
         TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
-        List<Long> shardGroupIdList = new ArrayList<>();
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
             long indexId = entry.getKey();
             MaterializedIndex index = entry.getValue();
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
 
             // create shard group
-            long shardGroupId = 0;
+            long shardGroupId = PhysicalPartitionImpl.INVALID_SHARD_GROUP_ID;
             if (table.isCloudNativeTableOrMaterializedView()) {
                 long indexShardGroupId = getNextId();
-                index.setShardGroupId(indexShardGroupId);
                 shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                         createShardGroup(db.getId(), table.getId(), indexShardGroupId);
+                index.setShardGroupId(shardGroupId);
             }
-            shardGroupIdList.add(shardGroupId);
 
             // create tablets
             TabletMeta tabletMeta =
@@ -1763,7 +1760,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 partition.createRollupIndex(index);
             }
         }
-        partition.setShardGroupIdList(shardGroupIdList);
+
         return partition;
     }
 

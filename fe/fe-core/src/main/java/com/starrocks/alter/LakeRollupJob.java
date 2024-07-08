@@ -19,31 +19,19 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -55,7 +43,6 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -74,15 +61,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
-
-import static com.starrocks.alter.RollupJobV2.analyzeExpr;
 
 public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     private static final Logger LOG = LogManager.getLogger(LakeRollupJob.class);
@@ -190,7 +172,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         .setShortKeyColumnCount(rollupShortKeyColumnCount)
                         .setSchemaHash(rollupSchemaHash)
                         .setStorageType(TStorageType.COLUMN)
-                        .setBloomFilterColumnNames(table.getCopiedBfColumns())
+                        .setBloomFilterColumnNames(table.getBfColumnIds())
                         .setBloomFilterFpp(table.getBfFpp())
                         .setIndexes(table.getCopiedIndexes())
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key
@@ -309,98 +291,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
-                    TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-                    long baseIndexId = invertedIndex.getTabletMeta(baseTabletId).getIndexId();
-                    List<Column> baseColumn = tbl.getIndexMetaByIndexId(baseIndexId).getSchema();
-
-                    DescriptorTable descTable = new DescriptorTable();
-                    TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
-                    Map<String, SlotDescriptor> slotDescByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-                    List<Column> rollupColumns = new ArrayList<Column>();
-                    Set<String> columnNames = new HashSet<String>();
-                    Set<String> baseTableColumnNames = Sets.newHashSet();
-                    for (Column column : tbl.getBaseSchema()) {
-                        rollupColumns.add(column);
-                        columnNames.add(column.getName());
-                        baseTableColumnNames.add(column.getName());
-                    }
-                    Set<String> usedBaseTableColNames = Sets.newLinkedHashSet();
-                    for (Column column : rollupSchema) {
-                        if (!columnNames.contains(column.getName())) {
-                            rollupColumns.add(column);
-                        } else {
-                            usedBaseTableColNames.add(column.getName());
-                        }
-                    }
-
-                    /*
-                     * The expression substitution is needed here, because all slotRefs in
-                     * definedExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                     * if it is init by SlotDescriptor. The slot information will be used by be to identify
-                     * the column location in a chunk.
-                     */
-                    for (Column column : tbl.getBaseSchema()) {
-                        SlotDescriptor destSlotDesc = descTable.addSlotDescriptor(tupleDesc);
-                        destSlotDesc.setIsMaterialized(true);
-                        destSlotDesc.setColumn(column);
-                        destSlotDesc.setIsNullable(column.isAllowNull());
-
-                        slotDescByName.put(column.getName(), destSlotDesc);
-                    }
-
-                    List<Expr> outputExprs = Lists.newArrayList();
-                    for (Column col : tbl.getBaseSchema()) {
-                        SlotDescriptor slotDesc = slotDescByName.get(col.getName());
-                        if (slotDesc == null) {
-                            throw new AlterCancelException("Expression for materialized view column can not find " +
-                                    "the ref column");
-                        }
-                        SlotRef slotRef = new SlotRef(slotDesc);
-                        slotRef.setColumnName(col.getName());
-                        outputExprs.add(slotRef);
-                    }
-
-                    TableName tableName = new TableName(db.getFullName(), tbl.getName());
-                    Map<String, Expr> defineExprs = Maps.newHashMap();
-                    for (Column column : rollupColumns) {
-                        if (column.getDefineExpr() == null) {
-                            continue;
-                        }
-
-                        Expr definedExpr = analyzeExpr(column.getType(), column.getName(), column.getDefineExpr(),
-                                slotDescByName, outputExprs, tbl, tableName);
-
-                        defineExprs.put(column.getName(), definedExpr);
-
-                        List<SlotRef> slots = Lists.newArrayList();
-                        definedExpr.collect(SlotRef.class, slots);
-                        slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
-                    }
-
-                    Expr whereExpr = null;
-                    if (whereClause != null) {
-                        Type type = ScalarType.createType(PrimitiveType.BOOLEAN);
-                        whereExpr = analyzeExpr(type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME, whereClause,
-                                slotDescByName, outputExprs, tbl, tableName);
-                        List<SlotRef> slots = Lists.newArrayList();
-                        whereExpr.collect(SlotRef.class, slots);
-                        slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
-                    }
-
-                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
-                    for (String refColName : usedBaseTableColNames) {
-                        if (!baseTableColumnNames.contains(refColName)) {
-                            throw new AlterCancelException("Materialized view's ref column " + refColName + " is not " +
-                                    "found in the base table.");
-                        }
-                    }
-
-                    List<ColumnId> usedColIds = new ArrayList<>(usedBaseTableColNames.size());
-                    for (String name : usedBaseTableColNames) {
-                        usedColIds.add(tbl.getColumn(name).getColumnId());
-                    }
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColIds);
+                            RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
 
                     ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                             .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
@@ -409,6 +301,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         throw new AlterCancelException("No alive backend");
                     }
 
+                    TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                    long baseIndexId = invertedIndex.getTabletMeta(baseTabletId).getIndexId();
+                    List<Column> baseColumn = tbl.getIndexMetaByIndexId(baseIndexId).getSchema();
                     AlterReplicaTask rollupTask = AlterReplicaTask.rollupLakeTablet(
                             computeNode.getId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                             baseTabletId, visibleVersion, jobId,

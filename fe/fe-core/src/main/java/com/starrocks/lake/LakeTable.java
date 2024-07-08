@@ -31,7 +31,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.TableIndexes;
