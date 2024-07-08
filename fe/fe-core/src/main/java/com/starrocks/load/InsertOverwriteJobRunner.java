@@ -387,6 +387,7 @@ public class InsertOverwriteJobRunner {
 
     private void doCommit(boolean isReplay) {
         Database db = getAndWriteLockDatabase(dbId);
+        OlapTable targetTable = checkAndGetTable(db, tableId);
         try {
             List<String> sourcePartitionNames = job.getSourcePartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
