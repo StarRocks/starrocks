@@ -685,14 +685,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
-<<<<<<< HEAD
-                    //
-                    for (TransactionState state : txnStateBatch.getTransactionStates()) {
-                        refreshMvIfNecessary(state);
-                    }
-
-=======
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch, dirtyPartitions);
                 } catch (UserException e) {

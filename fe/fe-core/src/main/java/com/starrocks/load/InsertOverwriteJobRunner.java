@@ -220,11 +220,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-<<<<<<< HEAD
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
-=======
         if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
 
@@ -353,11 +349,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-<<<<<<< HEAD
-        if (!locker.lockAndCheckExist(db, LockType.READ)) {
-=======
         if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.READ)) {
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         OlapTable targetTable;
@@ -379,11 +371,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-<<<<<<< HEAD
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
-=======
         if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
 
@@ -433,11 +421,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-<<<<<<< HEAD
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
-=======
         if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -504,11 +488,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-<<<<<<< HEAD
-        if (!locker.lockAndCheckExist(db, LockType.READ)) {
-=======
         if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.READ)) {
->>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         try {
