@@ -598,8 +598,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             if (metadataTable.getMetadataTableType() == MetadataTableType.LOGICAL_ICEBERG_METADATA) {
                 scanOperator = new LogicalIcebergMetadataScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                         columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
-                if (node.getTemporalClause() != null) {
-                    ((LogicalIcebergMetadataScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
+                if (node.getQueryPeriodString() != null) {
+                    ((LogicalIcebergMetadataScanOperator) scanOperator).setTemporalClause(node.getQueryPeriodString());
                 }
             } else {
                 throw new StarRocksPlannerException("Not support metadata table type: " + metadataTable.getMetadataTableType(),
@@ -619,8 +619,8 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new LogicalMysqlScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
-            if (node.getTemporalClause() != null) {
-                ((LogicalMysqlScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
+            if (node.getQueryPeriodString() != null) {
+                ((LogicalMysqlScanOperator) scanOperator).setTemporalClause(node.getQueryPeriodString());
             }
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
             scanOperator =

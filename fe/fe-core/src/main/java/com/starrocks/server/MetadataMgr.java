@@ -49,6 +49,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
@@ -502,6 +503,19 @@ public class MetadataMgr {
         }
         return connectorTable;
     }
+
+    public Table getTable(String catalogName, String dbName, String tblName,
+                          Optional<ConnectorTableVersion> startVersion, Optional<ConnectorTableVersion> endVersion) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName, startVersion, endVersion))
+                .orElse(null);
+        if (connectorTable != null) {
+            // Load meta information from ConnectorTblMetaInfoMgr for each external table.
+            connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
+        }
+        return connectorTable;
+    }
+
 
     public Table getTable(Long databaseId, Long tableId) {
         Database database = localMetastore.getDb(databaseId);

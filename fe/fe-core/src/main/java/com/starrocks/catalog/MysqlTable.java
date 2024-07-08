@@ -235,4 +235,9 @@ public class MysqlTable extends Table {
     public boolean supportInsert() {
         return true;
     }
+
+    @Override
+    public boolean supportTimeTravel() {
+        return true;
+    }
 }

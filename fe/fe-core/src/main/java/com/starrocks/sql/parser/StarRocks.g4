@@ -1951,13 +1951,18 @@ queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
-temporalClause
+queryPeriod
     : AS OF expression
-    | FOR SYSTEM_TIME AS OF TIMESTAMP string
     | FOR SYSTEM_TIME BETWEEN expression AND expression
     | FOR SYSTEM_TIME FROM expression TO expression
     | FOR SYSTEM_TIME ALL
-    | FOR VERSION AS OF expression
+    | (FOR)? periodType AS OF (TIMESTAMP)? end=expression
+    ;
+
+periodType
+    : SYSTEM_TIME
+    | TIMESTAMP
+    | VERSION
     ;
 
 queryPrimary
@@ -2033,7 +2038,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName temporalClause? partitionNames? tabletList? replicaList? (
+    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? (
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable

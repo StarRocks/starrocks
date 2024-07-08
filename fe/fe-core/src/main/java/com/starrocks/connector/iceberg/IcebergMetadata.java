@@ -35,7 +35,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetaPreparationItem;
@@ -65,6 +67,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
@@ -77,6 +80,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
@@ -91,6 +95,7 @@ import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
@@ -119,6 +124,10 @@ import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -146,6 +155,7 @@ import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 
 public class IcebergMetadata implements ConnectorMetadata {
@@ -156,6 +166,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     public static final String FILE_FORMAT = "file_format";
     public static final String COMPRESSION_CODEC = "compression_codec";
     public static final String COMMENT = "comment";
+    private static final DateTimeFormatter TIMESTAMP_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
@@ -331,13 +343,28 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
+        return getTable(dbName, tblName, Optional.empty(), Optional.empty());
+    }
+
+    @Override
+    public Table getTable(String dbName, String tblName, Optional<ConnectorTableVersion> startVersion,
+                          Optional<ConnectorTableVersion> endVersion) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
         if (tables.containsKey(identifier)) {
             return tables.get(identifier);
         }
 
         try {
+            if (startVersion.isPresent()) {
+                throw new StarRocksConnectorException("Read table with start version is not supported");
+            }
+
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
+
+            Optional<Long> snapshotId = Optional.empty();
+            if (endVersion.isPresent()) {
+                snapshotId = Optional.of(getSnapshotIdFromVersion(icebergTable, endVersion.get()));
+            }
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             // Hive/Glue catalog table name is case-insensitive, normalize it to lower case
             if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
@@ -346,6 +373,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
+            if (snapshotId.isPresent()) {
+                table.setSnapshotId(snapshotId);
+            }
+
             tables.put(identifier, table);
             return table;
         } catch (StarRocksConnectorException e) {
@@ -355,6 +386,69 @@ public class IcebergMetadata implements ConnectorMetadata {
             return getView(dbName, tblName);
         }
     }
+
+    private static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {
+        switch (version.getPointerType()) {
+            case TEMPORAL :
+                return getSnapshotIdFromTemporalVersion(table, version.getConstantOperator());
+            case VERSION:
+                return getTargetSnapshotIdFromVersion(table, version.getConstantOperator());
+            case UNKNOWN:
+            default:
+                throw new StarRocksConnectorException("Unknown version type %s", version.getPointerType());
+        }
+    }
+
+    private static long getTargetSnapshotIdFromVersion(org.apache.iceberg.Table table, ConstantOperator version) {
+        long snapshotId;
+        if (version.getType() == com.starrocks.catalog.Type.BIGINT) {
+            snapshotId = version.getBigint();
+        } else if (version.getType() == com.starrocks.catalog.Type.VARCHAR) {
+            String refName = version.getVarchar();
+            SnapshotRef ref = table.refs().get(refName);
+            if (ref == null) {
+                throw new StarRocksConnectorException("Cannot find snapshot with reference name: " + refName);
+            }
+            snapshotId = ref.snapshotId();
+        } else {
+            throw new StarRocksConnectorException("Unsupported type for table version: " + version);
+        }
+
+        if (table.snapshot(snapshotId) == null) {
+            throw new StarRocksConnectorException("Iceberg snapshot ID does not exists: " + snapshotId);
+        }
+        return snapshotId;
+    }
+
+    private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
+        LocalDateTime time;
+        try {
+            if (version.getType() == com.starrocks.catalog.Type.DATETIME) {
+                time = version.getDatetime();
+            } else if (version.getType() == com.starrocks.catalog.Type.VARCHAR) {
+                time = LocalDateTime.parse(version.getVarchar(), TIMESTAMP_FORMAT);
+            } else {
+                throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
+                        " You should use timestamp type", version);
+            }
+
+            long epochMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
+            return getSnapshotIdAsOfTime(table, epochMillis);
+        } catch (Exception e) {
+            LOG.error("Invalid temporal version {}", version, e);
+            throw new StarRocksConnectorException("Invalid temporal version [%s]", version, e);
+        }
+    }
+
+    public static long getSnapshotIdAsOfTime(org.apache.iceberg.Table table, long epochMillis) {
+        return table.history().stream()
+                .filter(logEntry -> logEntry.timestampMillis() <= epochMillis)
+                .max(comparing(HistoryEntry::timestampMillis))
+                .orElseThrow(() -> new StarRocksConnectorException("No version history table %s at or before %s",
+                        table.name(), Instant.ofEpochMilli(epochMillis)))
+                .snapshotId();
+    }
+
 
     public Table getView(String dbName, String viewName) {
         try {

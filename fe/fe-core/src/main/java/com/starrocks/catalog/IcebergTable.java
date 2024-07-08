@@ -119,7 +119,6 @@ public class IcebergTable extends Table {
         return remoteTableName;
     }
 
-
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
@@ -369,6 +368,11 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean supportPreCollectMetadata() {
+        return true;
+    }
+
+    @Override
+    public boolean supportTimeTravel() {
         return true;
     }
 

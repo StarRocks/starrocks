@@ -16,8 +16,11 @@ package com.starrocks.connector.metadata;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
+
+import java.util.Optional;
 
 
 // TODO(stephen): what's the pretty class name?
@@ -34,6 +37,21 @@ public class TableMetaMetadata implements ConnectorMetadata {
     }
 
     public Table getTable(String dbName, String tblName) {
+        MetadataTableName metadataTableName = MetadataTableName.from(tblName);
+        MetadataTableType tableType = metadataTableName.getTableType();
+        String tableName = metadataTableName.getTableName();
+
+        switch (tableType) {
+            case LOGICAL_ICEBERG_METADATA:
+                return LogicalIcebergMetadataTable.create(catalogName, dbName, tableName);
+            default:
+                throw new StarRocksConnectorException("Unrecognized metadata table type {}", tableType);
+        }
+    }
+
+    // TODO(stephen): use QueryPeriod for compatibility
+    public Table getTable(String dbName, String tblName, Optional<ConnectorTableVersion> startVersion,
+                          Optional<ConnectorTableVersion> endVersion) {
         MetadataTableName metadataTableName = MetadataTableName.from(tblName);
         MetadataTableType tableType = metadataTableName.getTableType();
         String tableName = metadataTableName.getTableName();
