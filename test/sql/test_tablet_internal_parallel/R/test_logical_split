@@ -82,4 +82,5 @@ insert into t2 select 1, 1;
 -- !result
 select t2.c_int_1_seq from t2 join [colocate] (select sleep(2) as x from t1)t on t2.k1 = t.x;
 -- result:
+1
 -- !result
