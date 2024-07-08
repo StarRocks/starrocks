@@ -1045,7 +1045,7 @@ public class StmtExecutor {
                     errorMsg = context.getState().getErrorMessage();
                 } catch (TTransportException e) {
                     errorMsg = "Failed to connect to fe " + fe.getHost() + ":" + fe.getRpcPort();
-                    LOG.warn(e.getMessage(), e);
+                    LOG.warn(errorMsg, e);
                 } catch (Exception e) {
                     errorMsg = e.getMessage();
                     LOG.warn(e.getMessage(), e);

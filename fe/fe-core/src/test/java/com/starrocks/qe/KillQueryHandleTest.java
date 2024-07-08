@@ -62,6 +62,26 @@ public class KillQueryHandleTest {
     }
 
     @Test
+    public void testKillStmt2(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
+            throws Exception {
+        // test killing query is forwarded to fe and query is successfully killed
+        new MockUp(FrontendServiceProxy.class) {
+            @Mock
+            public <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes,
+                              FrontendServiceProxy.MethodCallable<T> callable) throws Exception {
+                result.state = "OK";
+                return (T) result;
+            }
+        };
+        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+
+        ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
+        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+
+        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+    }
+
+    @Test
     public void testKillStmtWhenQueryIdNotFound(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
             throws Exception {
         // test killing query is forwarded to fe and query not found
@@ -101,6 +121,25 @@ public class KillQueryHandleTest {
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
         Assert.assertEquals("Failed to connect to fe 127.0.0.1:9020", ctx.getState().getErrorMessage());
+
+        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+    }
+
+    @Test
+    public void testKillStmtWhenForwardWithUnknownError(@Mocked SocketChannel socketChannel) throws Exception {
+        // test killing query is forwarded to fe with unexpected error
+        new MockUp(FrontendServiceProxy.class) {
+            @Mock
+            public <T> T call(TNetworkAddress address, int timeoutMs, int retryTimes,
+                              FrontendServiceProxy.MethodCallable<T> callable) throws Exception {
+                throw new Exception("Unknown error x");
+            }
+        };
+        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+
+        ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
+        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assert.assertEquals("Unknown error x", ctx.getState().getErrorMessage());
 
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }
