@@ -4161,28 +4161,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
-##### default_mv_resource_group_memory_limit
-
-- 默认值：0.8
-- 类型：Double
-- 单位：
-- 是否动态：否
-- 描述：物化视图刷新所占用的资源组 Memory 上限，默认 80%。
-- 引入版本：v3.1
--->
-
-<!--
-##### default_mv_resource_group_cpu_limit
-
-- 默认值：1
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：物化视图刷新占用的资源组 CPU 比例，默认 1%。
-- 引入版本：-
--->
-
-<!--
 ##### primary_key_batch_get_index_memory_limit
 
 - 默认值：104857600
@@ -4353,6 +4331,42 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：UDF 存放的路径。
 - 引入版本：-
+
+##### default_mv_resource_group_memory_limit
+
+- 默认值：0.8
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。
+- 引入版本：v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。
+- 引入版本：-
+
+##### default_mv_resource_group_concurrency_limit
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。
+- 引入版本：-
+
+##### default_mv_resource_group_spill_mem_limit_threshold
+
+- 默认值：0.8
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。
+- 引入版本：v3.1
 
 <!--
 ##### pull_load_task_dir

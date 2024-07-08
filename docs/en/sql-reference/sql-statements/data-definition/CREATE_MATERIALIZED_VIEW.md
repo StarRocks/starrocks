@@ -265,7 +265,12 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `mv_rewrite_staleness_second`: If the materialized view's last refresh is within the time interval specified in this property, this materialized view can be used directly for query rewrite, regardless of whether the data in the base tables changes. If the last refresh is before this time interval, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Unit: Second. This property is supported from v3.0.
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
-- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/management/resource_management/resource_group.md).
+
+  > **CAUTION**
+  >
+  > The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+
+- `resource_group`: The resource group to which the refresh tasks of the materialized view belong. The default value of this property is `default_mv_wg`, which is a system-defined resource group specifically used for materialized view refresh. The `cpu_core_limit` of `default_mv_wg` is `1`, `mem_limit` is `0.8`. For more about resource groups, see [Resource group](../../../administration/management/resource_management/resource_group.md).
 - `query_rewrite_consistency`: The query rewrite rule for the asynchronous materialized views. This property is supported from v3.2. Valid values:
   - `disable`: Disable automatic query rewrite of the asynchronous materialized view.
   - `checked` (Default value): Enable automatic query rewrite only when the materialized view meets the timeliness requirement, which means:
@@ -278,10 +283,6 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `false` (Default value): Disable query rewrite for external catalog-based materialized views.
 
   Because strong data consistency is not guaranteed between base tables and external catalog-based materialized views, this feature is set to `false` by default. When this feature is enabled, the materialized view is used for query rewrite in accordance with the rule specified in `query_rewrite_consistency`.
-
-> **CAUTION**
->
-> The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
 
 **query_statement** (required)
 
