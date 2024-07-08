@@ -18,6 +18,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -142,7 +143,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             return null;
         }
 
-        List<LiteralExpr> sourceTablePartitionList = Lists.newArrayList();
+        List<Expr> sourceTablePartitionList = Lists.newArrayList();
         List<Column> partitionCols = refBaseTable.getPartitionColumns();
         Map<Table, Column> partitionTableAndColumn = mv.getRelatedPartitionTableAndColumn();
         if (partitionTableAndColumn == null || !partitionTableAndColumn.containsKey(refBaseTable)) {
@@ -151,6 +152,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         Column refPartitionColumn = partitionTableAndColumn.get(table);
         int refIndex = ListPartitionDiffer.getRefBaseTableIdx(refBaseTable, refPartitionColumn);
         Type partitionType = partitionCols.get(refIndex).getType();
+
+        boolean isContainsNullPartition = false;
         for (String tablePartitionName : refBaseTablePartitionNames) {
             PListCell cell = baseListPartitionMap.get(tablePartitionName);
             for (List<String> values : cell.getPartitionItems()) {
@@ -158,11 +161,22 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                     return null;
                 }
                 LiteralExpr partitionValue = new PartitionValue(values.get(refIndex)).getValue(partitionType);
+                if (partitionValue.isConstantNull()) {
+                    isContainsNullPartition = true;
+                    continue;
+                }
                 sourceTablePartitionList.add(partitionValue);
             }
         }
-        List<Expr> partitionPredicates = MvUtils.convertList(mvPartitionSlotRef, sourceTablePartitionList);
-        return Expr.compoundOr(partitionPredicates);
+        Expr inPredicate = MvUtils.convertToInPredicate(mvPartitionSlotRef, sourceTablePartitionList);
+        // NOTE: If target partition values contain `null partition`, the generated predicate should
+        // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
+        if (isContainsNullPartition) {
+            IsNullPredicate isNullPredicate = new IsNullPredicate(mvPartitionSlotRef, false);
+            return Expr.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
+        } else {
+            return inPredicate;
+        }
     }
 
     @Override
