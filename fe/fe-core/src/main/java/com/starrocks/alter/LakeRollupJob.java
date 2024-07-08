@@ -28,13 +28,16 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
@@ -384,16 +387,20 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         slots.stream().map(slot -> slot.getColumnName()).forEach(usedBaseTableColNames::add);
                     }
 
-                    // List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
+                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                     for (String refColName : usedBaseTableColNames) {
                         if (!baseTableColumnNames.contains(refColName)) {
                             throw new AlterCancelException("Materialized view's ref column " + refColName + " is not " +
                                     "found in the base table.");
                         }
                     }
+
+                    List<ColumnId> usedColIds = new ArrayList<>(usedBaseTableColNames.size());
+                    for (String name : usedBaseTableColNames) {
+                        usedColIds.add(tbl.getColumn(name).getColumnId());
+                    }
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
-                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable,
-                                    Lists.newLinkedList(usedBaseTableColNames));
+                            new AlterReplicaTask.RollupJobV2Params(defineExprs, whereExpr, descTable, usedColIds);
 
                     ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                             .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
