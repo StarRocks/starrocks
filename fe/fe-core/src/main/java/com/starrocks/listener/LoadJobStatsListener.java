@@ -33,10 +33,10 @@ import java.util.stream.Collectors;
 /**
  * Listener to trigger a statistics collection after a first load
  */
-public class StatsOperationListener implements IJobOperationListener {
-    public static final StatsOperationListener INSTANCE = new StatsOperationListener();
+public class LoadJobStatsListener implements LoadJobListener {
+    public static final LoadJobStatsListener INSTANCE = new LoadJobStatsListener();
 
-    private static final Logger LOG = LogManager.getLogger(StatsOperationListener.class);
+    private static final Logger LOG = LogManager.getLogger(LoadJobStatsListener.class);
 
     @Override
     public void onStreamLoadTransactionFinish(TransactionState transactionState) {
@@ -49,7 +49,7 @@ public class StatsOperationListener implements IJobOperationListener {
     }
 
     @Override
-    public void onDMLStmtTransactionFinish(TransactionState transactionState, Database db, Table table) {
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
         StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true);
     }
 

@@ -22,7 +22,7 @@ import com.starrocks.transaction.TransactionState;
 /**
  * Listener for / insert into / stream load/ routine load/ insert into/ … job finished
  */
-public interface IJobOperationListener {
+public interface LoadJobListener {
     /**
      * Listener after `stream load` transaction is finished.
      * @param transactionState: finished transaction states
@@ -42,8 +42,7 @@ public interface IJobOperationListener {
      * @param db database of the target table
      * @param table target table that has changed
      */
-    void onDMLStmtTransactionFinish(TransactionState transactionState, Database db, Table table);
-
+    void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table);
 
     /**
      * Listener after `Insert OVERWRITE` transaction is finished, which is only triggered without an error.

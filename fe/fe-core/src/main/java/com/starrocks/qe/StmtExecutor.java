@@ -2355,7 +2355,7 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else if (txnState != null) {
-                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDMLStmtTransactionFinish(txnState, database,
+                GlobalStateMgr.getCurrentState().getOperationListenerBus().onDMLStmtJobTransactionFinish(txnState, database,
                         targetTable);
             }
         }

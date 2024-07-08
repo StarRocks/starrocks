@@ -42,10 +42,10 @@ import java.util.Set;
 /**
  * Auto trigger by job operation listener to refresh related materialized views.
  */
-public class MVOperationListener implements IJobOperationListener {
-    private static final Logger LOG = LogManager.getLogger(MVOperationListener.class);
+public class LoadJobMVListener implements LoadJobListener {
+    private static final Logger LOG = LogManager.getLogger(LoadJobMVListener.class);
 
-    public static final MVOperationListener INSTANCE = new MVOperationListener();
+    public static final LoadJobMVListener INSTANCE = new LoadJobMVListener();
 
     @Override
     public void onStreamLoadTransactionFinish(TransactionState transactionState) {
@@ -59,7 +59,7 @@ public class MVOperationListener implements IJobOperationListener {
     }
 
     @Override
-    public void onDMLStmtTransactionFinish(TransactionState transactionState, Database db, Table table) {
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
         if (table != null && table.isMaterializedView()) {
             return;
         }

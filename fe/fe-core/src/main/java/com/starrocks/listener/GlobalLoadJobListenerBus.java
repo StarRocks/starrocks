@@ -24,15 +24,15 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class GlobalOperationListenerBus {
-    private static final Logger LOG = LogManager.getLogger(GlobalOperationListenerBus.class);
+public class GlobalLoadJobListenerBus {
+    private static final Logger LOG = LogManager.getLogger(GlobalLoadJobListenerBus.class);
 
-    private final List<IJobOperationListener> listeners = ImmutableList.of(
-            StatsOperationListener.INSTANCE,
-            MVOperationListener.INSTANCE
+    private final List<LoadJobListener> listeners = ImmutableList.of(
+            LoadJobStatsListener.INSTANCE,
+            LoadJobMVListener.INSTANCE
     );
 
-    public GlobalOperationListenerBus() {
+    public GlobalLoadJobListenerBus() {
     }
 
     /**
@@ -53,11 +53,11 @@ public class GlobalOperationListenerBus {
      * @param db database of the target table
      * @param table target table that has changed
      */
-    public void onDMLStmtTransactionFinish(TransactionState transactionState, Database db, Table table) {
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
         if (transactionState == null) {
             return;
         }
-        listeners.stream().forEach(listener -> listener.onDMLStmtTransactionFinish(transactionState, db, table));
+        listeners.stream().forEach(listener -> listener.onDMLStmtJobTransactionFinish(transactionState, db, table));
     }
 
     /**
@@ -76,7 +76,7 @@ public class GlobalOperationListenerBus {
      * Do all callbacks after `stream load` transaction is finished.
      * @param transactionState: finished transaction states
      */
-    public void onTransactionFinish(TransactionState transactionState) {
+    public void onStreamJobTransactionFinish(TransactionState transactionState) {
         if (transactionState == null) {
             return;
         }
