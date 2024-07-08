@@ -69,7 +69,6 @@ import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
-import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
@@ -143,7 +142,6 @@ public class DatabaseTransactionMgr {
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
     private long maxCommitTs = 0;
-
     public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {
         this.dbId = dbId;
         this.globalStateMgr = globalStateMgr;
@@ -1104,8 +1102,14 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
+<<<<<<< HEAD
         collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
 
+=======
+        transactionState.notifyVisible();
+        // do after transaction finish
+        GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+>>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1814,8 +1818,8 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
 
-        collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
-
+        // do after transaction finish
+        GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1852,11 +1856,15 @@ public class DatabaseTransactionMgr {
             db.writeUnlock();
         }
 
-        collectStatisticsForStreamLoadOnFirstLoadBatch(stateBatch, db);
+        // do after transaction finish in batch
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
+        }
 
         LOG.info("finish transaction {} batch successfully", stateBatch);
     }
 
+<<<<<<< HEAD
     private void collectStatisticsForStreamLoadOnFirstLoad(TransactionState txnState, Database db) {
         TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
         if (!TransactionState.LoadJobSourceType.FRONTEND_STREAMING.equals(sourceType)
@@ -1882,6 +1890,8 @@ public class DatabaseTransactionMgr {
         }
     }
 
+=======
+>>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
     public String getTxnPublishTimeoutDebugInfo(long txnId) {
         TransactionState transactionState = getTransactionState(txnId);
         if (transactionState == null) {

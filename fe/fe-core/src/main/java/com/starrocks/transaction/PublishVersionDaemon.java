@@ -39,15 +39,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
@@ -58,7 +53,6 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
-import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
@@ -73,10 +67,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -350,9 +342,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
-
-                    // Refresh materialized view when base table update transaction has been visible if necessary
-                    refreshMvIfNecessary(transactionState);
                 }
             }
         } // end for readyTransactionStates
@@ -378,8 +367,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
-                    // Refresh materialized view when base table update transaction has been visible if necessary
-                    refreshMvIfNecessary(transactionState);
                 }
             } catch (UserException e) {
                 LOG.error("errors while publish version to all backends", e);
@@ -487,7 +474,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
-                    refreshMvIfNecessary(txnState);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -717,11 +703,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
+<<<<<<< HEAD
                     //
                     for (TransactionState state : txnStateBatch.getTransactionStates()) {
                         refreshMvIfNecessary(state);
                     }
 
+=======
+>>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch, dirtyPartitions);
                 } catch (UserException e) {
@@ -843,6 +832,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return false;
         }
     }
+<<<<<<< HEAD
 
     /**
      * Refresh the materialized view if it should be triggered after base table was loaded.
@@ -908,4 +898,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
         return new ArrayList<>(tableCommitInfo.getIdToPartitionCommitInfo().values());
     }
+=======
+>>>>>>> fd43f927b2 ([BugFix] [Refactor] Trigger to refresh related mvs after replacing temp partitions if base table is a mv (#47864))
 }
