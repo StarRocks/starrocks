@@ -491,6 +491,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Introduced in: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
 -->
 
+##### primary_key_limit_size
+
+- Default: 128
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of a key column in Primary Key tables.
+- Introduced in: v2.5
+
 ##### drop_tablet_worker_count
 
 - Default: 3
@@ -4226,17 +4235,6 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit:
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### primary_key_limit_size
-
-- Default: 128
-- Type: Int
-- Unit:
-- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
