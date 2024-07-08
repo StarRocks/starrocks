@@ -419,6 +419,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 syncPartitions();
                 Set<String> mvCandidatePartition = checkMvToRefreshedPartitions(context, true);
                 baseTableCandidatePartitions = getRefTableRefreshPartitions(mvCandidatePartition);
+            } catch (Exception e) {
+                // Since at here we sync partitions before the refreshExternalTable, the situation may happen that
+                // the base-table not exists before refreshExternalTable, so we just need to swallow this exception
+                if (!e.getMessage().contains("not exist")) {
+                    throw e;
+                }
             }
         }
 
