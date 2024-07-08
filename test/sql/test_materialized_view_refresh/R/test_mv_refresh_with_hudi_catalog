@@ -16,7 +16,7 @@ PROPERTIES
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(col_int) BUCKETS 10 
 REFRESH DEFERRED MANUAL
 AS 
-SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.hudi_db.hudi_parquet_snappy;
+SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table;
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY HASH(col_int) BUCKETS 10 
@@ -36,11 +36,11 @@ select count(1) from mv1;
 -- result:
 14
 -- !result
-function: check_hit_materialized_view("SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.hudi_db.hudi_parquet_snappy", "mv1")
+function: check_hit_materialized_view("SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table", "mv1")
 -- result:
 None
 -- !result
-SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.hudi_db.hudi_parquet_snappy order by 1, 2 limit 5;
+SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table order by 1, 2 limit 5;
 -- result:
 None	None	None
 None	None	None

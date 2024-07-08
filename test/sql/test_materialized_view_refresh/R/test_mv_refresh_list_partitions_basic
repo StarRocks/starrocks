@@ -1,4 +1,10 @@
 -- name: test_mv_refresh_list_partitions_basic
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
 CREATE TABLE t3 (
       id BIGINT,
       province VARCHAR(64) not null,

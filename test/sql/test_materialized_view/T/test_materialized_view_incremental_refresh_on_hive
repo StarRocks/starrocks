@@ -59,3 +59,8 @@ use db_${uuid0};
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 
 select * from test_mv1 order by dt;
+
+drop database db_${uuid0} force;
+-- drop external catalog & db
+drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.tbl_for_refresh;
+drop database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;
