@@ -5643,7 +5643,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
 }
 
 template <LogicalType Type>
-void array_repeat_test(Datum element_0, Datum element_1, Datum element_2,  Datum element_null) {
+void array_repeat_test(Datum element_0, Datum element_1, Datum element_2, Datum element_null) {
     {
         using CppType = RunTimeCppType<Type>;
 
@@ -5664,17 +5664,20 @@ void array_repeat_test(Datum element_0, Datum element_1, Datum element_2,  Datum
             repeat_count_column->append(repeat_count_1);
             repeat_count_column->append(repeat_count_2);
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, repeat_count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), 3);
             ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
             if (Type == TYPE_JSON) {
-                ASSERT_EQ(element_0.get_json()->get_slice(), dest_column->get(0).get_array()[0].get_json()->get_slice());
+                ASSERT_EQ(element_0.get_json()->get_slice(),
+                          dest_column->get(0).get_array()[0].get_json()->get_slice());
                 ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
                 ASSERT_EQ(dest_column->get(2).get_array().size(), 3);
-                ASSERT_EQ(element_2.get_json()->get_slice(), dest_column->get(2).get_array()[0].get_json()->get_slice());
-                ASSERT_EQ(element_2.get_json()->get_slice(), dest_column->get(2).get_array()[1].get_json()->get_slice());
-                ASSERT_EQ(element_2.get_json()->get_slice(), dest_column->get(2).get_array()[2].get_json()->get_slice());
+                ASSERT_EQ(element_2.get_json()->get_slice(),
+                          dest_column->get(2).get_array()[0].get_json()->get_slice());
+                ASSERT_EQ(element_2.get_json()->get_slice(),
+                          dest_column->get(2).get_array()[1].get_json()->get_slice());
+                ASSERT_EQ(element_2.get_json()->get_slice(),
+                          dest_column->get(2).get_array()[2].get_json()->get_slice());
             } else {
                 ASSERT_EQ(element_0.get<CppType>(), dest_column->get(0).get_array()[0].get<CppType>());
                 ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
@@ -5692,14 +5695,12 @@ void array_repeat_test(Datum element_0, Datum element_1, Datum element_2,  Datum
             src_column->append_datum(element_1);
             src_column->append_datum(element_null);
 
-            auto repeat_count_column = NullableColumn::create(
-                    Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            auto repeat_count_column = NullableColumn::create(Int32Column::create(), NullColumn::create(0, DATUM_NULL));
             repeat_count_column->append_datum(repeat_count_null);
             repeat_count_column->append_datum(Datum(repeat_count_1));
             repeat_count_column->append_datum(Datum(repeat_count_2));
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, repeat_count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), 3);
             ASSERT_TRUE(dest_column->get(0).is_null());
             ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
@@ -5720,15 +5721,15 @@ void array_repeat_test(Datum element_0, Datum element_1, Datum element_2,  Datum
 
             auto repeat_count_data_column = Int32Column::create();
             repeat_count_data_column->append(repeat_count_0);
-            auto repeat_count_column = ConstColumn::create(
-                    std::move(repeat_count_data_column), const_column_row_count);
+            auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, repeat_count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), const_column_row_count);
             if (Type == TYPE_JSON) {
-                ASSERT_EQ(element_0.get_json()->get_slice(), dest_column->get(0).get_array()[0].get_json()->get_slice());
-                ASSERT_EQ(element_0.get_json()->get_slice(), dest_column->get(1).get_array()[0].get_json()->get_slice());
+                ASSERT_EQ(element_0.get_json()->get_slice(),
+                          dest_column->get(0).get_array()[0].get_json()->get_slice());
+                ASSERT_EQ(element_0.get_json()->get_slice(),
+                          dest_column->get(1).get_array()[0].get_json()->get_slice());
             } else {
                 ASSERT_EQ(element_0.get<CppType>(), dest_column->get(0).get_array()[0].get<CppType>());
                 ASSERT_EQ(element_0.get<CppType>(), dest_column->get(1).get_array()[0].get<CppType>());
@@ -5743,17 +5744,15 @@ TEST_F(ArrayFunctionsTest, array_repeat) {
         array_repeat_test<TYPE_BIGINT>(Datum((int64_t)0), Datum((int64_t)1), Datum((int64_t)2), Datum());
         array_repeat_test<TYPE_FLOAT>(Datum((float)0), Datum((float)0.1), Datum((float)0.2), Datum());
         array_repeat_test<TYPE_DOUBLE>(Datum((double)0), Datum((double)0.1), Datum((double)0.2), Datum());
-        array_repeat_test<TYPE_DECIMALV2>(
-                Datum(DecimalV2Value(std::string("0.0000000000"))),
-                Datum(DecimalV2Value(std::string("1.0000000000"))),
-                Datum(DecimalV2Value(std::string("2.0000000000"))), Datum());
+        array_repeat_test<TYPE_DECIMALV2>(Datum(DecimalV2Value(std::string("0.0000000000"))),
+                                          Datum(DecimalV2Value(std::string("1.0000000000"))),
+                                          Datum(DecimalV2Value(std::string("2.0000000000"))), Datum());
         array_repeat_test<TYPE_BOOLEAN>(Datum(true), (false), Datum(false), Datum());
         array_repeat_test<TYPE_DATE>(DateValue::create(2020, 0, 0), DateValue::create(2021, 1, 1),
                                      DateValue::create(2022, 2, 2), Datum());
-        array_repeat_test<TYPE_DATETIME>(
-                TimestampValue::create(2020, 0, 0, 0, 0, 0),
-                TimestampValue::create(2021, 1, 1, 1, 1, 1),
-                TimestampValue::create(2022, 2, 2, 2, 2, 2), Datum());
+        array_repeat_test<TYPE_DATETIME>(TimestampValue::create(2020, 0, 0, 0, 0, 0),
+                                         TimestampValue::create(2021, 1, 1, 1, 1, 1),
+                                         TimestampValue::create(2022, 2, 2, 2, 2, 2), Datum());
         array_repeat_test<TYPE_VARCHAR>(Datum(Slice("0")), Datum(Slice("1")), Datum(Slice("2")), Datum());
         JsonValue json_element_0 = JsonValue::parse("{\"a\": 0}").value();
         JsonValue json_element_1 = JsonValue::parse("{\"b\": 1}").value();
@@ -5766,7 +5765,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
     {
         Datum element_0 = DatumArray{(int32_t)0};
         Datum element_1 = DatumArray{Datum()};
-        Datum element_2 = DatumArray{Datum(),(int32_t)2};
+        Datum element_2 = DatumArray{Datum(), (int32_t)2};
         Datum element_null;
         int32_t repeat_count_0 = (int32_t)1;
         int32_t repeat_count_1 = (int32_t)-2;
@@ -5785,8 +5784,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
             repeat_count_column->append(repeat_count_1);
             repeat_count_column->append(repeat_count_2);
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, repeat_count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), 3);
             ASSERT_EQ(dest_column->get(0).get_array().size(), 1);
             _check_array<int32_t>({(int32_t)0}, dest_column->get(0).get_array()[0].get_array());
@@ -5808,14 +5806,12 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
             src_column->append_datum(element_1);
             src_column->append_datum(element_null);
 
-            auto repeat_count_column = NullableColumn::create(
-                    Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            auto repeat_count_column = NullableColumn::create(Int32Column::create(), NullColumn::create(0, DATUM_NULL));
             repeat_count_column->append_datum(repeat_count_null);
             repeat_count_column->append_datum(Datum(repeat_count_1));
             repeat_count_column->append_datum(Datum(repeat_count_2));
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, repeat_count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), 3);
             ASSERT_TRUE(dest_column->get(0).is_null());
             ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
@@ -5832,16 +5828,13 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
 
             auto src_data_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
             src_data_column->append_datum(element_0);
-            auto src_column = ConstColumn::create(
-                    std::move(src_data_column), const_column_row_count);
+            auto src_column = ConstColumn::create(std::move(src_data_column), const_column_row_count);
 
             auto repeat_count_data_column = Int32Column::create();
             repeat_count_data_column->append(repeat_count_0);
-            auto repeat_count_column = ConstColumn::create(
-                    std::move(repeat_count_data_column), const_column_row_count);
+            auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, repeat_count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), const_column_row_count);
             _check_array<int32_t>({(int32_t)0}, dest_column->get(0).get_array()[0].get_array());
         }
@@ -5887,15 +5880,16 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
             repeat_count_column->append(repeat_count_1);
             repeat_count_column->append(repeat_count_2);
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, repeat_count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), 3);
             ASSERT_EQ(dest_column->get(0).get_array().size(), repeat_count_0);
-            ASSERT_EQ(element_0.find(2)->second.get_int32(), dest_column->get(0).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
+            ASSERT_EQ(element_0.find(2)->second.get_int32(),
+                      dest_column->get(0).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
             ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
             _check_array<int32_t>({}, dest_column->get(1).get_array());
             ASSERT_EQ(dest_column->get(2).get_array().size(), repeat_count_2);
-            ASSERT_EQ(element_2.find(8)->second.get_int32(), dest_column->get(2).get_array()[2].get<DatumMap>().find(8)->second.get_int32());
+            ASSERT_EQ(element_2.find(8)->second.get_int32(),
+                      dest_column->get(2).get_array()[2].get<DatumMap>().find(8)->second.get_int32());
         }
 
         // The case for testing NullableColumn
@@ -5908,20 +5902,17 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
             auto values_null = NullColumn::create();
             auto values = NullableColumn::create(values_data, values_null);
             auto map_column = MapColumn::create(keys, values, offsets);
-            auto src_column = NullableColumn::create(
-                    std::move(map_column), NullColumn::create(0, DATUM_NULL));
+            auto src_column = NullableColumn::create(std::move(map_column), NullColumn::create(0, DATUM_NULL));
             src_column->append_datum(element_0);
             src_column->append_datum(element_1);
             src_column->append_datum(element_null);
 
-            auto count_column = NullableColumn::create(
-                    Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            auto count_column = NullableColumn::create(Int32Column::create(), NullColumn::create(0, DATUM_NULL));
             count_column->append_datum(repeat_count_null);
             count_column->append_datum(Datum(repeat_count_1));
             count_column->append_datum(Datum(repeat_count_2));
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, count_column}).value();
             ASSERT_EQ(dest_column->size(), 3);
             ASSERT_TRUE(dest_column->get(0).is_null());
             ASSERT_EQ(dest_column->get(1).get_array().size(), 0);
@@ -5944,19 +5935,18 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
             auto values = NullableColumn::create(values_data, values_null);
             auto map_column = MapColumn::create(keys, values, offsets);
             map_column->append_datum(element_0);
-            auto src_column = ConstColumn::create(
-                    std::move(map_column), const_column_row_count);
+            auto src_column = ConstColumn::create(std::move(map_column), const_column_row_count);
 
             auto repeat_count_data_column = Int32Column::create();
             repeat_count_data_column->append(repeat_count_0);
-            auto repeat_count_column = ConstColumn::create(
-                    std::move(repeat_count_data_column), const_column_row_count);
+            auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
 
-            auto dest_column = ArrayFunctions::repeat(
-                    nullptr, {src_column, repeat_count_column}).value();
+            auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), const_column_row_count);
-            ASSERT_EQ(element_0.find(2)->second.get_int32(), dest_column->get(0).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
-            ASSERT_EQ(element_0.find(2)->second.get_int32(), dest_column->get(1).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
+            ASSERT_EQ(element_0.find(2)->second.get_int32(),
+                      dest_column->get(0).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
+            ASSERT_EQ(element_0.find(2)->second.get_int32(),
+                      dest_column->get(1).get_array()[0].get<DatumMap>().find(2)->second.get_int32());
         }
     }
 }
