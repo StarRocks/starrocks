@@ -3255,7 +3255,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
+- 描述：存算分离模式下是否使用 Data Cache。`true` 表示启用该功能，`false` 表示禁用。自 v3.2.3 起，默认值由 `false` 调整为 `true`。
 - 引入版本：v3.1
 
 <!--
@@ -3275,7 +3275,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离模式下，block data cache 最多可使用的磁盘容量百分比。
+- 描述：存算分离模式下，Data Cache 最多可使用的磁盘容量百分比。
 - 引入版本：v3.1
 
 <!--
