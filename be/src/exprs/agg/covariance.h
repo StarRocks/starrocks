@@ -113,11 +113,12 @@ public:
         double deltaY = this->data(state).meanY - meanY;
 
         double sum_count = this->data(state).count + count;
-        double factor = (this->data(state).count / sum_count);
 
-        this->data(state).meanX = meanX + deltaX * factor;
-        this->data(state).meanY = meanY + deltaY * factor;
+        double factor_for_mean = (this->data(state).count / sum_count);
+        this->data(state).meanX = meanX + deltaX * factor_for_mean;
+        this->data(state).meanY = meanY + deltaY * factor_for_mean;
 
+        double factor = (this->data(state).count * count / sum_count);
         this->data(state).c2 = c2 + this->data(state).c2 + (deltaX * deltaY) * factor;
         this->data(state).count = sum_count;
 
