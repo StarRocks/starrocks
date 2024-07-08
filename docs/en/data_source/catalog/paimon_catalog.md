@@ -116,41 +116,21 @@ If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, 
 
 ##### AWS S3
 
-If you choose AWS S3 as storage for your Paimon cluster, take one of the following actions:
-
-- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
+If you choose AWS S3 as storage for your Paimon cluster, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "aws.s3.use_instance_profile" = "true",
-  "aws.s3.region" = "<aws_s3_region>"
-  ```
-
-- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "aws.s3.use_instance_profile" = "true",
-  "aws.s3.iam_role_arn" = "<iam_role_arn>",
-  "aws.s3.region" = "<aws_s3_region>"
-  ```
-
-- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-| Parameter                   | Required | Description                                                  |
-| --------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
-| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. |
-| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
-| aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
-| aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+| Parameter                   | Required | Description                                                                              |
+| --------------------------- | -------- |------------------------------------------------------------------------------------------|
+| aws.s3.endpoint             | Yes      | The endpoint in which your AWS S3 bucket resides. Example: `s3.us-west-2.amazonaws.com`. |
+| aws.s3.access_key           | No       | The access key of your IAM user.                                                         |
+| aws.s3.secret_key           | No       | The secret key of your IAM user.                                                         |
 
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
@@ -366,8 +346,6 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
 
 #### AWS S3
 
-- If you choose the instance profile-based authentication method, run a command like below:
-
   ```SQL
   CREATE EXTERNAL CATALOG paimon_catalog_fs
   PROPERTIES
@@ -375,39 +353,9 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "type" = "paimon",
       "paimon.catalog.type" = "filesystem",
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2"
-  );
-  ```
-
-- If you choose the assumed role-based authentication method, run a command like below:
-
-  ```SQL
-  CREATE EXTERNAL CATALOG paimon_catalog_fs
-  PROPERTIES
-  (
-      "type" = "paimon",
-      "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2"
-  );
-  ```
-
-- If you choose the IAM user-based authentication method, run a command like below:
-
-  ```SQL
-  CREATE EXTERNAL CATALOG paimon_catalog_fs
-  PROPERTIES
-  (
-      "type" = "paimon",
-      "paimon.catalog.type" = "filesystem",
-      "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
-      "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "s3.us-west-2.amazonaws.com"     
   );
   ```
 
