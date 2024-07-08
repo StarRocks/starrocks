@@ -3182,7 +3182,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
+=======
+- Description: Whether to enable Data Cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it. The default value is set from `false` to `true` from v3.2.3 onwards.
+>>>>>>> 6f5bfeacfb ([Doc] Add Boundary to Shared-data and Rename Block Cache to Data Cache (#47921))
 - Introduced in: v3.1
 
 <!--
@@ -3202,7 +3206,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster.
 - Introduced in: v3.1
 
 <!--
