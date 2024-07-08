@@ -320,6 +320,7 @@ public class OptOlapPartitionPruner {
         if (multiLiteralExprValues != null && multiLiteralExprValues.size() > 0) {
             for (int i = 0; i < partitionColumns.size(); i++) {
                 ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
+                Set<Long> nullPartitionIds = new HashSet<>();
                 for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
                     Long partitionId = entry.getKey();
                     if (!partitionIds.contains(partitionId)) {
@@ -331,13 +332,18 @@ public class OptOlapPartitionPruner {
                     }
                     for (List<LiteralExpr> values : multiValues) {
                         LiteralExpr value = values.get(i);
-                        putValueMapItem(partitionValueToIds, partitionId, value);
+                        // store null partition value seperated from non-null partition values
+                        if (value.isConstantNull()) {
+                            nullPartitionIds.add(partitionId);
+                        } else {
+                            putValueMapItem(partitionValueToIds, partitionId, value);
+                        }
                     }
                 }
                 Column column = partitionColumns.get(i);
                 ColumnRefOperator columnRefOperator = operator.getColumnReference(column);
                 columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
-                columnToNullPartitions.put(columnRefOperator, new HashSet<>());
+                columnToNullPartitions.put(columnRefOperator, nullPartitionIds);
             }
         }
 

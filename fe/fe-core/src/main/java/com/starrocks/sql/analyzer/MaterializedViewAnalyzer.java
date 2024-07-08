@@ -813,11 +813,6 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }
-                // TODO: only support not null list partitions
-                if (slotRef.isNullable()) {
-                    throw new SemanticException("Materialized view partition column only support not null list partition " +
-                            "columns for now");
-                }
             } else {
                 throw new SemanticException("Materialized view related base table partition type: " +
                         partitionInfo.getType().name() + " not supports");

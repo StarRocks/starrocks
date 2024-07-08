@@ -64,7 +64,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -812,18 +811,13 @@ public class MvPartitionCompensator {
 
     public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
                                                                      Collection<PartitionKey> partitionRanges) {
-        List<ScalarOperator> inArgs = Lists.newArrayList();
-        inArgs.add(partitionColRef);
+        List<ScalarOperator> values = Lists.newArrayList();
         for (PartitionKey partitionKey : partitionRanges) {
             LiteralExpr literalExpr = partitionKey.getKeys().get(0);
             ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
-            inArgs.add(upperBound);
+            values.add(upperBound);
         }
-        if (inArgs.size() == 1) {
-            return ConstantOperator.TRUE;
-        } else {
-            return new InPredicateOperator(false, inArgs);
-        }
+        return MvUtils.convertToInPredicate(partitionColRef, values);
     }
 
     private static ScalarOperator convertPartitionKeysToPredicate(ScalarOperator partitionColumn,
